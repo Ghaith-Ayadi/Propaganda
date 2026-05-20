@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Upload01, User01, XClose } from "@untitledui/icons";
+import { Globe01, Upload01, User01, XClose } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { useSetting, setSetting } from "@/lib/settings";
@@ -9,7 +9,10 @@ interface Props {
   onClose: () => void;
 }
 
-type Tab = "author";
+type Tab = "author" | "site";
+
+const DEFAULT_MANIFESTO =
+  "It's called Verbatim because none of it is edited. I don't edit what I write. If I don't like what I said, I don't publish. No AI writing, no nonsense.";
 
 export function SettingsDialog({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>("author");
@@ -37,7 +40,9 @@ export function SettingsDialog({ onClose }: Props) {
           <TabButton active={tab === "author"} onClick={() => setTab("author")} icon={<User01 className="size-4" />}>
             Author
           </TabButton>
-          {/* future: <TabButton icon={...}>Site</TabButton>, Email, Domain… */}
+          <TabButton active={tab === "site"} onClick={() => setTab("site")} icon={<Globe01 className="size-4" />}>
+            Site
+          </TabButton>
         </nav>
 
         {/* Body */}
@@ -55,6 +60,7 @@ export function SettingsDialog({ onClose }: Props) {
 
           <div className="flex-1 overflow-y-auto px-6 py-6">
             {tab === "author" && <AuthorTab />}
+            {tab === "site" && <SiteTab />}
           </div>
         </div>
       </div>
@@ -128,6 +134,25 @@ function AuthorTab() {
         />
       </Field>
       <FaviconField current={faviconUrl ?? null} />
+    </div>
+  );
+}
+
+function SiteTab() {
+  const manifesto = useSetting<string>("site.manifesto", DEFAULT_MANIFESTO);
+  return (
+    <div className="space-y-5">
+      <Field
+        label="Manifesto"
+        hint="Shown on the public home page above the post list."
+      >
+        <textarea
+          value={manifesto ?? ""}
+          onChange={(e) => void setSetting("site.manifesto", e.target.value)}
+          rows={5}
+          className="w-full resize-none rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary outline-none focus:border-tertiary"
+        />
+      </Field>
     </div>
   );
 }

@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Command } from "cmdk";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowDown, ArrowUp, CornerDownLeft, FilePlus02, Moon01, SearchLg, Sun } from "@untitledui/icons";
+import { ArrowDown, ArrowUp, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, Moon01, SearchLg, Star01, Sun } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import { supabase } from "@/lib/supabase";
 import { search, subscribeSearch } from "@/lib/search";
 import { go } from "@/lib/route";
 import { useLayout } from "@/lib/layout";
 import { collectionDisplay } from "@/lib/collections";
-import { fromRow, setPostStatus, type PostRow } from "@/lib/posts";
+import { duplicatePost, fromRow, setPostStatus, toggleFavorite, type PostRow } from "@/lib/posts";
 import { toggleTheme, useTheme } from "@/lib/theme";
 import { createCollection } from "@/lib/collections";
 import { NewCollectionDialog } from "@/components/NewCollectionDialog";
@@ -146,6 +146,8 @@ export function CommandPalette({ currentPostId }: Props) {
     setOpen(false);
   }
 
+  const currentPost = currentPostId != null ? allPosts.find((p) => p.id === currentPostId) : null;
+
   type CommandRow = {
     key: string;
     label: string;
@@ -158,7 +160,50 @@ export function CommandPalette({ currentPostId }: Props) {
   const otherCollections = knownCollections.filter((c) => c !== defaultCollection);
   const defaultDisplay = collectionDisplay(defaultCollection, collectionRows);
 
+  const postCommands: CommandRow[] = currentPost
+    ? [
+        currentPost.status === "published"
+          ? {
+              key: "unpublish",
+              label: "Move to draft",
+              icon: <EyeOff className="size-4" />,
+              onSelect: () => {
+                void setPostStatus(currentPost.id, "draft");
+                setOpen(false);
+              },
+            }
+          : {
+              key: "publish",
+              label: "Publish post",
+              icon: <Eye className="size-4" />,
+              hint: "⌘⇧P",
+              onSelect: () => void publishCurrent(),
+            },
+        {
+          key: "favorite",
+          label: currentPost.favorited ? "Remove from favorites" : "Add to favorites",
+          icon: <Star01 className="size-4" />,
+          onSelect: () => {
+            void toggleFavorite(currentPost.id);
+            setOpen(false);
+          },
+        },
+        {
+          key: "duplicate",
+          label: "Duplicate post",
+          icon: <Copy04 className="size-4" />,
+          onSelect: () => {
+            void duplicatePost(currentPost).then((dup) => {
+              if (dup) go({ view: "post", id: dup.id });
+            });
+            setOpen(false);
+          },
+        },
+      ]
+    : [];
+
   const allCommands: CommandRow[] = [
+    ...postCommands,
     {
       key: "new-default",
       label: defaultCollection
@@ -216,16 +261,6 @@ export function CommandPalette({ currentPostId }: Props) {
         setOpen(false);
       },
     },
-    ...(currentPostId != null
-      ? [
-          {
-            key: "publish",
-            label: "Publish current post",
-            hint: "⌘⇧P",
-            onSelect: () => void publishCurrent(),
-          } as CommandRow,
-        ]
-      : []),
   ];
 
   const filteredCommands = commandQuery

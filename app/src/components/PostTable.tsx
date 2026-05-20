@@ -85,7 +85,7 @@ export function PostTable({ posts, onAddPost }: Props) {
             <Th className="w-28">Status</Th>
             <Th className="w-44">Length</Th>
             <SortableTh
-              className="w-32 text-right"
+              className="w-28"
               active={sortKey === "created"}
               dir={sortDir}
               onClick={() => toggleSort("created")}
@@ -93,14 +93,14 @@ export function PostTable({ posts, onAddPost }: Props) {
               Created
             </SortableTh>
             <SortableTh
-              className="w-32 text-right"
+              className="w-28"
               active={sortKey === "updated"}
               dir={sortDir}
               onClick={() => toggleSort("updated")}
             >
               Updated
             </SortableTh>
-            <Th className="w-12" />
+            <Th className="w-10" />
           </tr>
         </thead>
         <tbody>
@@ -147,13 +147,13 @@ export function PostTable({ posts, onAddPost }: Props) {
               <Td>
                 <StatusBadge status={(p.status ?? "draft") as "draft" | "published"} />
               </Td>
-              <Td className="text-xs text-tertiary">
+              <Td className="whitespace-nowrap text-xs text-tertiary">
                 {formatWordCount(p.wordCount)}
               </Td>
-              <Td className="date-pill text-right text-xs text-quaternary">
+              <Td className="date-pill text-xs text-quaternary">
                 {formatDate(p.createdAt)}
               </Td>
-              <Td className="date-pill text-right text-xs text-quaternary">
+              <Td className="date-pill text-xs text-quaternary">
                 {formatDate(p.updatedAt)}
               </Td>
               <Td
@@ -249,19 +249,12 @@ function SortableTh({
       <button
         type="button"
         onClick={onClick}
-        className={[
-          "inline-flex w-full items-center gap-1 transition hover:text-secondary",
-          className?.includes("text-right") ? "justify-end" : "",
-          active ? "text-primary" : "",
-        ].join(" ")}
+        className="flex w-full items-center justify-between gap-1 uppercase tracking-wide transition hover:text-secondary"
       >
         <span>{children}</span>
-        {active &&
-          (dir === "desc" ? (
-            <ArrowDown className="size-3" />
-          ) : (
-            <ArrowUp className="size-3" />
-          ))}
+        <span className="inline-flex w-3 shrink-0 items-center justify-center">
+          {active && (dir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
+        </span>
       </button>
     </th>
   );
@@ -327,7 +320,7 @@ function Toolbar({
           type="search"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          placeholder="Filter…"
+          placeholder="Search"
           className="w-36 bg-transparent text-primary outline-none placeholder:text-quaternary"
         />
       </label>
