@@ -37,7 +37,7 @@ export function readTime(words: number | null | undefined): number {
 export function formatWordCount(words: number | null | undefined): string {
   const w = words ?? 0;
   const min = readTime(w);
-  return `${w.toLocaleString()} Words · ${min} min read`;
+  return `${w.toLocaleString()} Words · ${min} min`;
 }
 
 export function relativeTime(ms: number): string {

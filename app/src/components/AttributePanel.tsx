@@ -1,18 +1,17 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ChevronDown, Copy04, Star01, Trash01 } from "@untitledui/icons";
+import { Copy04, Star01, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
-import type { Collection, Post, PostVersion } from "@/types";
+import type { Collection, Post, PostStatus, PostVersion } from "@/types";
 import { deletePost, duplicatePost, setPostStatus, toggleFavorite, updatePost } from "@/lib/posts";
 import { collectionDisplay } from "@/lib/collections";
 import { formatDate, relativeTime } from "@/lib/format";
 import { go } from "@/lib/route";
 import { DiffModal } from "@/components/DiffModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { ActionMenu } from "@/components/Menu";
 import { Input } from "@/components/base/input/input";
 import { Select } from "@/components/base/select/select";
-import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 
 interface Props {
   post: Post;
@@ -54,13 +53,47 @@ export function AttributePanel({ post }: Props) {
       }),
     [collectionRows],
   );
-  const statusItems = [
-    { id: "draft", label: "Draft" },
-    { id: "published", label: "Published" },
-  ];
+  const status: PostStatus = post.status ?? "draft";
 
   return (
     <aside className="flex h-full w-[300px] flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm">
+      <div className="flex items-center gap-1">
+        <ButtonUtility
+          size="sm"
+          color="tertiary"
+          tooltip={post.favorited ? "Remove from favorites" : "Add to favorites"}
+          icon={(props) => (
+            <Star01
+              {...props}
+              fill={post.favorited ? "currentColor" : "none"}
+              className={[props?.className ?? "", post.favorited ? "text-warning-primary" : ""].join(" ")}
+            />
+          )}
+          onClick={() => void toggleFavorite(post.id)}
+        />
+        <ButtonUtility
+          size="sm"
+          color="tertiary"
+          tooltip="Duplicate"
+          icon={Copy04}
+          onClick={() => void onDuplicate()}
+        />
+        <ButtonUtility
+          size="sm"
+          color="tertiary"
+          tooltip="Delete"
+          icon={Trash01}
+          onClick={() => setConfirmDelete(true)}
+        />
+      </div>
+
+      <FieldStack label="Status">
+        <StatusGroup
+          value={status}
+          onChange={(s) => void setPostStatus(post.id, s)}
+        />
+      </FieldStack>
+
       <FieldStack label="Slug">
         <Input
           size="sm"
@@ -84,17 +117,6 @@ export function AttributePanel({ post }: Props) {
         </p>
       </FieldStack>
 
-      <FieldStack label="Status">
-        <Select
-          size="sm"
-          selectedKey={post.status ?? "draft"}
-          onSelectionChange={(k) => void setPostStatus(post.id, k as "draft" | "published")}
-          items={statusItems}
-        >
-          {(item) => <Select.Item id={item.id} label={item.label} />}
-        </Select>
-      </FieldStack>
-
       <FieldStack label="Published">
         <div className="date-pill text-secondary">{formatDate(post.publishedAt)}</div>
       </FieldStack>
@@ -106,41 +128,6 @@ export function AttributePanel({ post }: Props) {
           onChange={(v) => void updatePost(post.id, { category: v })}
         />
       </FieldStack>
-
-      <div className="flex items-center gap-2">
-        <Button
-          size="sm"
-          color={post.favorited ? "primary" : "tertiary"}
-          iconLeading={Star01}
-          onClick={() => void toggleFavorite(post.id)}
-        >
-          {post.favorited ? "Favorited" : "Favorite"}
-        </Button>
-        <ActionMenu
-          triggerClassName="inline-flex items-center gap-1.5 rounded-lg border border-secondary bg-primary px-3 py-1.5 text-sm font-semibold text-secondary outline-none transition hover:bg-primary_hover hover:text-primary data-[pressed]:bg-primary_hover"
-          trigger={
-            <>
-              <span>Actions</span>
-              <ChevronDown className="size-4" data-icon />
-            </>
-          }
-          items={[
-            {
-              id: "duplicate",
-              label: "Duplicate",
-              icon: <Copy04 className="size-4" />,
-              onAction: () => void onDuplicate(),
-            },
-            {
-              id: "delete",
-              label: "Delete",
-              icon: <Trash01 className="size-4" />,
-              destructive: true,
-              onAction: () => setConfirmDelete(true),
-            },
-          ]}
-        />
-      </div>
 
       <div className="mt-2 border-t border-secondary pt-4">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-quaternary">
@@ -184,6 +171,41 @@ export function AttributePanel({ post }: Props) {
         />
       )}
     </aside>
+  );
+}
+
+function StatusGroup({
+  value,
+  onChange,
+}: {
+  value: PostStatus;
+  onChange: (s: PostStatus) => void;
+}) {
+  const options: { id: PostStatus; label: string }[] = [
+    { id: "draft", label: "Draft" },
+    { id: "published", label: "Published" },
+  ];
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-secondary bg-secondary p-0.5">
+      {options.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            className={[
+              "flex-1 rounded-md px-2.5 py-1 text-sm transition",
+              active
+                ? "bg-primary text-primary shadow-xs ring-1 ring-secondary"
+                : "text-secondary hover:text-primary",
+            ].join(" ")}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

@@ -83,7 +83,7 @@ export function PostTable({ posts, onAddPost }: Props) {
             <Th className="w-20">ID</Th>
             <Th>Title</Th>
             <Th className="w-28">Status</Th>
-            <Th className="w-44">Length</Th>
+            <Th className="w-36">Length</Th>
             <SortableTh
               className="w-28"
               active={sortKey === "created"}
