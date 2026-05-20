@@ -14,6 +14,7 @@ import { toggleTheme, useTheme } from "@/lib/theme";
 import { createCollection } from "@/lib/collections";
 import { NewCollectionDialog } from "@/components/NewCollectionDialog";
 import { setActiveCollection } from "@/lib/activeCollection";
+import { requestTitleFocus } from "@/lib/postFocus";
 import type { Collection, Post } from "@/types";
 
 type Mode = "search" | "commands";
@@ -135,6 +136,7 @@ export function CommandPalette({ currentPostId }: Props) {
     await db.posts.put({ ...post, syncedAt: Date.now(), dirty: false });
     localStorage.setItem(LAST_COLLECTION_KEY, type);
     setOpen(false);
+    requestTitleFocus(post.id);
     go({ view: "post", id: post.id });
   }
 

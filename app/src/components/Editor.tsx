@@ -3,19 +3,18 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { useCreateBlockNote } from "@blocknote/react";
 import "@blocknote/mantine/style.css";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft, ArrowDown, ArrowUp, Copy04, DotsHorizontal, Trash01 } from "@untitledui/icons";
+import { ArrowLeft, ArrowDown, ArrowUp } from "@untitledui/icons";
 import type { Post } from "@/types";
 import { db } from "@/lib/db";
-import { deletePost, duplicatePost, updatePost } from "@/lib/posts";
+import { updatePost } from "@/lib/posts";
 import { uploadFile } from "@/lib/uploads";
 import { go } from "@/lib/route";
 import { collectionDisplay } from "@/lib/collections";
 import { useTheme } from "@/lib/theme";
 import { countWords, formatWordCount } from "@/lib/format";
+import { consumeTitleFocus } from "@/lib/postFocus";
 import type { Collection } from "@/types";
 import { WikilinkAutocomplete } from "@/components/WikilinkAutocomplete";
-import { ActionMenu } from "@/components/Menu";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface Props {
   post: Post;
@@ -73,6 +72,32 @@ export function Editor({ post }: Props) {
     return () => io.disconnect();
   }, [post.id]);
 
+  // Focus the title when navigating to a freshly-created post (cmd+K → new).
+  useEffect(() => {
+    if (consumeTitleFocus(post.id)) {
+      titleRef.current?.focus();
+    }
+  }, [post.id]);
+
+  // ArrowUp at the top of the body should jump back to the title.
+  useEffect(() => {
+    const root = editorRootRef.current;
+    if (!root || !editor) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowUp" && !(e.key === "Tab" && e.shiftKey)) return;
+      const pos = editor.getTextCursorPosition?.();
+      if (!pos || pos.prevBlock) return;
+      e.preventDefault();
+      const el = titleRef.current;
+      if (!el) return;
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    };
+    root.addEventListener("keydown", onKeyDown, true);
+    return () => root.removeEventListener("keydown", onKeyDown, true);
+  }, [editor, post.id]);
+
   return (
     <div className="mx-auto w-full max-w-[760px] px-10">
       <PostNav post={post} showTitle={!titleVisible} />
@@ -116,21 +141,6 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
   const prev = idx > 0 ? sorted[idx - 1] : null;
   const next = idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
   const display = collectionDisplay(post.type, collections);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  async function onDuplicate() {
-    const dup = await duplicatePost(post);
-    if (dup) go({ view: "post", id: dup.id });
-  }
-
-  async function onDelete() {
-    await deletePost(post.id);
-    // After delete, fall back to the next or prev post in the collection,
-    // or go home if this was the last one.
-    const fallback = next ?? prev;
-    if (fallback) go({ view: "post", id: fallback.id });
-    else go({ view: "list" });
-  }
 
   return (
     <>
@@ -183,38 +193,8 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
           >
             <ArrowDown className="size-4" />
           </button>
-          <div className="ml-1">
-            <ActionMenu
-              trigger={<DotsHorizontal className="size-4" data-icon />}
-              items={[
-                {
-                  id: "duplicate",
-                  label: "Duplicate",
-                  icon: <Copy04 className="size-4" />,
-                  onAction: () => void onDuplicate(),
-                },
-                {
-                  id: "delete",
-                  label: "Delete",
-                  icon: <Trash01 className="size-4" />,
-                  destructive: true,
-                  onAction: () => setConfirmDelete(true),
-                },
-              ]}
-            />
-          </div>
         </div>
       </div>
-      {confirmDelete && (
-        <ConfirmDialog
-          title={`Delete "${post.title || "Untitled"}"?`}
-          message="The post and all of its versions will be permanently deleted."
-          confirmLabel="Delete post"
-          destructive
-          onClose={() => setConfirmDelete(false)}
-          onConfirm={() => void onDelete()}
-        />
-      )}
     </>
   );
 }

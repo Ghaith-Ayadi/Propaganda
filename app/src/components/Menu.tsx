@@ -24,14 +24,21 @@ export function ActionMenu({
   trigger,
   items,
   placement = "bottom end",
+  triggerClassName,
 }: {
   trigger: ReactNode;
   items: MenuAction[];
   placement?: "bottom start" | "bottom end" | "top start" | "top end";
+  triggerClassName?: string;
 }) {
   return (
     <AriaMenuTrigger>
-      <AriaButton className="rounded-md text-quaternary outline-none transition hover:bg-primary_hover hover:text-secondary data-[pressed]:bg-primary_hover">
+      <AriaButton
+        className={
+          triggerClassName ??
+          "rounded-md text-quaternary outline-none transition hover:bg-primary_hover hover:text-secondary data-[pressed]:bg-primary_hover"
+        }
+      >
         {trigger}
       </AriaButton>
       <AriaPopover

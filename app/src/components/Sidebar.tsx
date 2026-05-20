@@ -48,6 +48,12 @@ export function Sidebar({ currentId }: Props) {
       if (!m.has(key)) m.set(key, []);
       m.get(key)!.push(p);
     }
+    // Stable order within each collection — newest seq first, matching the
+    // post-nav arrows. Without this, typing into a post would shuffle the
+    // sidebar because the global list is sorted by updatedAt.
+    for (const list of m.values()) {
+      list.sort((a, b) => (b.collectionSeq ?? 0) - (a.collectionSeq ?? 0));
+    }
     return m;
   }, [posts, collectionRows]);
 

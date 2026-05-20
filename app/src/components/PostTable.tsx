@@ -4,7 +4,7 @@
 // - Title filter input on the right
 
 import { useMemo, useState } from "react";
-import { Copy04, DotsHorizontal, Plus, SearchLg, Trash01 } from "@untitledui/icons";
+import { ArrowDown, ArrowUp, Copy04, DotsHorizontal, Plus, SearchLg, Trash01 } from "@untitledui/icons";
 import type { Post } from "@/types";
 import { go } from "@/lib/route";
 import { formatDate, formatWordCount } from "@/lib/format";
@@ -13,6 +13,8 @@ import { ActionMenu } from "@/components/Menu";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 type StatusFilter = "all" | "draft" | "published";
+type SortKey = "updated" | "created";
+type SortDir = "asc" | "desc";
 
 interface Props {
   posts: Post[];
@@ -22,6 +24,8 @@ interface Props {
 export function PostTable({ posts, onAddPost }: Props) {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [confirmDelete, setConfirmDelete] = useState<Post | null>(null);
 
   const filtered = useMemo(() => {
@@ -35,8 +39,24 @@ export function PostTable({ posts, onAddPost }: Props) {
         (p) => p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q),
       );
     }
+    const field = sortKey === "updated" ? "updatedAt" : "createdAt";
+    const sign = sortDir === "desc" ? -1 : 1;
+    xs = [...xs].sort((a, b) => {
+      const av = (a[field] ?? 0) as number;
+      const bv = (b[field] ?? 0) as number;
+      return av === bv ? 0 : av < bv ? -1 * sign : 1 * sign;
+    });
     return xs;
-  }, [posts, filter, query]);
+  }, [posts, filter, query, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  }
 
   const counts = useMemo(() => {
     let draft = 0;
@@ -64,7 +84,22 @@ export function PostTable({ posts, onAddPost }: Props) {
             <Th>Title</Th>
             <Th className="w-28">Status</Th>
             <Th className="w-44">Length</Th>
-            <Th className="w-32 text-right">Updated</Th>
+            <SortableTh
+              className="w-32 text-right"
+              active={sortKey === "created"}
+              dir={sortDir}
+              onClick={() => toggleSort("created")}
+            >
+              Created
+            </SortableTh>
+            <SortableTh
+              className="w-32 text-right"
+              active={sortKey === "updated"}
+              dir={sortDir}
+              onClick={() => toggleSort("updated")}
+            >
+              Updated
+            </SortableTh>
             <Th className="w-12" />
           </tr>
         </thead>
@@ -86,6 +121,7 @@ export function PostTable({ posts, onAddPost }: Props) {
             <Td className="bg-primary text-sm group-hover:bg-secondary group-focus:bg-secondary">
               New post
             </Td>
+            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
             <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
             <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
             <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
@@ -115,6 +151,9 @@ export function PostTable({ posts, onAddPost }: Props) {
                 {formatWordCount(p.wordCount)}
               </Td>
               <Td className="date-pill text-right text-xs text-quaternary">
+                {formatDate(p.createdAt)}
+              </Td>
+              <Td className="date-pill text-right text-xs text-quaternary">
                 {formatDate(p.updatedAt)}
               </Td>
               <Td
@@ -130,7 +169,7 @@ export function PostTable({ posts, onAddPost }: Props) {
           {filtered.length === 0 && (
             <tr>
               <td
-                colSpan={6}
+                colSpan={7}
                 className="border-b border-secondary px-4 py-8 text-center text-sm text-tertiary last:border-b-0"
               >
                 {query ? "No matches." : "No posts in this filter."}
@@ -184,6 +223,47 @@ function PostRowActions({
         },
       ]}
     />
+  );
+}
+
+function SortableTh({
+  children,
+  className,
+  active,
+  dir,
+  onClick,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+}) {
+  return (
+    <th
+      className={[
+        "border-b border-secondary bg-secondary px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-quaternary",
+        className ?? "",
+      ].join(" ")}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={[
+          "inline-flex w-full items-center gap-1 transition hover:text-secondary",
+          className?.includes("text-right") ? "justify-end" : "",
+          active ? "text-primary" : "",
+        ].join(" ")}
+      >
+        <span>{children}</span>
+        {active &&
+          (dir === "desc" ? (
+            <ArrowDown className="size-3" />
+          ) : (
+            <ArrowUp className="size-3" />
+          ))}
+      </button>
+    </th>
   );
 }
 

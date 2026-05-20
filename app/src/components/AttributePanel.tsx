@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Star01 } from "@untitledui/icons";
+import { ChevronDown, Copy04, Star01, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import type { Collection, Post, PostVersion } from "@/types";
-import { setPostStatus, toggleFavorite, updatePost } from "@/lib/posts";
+import { deletePost, duplicatePost, setPostStatus, toggleFavorite, updatePost } from "@/lib/posts";
 import { collectionDisplay } from "@/lib/collections";
 import { formatDate, relativeTime } from "@/lib/format";
+import { go } from "@/lib/route";
 import { DiffModal } from "@/components/DiffModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ActionMenu } from "@/components/Menu";
 import { Input } from "@/components/base/input/input";
 import { Select } from "@/components/base/select/select";
 import { Button } from "@/components/base/buttons/button";
@@ -28,6 +31,17 @@ export function AttributePanel({ post }: Props) {
   );
 
   const [diffFor, setDiffFor] = useState<PostVersion | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  async function onDuplicate() {
+    const dup = await duplicatePost(post);
+    if (dup) go({ view: "post", id: dup.id });
+  }
+
+  async function onDelete() {
+    await deletePost(post.id);
+    go({ view: "list" });
+  }
 
   const collectionItems = useMemo(
     () =>
@@ -93,7 +107,7 @@ export function AttributePanel({ post }: Props) {
         />
       </FieldStack>
 
-      <div>
+      <div className="flex items-center gap-2">
         <Button
           size="sm"
           color={post.favorited ? "primary" : "tertiary"}
@@ -102,6 +116,30 @@ export function AttributePanel({ post }: Props) {
         >
           {post.favorited ? "Favorited" : "Favorite"}
         </Button>
+        <ActionMenu
+          triggerClassName="inline-flex items-center gap-1.5 rounded-lg border border-secondary bg-primary px-3 py-1.5 text-sm font-semibold text-secondary outline-none transition hover:bg-primary_hover hover:text-primary data-[pressed]:bg-primary_hover"
+          trigger={
+            <>
+              <span>Actions</span>
+              <ChevronDown className="size-4" data-icon />
+            </>
+          }
+          items={[
+            {
+              id: "duplicate",
+              label: "Duplicate",
+              icon: <Copy04 className="size-4" />,
+              onAction: () => void onDuplicate(),
+            },
+            {
+              id: "delete",
+              label: "Delete",
+              icon: <Trash01 className="size-4" />,
+              destructive: true,
+              onAction: () => setConfirmDelete(true),
+            },
+          ]}
+        />
       </div>
 
       <div className="mt-2 border-t border-secondary pt-4">
@@ -134,6 +172,16 @@ export function AttributePanel({ post }: Props) {
 
       {diffFor && (
         <DiffModal post={post} initialVersion={diffFor} onClose={() => setDiffFor(null)} />
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete "${post.title || "Untitled"}"?`}
+          message="The post and all of its versions will be permanently deleted."
+          confirmLabel="Delete post"
+          destructive
+          onClose={() => setConfirmDelete(false)}
+          onConfirm={() => void onDelete()}
+        />
       )}
     </aside>
   );
