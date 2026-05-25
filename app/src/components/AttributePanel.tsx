@@ -94,12 +94,20 @@ export function AttributePanel({ post }: Props) {
         />
       </FieldStack>
 
+      <FieldStack label="Post ID">
+        <div className="date-pill select-all font-mono text-secondary">
+          {post.postId ?? post.slug}
+        </div>
+        <p className="mt-1.5 text-[11px] text-quaternary">System-managed. Updates when collection changes.</p>
+      </FieldStack>
+
       <FieldStack label="Slug">
         <Input
           size="sm"
           value={post.slug}
           onChange={(v) => void updatePost(post.id, { slug: v })}
         />
+        <p className="mt-1.5 text-[11px] text-quaternary">Used for the public URL. Auto-generated from title while unpublished.</p>
       </FieldStack>
 
       <FieldStack label="Collection">
@@ -117,6 +125,12 @@ export function AttributePanel({ post }: Props) {
         </p>
       </FieldStack>
 
+      {post.doneAt && (
+        <FieldStack label="Done">
+          <div className="date-pill text-secondary">{formatDate(post.doneAt)}</div>
+        </FieldStack>
+      )}
+
       <FieldStack label="Published">
         <div className="date-pill text-secondary">{formatDate(post.publishedAt)}</div>
       </FieldStack>
@@ -127,6 +141,24 @@ export function AttributePanel({ post }: Props) {
           value={post.category ?? ""}
           onChange={(v) => void updatePost(post.id, { category: v })}
         />
+      </FieldStack>
+
+      <FieldStack label="Created">
+        <div
+          className="date-pill cursor-default text-secondary"
+          title={formatDate(post.createdAt)}
+        >
+          {relativeTime(post.createdAt)}
+        </div>
+      </FieldStack>
+
+      <FieldStack label="Edited">
+        <div
+          className="date-pill cursor-default text-secondary"
+          title={formatDate(post.updatedAt)}
+        >
+          {relativeTime(post.updatedAt)}
+        </div>
       </FieldStack>
 
       <div className="mt-2 border-t border-secondary pt-4">
@@ -181,9 +213,10 @@ function StatusGroup({
   value: PostStatus;
   onChange: (s: PostStatus) => void;
 }) {
-  const options: { id: PostStatus; label: string }[] = [
-    { id: "draft", label: "Draft" },
-    { id: "published", label: "Published" },
+  const options: { id: PostStatus; label: string; dot: string }[] = [
+    { id: "draft",     label: "Draft",     dot: "bg-fg-quaternary" },
+    { id: "done",      label: "Done",      dot: "bg-utility-blue-500" },
+    { id: "published", label: "Published", dot: "bg-utility-success-500" },
   ];
   return (
     <div className="flex items-center gap-1 rounded-lg border border-secondary bg-secondary p-0.5">
@@ -195,12 +228,13 @@ function StatusGroup({
             type="button"
             onClick={() => onChange(o.id)}
             className={[
-              "flex-1 rounded-md px-2.5 py-1 text-sm transition",
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-sm transition",
               active
                 ? "bg-primary text-primary shadow-xs ring-1 ring-secondary"
                 : "text-secondary hover:text-primary",
             ].join(" ")}
           >
+            <span className={["size-1.5 shrink-0 rounded-full", o.dot].join(" ")} />
             {o.label}
           </button>
         );

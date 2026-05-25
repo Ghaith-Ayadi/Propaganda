@@ -10,3 +10,5 @@ dev-dist
 .turbo
 .cache
 coverage
+.env*.local
+.env.vercel-pull

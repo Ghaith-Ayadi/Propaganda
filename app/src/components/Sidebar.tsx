@@ -164,7 +164,7 @@ export function Sidebar({ currentId }: Props) {
 
 function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <label className="flex items-center gap-2 rounded-lg border border-secondary bg-primary px-2.5 py-1.5 text-sm focus-within:border-tertiary">
+    <label className="flex items-center gap-2 rounded-lg bg-primary px-2.5 py-1.5 text-sm shadow-xs ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand">
       <SearchLg className="size-4 shrink-0 text-quaternary" />
       <input
         type="search"
@@ -388,7 +388,8 @@ function PostRow({
       {!compact && (
         <span className="w-4 shrink-0 text-center text-[13px] leading-none">{d.emoji ?? ""}</span>
       )}
-      {post.status === "draft" && <span className="text-quaternary">●</span>}
+      {(post.status === "draft" || post.status === null) && <span className="text-quaternary">●</span>}
+      {post.status === "done" && <span className="text-utility-blue-400">●</span>}
       <span className="truncate">{title}</span>
     </a>
   );

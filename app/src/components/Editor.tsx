@@ -13,6 +13,7 @@ import { collectionDisplay } from "@/lib/collections";
 import { useTheme } from "@/lib/theme";
 import { countWords, formatWordCount } from "@/lib/format";
 import { consumeTitleFocus } from "@/lib/postFocus";
+import { useEditorStyles } from "@/lib/editorStyles";
 import type { Collection } from "@/types";
 import { WikilinkAutocomplete } from "@/components/WikilinkAutocomplete";
 
@@ -58,7 +59,9 @@ export function Editor({ post }: Props) {
 
   const editorRootRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
+  const subtitleRef = useRef<HTMLInputElement | null>(null);
   const [titleVisible, setTitleVisible] = useState(true);
+  const editorCss = useEditorStyles();
 
   // When the article title scrolls out of view, the sticky nav switches to
   // showing the post title in place of just the collection.
@@ -79,7 +82,7 @@ export function Editor({ post }: Props) {
     }
   }, [post.id]);
 
-  // ArrowUp at the top of the body should jump back to the title.
+  // ArrowUp at the top of the body → subtitle → title.
   useEffect(() => {
     const root = editorRootRef.current;
     if (!root || !editor) return;
@@ -88,11 +91,16 @@ export function Editor({ post }: Props) {
       const pos = editor.getTextCursorPosition?.();
       if (!pos || pos.prevBlock) return;
       e.preventDefault();
-      const el = titleRef.current;
-      if (!el) return;
-      el.focus();
-      const len = el.value.length;
-      el.setSelectionRange(len, len);
+      // Step to subtitle if present, otherwise go straight to title.
+      const sub = subtitleRef.current;
+      const title = titleRef.current;
+      if (sub && document.activeElement !== sub) {
+        sub.focus();
+        sub.setSelectionRange(sub.value.length, sub.value.length);
+      } else if (title) {
+        title.focus();
+        title.setSelectionRange(title.value.length, title.value.length);
+      }
     };
     root.addEventListener("keydown", onKeyDown, true);
     return () => root.removeEventListener("keydown", onKeyDown, true);
@@ -100,18 +108,44 @@ export function Editor({ post }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-[760px] px-10">
+      <style>{editorCss}</style>
       <PostNav post={post} showTitle={!titleVisible} />
       <div className="pt-2">
         <input
           ref={titleRef}
           value={post.title}
           onChange={(e) => void updatePost(post.id, { title: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              subtitleRef.current?.focus();
+            }
+          }}
           placeholder="Untitled"
           className="w-full bg-transparent font-title text-4xl leading-tight text-primary outline-none placeholder:text-quaternary"
         />
-        <div className="mt-3 mb-8 text-xs text-quaternary">
-          {formatWordCount(post.wordCount)}
-        </div>
+        <input
+          ref={subtitleRef}
+          value={post.subtitle ?? ""}
+          onChange={(e) => void updatePost(post.id, { subtitle: e.target.value || null })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              editor.focus();
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              const title = titleRef.current;
+              if (title) {
+                title.focus();
+                title.setSelectionRange(title.value.length, title.value.length);
+              }
+            }
+          }}
+          placeholder="Subtitle"
+          className="mt-2 w-full bg-transparent text-xl text-secondary outline-none placeholder:text-quaternary"
+        />
+        <div className="mb-8" />
         <div ref={editorRootRef} className="w-full pb-24">
           <BlockNoteView editor={editor} theme={theme} />
           <WikilinkAutocomplete rootRef={editorRootRef} />
@@ -172,6 +206,11 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
           )}
         </div>
         <div className="flex items-center gap-1">
+          {post.wordCount != null && (
+            <span className="mr-1 text-quaternary">
+              {formatWordCount(post.wordCount)}
+            </span>
+          )}
           <span className="date-pill mr-2 text-quaternary">
             #{post.collectionSeq ?? "—"} of {sorted.length}
           </span>

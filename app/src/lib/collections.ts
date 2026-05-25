@@ -134,21 +134,22 @@ export async function renameCollection(oldName: string, newName: string): Promis
     console.error("renameCollection update posts failed:", error);
     return;
   }
-  // Cascade slug rewrites — they encode the collection prefix.
+  // Cascade post_id rewrites — they encode the collection prefix.
+  // Note: slug is NOT rewritten here; it belongs to the URL and must stay stable.
   const affected = await db.posts.where("type").equals(oldName).toArray();
   const { postSlug } = await import("@/lib/postId");
-  const slugUpdates = affected.map((p) => ({
+  const postIdUpdates = affected.map((p) => ({
     id: p.id,
-    slug: postSlug(newName, p.collectionSeq),
+    post_id: postSlug(newName, p.collectionSeq),
   }));
-  if (slugUpdates.length) {
-    const { error: slugErr } = await supabase.from("posts").upsert(slugUpdates);
-    if (slugErr) console.error("renameCollection slug rewrite failed:", slugErr);
+  if (postIdUpdates.length) {
+    const { error: pidErr } = await supabase.from("posts").upsert(postIdUpdates);
+    if (pidErr) console.error("renameCollection post_id rewrite failed:", pidErr);
   }
   // Mirror in Dexie so the UI updates without waiting for the next pull.
   await db.transaction("rw", db.posts, async () => {
     for (const p of affected) {
-      await db.posts.put({ ...p, type: newName, slug: postSlug(newName, p.collectionSeq) });
+      await db.posts.put({ ...p, type: newName, postId: postSlug(newName, p.collectionSeq) });
     }
   });
   // Delete the old collection row.

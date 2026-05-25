@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { Globe01, Upload01, User01, XClose } from "@untitledui/icons";
+import { Globe01, PenTool01, Upload01, User01, XClose } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { useSetting, setSetting } from "@/lib/settings";
 import { uploadFile } from "@/lib/uploads";
+import {
+  setCaptionAlign, setCaptionSize, setLineHeight, setBlockSpacing,
+  EDITOR_LINE_HEIGHT_KEY, EDITOR_BLOCK_SPACING_KEY, EDITOR_CAPTION_ALIGN_KEY, EDITOR_CAPTION_SIZE_KEY,
+  LINE_HEIGHT_DEFAULT, BLOCK_SPACING_DEFAULT, CAPTION_ALIGN_DEFAULT, CAPTION_SIZE_DEFAULT,
+} from "@/lib/editorStyles";
 
 interface Props {
   onClose: () => void;
 }
 
-type Tab = "author" | "site";
+type Tab = "author" | "site" | "editor";
 
 const DEFAULT_MANIFESTO =
   "It's called Verbatim because none of it is edited. I don't edit what I write. If I don't like what I said, I don't publish. No AI writing, no nonsense.";
@@ -43,6 +48,9 @@ export function SettingsDialog({ onClose }: Props) {
           <TabButton active={tab === "site"} onClick={() => setTab("site")} icon={<Globe01 className="size-4" />}>
             Site
           </TabButton>
+          <TabButton active={tab === "editor"} onClick={() => setTab("editor")} icon={<PenTool01 className="size-4" />}>
+            Editor
+          </TabButton>
         </nav>
 
         {/* Body */}
@@ -61,6 +69,7 @@ export function SettingsDialog({ onClose }: Props) {
           <div className="flex-1 overflow-y-auto px-6 py-6">
             {tab === "author" && <AuthorTab />}
             {tab === "site" && <SiteTab />}
+            {tab === "editor" && <EditorTab />}
           </div>
         </div>
       </div>
@@ -130,7 +139,7 @@ function AuthorTab() {
           value={bio ?? ""}
           onChange={(e) => void setSetting("author.bio", e.target.value)}
           rows={7}
-          className="w-full resize-none rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary outline-none focus:border-tertiary"
+          className="w-full resize-none rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs outline-none ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus:ring-2 focus:ring-inset focus:ring-brand"
         />
       </Field>
       <FaviconField current={faviconUrl ?? null} />
@@ -150,7 +159,7 @@ function SiteTab() {
           value={manifesto ?? ""}
           onChange={(e) => void setSetting("site.manifesto", e.target.value)}
           rows={5}
-          className="w-full resize-none rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary outline-none focus:border-tertiary"
+          className="w-full resize-none rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs outline-none ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus:ring-2 focus:ring-inset focus:ring-brand"
         />
       </Field>
     </div>
@@ -241,6 +250,100 @@ function FaviconField({ current }: { current: string | null }) {
           {uploading ? "Uploading…" : current ? "Replace" : "Upload"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function EditorTab() {
+  const lineHeight = useSetting<string>(EDITOR_LINE_HEIGHT_KEY, LINE_HEIGHT_DEFAULT) ?? LINE_HEIGHT_DEFAULT;
+  const blockSpacing = useSetting<string>(EDITOR_BLOCK_SPACING_KEY, BLOCK_SPACING_DEFAULT) ?? BLOCK_SPACING_DEFAULT;
+  const captionAlign = useSetting<string>(EDITOR_CAPTION_ALIGN_KEY, CAPTION_ALIGN_DEFAULT) ?? CAPTION_ALIGN_DEFAULT;
+  const captionSize = useSetting<string>(EDITOR_CAPTION_SIZE_KEY, CAPTION_SIZE_DEFAULT) ?? CAPTION_SIZE_DEFAULT;
+
+  return (
+    <div className="space-y-6">
+      <OptionGroup
+        label="Line height"
+        hint="Spacing between lines of text in the editor."
+        value={lineHeight}
+        onChange={(v) => void setLineHeight(v)}
+        options={[
+          { value: "1.5", label: "Tight" },
+          { value: "1.7", label: "Normal" },
+          { value: "1.9", label: "Relaxed" },
+        ]}
+      />
+      <OptionGroup
+        label="Block spacing"
+        hint="Vertical padding inside each paragraph block."
+        value={blockSpacing}
+        onChange={(v) => void setBlockSpacing(v)}
+        options={[
+          { value: "tight", label: "Tight" },
+          { value: "normal", label: "Normal" },
+          { value: "relaxed", label: "Relaxed" },
+        ]}
+      />
+      <OptionGroup
+        label="Caption alignment"
+        hint="Alignment of image captions in the editor."
+        value={captionAlign}
+        onChange={(v) => void setCaptionAlign(v)}
+        options={[
+          { value: "left", label: "Left" },
+          { value: "center", label: "Center" },
+        ]}
+      />
+      <OptionGroup
+        label="Caption size"
+        hint="Font size of image captions."
+        value={captionSize}
+        onChange={(v) => void setCaptionSize(v)}
+        options={[
+          { value: "0.75rem", label: "Small" },
+          { value: "0.875rem", label: "Medium" },
+        ]}
+      />
+    </div>
+  );
+}
+
+function OptionGroup({
+  label,
+  hint,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">
+        {label}
+      </div>
+      <div className="flex gap-1 rounded-lg border border-secondary bg-secondary p-0.5">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={[
+              "flex-1 rounded-md px-3 py-1.5 text-sm transition",
+              value === o.value
+                ? "bg-primary text-primary shadow-xs ring-1 ring-secondary"
+                : "text-secondary hover:text-primary",
+            ].join(" ")}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      {hint && <p className="mt-1.5 text-xs text-tertiary">{hint}</p>}
     </div>
   );
 }

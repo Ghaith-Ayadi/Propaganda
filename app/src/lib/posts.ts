@@ -9,8 +9,11 @@ export interface PostRow {
   id: number;
   title: string;
   slug: string;
+  post_id: string | null;
   type: string;
   status: PostStatus | null;
+  subtitle: string | null;
+  done_at: string | null;
   published_at: string | null;
   excerpt: string | null;
   category: string | null;
@@ -31,8 +34,11 @@ export function fromRow(r: PostRow): Post {
     id: r.id,
     title: r.title ?? "",
     slug: r.slug ?? "",
+    postId: r.post_id ?? null,
     type: r.type,
     status: r.status,
+    subtitle: r.subtitle ?? null,
+    doneAt: isoToMs(r.done_at),
     publishedAt: isoToMs(r.published_at),
     excerpt: r.excerpt,
     category: r.category,
@@ -51,8 +57,11 @@ export function toRow(p: Post): Partial<PostRow> {
     id: p.id,
     title: p.title,
     slug: p.slug,
+    post_id: p.postId ?? null,
     type: p.type,
     status: p.status,
+    subtitle: p.subtitle ?? null,
+    done_at: msToIso(p.doneAt),
     published_at: msToIso(p.publishedAt),
     excerpt: p.excerpt,
     category: p.category,
@@ -72,6 +81,20 @@ export async function updatePost(
 ): Promise<void> {
   const existing = await db.posts.get(id);
   if (!existing) return;
+
+  // Auto-derive slug from title while the post is unpublished and slug
+  // hasn't been manually customised (i.e., slug still equals postId).
+  if (
+    patch.title !== undefined &&
+    (existing.status ?? "draft") !== "published" &&
+    !patch.slug &&
+    existing.postId &&
+    existing.slug === existing.postId
+  ) {
+    const { slugify } = await import("@/lib/postId");
+    patch = { ...patch, slug: slugify(patch.title) };
+  }
+
   const next: Post = {
     ...existing,
     ...patch,
@@ -99,11 +122,13 @@ export async function duplicatePost(source: import("@/types").Post): Promise<imp
   const peers = await db.posts.where("type").equals(source.type).toArray();
   const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
 
+  const pid = postSlug(source.type, nextSeq);
   const { data, error } = await supabase
     .from("posts")
     .insert({
       title: source.title ? `${source.title} (copy)` : "",
-      slug: postSlug(source.type, nextSeq),
+      slug: pid,
+      post_id: pid,
       type: source.type,
       status: "draft",
       content_md: source.content,
@@ -138,15 +163,25 @@ export async function deletePost(id: number): Promise<void> {
 export async function setPostStatus(id: number, status: PostStatus): Promise<void> {
   const before = await db.posts.get(id);
   const patch: Partial<Post> = { status };
-  if (status === "published") {
-    if (before && !before.publishedAt) patch.publishedAt = Date.now();
+  const now = Date.now();
+
+  // doneAt: stamp on first transition out of draft (whether going to "done" or skipping straight to "published")
+  if ((status === "done" || status === "published") && before && !before.doneAt) {
+    patch.doneAt = now;
   }
+  if (status === "published" && before && !before.publishedAt) {
+    patch.publishedAt = now;
+  }
+
   await updatePost(id, patch);
-  if (status === "published" && before?.status !== "published") {
+
+  // Snapshot version on meaningful status transitions
+  const snapshotMessage = status === "done" ? "Done" : status === "published" ? "Published" : null;
+  if (snapshotMessage && before?.status !== status) {
     const after = await db.posts.get(id);
     if (after) {
       const { snapshotVersion } = await import("@/lib/versions");
-      await snapshotVersion(after, "user", "Published");
+      await snapshotVersion(after, "user", snapshotMessage);
     }
   }
 }

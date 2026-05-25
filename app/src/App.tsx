@@ -8,14 +8,16 @@ import { lazy, Suspense } from "react";
 
 const EditorApp = lazy(() => import("./EditorApp").then((m) => ({ default: m.EditorApp })));
 const BlogApp = lazy(() => import("./blog/BlogApp").then((m) => ({ default: m.BlogApp })));
+const CardGallery = lazy(() => import("./shareable/CardGallery").then((m) => ({ default: m.CardGallery })));
 
 export default function App() {
-  const isAdmin =
-    typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const isAdmin = path.startsWith("/admin");
+  const isCards = path.startsWith("/cards");
 
   return (
     <Suspense fallback={null}>
-      {isAdmin ? <EditorApp /> : <BlogApp />}
+      {isAdmin ? <EditorApp /> : isCards ? <CardGallery /> : <BlogApp />}
     </Suspense>
   );
 }

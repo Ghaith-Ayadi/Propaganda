@@ -1,14 +1,17 @@
 // Domain types.
 // Mirror the Supabase schema but use camelCase + ms timestamps locally.
 
-export type PostStatus = "draft" | "published";
+export type PostStatus = "draft" | "done" | "published";
 
 export interface Post {
   id: number;
   title: string;
-  slug: string;
+  slug: string;                 // URL slug (editable, auto-generated from title while draft)
+  postId: string | null;        // system-managed identifier: {PREFIX}·{SEQ}, changes with collection
   type: string;                 // free-form collection name (hokum, journal, brief, …)
   status: PostStatus | null;
+  subtitle: string | null;      // short standfirst shown below the title
+  doneAt: number | null;        // first time writing finished (draft → done or draft → published)
   publishedAt: number | null;
   excerpt: string | null;
   category: string | null;

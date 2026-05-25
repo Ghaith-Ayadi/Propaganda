@@ -55,6 +55,30 @@ class VerbatimDB extends Dexie {
       collections: "name, position, updatedAt",
       syncMeta: "key",
     });
+
+    // v6: doneAt — writing-finished timestamp, independent of publishedAt.
+    this.version(6).stores({
+      posts: "id, slug, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
+      versions: "id, postId, [postId+version], createdAt",
+      collections: "name, position, updatedAt",
+      syncMeta: "key",
+    });
+
+    // v7: subtitle — short standfirst line shown below the title.
+    this.version(7).stores({
+      posts: "id, slug, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
+      versions: "id, postId, [postId+version], createdAt",
+      collections: "name, position, updatedAt",
+      syncMeta: "key",
+    });
+
+    // v8: postId — system-managed {PREFIX}·{SEQ}, decoupled from the URL slug.
+    this.version(8).stores({
+      posts: "id, slug, postId, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
+      versions: "id, postId, [postId+version], createdAt",
+      collections: "name, position, updatedAt",
+      syncMeta: "key",
+    });
   }
 }
 

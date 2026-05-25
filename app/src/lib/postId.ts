@@ -25,3 +25,17 @@ export function padSeq(seq: number | null | undefined): string {
 export function postSlug(collectionName: string, seq: number | null | undefined): string {
   return `${collectionPrefix(collectionName)}·${padSeq(seq)}`;
 }
+
+/**
+ * Derive a URL slug from a post title.
+ * Lowercases, replaces spaces/special chars with hyphens, collapses runs.
+ */
+export function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")  // strip non-word, non-space, non-hyphen
+    .replace(/[\s_]+/g, "-")   // spaces/underscores → hyphens
+    .replace(/-+/g, "-")       // collapse multiple hyphens
+    .replace(/^-|-$/g, "")     // trim leading/trailing hyphens
+    || "untitled";
+}

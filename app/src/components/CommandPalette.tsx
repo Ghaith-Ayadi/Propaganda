@@ -114,12 +114,13 @@ export function CommandPalette({ currentPostId }: Props) {
     const peers = await db.posts.where("type").equals(type).toArray();
     const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
     const { postSlug } = await import("@/lib/postId");
-    const slug = postSlug(type, nextSeq);
+    const pid = postSlug(type, nextSeq);
     const { data, error } = await supabase
       .from("posts")
       .insert({
         title: "",
-        slug,
+        slug: pid,
+        post_id: pid,
         type,
         status: "draft",
         content_md: "",

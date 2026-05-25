@@ -12,7 +12,7 @@ import { deletePost, duplicatePost } from "@/lib/posts";
 import { ActionMenu } from "@/components/Menu";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
-type StatusFilter = "all" | "draft" | "published";
+type StatusFilter = "all" | "draft" | "done" | "published";
 type SortKey = "updated" | "created";
 type SortDir = "asc" | "desc";
 
@@ -60,12 +60,15 @@ export function PostTable({ posts, onAddPost }: Props) {
 
   const counts = useMemo(() => {
     let draft = 0;
+    let done = 0;
     let published = 0;
     for (const p of posts) {
-      if ((p.status ?? "draft") === "published") published++;
+      const s = p.status ?? "draft";
+      if (s === "published") published++;
+      else if (s === "done") done++;
       else draft++;
     }
-    return { all: posts.length, draft, published };
+    return { all: posts.length, draft, done, published };
   }, [posts]);
 
   return (
@@ -145,7 +148,7 @@ export function PostTable({ posts, onAddPost }: Props) {
                 {p.title || <span className="text-quaternary">Untitled</span>}
               </Td>
               <Td>
-                <StatusBadge status={(p.status ?? "draft") as "draft" | "published"} />
+                <StatusBadge status={(p.status ?? "draft") as "draft" | "done" | "published"} />
               </Td>
               <Td className="whitespace-nowrap text-xs text-tertiary">
                 {formatWordCount(p.wordCount)}
@@ -299,7 +302,7 @@ function Toolbar({
   onFilterChange: (s: StatusFilter) => void;
   query: string;
   onQueryChange: (s: string) => void;
-  counts: { all: number; draft: number; published: number };
+  counts: { all: number; draft: number; done: number; published: number };
 }) {
   return (
     <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-secondary bg-primary px-4 py-3">
@@ -310,11 +313,14 @@ function Toolbar({
         <Chip active={filter === "draft"} onClick={() => onFilterChange("draft")}>
           Drafts <Count n={counts.draft} />
         </Chip>
+        <Chip active={filter === "done"} onClick={() => onFilterChange("done")}>
+          Done <Count n={counts.done} />
+        </Chip>
         <Chip active={filter === "published"} onClick={() => onFilterChange("published")}>
           Published <Count n={counts.published} />
         </Chip>
       </div>
-      <label className="flex items-center gap-2 rounded-lg border border-secondary bg-secondary px-2.5 py-1.5 text-sm focus-within:border-tertiary">
+      <label className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-1.5 text-sm shadow-xs ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand">
         <SearchLg className="size-3.5 shrink-0 text-quaternary" />
         <input
           type="search"
@@ -357,12 +363,20 @@ function Count({ n }: { n: number }) {
   return <span className="font-mono text-xs text-quaternary">{n}</span>;
 }
 
-function StatusBadge({ status }: { status: "draft" | "published" }) {
+function StatusBadge({ status }: { status: "draft" | "done" | "published" }) {
   if (status === "published") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-utility-green-50 px-2 py-0.5 text-xs font-medium text-utility-green-700 ring-1 ring-utility-green-200 ring-inset">
         <span className="size-1.5 rounded-full bg-utility-green-500" />
         Published
+      </span>
+    );
+  }
+  if (status === "done") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-utility-blue-50 px-2 py-0.5 text-xs font-medium text-utility-blue-700 ring-1 ring-utility-blue-200 ring-inset">
+        <span className="size-1.5 rounded-full bg-utility-blue-500" />
+        Done
       </span>
     );
   }
