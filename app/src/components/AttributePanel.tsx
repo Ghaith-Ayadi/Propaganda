@@ -9,6 +9,7 @@ import { formatDate, relativeTime } from "@/lib/format";
 import { go } from "@/lib/route";
 import { DiffModal } from "@/components/DiffModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SharePanel } from "@/components/SharePanel";
 import { Input } from "@/components/base/input/input";
 import { Select } from "@/components/base/select/select";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
@@ -166,6 +167,8 @@ export function AttributePanel({ post }: Props) {
         </dl>
       </div>
 
+      <SharePanel post={post} />
+
       <div className="mt-2 border-t border-secondary pt-4">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-quaternary">
           History
@@ -221,7 +224,7 @@ function StatusGroup({
   const options: { id: PostStatus; label: string; dot: string }[] = [
     { id: "draft",     label: "Draft",     dot: "bg-fg-quaternary" },
     { id: "done",      label: "Done",      dot: "bg-utility-blue-500" },
-    { id: "published", label: "Published", dot: "bg-utility-success-500" },
+    { id: "published", label: "Published", dot: "bg-utility-green-500" },
   ];
   return (
     <div className="flex items-center gap-1 rounded-lg border border-secondary bg-secondary p-0.5">

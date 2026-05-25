@@ -390,7 +390,7 @@ function PostRow({
       )}
       {(post.status === "draft" || post.status === null) && <span className="text-quaternary">●</span>}
       {post.status === "done" && <span className="text-utility-blue-400">●</span>}
-      {post.status === "published" && <span className="text-utility-success-500">●</span>}
+      {post.status === "published" && <span className="text-utility-green-500">●</span>}
       <span className="truncate">{title}</span>
     </a>
   );
