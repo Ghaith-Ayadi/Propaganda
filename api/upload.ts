@@ -6,9 +6,7 @@
 
 import { put } from "@vercel/blob";
 
-export const config = {
-  runtime: "edge",
-};
+// Node.js runtime required — @vercel/blob uses Node streams (not Edge-compatible).
 
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") {
