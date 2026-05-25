@@ -5,9 +5,11 @@ import { Input } from "@/components/base/input/input";
 import { useSetting, setSetting } from "@/lib/settings";
 import { uploadFile } from "@/lib/uploads";
 import {
-  setCaptionAlign, setCaptionSize, setLineHeight, setBlockSpacing,
-  EDITOR_LINE_HEIGHT_KEY, EDITOR_BLOCK_SPACING_KEY, EDITOR_CAPTION_ALIGN_KEY, EDITOR_CAPTION_SIZE_KEY,
-  LINE_HEIGHT_DEFAULT, BLOCK_SPACING_DEFAULT, CAPTION_ALIGN_DEFAULT, CAPTION_SIZE_DEFAULT,
+  PARA_FONT_SIZE_KEY, PARA_FONT_WEIGHT_KEY, PARA_LINE_HEIGHT_KEY, PARA_LETTER_SPACING_KEY, PARA_SPACING_KEY,
+  PARA_FONT_SIZE_DEFAULT, PARA_FONT_WEIGHT_DEFAULT, PARA_LINE_HEIGHT_DEFAULT, PARA_LETTER_SPACING_DEFAULT, PARA_SPACING_DEFAULT,
+  setParaFontSize, setParaFontWeight, setParaLineHeight, setParaLetterSpacing, setParaSpacing,
+  CAPTION_ALIGN_KEY, CAPTION_SIZE_KEY, CAPTION_ALIGN_DEFAULT, CAPTION_SIZE_DEFAULT,
+  setCaptionAlign, setCaptionSize,
 } from "@/lib/editorStyles";
 
 interface Props {
@@ -255,18 +257,53 @@ function FaviconField({ current }: { current: string | null }) {
 }
 
 function EditorTab() {
-  const lineHeight = useSetting<string>(EDITOR_LINE_HEIGHT_KEY, LINE_HEIGHT_DEFAULT) ?? LINE_HEIGHT_DEFAULT;
-  const blockSpacing = useSetting<string>(EDITOR_BLOCK_SPACING_KEY, BLOCK_SPACING_DEFAULT) ?? BLOCK_SPACING_DEFAULT;
-  const captionAlign = useSetting<string>(EDITOR_CAPTION_ALIGN_KEY, CAPTION_ALIGN_DEFAULT) ?? CAPTION_ALIGN_DEFAULT;
-  const captionSize = useSetting<string>(EDITOR_CAPTION_SIZE_KEY, CAPTION_SIZE_DEFAULT) ?? CAPTION_SIZE_DEFAULT;
+  return (
+    <div className="space-y-8">
+      <BlockSection title="Paragraph">
+        <ParagraphSettings />
+      </BlockSection>
+      <BlockSection title="Image">
+        <ImageSettings />
+      </BlockSection>
+    </div>
+  );
+}
+
+function ParagraphSettings() {
+  const fontSize      = useSetting<string>(PARA_FONT_SIZE_KEY, PARA_FONT_SIZE_DEFAULT) ?? PARA_FONT_SIZE_DEFAULT;
+  const fontWeight    = useSetting<string>(PARA_FONT_WEIGHT_KEY, PARA_FONT_WEIGHT_DEFAULT) ?? PARA_FONT_WEIGHT_DEFAULT;
+  const lineHeight    = useSetting<string>(PARA_LINE_HEIGHT_KEY, PARA_LINE_HEIGHT_DEFAULT) ?? PARA_LINE_HEIGHT_DEFAULT;
+  const letterSpacing = useSetting<string>(PARA_LETTER_SPACING_KEY, PARA_LETTER_SPACING_DEFAULT) ?? PARA_LETTER_SPACING_DEFAULT;
+  const spacing       = useSetting<string>(PARA_SPACING_KEY, PARA_SPACING_DEFAULT) ?? PARA_SPACING_DEFAULT;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <OptionGroup
+        label="Font size"
+        value={fontSize}
+        onChange={(v) => void setParaFontSize(v)}
+        options={[
+          { value: "14px", label: "14" },
+          { value: "15px", label: "15" },
+          { value: "16px", label: "16" },
+          { value: "17px", label: "17" },
+          { value: "18px", label: "18" },
+        ]}
+      />
+      <OptionGroup
+        label="Font weight"
+        value={fontWeight}
+        onChange={(v) => void setParaFontWeight(v)}
+        options={[
+          { value: "300", label: "Light" },
+          { value: "400", label: "Regular" },
+          { value: "500", label: "Medium" },
+        ]}
+      />
       <OptionGroup
         label="Line height"
-        hint="Spacing between lines of text in the editor."
         value={lineHeight}
-        onChange={(v) => void setLineHeight(v)}
+        onChange={(v) => void setParaLineHeight(v)}
         options={[
           { value: "1.5", label: "Tight" },
           { value: "1.7", label: "Normal" },
@@ -274,36 +311,65 @@ function EditorTab() {
         ]}
       />
       <OptionGroup
-        label="Block spacing"
-        hint="Vertical padding inside each paragraph block."
-        value={blockSpacing}
-        onChange={(v) => void setBlockSpacing(v)}
+        label="Letter spacing"
+        value={letterSpacing}
+        onChange={(v) => void setParaLetterSpacing(v)}
         options={[
-          { value: "tight", label: "Tight" },
-          { value: "normal", label: "Normal" },
-          { value: "relaxed", label: "Relaxed" },
+          { value: "-0.02em", label: "Tight" },
+          { value: "0em",     label: "Normal" },
+          { value: "0.03em",  label: "Wide" },
         ]}
       />
       <OptionGroup
+        label="Paragraph spacing"
+        value={spacing}
+        onChange={(v) => void setParaSpacing(v)}
+        options={[
+          { value: "tight",   label: "Tight" },
+          { value: "normal",  label: "Normal" },
+          { value: "relaxed", label: "Relaxed" },
+        ]}
+      />
+    </div>
+  );
+}
+
+function ImageSettings() {
+  const captionAlign = useSetting<string>(CAPTION_ALIGN_KEY, CAPTION_ALIGN_DEFAULT) ?? CAPTION_ALIGN_DEFAULT;
+  const captionSize  = useSetting<string>(CAPTION_SIZE_KEY, CAPTION_SIZE_DEFAULT) ?? CAPTION_SIZE_DEFAULT;
+
+  return (
+    <div className="space-y-5">
+      <OptionGroup
         label="Caption alignment"
-        hint="Alignment of image captions in the editor."
         value={captionAlign}
         onChange={(v) => void setCaptionAlign(v)}
         options={[
-          { value: "left", label: "Left" },
+          { value: "left",   label: "Left" },
           { value: "center", label: "Center" },
         ]}
       />
       <OptionGroup
         label="Caption size"
-        hint="Font size of image captions."
         value={captionSize}
         onChange={(v) => void setCaptionSize(v)}
         options={[
-          { value: "0.75rem", label: "Small" },
+          { value: "0.75rem",  label: "Small" },
           { value: "0.875rem", label: "Medium" },
         ]}
       />
+    </div>
+  );
+}
+
+function BlockSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-4 flex items-center gap-3">
+        <div className="text-xs font-semibold uppercase tracking-wider text-secondary">{title}</div>
+        <div className="flex-1 border-t border-secondary" />
+      </div>
+      {children}
     </div>
   );
 }
