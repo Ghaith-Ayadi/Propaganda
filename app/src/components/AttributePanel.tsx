@@ -94,13 +94,6 @@ export function AttributePanel({ post }: Props) {
         />
       </FieldStack>
 
-      <FieldStack label="Post ID">
-        <div className="date-pill select-all font-mono text-secondary">
-          {post.postId ?? post.slug}
-        </div>
-        <p className="mt-1.5 text-[11px] text-quaternary">System-managed. Updates when collection changes.</p>
-      </FieldStack>
-
       <FieldStack label="Slug">
         <Input
           size="sm"
@@ -160,6 +153,18 @@ export function AttributePanel({ post }: Props) {
           {relativeTime(post.updatedAt)}
         </div>
       </FieldStack>
+
+      <div className="mt-2 border-t border-secondary pt-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-quaternary">
+          Info
+        </div>
+        <dl className="space-y-1.5 text-xs">
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="shrink-0 text-quaternary">Post ID</dt>
+            <dd className="select-all truncate font-mono text-secondary">{post.postId ?? post.slug}</dd>
+          </div>
+        </dl>
+      </div>
 
       <div className="mt-2 border-t border-secondary pt-4">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-quaternary">
