@@ -59,7 +59,7 @@ export function Editor({ post }: Props) {
 
   const editorRootRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
-  const subtitleRef = useRef<HTMLInputElement | null>(null);
+  const subtitleRef = useRef<HTMLTextAreaElement | null>(null);
   const [titleVisible, setTitleVisible] = useState(true);
   const editorCss = useEditorStyles();
 
@@ -124,10 +124,16 @@ export function Editor({ post }: Props) {
           placeholder="Untitled"
           className="w-full bg-transparent font-title text-4xl leading-tight text-primary outline-none placeholder:text-quaternary"
         />
-        <input
+        <textarea
           ref={subtitleRef}
           value={post.subtitle ?? ""}
-          onChange={(e) => void updatePost(post.id, { subtitle: e.target.value || null })}
+          rows={1}
+          onChange={(e) => {
+            const el = e.currentTarget;
+            el.style.height = "auto";
+            el.style.height = `${el.scrollHeight}px`;
+            void updatePost(post.id, { subtitle: e.target.value || null });
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -143,7 +149,7 @@ export function Editor({ post }: Props) {
             }
           }}
           placeholder="Subtitle"
-          className="mt-2 w-full bg-transparent text-xl text-secondary outline-none placeholder:text-quaternary"
+          className="mt-2 w-full resize-none overflow-hidden bg-transparent text-xl leading-snug text-secondary outline-none placeholder:text-quaternary"
         />
         <div className="mb-8" />
         <div ref={editorRootRef} className="w-full pb-24">
