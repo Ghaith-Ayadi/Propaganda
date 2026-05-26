@@ -119,16 +119,6 @@ export function AttributePanel({ post }: Props) {
         </p>
       </FieldStack>
 
-      {post.doneAt && (
-        <FieldStack label="Done">
-          <div className="date-pill text-secondary">{formatDate(post.doneAt)}</div>
-        </FieldStack>
-      )}
-
-      <FieldStack label="Published">
-        <div className="date-pill text-secondary">{formatDate(post.publishedAt)}</div>
-      </FieldStack>
-
       <FieldStack label="Category">
         <Input
           size="sm"
@@ -136,36 +126,6 @@ export function AttributePanel({ post }: Props) {
           onChange={(v) => void updatePost(post.id, { category: v })}
         />
       </FieldStack>
-
-      <FieldStack label="Created">
-        <div
-          className="date-pill cursor-default text-secondary"
-          title={formatDate(post.createdAt)}
-        >
-          {relativeTime(post.createdAt)}
-        </div>
-      </FieldStack>
-
-      <FieldStack label="Edited">
-        <div
-          className="date-pill cursor-default text-secondary"
-          title={formatDate(post.updatedAt)}
-        >
-          {relativeTime(post.updatedAt)}
-        </div>
-      </FieldStack>
-
-      <div className="mt-2 border-t border-secondary pt-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-quaternary">
-          Info
-        </div>
-        <dl className="space-y-1.5 text-xs">
-          <div className="flex items-baseline justify-between gap-2">
-            <dt className="shrink-0 text-quaternary">Post ID</dt>
-            <dd className="select-all truncate font-mono text-secondary">{post.postId ?? post.slug}</dd>
-          </div>
-        </dl>
-      </div>
 
       <SharePanel post={post} />
 
@@ -195,6 +155,34 @@ export function AttributePanel({ post }: Props) {
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="mt-2 border-t border-secondary pt-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-quaternary">
+          Info
+        </div>
+        <dl className="space-y-1.5 text-xs">
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="shrink-0 text-quaternary">Post ID</dt>
+            <dd className="select-all truncate font-mono text-secondary">{post.postId ?? post.slug}</dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="shrink-0 text-quaternary">Published</dt>
+            <dd className="text-secondary">{formatDate(post.publishedAt)}</dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="shrink-0 text-quaternary">Done</dt>
+            <dd className="text-secondary">{formatDate(post.doneAt)}</dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="shrink-0 text-quaternary">Last edited</dt>
+            <dd className="cursor-default text-secondary" title={formatDate(post.updatedAt)}>{relativeTime(post.updatedAt)}</dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="shrink-0 text-quaternary">Created</dt>
+            <dd className="cursor-default text-secondary" title={formatDate(post.createdAt)}>{relativeTime(post.createdAt)}</dd>
+          </div>
+        </dl>
       </div>
 
       {diffFor && (
