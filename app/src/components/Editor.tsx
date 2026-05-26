@@ -78,7 +78,7 @@ export function Editor({ post }: Props) {
     if (!titleRef.current) return;
     const io = new IntersectionObserver(
       ([entry]) => setTitleVisible(entry.isIntersecting),
-      { threshold: 0, rootMargin: "-1px 0px 0px 0px" },
+      { threshold: 0, rootMargin: "-44px 0px 0px 0px" },
     );
     io.observe(titleRef.current);
     return () => io.disconnect();
@@ -194,12 +194,7 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
   return (
     <>
       <div
-        className={[
-          "sticky top-0 z-30 -mx-10 flex items-center justify-between px-10 py-3 text-xs text-tertiary transition-[background,border-color] duration-150",
-          showTitle
-            ? "border-b border-secondary bg-primary/85 backdrop-blur"
-            : "border-b border-transparent bg-transparent",
-        ].join(" ")}
+        className="sticky top-0 z-30 -mx-10 flex items-center justify-between border-b border-secondary bg-primary/85 px-10 py-3 text-xs text-tertiary backdrop-blur"
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <button
