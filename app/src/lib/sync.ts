@@ -112,27 +112,23 @@ async function pullChanges(): Promise<void> {
 }
 
 async function pullCollections(): Promise<void> {
-  const meta = await db.syncMeta.get("lastCollectionsPullIso");
-  const cursor = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
+  // Full replace — collections are small and deletes must propagate to Dexie.
   const { data, error } = await supabase
     .from("collections")
     .select("*")
-    .gt("updated_at", cursor)
-    .order("updated_at", { ascending: true });
+    .order("position", { ascending: true });
   if (error) {
     console.error("Pull collections failed:", error);
     return;
   }
-  if (!data?.length) return;
-  let maxIso = cursor;
+  const now = Date.now();
   await db.transaction("rw", db.collections, async () => {
-    for (const raw of data) {
+    await db.collections.clear();
+    for (const raw of data ?? []) {
       const row = raw as Parameters<typeof fromCollectionRow>[0];
-      if (row.updated_at > maxIso) maxIso = row.updated_at;
-      await db.collections.put({ ...fromCollectionRow(row), syncedAt: Date.now(), dirty: false });
+      await db.collections.put({ ...fromCollectionRow(row), syncedAt: now, dirty: false });
     }
   });
-  await db.syncMeta.put({ key: "lastCollectionsPullIso", value: maxIso });
 }
 
 export async function resetSyncState() {
