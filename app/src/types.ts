@@ -20,6 +20,7 @@ export interface Post {
   favorited: boolean;
   collectionSeq: number | null; // 1-based position inside its collection
   wordCount: number | null;
+  shareableQuotes: string[] | null; // LLM-extracted pull-quotes; null = not yet run
   createdAt: number;
   updatedAt: number;
   // sync metadata, local-only

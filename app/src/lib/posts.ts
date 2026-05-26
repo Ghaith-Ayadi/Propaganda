@@ -22,6 +22,7 @@ export interface PostRow {
   favorited: boolean;
   collection_seq: number | null;
   word_count: number | null;
+  shareable_quotes: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +48,7 @@ export function fromRow(r: PostRow): Post {
     favorited: !!r.favorited,
     collectionSeq: r.collection_seq ?? null,
     wordCount: r.word_count ?? null,
+    shareableQuotes: r.shareable_quotes ?? null,
     createdAt: new Date(r.created_at).getTime(),
     updatedAt: new Date(r.updated_at).getTime(),
   };
@@ -70,6 +72,7 @@ export function toRow(p: Post): Partial<PostRow> {
     favorited: p.favorited,
     collection_seq: p.collectionSeq ?? null,
     word_count: p.wordCount ?? null,
+    shareable_quotes: p.shareableQuotes ?? null,
   };
 }
 
