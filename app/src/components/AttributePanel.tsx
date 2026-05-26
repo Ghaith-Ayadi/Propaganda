@@ -33,6 +33,7 @@ export function AttributePanel({ post }: Props) {
   const [diffFor, setDiffFor] = useState<PostVersion | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [slugWarnDismissed, setSlugWarnDismissed] = useState(false);
+  const [slugEdited, setSlugEdited] = useState(false);
 
   const publicUrl = `${window.location.origin}/p/${post.slug}`;
 
@@ -112,12 +113,12 @@ export function AttributePanel({ post }: Props) {
           size="sm"
           value={post.slug}
           onChange={(v) => {
-            setSlugWarnDismissed(false);
+            setSlugEdited(true);
             void updatePost(post.id, { slug: v });
           }}
         />
         <p className="mt-1.5 select-all truncate text-[11px] text-quaternary">{publicUrl}</p>
-        {post.status === "published" && !slugWarnDismissed && (
+        {post.status === "published" && slugEdited && !slugWarnDismissed && (
           <div className="mt-2 flex items-start justify-between gap-1.5 rounded-md bg-utility-yellow-100 px-2.5 py-1.5 text-[11px] text-utility-yellow-700">
             <span>Changing the slug will break any existing public links to this post.</span>
             <button
