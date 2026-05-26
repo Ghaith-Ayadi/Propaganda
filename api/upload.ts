@@ -8,11 +8,7 @@ import { put } from "@vercel/blob";
 
 // Node.js runtime required — @vercel/blob uses Node streams (not Edge-compatible).
 
-export default async function handler(request: Request): Promise<Response> {
-  if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
-
+export async function POST(request: Request): Promise<Response> {
   let formData: FormData;
   try {
     formData = await request.formData();
