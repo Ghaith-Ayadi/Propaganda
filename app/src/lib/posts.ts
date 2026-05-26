@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { scheduleSync } from "@/lib/sync";
+import { snapshotVersion } from "@/lib/versions";
 import type { Post, PostStatus } from "@/types";
 
 export interface PostRow {
@@ -183,7 +184,6 @@ export async function setPostStatus(id: number, status: PostStatus): Promise<voi
   if (snapshotMessage && before?.status !== status) {
     const after = await db.posts.get(id);
     if (after) {
-      const { snapshotVersion } = await import("@/lib/versions");
       await snapshotVersion(after, "user", snapshotMessage);
     }
   }
