@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Copy04, Star01, Trash01 } from "@untitledui/icons";
+import { Copy04, LinkExternal01, Star01, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import type { Collection, Post, PostStatus, PostVersion } from "@/types";
 import { deletePost, duplicatePost, setPostStatus, toggleFavorite, updatePost } from "@/lib/posts";
@@ -32,6 +32,9 @@ export function AttributePanel({ post }: Props) {
 
   const [diffFor, setDiffFor] = useState<PostVersion | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [slugWarnDismissed, setSlugWarnDismissed] = useState(false);
+
+  const publicUrl = `${window.location.origin}/p/${post.slug}`;
 
   async function onDuplicate() {
     const dup = await duplicatePost(post);
@@ -86,6 +89,15 @@ export function AttributePanel({ post }: Props) {
           icon={Trash01}
           onClick={() => setConfirmDelete(true)}
         />
+        <div className="ml-auto">
+          <ButtonUtility
+            size="sm"
+            color="tertiary"
+            tooltip="Preview"
+            icon={LinkExternal01}
+            onClick={() => window.open(publicUrl, "_blank")}
+          />
+        </div>
       </div>
 
       <FieldStack label="Status">
@@ -99,9 +111,24 @@ export function AttributePanel({ post }: Props) {
         <Input
           size="sm"
           value={post.slug}
-          onChange={(v) => void updatePost(post.id, { slug: v })}
+          onChange={(v) => {
+            setSlugWarnDismissed(false);
+            void updatePost(post.id, { slug: v });
+          }}
         />
-        <p className="mt-1.5 text-[11px] text-quaternary">Used for the public URL. Auto-generated from title while unpublished.</p>
+        <p className="mt-1.5 select-all truncate text-[11px] text-quaternary">{publicUrl}</p>
+        {post.status === "published" && !slugWarnDismissed && (
+          <div className="mt-2 flex items-start justify-between gap-1.5 rounded-md bg-utility-yellow-100 px-2.5 py-1.5 text-[11px] text-utility-yellow-700">
+            <span>Changing the slug will break any existing public links to this post.</span>
+            <button
+              onClick={() => setSlugWarnDismissed(true)}
+              className="mt-0.5 shrink-0 opacity-60 hover:opacity-100"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </FieldStack>
 
       <FieldStack label="Collection">
