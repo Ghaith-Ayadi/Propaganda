@@ -61,6 +61,15 @@ export function Editor({ post }: Props) {
   const titleRef = useRef<HTMLInputElement | null>(null);
   const subtitleRef = useRef<HTMLTextAreaElement | null>(null);
   const [titleVisible, setTitleVisible] = useState(true);
+
+  // Auto-size the subtitle textarea to its content on mount and when the post
+  // changes (e.g. navigating between posts or subtitle syncing in).
+  useEffect(() => {
+    const el = subtitleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [post.id, post.subtitle]);
   const editorCss = useEditorStyles();
 
   // When the article title scrolls out of view, the sticky nav switches to
