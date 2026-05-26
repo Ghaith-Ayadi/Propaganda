@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Globe01, PenTool01, Upload01, User01, XClose } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
-import { useSetting, setSetting } from "@/lib/settings";
+import { useSetting, setSetting, useSettingsVersion } from "@/lib/settings";
 import { uploadFile } from "@/lib/uploads";
 import {
-  PARA_FONT_SIZE_KEY, PARA_FONT_WEIGHT_KEY, PARA_LINE_HEIGHT_KEY, PARA_LETTER_SPACING_KEY, PARA_SPACING_KEY,
-  PARA_FONT_SIZE_DEFAULT, PARA_FONT_WEIGHT_DEFAULT, PARA_LINE_HEIGHT_DEFAULT, PARA_LETTER_SPACING_DEFAULT, PARA_SPACING_DEFAULT,
-  setParaFontSize, setParaFontWeight, setParaLineHeight, setParaLetterSpacing, setParaSpacing,
+  type BlockKey,
+  getBlockProp,
+  setBlockProp,
   CAPTION_ALIGN_KEY, CAPTION_SIZE_KEY, CAPTION_ALIGN_DEFAULT, CAPTION_SIZE_DEFAULT,
   setCaptionAlign, setCaptionSize,
 } from "@/lib/editorStyles";
@@ -260,7 +260,19 @@ function EditorTab() {
   return (
     <div className="space-y-8">
       <BlockSection title="Paragraph">
-        <ParagraphSettings />
+        <BlockTypeSettings block="paragraph" />
+      </BlockSection>
+      <BlockSection title="H1">
+        <BlockTypeSettings block="h1" />
+      </BlockSection>
+      <BlockSection title="H2">
+        <BlockTypeSettings block="h2" />
+      </BlockSection>
+      <BlockSection title="H3">
+        <BlockTypeSettings block="h3" />
+      </BlockSection>
+      <BlockSection title="Quote">
+        <BlockTypeSettings block="quote" />
       </BlockSection>
       <BlockSection title="Image">
         <ImageSettings />
@@ -269,67 +281,79 @@ function EditorTab() {
   );
 }
 
-function ParagraphSettings() {
-  const fontSize      = useSetting<string>(PARA_FONT_SIZE_KEY, PARA_FONT_SIZE_DEFAULT) ?? PARA_FONT_SIZE_DEFAULT;
-  const fontWeight    = useSetting<string>(PARA_FONT_WEIGHT_KEY, PARA_FONT_WEIGHT_DEFAULT) ?? PARA_FONT_WEIGHT_DEFAULT;
-  const lineHeight    = useSetting<string>(PARA_LINE_HEIGHT_KEY, PARA_LINE_HEIGHT_DEFAULT) ?? PARA_LINE_HEIGHT_DEFAULT;
-  const letterSpacing = useSetting<string>(PARA_LETTER_SPACING_KEY, PARA_LETTER_SPACING_DEFAULT) ?? PARA_LETTER_SPACING_DEFAULT;
-  const spacing       = useSetting<string>(PARA_SPACING_KEY, PARA_SPACING_DEFAULT) ?? PARA_SPACING_DEFAULT;
-
+function BlockTypeSettings({ block }: { block: BlockKey }) {
+  useSettingsVersion();
   return (
-    <div className="space-y-5">
-      <OptionGroup
+    <div className="space-y-3">
+      <NumberField
         label="Font size"
-        value={fontSize}
-        onChange={(v) => void setParaFontSize(v)}
-        options={[
-          { value: "14px", label: "14" },
-          { value: "15px", label: "15" },
-          { value: "16px", label: "16" },
-          { value: "17px", label: "17" },
-          { value: "18px", label: "18" },
-        ]}
+        value={getBlockProp(block, "fontSize")}
+        onChange={(v) => void setBlockProp(block, "fontSize", v)}
+        min={8} max={72} step={1} unit="px"
       />
-      <OptionGroup
+      <NumberField
         label="Font weight"
-        value={fontWeight}
-        onChange={(v) => void setParaFontWeight(v)}
-        options={[
-          { value: "300", label: "Light" },
-          { value: "400", label: "Regular" },
-          { value: "500", label: "Medium" },
-        ]}
+        value={getBlockProp(block, "fontWeight")}
+        onChange={(v) => void setBlockProp(block, "fontWeight", v)}
+        min={100} max={900} step={100}
       />
-      <OptionGroup
+      <NumberField
         label="Line height"
-        value={lineHeight}
-        onChange={(v) => void setParaLineHeight(v)}
-        options={[
-          { value: "1.5", label: "Tight" },
-          { value: "1.7", label: "Normal" },
-          { value: "1.9", label: "Relaxed" },
-        ]}
+        value={getBlockProp(block, "lineHeight")}
+        onChange={(v) => void setBlockProp(block, "lineHeight", v)}
+        min={0.5} max={3} step={0.05}
       />
-      <OptionGroup
+      <NumberField
         label="Letter spacing"
-        value={letterSpacing}
-        onChange={(v) => void setParaLetterSpacing(v)}
-        options={[
-          { value: "-0.02em", label: "Tight" },
-          { value: "0em",     label: "Normal" },
-          { value: "0.03em",  label: "Wide" },
-        ]}
+        value={getBlockProp(block, "letterSpacing")}
+        onChange={(v) => void setBlockProp(block, "letterSpacing", v)}
+        min={-0.1} max={0.2} step={0.005} unit="em"
       />
-      <OptionGroup
+      <NumberField
         label="Paragraph spacing"
-        value={spacing}
-        onChange={(v) => void setParaSpacing(v)}
-        options={[
-          { value: "tight",   label: "Tight" },
-          { value: "normal",  label: "Normal" },
-          { value: "relaxed", label: "Relaxed" },
-        ]}
+        value={getBlockProp(block, "spacing")}
+        onChange={(v) => void setBlockProp(block, "spacing", v)}
+        min={0} max={48} step={1} unit="px"
       />
+    </div>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  unit,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs text-secondary">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          value={value}
+          min={min}
+          max={max}
+          step={step ?? 1}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v)) onChange(v);
+          }}
+          className="w-20 rounded-md bg-primary px-2 py-1 text-right text-sm text-primary shadow-xs outline-none ring-1 ring-inset ring-primary transition-shadow duration-100 focus:ring-2 focus:ring-brand"
+        />
+        {unit && <span className="w-5 text-xs text-quaternary">{unit}</span>}
+      </div>
     </div>
   );
 }

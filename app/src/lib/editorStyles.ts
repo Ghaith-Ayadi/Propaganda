@@ -1,96 +1,107 @@
 // Editor appearance settings: per-block-type CSS controls.
-// Values stored via the app settings system and applied as injected CSS.
+// Values stored as numbers via the app settings system and applied as injected CSS.
 
-import { getSetting, setSetting, useSetting } from "@/lib/settings";
+import { getSetting, setSetting, useSettingsVersion } from "@/lib/settings";
 
-// ─── Paragraph ───────────────────────────────────────────────────────────────
+// ─── Block types ─────────────────────────────────────────────────────────────
 
-export const PARA_FONT_SIZE_KEY      = "editor.paragraph.fontSize";
-export const PARA_FONT_WEIGHT_KEY    = "editor.paragraph.fontWeight";
-export const PARA_LINE_HEIGHT_KEY    = "editor.paragraph.lineHeight";
-export const PARA_LETTER_SPACING_KEY = "editor.paragraph.letterSpacing";
-export const PARA_SPACING_KEY        = "editor.paragraph.spacing";
+export type BlockKey = "paragraph" | "h1" | "h2" | "h3" | "quote";
 
-export const PARA_FONT_SIZE_DEFAULT      = "16px";
-export const PARA_FONT_WEIGHT_DEFAULT    = "400";
-export const PARA_LINE_HEIGHT_DEFAULT    = "1.7";
-export const PARA_LETTER_SPACING_DEFAULT = "0em";
-export const PARA_SPACING_DEFAULT        = "normal";
+export interface BlockConfig {
+  fontSize:      number; // px
+  fontWeight:    number; // unitless
+  lineHeight:    number; // unitless
+  letterSpacing: number; // em
+  spacing:       number; // px top/bottom padding
+}
+
+export const BLOCK_DEFAULTS: Record<BlockKey, BlockConfig> = {
+  paragraph: { fontSize: 16, fontWeight: 400, lineHeight: 1.7,  letterSpacing:  0,     spacing: 4 },
+  h1:        { fontSize: 36, fontWeight: 700, lineHeight: 1.15, letterSpacing: -0.02,  spacing: 8 },
+  h2:        { fontSize: 28, fontWeight: 600, lineHeight: 1.25, letterSpacing: -0.01,  spacing: 6 },
+  h3:        { fontSize: 22, fontWeight: 600, lineHeight: 1.35, letterSpacing:  0,     spacing: 4 },
+  quote:     { fontSize: 16, fontWeight: 400, lineHeight: 1.8,  letterSpacing:  0,     spacing: 4 },
+};
+
+// ─── Setting keys ─────────────────────────────────────────────────────────────
+
+export const BLOCK_PROPS = ["fontSize", "fontWeight", "lineHeight", "letterSpacing", "spacing"] as const;
+export type BlockProp = (typeof BLOCK_PROPS)[number];
+
+export function settingKey(block: BlockKey, prop: BlockProp): string {
+  return `editor.${block}.${prop}`;
+}
+
+// ─── Getters / setters ────────────────────────────────────────────────────────
+
+export function getBlockProp(block: BlockKey, prop: BlockProp): number {
+  return (
+    getSetting<number>(settingKey(block, prop), BLOCK_DEFAULTS[block][prop]) ??
+    BLOCK_DEFAULTS[block][prop]
+  );
+}
+
+export function setBlockProp(block: BlockKey, prop: BlockProp, value: number): Promise<void> {
+  return setSetting(settingKey(block, prop), value);
+}
 
 // ─── Image captions ──────────────────────────────────────────────────────────
 
-export const CAPTION_ALIGN_KEY = "editor.captionAlignment";
-export const CAPTION_SIZE_KEY  = "editor.captionFontSize";
-
+export const CAPTION_ALIGN_KEY     = "editor.captionAlignment";
+export const CAPTION_SIZE_KEY      = "editor.captionFontSize";
 export const CAPTION_ALIGN_DEFAULT = "center";
 export const CAPTION_SIZE_DEFAULT  = "0.75rem";
 
-// ─── CSS maps ────────────────────────────────────────────────────────────────
+export const getCaptionAlign = () => getSetting<string>(CAPTION_ALIGN_KEY, CAPTION_ALIGN_DEFAULT);
+export const setCaptionAlign = (v: string) => setSetting(CAPTION_ALIGN_KEY, v);
+export const getCaptionSize  = () => getSetting<string>(CAPTION_SIZE_KEY, CAPTION_SIZE_DEFAULT);
+export const setCaptionSize  = (v: string) => setSetting(CAPTION_SIZE_KEY, v);
 
-const PARA_SPACING_MAP: Record<string, string> = {
-  tight:   "1px 0",
-  normal:  "3px 0",
-  relaxed: "7px 0",
+// ─── CSS selectors ────────────────────────────────────────────────────────────
+
+const BLOCK_SELECTOR: Record<BlockKey, string> = {
+  paragraph: '.bn-block-content[data-content-type="paragraph"]',
+  h1:        '.bn-block-content[data-content-type="heading"][data-level="1"]',
+  h2:        '.bn-block-content[data-content-type="heading"][data-level="2"]',
+  h3:        '.bn-block-content[data-content-type="heading"][data-level="3"]',
+  quote:     '.bn-block-content[data-content-type="quote"]',
 };
 
 // ─── CSS generation ──────────────────────────────────────────────────────────
 
+function blockCss(block: BlockKey, cfg: BlockConfig): string {
+  const sel = BLOCK_SELECTOR[block];
+  return `${sel} { font-size: ${cfg.fontSize}px; font-weight: ${cfg.fontWeight}; line-height: ${cfg.lineHeight}; letter-spacing: ${cfg.letterSpacing}em; padding: ${cfg.spacing}px 0; }`;
+}
+
 export function buildEditorCss(
-  paraFontSize: string,
-  paraFontWeight: string,
-  paraLineHeight: string,
-  paraLetterSpacing: string,
-  paraSpacing: string,
+  configs: Record<BlockKey, BlockConfig>,
   captionAlign: string,
   captionSize: string,
 ): string {
-  const padding = PARA_SPACING_MAP[paraSpacing] ?? PARA_SPACING_MAP.normal;
-  return `
-.bn-block-content[data-content-type="paragraph"] { font-size: ${paraFontSize}; font-weight: ${paraFontWeight}; line-height: ${paraLineHeight}; letter-spacing: ${paraLetterSpacing}; padding: ${padding}; }
-.bn-file-caption { text-align: ${captionAlign}; font-size: ${captionSize}; }
-  `.trim();
+  const lines = (Object.keys(configs) as BlockKey[]).map((b) => blockCss(b, configs[b]));
+  lines.push(`.bn-file-caption { text-align: ${captionAlign}; font-size: ${captionSize}; }`);
+  return lines.join("\n");
 }
-
-// ─── Typed getters / setters ─────────────────────────────────────────────────
-
-export const getParaFontSize      = () => getSetting<string>(PARA_FONT_SIZE_KEY, PARA_FONT_SIZE_DEFAULT);
-export const setParaFontSize      = (v: string) => setSetting(PARA_FONT_SIZE_KEY, v);
-
-export const getParaFontWeight    = () => getSetting<string>(PARA_FONT_WEIGHT_KEY, PARA_FONT_WEIGHT_DEFAULT);
-export const setParaFontWeight    = (v: string) => setSetting(PARA_FONT_WEIGHT_KEY, v);
-
-export const getParaLineHeight    = () => getSetting<string>(PARA_LINE_HEIGHT_KEY, PARA_LINE_HEIGHT_DEFAULT);
-export const setParaLineHeight    = (v: string) => setSetting(PARA_LINE_HEIGHT_KEY, v);
-
-export const getParaLetterSpacing = () => getSetting<string>(PARA_LETTER_SPACING_KEY, PARA_LETTER_SPACING_DEFAULT);
-export const setParaLetterSpacing = (v: string) => setSetting(PARA_LETTER_SPACING_KEY, v);
-
-export const getParaSpacing       = () => getSetting<string>(PARA_SPACING_KEY, PARA_SPACING_DEFAULT);
-export const setParaSpacing       = (v: string) => setSetting(PARA_SPACING_KEY, v);
-
-export const getCaptionAlign      = () => getSetting<string>(CAPTION_ALIGN_KEY, CAPTION_ALIGN_DEFAULT);
-export const setCaptionAlign      = (v: string) => setSetting(CAPTION_ALIGN_KEY, v);
-
-export const getCaptionSize       = () => getSetting<string>(CAPTION_SIZE_KEY, CAPTION_SIZE_DEFAULT);
-export const setCaptionSize       = (v: string) => setSetting(CAPTION_SIZE_KEY, v);
 
 // ─── React hook ──────────────────────────────────────────────────────────────
 
 export function useEditorStyles(): string {
-  const paraFontSize      = useSetting<string>(PARA_FONT_SIZE_KEY, PARA_FONT_SIZE_DEFAULT) ?? PARA_FONT_SIZE_DEFAULT;
-  const paraFontWeight    = useSetting<string>(PARA_FONT_WEIGHT_KEY, PARA_FONT_WEIGHT_DEFAULT) ?? PARA_FONT_WEIGHT_DEFAULT;
-  const paraLineHeight    = useSetting<string>(PARA_LINE_HEIGHT_KEY, PARA_LINE_HEIGHT_DEFAULT) ?? PARA_LINE_HEIGHT_DEFAULT;
-  const paraLetterSpacing = useSetting<string>(PARA_LETTER_SPACING_KEY, PARA_LETTER_SPACING_DEFAULT) ?? PARA_LETTER_SPACING_DEFAULT;
-  const paraSpacing       = useSetting<string>(PARA_SPACING_KEY, PARA_SPACING_DEFAULT) ?? PARA_SPACING_DEFAULT;
-  const captionAlign      = useSetting<string>(CAPTION_ALIGN_KEY, CAPTION_ALIGN_DEFAULT) ?? CAPTION_ALIGN_DEFAULT;
-  const captionSize       = useSetting<string>(CAPTION_SIZE_KEY, CAPTION_SIZE_DEFAULT) ?? CAPTION_SIZE_DEFAULT;
-  return buildEditorCss(
-    paraFontSize,
-    paraFontWeight,
-    paraLineHeight,
-    paraLetterSpacing,
-    paraSpacing,
-    captionAlign,
-    captionSize,
-  );
+  useSettingsVersion(); // re-render whenever any setting changes
+
+  const configs = {} as Record<BlockKey, BlockConfig>;
+  for (const block of Object.keys(BLOCK_DEFAULTS) as BlockKey[]) {
+    configs[block] = {
+      fontSize:      getBlockProp(block, "fontSize"),
+      fontWeight:    getBlockProp(block, "fontWeight"),
+      lineHeight:    getBlockProp(block, "lineHeight"),
+      letterSpacing: getBlockProp(block, "letterSpacing"),
+      spacing:       getBlockProp(block, "spacing"),
+    };
+  }
+
+  const captionAlign = getSetting<string>(CAPTION_ALIGN_KEY, CAPTION_ALIGN_DEFAULT) ?? CAPTION_ALIGN_DEFAULT;
+  const captionSize  = getSetting<string>(CAPTION_SIZE_KEY, CAPTION_SIZE_DEFAULT) ?? CAPTION_SIZE_DEFAULT;
+
+  return buildEditorCss(configs, captionAlign, captionSize);
 }
