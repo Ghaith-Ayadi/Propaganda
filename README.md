@@ -8,7 +8,7 @@ The multi-tenant work is the medium-term direction. The current PRD is being rew
 
 Vite + React 19 + TanStack Router/Query, BlockNote editor on TipTap, Dexie (IndexedDB) as the source-of-truth UI store, Supabase (Postgres + Storage) for cloud sync, Vercel for hosting.
 
-**Infra constraint:** minimize providers. Vercel + Supabase is the entire stack target — adding a third provider needs justification. Specifically: no Next.js (we keep Vite even when hosted on Vercel).
+**Infra constraint:** minimize providers. Vercel + Supabase is the entire stack target — adding a third provider needs justification. Be cautious about Next.js: Vite is the default, and "Vercel hosting" doesn't automatically mean "Next.js framework." Reach for Next.js only when there's a real reason that holds up off-Vercel too.
 
 ## Layout
 
@@ -30,12 +30,12 @@ Today the codebase hardcodes the single-tenant assumption in most places. Discip
 
 ## Known migration debt
 
-- **`blog/` is Next.js** — has to be replaced (still Vercel-hostable, just not Next.js). Schedule with the platform migration.
+- **`blog/` is Next.js** — slated for replacement during the platform migration (likely with a non-Next.js renderer, still Vercel-hostable). Existing renderer can stay until then; just don't deepen the Next.js coupling unnecessarily.
 - **Notion migration code** in `scripts/` is Verbatim-specific seed import. Long-term it becomes a tenant migration plugin.
 
 ## Work tracking
 
-Active issues in Plane project **Propaganda (PPG)**. Historical issues in the archived **Verbatim (VST)** project.
+Active issues in Plane project **Propaganda (PPG)**. The previous **Verbatim (VST)** project still exists with the historical issues — disposition pending.
 
 ---
 

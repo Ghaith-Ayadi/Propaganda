@@ -119,7 +119,7 @@ export function Editor({ post }: Props) {
     <div className="mx-auto w-full max-w-[760px] px-10">
       <style>{editorCss}</style>
       <PostNav post={post} showTitle={!titleVisible} />
-      <div className="pt-2">
+      <div className="pt-12">
         <input
           ref={titleRef}
           value={post.title}
