@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Copy04, DotsHorizontal, EyeOff, Trash01 } from "@untitledui/icons";
+import { Copy04, DotsHorizontal, Eye, EyeOff, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import { supabase } from "@/lib/supabase";
 import { go } from "@/lib/route";
@@ -140,6 +140,15 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
   return (
     <div>
       <div className="mb-4 flex items-center justify-end gap-2">
+        {collection.isHidden && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary"
+            title="Hidden from the public site. Articles in this collection won't render."
+          >
+            <EyeOff className="size-3" />
+            Hidden
+          </span>
+        )}
         <ActionMenu
           trigger={<DotsHorizontal className="size-4" data-icon />}
           items={[
@@ -151,10 +160,14 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
             },
             {
               id: "hide",
-              label: "Hide from public site",
-              icon: <EyeOff className="size-4" />,
-              disabled: true,
-              onAction: () => {},
+              label: collection.isHidden ? "Show on public site" : "Hide from public site",
+              icon: collection.isHidden ? (
+                <Eye className="size-4" />
+              ) : (
+                <EyeOff className="size-4" />
+              ),
+              onAction: () =>
+                void upsertCollection(collection.name, { isHidden: !collection.isHidden }),
             },
             {
               id: "delete",

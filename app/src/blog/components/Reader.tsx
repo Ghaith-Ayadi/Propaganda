@@ -54,6 +54,7 @@ export function Reader({ slug }: Props) {
   void _navigate;
   const { collections, posts } = useBlogData();
   const [post, setPost] = useState<BlogPost | null>(null);
+  const [hidden, setHidden] = useState(false);
   const [loading, setLoading] = useState(true);
   const authorName = useSetting<string>("author.name", "Ghaith Ayadi");
   const authorTagline = useSetting<string>("author.tagline", "");
@@ -63,11 +64,13 @@ export function Reader({ slug }: Props) {
     let cancelled = false;
     setLoading(true);
     setPost(null);
+    setHidden(false);
     window.scrollTo({ top: 0, behavior: "instant" });
     void (async () => {
-      const p = await fetchPostBySlug(slug);
+      const result = await fetchPostBySlug(slug);
       if (cancelled) return;
-      setPost(p);
+      if (result.kind === "post") setPost(result.post);
+      else if (result.kind === "hidden") setHidden(true);
       setLoading(false);
     })();
     return () => {
@@ -114,6 +117,21 @@ export function Reader({ slug }: Props) {
         >
           Loading…
         </div>
+      </div>
+    );
+  }
+
+  if (hidden) {
+    return (
+      <div className="blog-app">
+        <Topbar backLabel="Index" onBack={() => navigateTo({ view: "home" })} />
+        <article className="blog-article">
+          <h1>Private collection.</h1>
+          <p className="dek">
+            This post belongs to a collection that isn't publicly available.
+          </p>
+        </article>
+        <Colophon />
       </div>
     );
   }

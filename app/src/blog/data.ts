@@ -12,6 +12,7 @@ interface CollectionRow {
   emoji: string | null;
   description: string | null;
   position: number;
+  is_hidden: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,7 @@ function fromCollectionRow(r: CollectionRow): Collection {
     emoji: r.emoji,
     description: r.description,
     position: r.position,
+    isHidden: r.is_hidden ?? false,
     createdAt: new Date(r.created_at).getTime(),
     updatedAt: new Date(r.updated_at).getTime(),
   };
@@ -116,14 +118,32 @@ export function useBlogData(): {
   return { loading, collections, posts, error };
 }
 
+/**
+ * Reader fetch result: either the post, or a sentinel saying the collection
+ * is hidden. We resolve hidden-ness server-side so the Reader never holds
+ * the body of a private post in memory.
+ */
+export type ReaderFetch =
+  | { kind: "post"; post: BlogPost }
+  | { kind: "hidden" }
+  | { kind: "missing" };
+
 /** Get a single post by slug for the reader view. */
-export async function fetchPostBySlug(slug: string): Promise<BlogPost | null> {
+export async function fetchPostBySlug(slug: string): Promise<ReaderFetch> {
   const { data, error } = await supabase
     .from("posts")
     .select(PUBLIC_COLUMNS)
     .eq("slug", slug)
     .eq("status", "published")
     .single();
-  if (error || !data) return null;
-  return fromBlogRow(data as BlogPostRow);
+  if (error || !data) return { kind: "missing" };
+  const row = data as BlogPostRow;
+  // Check the collection's visibility before exposing the post.
+  const { data: col } = await supabase
+    .from("collections")
+    .select("is_hidden")
+    .eq("name", row.type)
+    .maybeSingle();
+  if (col?.is_hidden) return { kind: "hidden" };
+  return { kind: "post", post: fromBlogRow(row) };
 }

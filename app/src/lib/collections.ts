@@ -11,6 +11,7 @@ interface CollectionRow {
   emoji: string | null;
   description: string | null;
   position: number;
+  is_hidden: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,7 @@ export function fromCollectionRow(r: CollectionRow): Collection {
     emoji: r.emoji,
     description: r.description,
     position: r.position,
+    isHidden: r.is_hidden ?? false,
     createdAt: new Date(r.created_at).getTime(),
     updatedAt: new Date(r.updated_at).getTime(),
   };
@@ -78,7 +80,7 @@ export function collectionDisplay(
 
 export async function upsertCollection(
   name: string,
-  patch: Partial<Pick<Collection, "emoji" | "description" | "position">>,
+  patch: Partial<Pick<Collection, "emoji" | "description" | "position" | "isHidden">>,
 ): Promise<void> {
   const existing = await db.collections.get(name);
   const now = Date.now();
@@ -88,6 +90,8 @@ export async function upsertCollection(
     description:
       patch.description !== undefined ? patch.description : existing?.description ?? null,
     position: patch.position !== undefined ? patch.position : existing?.position ?? 0,
+    isHidden:
+      patch.isHidden !== undefined ? patch.isHidden : existing?.isHidden ?? false,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     dirty: false,
@@ -101,6 +105,7 @@ export async function upsertCollection(
       emoji: next.emoji,
       description: next.description,
       position: next.position,
+      is_hidden: next.isHidden,
     });
   if (error) {
     console.error("upsertCollection failed:", error);
@@ -121,6 +126,7 @@ export async function renameCollection(oldName: string, newName: string): Promis
       emoji: existing.emoji,
       description: existing.description,
       position: existing.position,
+      isHidden: existing.isHidden,
     });
   } else {
     await upsertCollection(newName, {});

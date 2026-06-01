@@ -33,6 +33,7 @@ export interface Collection {
   emoji: string | null;
   description: string | null;
   position: number;
+  isHidden: boolean;            // hidden from public nav; articles 404 to a "private collection" page
   createdAt: number;
   updatedAt: number;
   syncedAt?: number | null;

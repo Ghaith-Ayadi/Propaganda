@@ -26,15 +26,30 @@ export function Home({ collections, posts }: Props) {
   const [storedTab, setStoredTab] = useActiveTab();
   const [sort, setSort] = useState<SortMode>("latest");
 
+  // Hidden collections are invisible to the public: no tab, no post listings.
+  // The author still sees them in the editor.
+  const publicCollections = useMemo(
+    () => collections.filter((c) => !c.isHidden),
+    [collections],
+  );
+  const hiddenNames = useMemo(
+    () => new Set(collections.filter((c) => c.isHidden).map((c) => c.name)),
+    [collections],
+  );
+  const publicPosts = useMemo(
+    () => posts.filter((p) => !hiddenNames.has(p.type)),
+    [posts, hiddenNames],
+  );
+
   // Resolve the active collection: stored value if valid, else the first one
   // that actually has posts, else the first collection.
   const fallbackName = useMemo(() => {
-    const withPosts = collections.find((c) => posts.some((p) => p.type === c.name));
-    return withPosts?.name ?? collections[0]?.name ?? "";
-  }, [collections, posts]);
+    const withPosts = publicCollections.find((c) => publicPosts.some((p) => p.type === c.name));
+    return withPosts?.name ?? publicCollections[0]?.name ?? "";
+  }, [publicCollections, publicPosts]);
 
   const activeName =
-    storedTab && collections.some((c) => c.name === storedTab) ? storedTab : fallbackName;
+    storedTab && publicCollections.some((c) => c.name === storedTab) ? storedTab : fallbackName;
 
   // Keep document.title pinned to the brand on home (tabs don't change URL,
   // so they shouldn't change the page title either).
@@ -44,18 +59,18 @@ export function Home({ collections, posts }: Props) {
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const p of posts) m[p.type] = (m[p.type] ?? 0) + 1;
+    for (const p of publicPosts) m[p.type] = (m[p.type] ?? 0) + 1;
     return m;
-  }, [posts]);
+  }, [publicPosts]);
 
   const visible = useMemo(() => {
-    const xs = posts.filter((p) => p.type === activeName);
+    const xs = publicPosts.filter((p) => p.type === activeName);
     if (sort === "az") return [...xs].sort((a, b) => a.title.localeCompare(b.title));
     return [...xs].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
-  }, [posts, activeName, sort]);
+  }, [publicPosts, activeName, sort]);
 
-  const activeCollection = collections.find((c) => c.name === activeName);
-  const lastUpdate = posts.reduce<number | null>(
+  const activeCollection = publicCollections.find((c) => c.name === activeName);
+  const lastUpdate = publicPosts.reduce<number | null>(
     (m, p) => (p.publishedAt && (m == null || p.publishedAt > m) ? p.publishedAt : m),
     null,
   );
@@ -64,14 +79,14 @@ export function Home({ collections, posts }: Props) {
     <div className="blog-app">
       <Topbar />
       <Hero
-        postCount={posts.length}
-        collectionCount={collections.length}
+        postCount={publicPosts.length}
+        collectionCount={publicCollections.length}
         lastUpdate={lastUpdate}
       />
 
       <div className="blog-tabs-wrap">
         <div className="blog-tabs" role="tablist">
-          {collections.map((c) => {
+          {publicCollections.map((c) => {
             const display = c.emoji ? `${c.emoji} ${c.name}` : c.name;
             return (
               <button
