@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  BarChart01,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -134,6 +135,13 @@ export function Sidebar({ currentId }: Props) {
       </div>
 
       <div className="flex flex-col gap-0 border-t border-secondary p-2">
+        <button
+          onClick={() => go({ view: "analytics" })}
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"
+        >
+          <BarChart01 className="size-3.5 text-quaternary" />
+          <span>Analytics</span>
+        </button>
         <button
           onClick={() => setSettingsOpen(true)}
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"

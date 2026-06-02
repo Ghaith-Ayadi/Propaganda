@@ -14,6 +14,7 @@ import { getSimDataset } from "./dataset";
 import type {
   BucketRow,
   DateRangePreset,
+  HitsAndTime,
   ReferrerBucketRow,
   SiteViewsResult,
   TopPostRow,
@@ -67,4 +68,24 @@ export function useDeviceMix(range: DateRangePreset): BucketRow[] | null {
   if (!sim) return null;
   const ds = getSimDataset(posts, collections);
   return ds.deviceMix(range);
+}
+
+/** All-time hits + total reading-seconds for one post. */
+export function usePostHitsTime(postSlug: string | null | undefined): HitsAndTime | null {
+  const sim = useSimMode();
+  const { posts, collections } = usePostsAndCollections();
+  if (!sim || !postSlug) return null;
+  const ds = getSimDataset(posts, collections);
+  return ds.postHitsTime(postSlug);
+}
+
+/** All-time hits + total reading-seconds for a collection. */
+export function useCollectionHitsTime(
+  collectionName: string | null | undefined,
+): HitsAndTime | null {
+  const sim = useSimMode();
+  const { posts, collections } = usePostsAndCollections();
+  if (!sim || !collectionName) return null;
+  const ds = getSimDataset(posts, collections);
+  return ds.collectionHitsTime(collectionName);
 }

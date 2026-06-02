@@ -43,3 +43,9 @@ export type ReferrerBucket =
 export interface ReferrerBucketRow extends BucketRow {
   bucket: ReferrerBucket;
 }
+
+/** All-time hits + total reading-time for a single post or a collection. */
+export interface HitsAndTime {
+  hits: number;
+  seconds: number;
+}

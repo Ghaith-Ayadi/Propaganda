@@ -6,10 +6,13 @@ import type { Collection, Post } from "@/types";
 import { mulberry32 } from "./prng";
 import { SIM_SEED } from "./sim";
 import {
+  buildCollectionTotals,
   buildCountryMix,
   buildDeviceMix,
   buildPostBaselines,
   buildPostDailySeries,
+  buildPostHits,
+  buildPostReadSeconds,
   buildReferrerMix,
   buildTopPosts,
   previousRangeTotal,
@@ -18,7 +21,15 @@ import {
   SIM_DAYS,
   type PostBaseline,
 } from "./factories";
-import type { BucketRow, DateRangePreset, DayPoint, ReferrerBucketRow, SiteViewsResult, TopPostRow } from "./types";
+import type {
+  BucketRow,
+  DateRangePreset,
+  DayPoint,
+  HitsAndTime,
+  ReferrerBucketRow,
+  SiteViewsResult,
+  TopPostRow,
+} from "./types";
 
 function rangeDays(preset: DateRangePreset): number | "all" {
   switch (preset) {
@@ -39,6 +50,11 @@ export interface SimDataset {
   referrerMix(range: DateRangePreset): ReferrerBucketRow[];
   countryMix(range: DateRangePreset): BucketRow[];
   deviceMix(range: DateRangePreset): BucketRow[];
+
+  /** All-time hits + total reading-seconds for one post. */
+  postHitsTime(postSlug: string): HitsAndTime;
+  /** All-time hits + total reading-seconds aggregated for a collection. */
+  collectionHitsTime(collectionName: string): HitsAndTime;
 }
 
 let cache: { posts: Post[]; collections: Collection[]; dataset: SimDataset } | null = null;
@@ -55,6 +71,9 @@ export function getSimDataset(posts: Post[], collections: Collection[]): SimData
   const baselines = buildPostBaselines(posts, collections, rng);
   const perPostSeries = buildPostDailySeries(baselines, rng);
   const siteSeries = siteDailySeries(perPostSeries);
+  const postHits = buildPostHits(perPostSeries);
+  const postSeconds = buildPostReadSeconds(baselines, postHits);
+  const collectionTotals = buildCollectionTotals(baselines, postHits, postSeconds);
 
   const dataset: SimDataset = {
     baselines,
@@ -87,6 +106,17 @@ export function getSimDataset(posts: Post[], collections: Collection[]): SimData
     deviceMix(range) {
       const total = rangeTotal(siteSeries, rangeDays(range));
       return buildDeviceMix(total, mulberry32(SIM_SEED ^ 0xc3));
+    },
+
+    postHitsTime(postSlug) {
+      return {
+        hits: postHits.get(postSlug) ?? 0,
+        seconds: postSeconds.get(postSlug) ?? 0,
+      };
+    },
+
+    collectionHitsTime(collectionName) {
+      return collectionTotals.get(collectionName) ?? { hits: 0, seconds: 0 };
     },
   };
 

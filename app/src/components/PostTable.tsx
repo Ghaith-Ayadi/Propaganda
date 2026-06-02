@@ -8,6 +8,8 @@ import { ArrowDown, ArrowUp, Copy04, DotsHorizontal, Plus, SearchLg, Trash01 } f
 import type { Post } from "@/types";
 import { go } from "@/lib/route";
 import { formatDate, formatWordCount } from "@/lib/format";
+import { usePostHitsTime } from "@/lib/analytics/hook";
+import { formatHitsAndDuration } from "@/lib/analytics/format";
 import { deletePost, duplicatePost } from "@/lib/posts";
 import { ActionMenu } from "@/components/Menu";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -87,6 +89,7 @@ export function PostTable({ posts, onAddPost }: Props) {
             <Th>Title</Th>
             <Th className="w-28">Status</Th>
             <Th className="w-36">Length</Th>
+            <Th className="w-20">Hits</Th>
             <SortableTh
               className="w-28"
               active={sortKey === "created"}
@@ -129,6 +132,7 @@ export function PostTable({ posts, onAddPost }: Props) {
             <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
             <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
             <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
+            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
           </tr>
           {filtered.map((p) => (
             <tr
@@ -153,6 +157,9 @@ export function PostTable({ posts, onAddPost }: Props) {
               <Td className="whitespace-nowrap text-xs text-tertiary">
                 {formatWordCount(p.wordCount)}
               </Td>
+              <Td className="whitespace-nowrap text-xs text-tertiary">
+                <HitsCell slug={p.slug} />
+              </Td>
               <Td className="date-pill text-xs text-quaternary">
                 {formatDate(p.createdAt)}
               </Td>
@@ -172,7 +179,7 @@ export function PostTable({ posts, onAddPost }: Props) {
           {filtered.length === 0 && (
             <tr>
               <td
-                colSpan={7}
+                colSpan={8}
                 className="border-b border-secondary px-4 py-8 text-center text-sm text-tertiary last:border-b-0"
               >
                 {query ? "No matches." : "No posts in this filter."}
@@ -198,6 +205,18 @@ export function PostTable({ posts, onAddPost }: Props) {
       )}
     </div>
   );
+}
+
+/**
+ * Combined hits + reading-time cell. "544 · 9h" when analytics are live
+ * (currently: sim mode), an em-dash when not.
+ */
+function HitsCell({ slug }: { slug: string }) {
+  const stats = usePostHitsTime(slug);
+  if (!stats || stats.hits === 0) {
+    return <span className="text-quaternary">—</span>;
+  }
+  return <span>{formatHitsAndDuration(stats.hits, stats.seconds)}</span>;
 }
 
 function PostRowActions({

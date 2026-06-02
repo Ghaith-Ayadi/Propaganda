@@ -27,6 +27,7 @@ export interface PostBaseline {
   collection: string;
   emoji: string | null;
   baseDaily: number; // average views/day for this post
+  avgSecondsPerVisit: number; // synthesized: how long the typical visitor lingers
   isViral: boolean;
   isHnSpike: boolean;
 }
@@ -58,16 +59,64 @@ export function buildPostBaselines(
     if (p.status !== "published") baseDaily *= 0.05; // drafts: scraps
     if (isViral) baseDaily = 60 + rng() * 20; // sustained high
     const d = collectionDisplay(p.type, collections);
+
+    // Avg time per visit: most posts 60–180s. Viral and HN-spike posts get
+    // less attention per visitor (skim / driveby). Tiny posts shorter too.
+    let avgSecondsPerVisit = 60 + rng() * 120;
+    if (isViral) avgSecondsPerVisit = 25 + rng() * 35;
+    else if (isHnSpike) avgSecondsPerVisit = 30 + rng() * 30;
+    else if ((p.wordCount ?? 0) < 200) avgSecondsPerVisit = 20 + rng() * 40;
+    else if ((p.wordCount ?? 0) > 1500) avgSecondsPerVisit = 180 + rng() * 240;
+
     return {
       postSlug: p.slug,
       title: p.title || "Untitled",
       collection: p.type,
       emoji: d.emoji,
       baseDaily,
+      avgSecondsPerVisit,
       isViral,
       isHnSpike,
     };
   });
+}
+
+/** Total hits per post over the whole simulated window. */
+export function buildPostHits(perPostSeries: Map<string, DayPoint[]>): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [slug, series] of perPostSeries) {
+    out.set(slug, series.reduce((s, p) => s + p.value, 0));
+  }
+  return out;
+}
+
+/** Total reading-time seconds per post: hits × avgSecondsPerVisit. */
+export function buildPostReadSeconds(
+  baselines: PostBaseline[],
+  postHits: Map<string, number>,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const b of baselines) {
+    const hits = postHits.get(b.postSlug) ?? 0;
+    out.set(b.postSlug, Math.round(hits * b.avgSecondsPerVisit));
+  }
+  return out;
+}
+
+/** Roll per-post numbers up to per-collection. */
+export function buildCollectionTotals(
+  baselines: PostBaseline[],
+  postHits: Map<string, number>,
+  postSeconds: Map<string, number>,
+): Map<string, { hits: number; seconds: number }> {
+  const out = new Map<string, { hits: number; seconds: number }>();
+  for (const b of baselines) {
+    const cur = out.get(b.collection) ?? { hits: 0, seconds: 0 };
+    cur.hits += postHits.get(b.postSlug) ?? 0;
+    cur.seconds += postSeconds.get(b.postSlug) ?? 0;
+    out.set(b.collection, cur);
+  }
+  return out;
 }
 
 /**
