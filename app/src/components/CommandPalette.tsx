@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Command } from "cmdk";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowDown, ArrowUp, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, Moon01, SearchLg, Star01, Sun } from "@untitledui/icons";
+import { ArrowDown, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, Moon01, SearchLg, Star01, Sun, Zap } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import { supabase } from "@/lib/supabase";
 import { search, subscribeSearch } from "@/lib/search";
@@ -11,6 +11,7 @@ import { useLayout } from "@/lib/layout";
 import { collectionDisplay } from "@/lib/collections";
 import { duplicatePost, fromRow, setPostStatus, toggleFavorite, type PostRow } from "@/lib/posts";
 import { toggleTheme, useTheme } from "@/lib/theme";
+import { setSimMode, useSimMode } from "@/lib/analytics/sim";
 import { createCollection } from "@/lib/collections";
 import { NewCollectionDialog } from "@/components/NewCollectionDialog";
 import { setActiveCollection } from "@/lib/activeCollection";
@@ -34,6 +35,7 @@ export function CommandPalette({ currentPostId }: Props) {
   const commandQuery = q.startsWith("/") ? q.slice(1).trim().toLowerCase() : "";
   const [, , toggleAuthorMode] = useLayout();
   const [theme] = useTheme();
+  const simOn = useSimMode();
 
   const allPosts = useLiveQuery(
     () => db.posts.orderBy("updatedAt").reverse().toArray(),
@@ -259,6 +261,26 @@ export function CommandPalette({ currentPostId }: Props) {
       hint: "⌘⇧L",
       onSelect: () => {
         toggleTheme();
+        setOpen(false);
+      },
+    },
+    {
+      key: "analytics",
+      label: "Open analytics",
+      icon: <BarChart01 className="size-4" />,
+      onSelect: () => {
+        go({ view: "analytics" });
+        setOpen(false);
+      },
+    },
+    {
+      key: "simulate-traffic",
+      label: simOn ? "/clearSimulation" : "/simulateTraffic",
+      hint: simOn ? "loaded" : "preview",
+      icon: <Zap className="size-4" />,
+      onSelect: () => {
+        setSimMode(!simOn);
+        go({ view: "analytics" });
         setOpen(false);
       },
     },

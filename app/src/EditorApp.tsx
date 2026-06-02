@@ -7,6 +7,7 @@ import { Editor } from "@/components/Editor";
 import { AttributePanel } from "@/components/AttributePanel";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CollectionTabs } from "@/components/CollectionTabs";
+import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
 import { HelpFab } from "@/components/HelpFab";
 import { db } from "@/lib/db";
 import { useRoute } from "@/lib/route";
@@ -94,6 +95,7 @@ function Shell() {
       {layout.sidebar && <Sidebar currentId={route.view === "post" ? route.id : null} />}
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {route.view === "list" && <CollectionTabs />}
+        {route.view === "analytics" && <AnalyticsPage />}
         {route.view === "post" && !currentPost && (
           <div className="flex h-full items-center justify-center text-tertiary">
             Post not found.

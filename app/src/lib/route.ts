@@ -5,17 +5,21 @@ import { useEffect, useState } from "react";
 
 export type Route =
   | { view: "list" }
-  | { view: "post"; id: number };
+  | { view: "post"; id: number }
+  | { view: "analytics" };
 
 function parse(): Route {
   const h = window.location.hash;
   const m = h.match(/^#\/post\/(\d+)$/);
   if (m) return { view: "post", id: Number(m[1]) };
+  if (h === "#/analytics") return { view: "analytics" };
   return { view: "list" };
 }
 
 function toHash(r: Route): string {
-  return r.view === "list" ? "#/" : `#/post/${r.id}`;
+  if (r.view === "list") return "#/";
+  if (r.view === "analytics") return "#/analytics";
+  return `#/post/${r.id}`;
 }
 
 export function useRoute(): [Route, (r: Route) => void] {
@@ -39,4 +43,8 @@ export function go(r: Route) {
 
 export function postHref(id: number): string {
   return `#/post/${id}`;
+}
+
+export function analyticsHref(): string {
+  return "#/analytics";
 }
