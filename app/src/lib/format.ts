@@ -40,13 +40,72 @@ export function formatWordCount(words: number | null | undefined): string {
   return `${w.toLocaleString()} Words · ${min} min`;
 }
 
-export function relativeTime(ms: number): string {
-  const dt = Date.now() - ms;
+/**
+ * Human-readable distance from now. Spelled-out units, escalating to
+ * "Y years and M months ago" once we cross a year. Years collapse to
+ * "Y years ago" when the months remainder is zero.
+ *   "just now" · "5 minutes ago" · "3 hours ago" · "4 days ago"
+ *   "2 weeks ago" · "5 months ago" · "2 years and 3 months ago"
+ */
+export function relativeTime(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  let dt = Date.now() - ms;
+  const future = dt < 0;
+  dt = Math.abs(dt);
   const m = Math.floor(dt / 60_000);
+
   if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
+
+  let body: string;
+  if (m < 60) body = plural(m, "minute");
+  else {
+    const h = Math.floor(m / 60);
+    if (h < 24) body = plural(h, "hour");
+    else {
+      const d = Math.floor(h / 24);
+      if (d < 7) body = plural(d, "day");
+      else if (d < 30) body = plural(Math.floor(d / 7), "week");
+      else if (d < 365) body = plural(Math.floor(d / 30), "month");
+      else {
+        const years = Math.floor(d / 365);
+        const monthsRem = Math.floor((d - years * 365) / 30);
+        body = monthsRem
+          ? `${plural(years, "year")} and ${plural(monthsRem, "month")}`
+          : plural(years, "year");
+      }
+    }
+  }
+  return future ? `in ${body}` : `${body} ago`;
+}
+
+function plural(n: number, unit: string): string {
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
+}
+
+const SHORT_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function ordinal(n: number): "st" | "nd" | "rd" | "th" {
+  const j = n % 10, k = n % 100;
+  if (k >= 11 && k <= 13) return "th";
+  if (j === 1) return "st";
+  if (j === 2) return "nd";
+  if (j === 3) return "rd";
+  return "th";
+}
+
+/**
+ * Exact date in title-case short-month form with an ordinal day and a
+ * two-digit year:  "Oct 19th, '24".
+ * Used alongside `relativeTime` for the post Info panel.
+ */
+export function formatExactDate(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "—";
+  const mon = SHORT_MONTHS[d.getMonth()];
+  const day = d.getDate();
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${mon} ${day}${ordinal(day)}, '${yy}`;
 }

@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 import type { Collection, Post, PostStatus, PostVersion } from "@/types";
 import { deletePost, duplicatePost, setPostStatus, toggleFavorite, updatePost } from "@/lib/posts";
 import { collectionDisplay } from "@/lib/collections";
-import { formatDate, relativeTime } from "@/lib/format";
+import { formatExactDate, relativeTime } from "@/lib/format";
+// Future: make the relative-vs-exact priority configurable per user. See
+// the Propaganda Notion backlog task "Configurable post-date display."
 import { go } from "@/lib/route";
 import { DiffModal } from "@/components/DiffModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -196,19 +198,27 @@ export function AttributePanel({ post }: Props) {
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <dt className="shrink-0 text-quaternary">Published</dt>
-            <dd className="text-secondary">{formatDate(post.publishedAt)}</dd>
+            <dd className="cursor-default text-secondary" title={formatExactDate(post.publishedAt)}>
+              {post.publishedAt == null ? "—" : relativeTime(post.publishedAt)}
+            </dd>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <dt className="shrink-0 text-quaternary">Done</dt>
-            <dd className="text-secondary">{formatDate(post.doneAt)}</dd>
+            <dd className="cursor-default text-secondary" title={formatExactDate(post.doneAt)}>
+              {post.doneAt == null ? "—" : relativeTime(post.doneAt)}
+            </dd>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <dt className="shrink-0 text-quaternary">Last edited</dt>
-            <dd className="cursor-default text-secondary" title={formatDate(post.updatedAt)}>{relativeTime(post.updatedAt)}</dd>
+            <dd className="cursor-default text-secondary" title={formatExactDate(post.updatedAt)}>
+              {relativeTime(post.updatedAt)}
+            </dd>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <dt className="shrink-0 text-quaternary">Created</dt>
-            <dd className="cursor-default text-secondary" title={formatDate(post.createdAt)}>{relativeTime(post.createdAt)}</dd>
+            <dd className="cursor-default text-secondary" title={formatExactDate(post.createdAt)}>
+              {relativeTime(post.createdAt)}
+            </dd>
           </div>
         </dl>
       </div>
@@ -277,4 +287,5 @@ function FieldStack({ label, children }: { label: string; children: React.ReactN
     </div>
   );
 }
+
 
