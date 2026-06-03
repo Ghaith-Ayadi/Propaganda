@@ -45,6 +45,21 @@ export interface Brief {
   dirty?: boolean;
 }
 
+/** A reusable preset for new briefs: its body seeds the brief's writing
+ *  guidance and its checks seed the brief's compliance constraints. Persisted
+ *  like a brief (Dexie + sync); referenced loosely by Brief.templateId (no FK). */
+export interface BriefTemplate {
+  id: string; // uuid (client-generated)
+  name: string;
+  body: string; // markdown skeleton seeded into a new brief's body
+  checks: BriefChecks; // default checks seeded into the brief
+  createdAt: number;
+  updatedAt: number;
+  // sync metadata, local-only
+  syncedAt?: number | null;
+  dirty?: boolean;
+}
+
 export interface BriefStatusMeta {
   value: BriefStatus;
   label: string;

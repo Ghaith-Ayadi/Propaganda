@@ -14,10 +14,11 @@ import { db } from "@/lib/db";
 import { useTheme } from "@/lib/theme";
 import { collectionDisplay } from "@/lib/collections";
 import { updateBrief, seedBriefsIfEmpty } from "@/lib/plan/briefs";
+import { seedTemplatesIfEmpty } from "@/lib/plan/templates";
 import type { Collection } from "@/types";
-import type { Brief, BriefStatus } from "@/lib/plan/types";
+import type { Brief, BriefStatus, BriefTemplate } from "@/lib/plan/types";
 import { BRIEF_STATUS_ORDER, statusMeta } from "@/lib/plan/types";
-import { MOCK_ASSIGNEES, MOCK_TEMPLATES, assigneeById } from "@/lib/plan/mock";
+import { MOCK_ASSIGNEES, assigneeById } from "@/lib/plan/mock";
 import { StatusBadge } from "@/components/plan/bits";
 import { Button } from "@/components/base/buttons/button";
 import { BadgeWithButton } from "@/components/base/badges/badges";
@@ -30,6 +31,7 @@ const NONE = "__none__";
 export function BriefPage({ id }: { id: string }) {
   useEffect(() => {
     void seedBriefsIfEmpty();
+    void seedTemplatesIfEmpty();
   }, []);
 
   const brief = useLiveQuery(() => db.briefs.get(id), [id]);
@@ -52,8 +54,40 @@ function BriefView({ brief }: { brief: Brief }) {
     [],
     [] as Collection[],
   );
+  const templates = useLiveQuery(() => db.briefTemplates.toArray(), [], [] as BriefTemplate[]);
 
   const persist = (patch: Partial<Brief>) => void updateBrief(brief.id, patch);
+
+  // Picking a template stamps templateId and, for a still-empty brief, seeds the
+  // body (into the editor) and the checks from the template. A brief with its own
+  // body/checks is never clobbered.
+  const applyTemplate = async (key: string | null) => {
+    if (!key || key === NONE) {
+      persist({ templateId: null });
+      return;
+    }
+    const tpl = templates.find((t) => t.id === key);
+    const patch: Partial<Brief> = { templateId: key };
+    if (tpl) {
+      const briefHasChecks = Boolean(
+        brief.checks.minWords || brief.checks.maxWords || brief.checks.requiredKeywords?.length,
+      );
+      const tplHasChecks = Boolean(
+        tpl.checks.minWords || tpl.checks.maxWords || tpl.checks.requiredKeywords?.length,
+      );
+      if (!briefHasChecks && tplHasChecks) patch.checks = tpl.checks;
+
+      if (tpl.body.trim() && editor) {
+        const currentMd = (await editor.blocksToMarkdownLossy()).trim();
+        if (!currentMd) {
+          const blocks = await editor.tryParseMarkdownToBlocks(tpl.body);
+          editor.replaceBlocks(editor.document, blocks);
+          patch.body = tpl.body;
+        }
+      }
+    }
+    persist(patch);
+  };
 
   // Seed the body editor once from the brief.
   const seeded = useRef(false);
@@ -94,7 +128,9 @@ function BriefView({ brief }: { brief: Brief }) {
   const statusItems = BRIEF_STATUS_ORDER.map((s) => ({ id: s, label: statusMeta(s).label }));
   const templateItems = [
     { id: NONE, label: "No template" },
-    ...MOCK_TEMPLATES.map((t) => ({ id: t.id, label: t.name })),
+    ...[...templates]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((t) => ({ id: t.id, label: t.name || "Untitled template" })),
   ];
   const collectionItems = collectionRows.map((c) => {
     const d = collectionDisplay(c.name, collectionRows);
@@ -211,11 +247,14 @@ function BriefView({ brief }: { brief: Brief }) {
           <Select
             size="sm"
             selectedKey={brief.templateId ?? NONE}
-            onSelectionChange={(k) => persist({ templateId: k === NONE ? null : String(k) })}
+            onSelectionChange={(k) => void applyTemplate(k ? String(k) : null)}
             items={templateItems}
           >
             {(item) => <Select.Item id={item.id} label={item.label} />}
           </Select>
+          <p className="mt-1.5 text-[11px] text-quaternary">
+            Seeds an empty brief's body and checks. Manage templates in Settings.
+          </p>
         </FieldStack>
 
         <FieldStack label="Tags">

@@ -9,11 +9,13 @@ import { db } from "@/lib/db";
 import { supabase } from "@/lib/supabase";
 import { fromRow, toRow, type PostRow } from "@/lib/posts";
 import { fromBriefRow, toBriefRow, type BriefRow } from "@/lib/plan/briefs";
+import { fromTemplateRow, toTemplateRow, type BriefTemplateRow } from "@/lib/plan/templates";
 import { pullAllVersions } from "@/lib/versions";
 import { fromCollectionRow } from "@/lib/collections";
 
 const LAST_PULL_KEY = "lastPullIso";
 const LAST_BRIEF_PULL_KEY = "lastBriefPullIso";
+const LAST_TEMPLATE_PULL_KEY = "lastTemplatePullIso";
 const DEBOUNCE_MS = 2000;
 
 let currentUserId: number | null = null;
@@ -51,10 +53,12 @@ export async function runSync(): Promise<void> {
   try {
     await pushPending();
     await pushBriefs();
+    await pushBriefTemplates();
     await pullChanges();
     await pullAllVersions();
     await pullCollections();
     await pullBriefs();
+    await pullBriefTemplates();
     onSyncComplete?.();
   } catch (err) {
     console.error("Sync failed:", err);
@@ -183,6 +187,56 @@ async function pullBriefs(): Promise<void> {
     }
   });
   await db.syncMeta.put({ key: LAST_BRIEF_PULL_KEY, value: maxIso });
+}
+
+async function pushBriefTemplates(): Promise<void> {
+  const all = await db.briefTemplates.toArray();
+  const pending = all.filter((t) => t.dirty || !t.syncedAt || t.updatedAt > (t.syncedAt ?? 0));
+  if (!pending.length) return;
+
+  const rows = pending.map(toTemplateRow);
+  const { data, error } = await supabase.from("brief_templates").upsert(rows).select();
+  if (error) {
+    console.error("Push brief templates failed:", error);
+    return;
+  }
+
+  const now = Date.now();
+  await db.transaction("rw", db.briefTemplates, async () => {
+    for (const raw of data ?? []) {
+      const server = fromTemplateRow(raw as BriefTemplateRow);
+      await db.briefTemplates.put({ ...server, syncedAt: now, dirty: false });
+    }
+  });
+}
+
+async function pullBriefTemplates(): Promise<void> {
+  const meta = await db.syncMeta.get(LAST_TEMPLATE_PULL_KEY);
+  const lastPullIso = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
+
+  const { data, error } = await supabase
+    .from("brief_templates")
+    .select("*")
+    .gt("updated_at", lastPullIso)
+    .order("updated_at", { ascending: true });
+  if (error) {
+    console.error("Pull brief templates failed:", error);
+    return;
+  }
+  if (!data?.length) return;
+
+  const now = Date.now();
+  let maxIso = lastPullIso;
+  await db.transaction("rw", db.briefTemplates, async () => {
+    for (const raw of data) {
+      const row = raw as BriefTemplateRow;
+      if (row.updated_at > maxIso) maxIso = row.updated_at;
+      const local = await db.briefTemplates.get(row.id);
+      if (local?.dirty && local.updatedAt > new Date(row.updated_at).getTime()) continue;
+      await db.briefTemplates.put({ ...fromTemplateRow(row), syncedAt: now, dirty: false });
+    }
+  });
+  await db.syncMeta.put({ key: LAST_TEMPLATE_PULL_KEY, value: maxIso });
 }
 
 export async function resetSyncState() {

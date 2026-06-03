@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Globe01, PenTool01, Upload01, User01, XClose } from "@untitledui/icons";
+import { useLiveQuery } from "dexie-react-hooks";
+import { File02, Globe01, PenTool01, Plus, Trash01, Upload01, User01, XClose } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
+import { db } from "@/lib/db";
 import { useSetting, setSetting, useSettingsVersion } from "@/lib/settings";
 import { uploadFile } from "@/lib/uploads";
+import type { BriefChecks, BriefTemplate } from "@/lib/plan/types";
+import {
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  seedTemplatesIfEmpty,
+} from "@/lib/plan/templates";
 import {
   type BlockKey,
   getBlockProp,
@@ -16,7 +25,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Tab = "author" | "site" | "editor";
+type Tab = "author" | "site" | "editor" | "templates";
 
 const DEFAULT_MANIFESTO =
   "It's called Verbatim because none of it is edited. I don't edit what I write. If I don't like what I said, I don't publish. No AI writing, no nonsense.";
@@ -53,6 +62,9 @@ export function SettingsDialog({ onClose }: Props) {
           <TabButton active={tab === "editor"} onClick={() => setTab("editor")} icon={<PenTool01 className="size-4" />}>
             Editor
           </TabButton>
+          <TabButton active={tab === "templates"} onClick={() => setTab("templates")} icon={<File02 className="size-4" />}>
+            Templates
+          </TabButton>
         </nav>
 
         {/* Body */}
@@ -72,6 +84,7 @@ export function SettingsDialog({ onClose }: Props) {
             {tab === "author" && <AuthorTab />}
             {tab === "site" && <SiteTab />}
             {tab === "editor" && <EditorTab />}
+            {tab === "templates" && <TemplatesTab />}
           </div>
         </div>
       </div>
@@ -435,5 +448,150 @@ function OptionGroup({
       </div>
       {hint && <p className="mt-1.5 text-xs text-tertiary">{hint}</p>}
     </div>
+  );
+}
+
+function TemplatesTab() {
+  useEffect(() => {
+    void seedTemplatesIfEmpty();
+  }, []);
+
+  const templates = useLiveQuery(() => db.briefTemplates.toArray(), [], [] as BriefTemplate[]);
+  const sorted = [...templates].sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs text-tertiary">
+          Templates pre-fill a new brief. Picking one on a brief seeds an empty body and its
+          checks.
+        </p>
+        <Button
+          size="sm"
+          color="secondary"
+          iconLeading={Plus}
+          onClick={() => void createTemplate({ name: "New template" })}
+        >
+          New
+        </Button>
+      </div>
+
+      {sorted.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-secondary px-4 py-10 text-center text-xs text-quaternary">
+          No templates yet.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {sorted.map((t) => (
+            <TemplateCard key={t.id} tpl={t} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TemplateCard({ tpl }: { tpl: BriefTemplate }) {
+  const [name, setName] = useState(tpl.name);
+  const [body, setBody] = useState(tpl.body);
+  const [minWords, setMinWords] = useState(tpl.checks.minWords?.toString() ?? "");
+  const [maxWords, setMaxWords] = useState(tpl.checks.maxWords?.toString() ?? "");
+  const [keywords, setKeywords] = useState((tpl.checks.requiredKeywords ?? []).join(", "));
+
+  // Debounced persist on any field change. Skip the initial mount so rendering a
+  // seeded (clean) template doesn't immediately mark it dirty.
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const checks: BriefChecks = {};
+      const mn = parseInt(minWords, 10);
+      const mx = parseInt(maxWords, 10);
+      if (!Number.isNaN(mn)) checks.minWords = mn;
+      if (!Number.isNaN(mx)) checks.maxWords = mx;
+      const kw = keywords
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (kw.length) checks.requiredKeywords = kw;
+      void updateTemplate(tpl.id, { name, body, checks });
+    }, 400);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [name, body, minWords, maxWords, keywords, tpl.id]);
+
+  return (
+    <div className="space-y-3 rounded-lg border border-secondary bg-primary p-4">
+      <div className="flex items-center gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Template name"
+          className="min-w-0 flex-1 bg-transparent text-sm font-medium text-primary outline-none placeholder:text-quaternary"
+        />
+        <button
+          aria-label={`Delete ${tpl.name || "template"}`}
+          onClick={() => void deleteTemplate(tpl.id)}
+          className="rounded-md p-1.5 text-quaternary transition hover:bg-tertiary hover:text-primary"
+        >
+          <Trash01 className="size-4" />
+        </button>
+      </div>
+
+      <div>
+        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">
+          Body skeleton
+        </div>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={6}
+          placeholder="Markdown seeded into the brief body…"
+          className="w-full resize-y rounded-lg bg-secondary px-3 py-2 font-mono text-xs text-primary shadow-xs outline-none ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus:ring-2 focus:ring-inset focus:ring-brand"
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <CheckField label="Min words" value={minWords} onChange={setMinWords} numeric />
+        <CheckField label="Max words" value={maxWords} onChange={setMaxWords} numeric />
+        <CheckField label="Keywords" value={keywords} onChange={setKeywords} placeholder="a, b" />
+      </div>
+    </div>
+  );
+}
+
+function CheckField({
+  label,
+  value,
+  onChange,
+  numeric,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  numeric?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">
+        {label}
+      </div>
+      <input
+        type={numeric ? "number" : "text"}
+        value={value}
+        min={numeric ? 0 : undefined}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md bg-secondary px-2 py-1.5 text-sm text-primary shadow-xs outline-none ring-1 ring-inset ring-primary transition-shadow duration-100 focus:ring-2 focus:ring-brand"
+      />
+    </label>
   );
 }

@@ -2,7 +2,7 @@
 // data first" pattern — no DB/sync yet. Briefs are anchored to the *current*
 // month so the calendar always has something to show.
 
-import type { Assignee, Brief, BriefChecks, BriefStatus } from "./types";
+import type { Assignee, Brief, BriefChecks, BriefStatus, BriefTemplate } from "./types";
 
 export const MOCK_ASSIGNEES: Assignee[] = [
   { id: "u-ghaith", name: "Ghaith" },
@@ -10,22 +10,37 @@ export const MOCK_ASSIGNEES: Assignee[] = [
   { id: "u-sol", name: "Sol" },
 ];
 
-export interface BriefTemplate {
-  id: string;
-  name: string;
-}
-
-export const MOCK_TEMPLATES: BriefTemplate[] = [
-  { id: "t-standard", name: "Standard brief" },
-  { id: "t-longform", name: "Longform essay" },
-  { id: "t-interview", name: "Interview" },
-  { id: "t-weeknotes", name: "Weeknotes" },
+/** First-run seed for the brief_templates store. Fixed uuids so the same four
+ *  presets dedupe across devices. Timestamps are stamped at seed time. */
+export const SEED_TEMPLATES: Array<Pick<BriefTemplate, "id" | "name" | "body" | "checks">> = [
+  {
+    id: "10000000-0000-4000-8000-000000000001",
+    name: "Standard brief",
+    body:
+      "## Angle\nThe one idea in a sentence.\n\n## Key points\n- \n- \n- \n\n## Call to action\nWhat should the reader do next?",
+    checks: {},
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000002",
+    name: "Longform essay",
+    body:
+      "## Thesis\nThe argument in one line.\n\n## Sections\n1. \n2. \n3. \n\n## Sources\n- \n\n## Pull-quote\nThe line worth lifting out.",
+    checks: { minWords: 1500 },
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000003",
+    name: "Interview",
+    body:
+      "## Guest\nWho, and why now.\n\n## Questions\n1. \n2. \n3. \n\n## Pull-quotes\n- ",
+    checks: { minWords: 1200 },
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000004",
+    name: "Weeknotes",
+    body: "## Shipped\n- \n\n## Next\n- \n\n## Links\n- ",
+    checks: { maxWords: 800 },
+  },
 ];
-
-export function templateById(id: string | null): BriefTemplate | null {
-  if (!id) return null;
-  return MOCK_TEMPLATES.find((t) => t.id === id) ?? null;
-}
 
 export function assigneeById(id: string | null): Assignee | null {
   if (!id) return null;
