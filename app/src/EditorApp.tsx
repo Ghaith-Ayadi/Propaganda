@@ -10,7 +10,6 @@ import { CollectionTabs } from "@/components/CollectionTabs";
 import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
 import { PlanPage } from "@/components/plan/PlanPage";
 import { BriefPage } from "@/components/plan/BriefPage";
-import { HelpFab } from "@/components/HelpFab";
 import { db } from "@/lib/db";
 import { useRoute } from "@/lib/route";
 import { useLayout } from "@/lib/layout";
@@ -116,7 +115,6 @@ function Shell() {
         </>
       )}
       <CommandPalette currentPostId={currentPost?.id ?? null} />
-      <HelpFab />
     </div>
   );
 }

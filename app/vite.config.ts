@@ -3,7 +3,19 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
+import { execSync } from "node:child_process";
 import type { Plugin, ViteDevServer } from "vite";
+
+// Short commit SHA for the /version panel. On Vercel the build env provides the
+// full SHA; locally we read it from git. Empty string if neither is available.
+function gitSha(): string {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7);
+  try {
+    return execSync("git rev-parse --short HEAD").toString().trim();
+  } catch {
+    return "";
+  }
+}
 
 // ── Dev-only API middleware ──────────────────────────────────────────────────
 // Handles /api/* routes in `vite dev` so the Gemini key stays server-side
@@ -136,9 +148,15 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: { "@": path.resolve(__dirname, "src") },
     },
-    define: Object.fromEntries(
-      Object.entries(env).map(([k, v]) => [`import.meta.env.${k}`, JSON.stringify(v)]),
-    ),
+    define: {
+      ...Object.fromEntries(
+        Object.entries(env).map(([k, v]) => [`import.meta.env.${k}`, JSON.stringify(v)]),
+      ),
+      // Build/deploy metadata for the /version panel (see lib/version.ts).
+      "import.meta.env.VITE_BUILD_TIME": JSON.stringify(new Date().toISOString()),
+      "import.meta.env.VITE_COMMIT_SHA": JSON.stringify(gitSha()),
+      "import.meta.env.VITE_DEPLOY_ENV": JSON.stringify(process.env.VERCEL_ENV || mode),
+    },
     server: { port: process.env.PORT ? Number(process.env.PORT) : 5173 },
   };
 });
