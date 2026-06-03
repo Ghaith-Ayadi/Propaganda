@@ -8,19 +8,22 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { useCreateBlockNote } from "@blocknote/react";
 import "@blocknote/mantine/style.css";
 import { parseDate } from "@internationalized/date";
-import { ArrowLeft, Link01, LinkExternal01, Plus } from "@untitledui/icons";
+import { ArrowLeft, Link01, LinkExternal01, Plus, XClose } from "@untitledui/icons";
 import { go } from "@/lib/route";
 import { db } from "@/lib/db";
 import { useTheme } from "@/lib/theme";
 import { collectionDisplay } from "@/lib/collections";
-import { updateBrief, seedBriefsIfEmpty } from "@/lib/plan/briefs";
+import { createPost } from "@/lib/posts";
+import { updateBrief, seedBriefsIfEmpty, linkBriefToPost } from "@/lib/plan/briefs";
 import { seedTemplatesIfEmpty } from "@/lib/plan/templates";
-import type { Collection } from "@/types";
+import type { Collection, Post } from "@/types";
 import type { Brief, BriefStatus, BriefTemplate } from "@/lib/plan/types";
 import { BRIEF_STATUS_ORDER, statusMeta } from "@/lib/plan/types";
 import { MOCK_ASSIGNEES, assigneeById } from "@/lib/plan/mock";
 import { StatusBadge } from "@/components/plan/bits";
+import { LinkPickerDialog, type PickItem } from "@/components/plan/LinkPickerDialog";
 import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { BadgeWithButton } from "@/components/base/badges/badges";
 import { Select } from "@/components/base/select/select";
 import { Input } from "@/components/base/input/input";
@@ -34,11 +37,29 @@ export function BriefPage({ id }: { id: string }) {
     void seedTemplatesIfEmpty();
   }, []);
 
-  const brief = useLiveQuery(() => db.briefs.get(id), [id]);
+  // undefined = query in flight; null = settled but no brief with this id.
+  const brief = useLiveQuery(async () => (await db.briefs.get(id)) ?? null, [id]);
 
   if (brief === undefined) {
     return (
       <div className="flex min-w-0 flex-1 items-center justify-center text-tertiary">Loading…</div>
+    );
+  }
+
+  if (brief === null) {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 text-center">
+        <p className="text-sm font-medium text-secondary">Brief not found</p>
+        <p className="text-xs text-quaternary">It may have been deleted.</p>
+        <Button
+          size="sm"
+          color="secondary"
+          iconLeading={ArrowLeft}
+          onClick={() => go({ view: "plan" })}
+        >
+          Back to Planning
+        </Button>
+      </div>
     );
   }
 
@@ -303,27 +324,7 @@ function BriefView({ brief }: { brief: Brief }) {
           </FieldStack>
         )}
 
-        <FieldStack label="Linked post">
-          {brief.postId ? (
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-primary p-2.5 ring-1 ring-secondary ring-inset">
-              <span className="flex items-center gap-2 text-secondary">
-                <Link01 className="size-4 text-fg-quaternary" /> Post #{brief.postId}
-              </span>
-              <Button size="sm" color="secondary" iconLeading={LinkExternal01}>
-                Open
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <Button size="sm" color="secondary" iconLeading={Plus}>
-                Add post
-              </Button>
-              <Button size="sm" color="secondary" iconLeading={Link01}>
-                Link existing
-              </Button>
-            </div>
-          )}
-        </FieldStack>
+        <LinkedPostField brief={brief} />
 
         <div className="mt-auto border-t border-secondary pt-3 text-[11px] text-quaternary">
           Edits save automatically.
@@ -339,5 +340,87 @@ function FieldStack({ label, children }: { label: string; children: ReactNode })
       <div className="mb-1.5 text-sm font-medium text-secondary">{label}</div>
       {children}
     </div>
+  );
+}
+
+// The brief↔post link (1:1). "Add post" spins up a draft in the brief's target
+// collection and links it; "Link existing" picks any post. The post the brief
+// produces lives in a collection; the brief itself does not.
+function LinkedPostField({ brief }: { brief: Brief }) {
+  const [picking, setPicking] = useState(false);
+  const linkedPost = useLiveQuery(
+    async () => (brief.postId != null ? await db.posts.get(brief.postId) : undefined),
+    [brief.postId],
+  );
+  const allPosts = useLiveQuery(() => db.posts.toArray(), [], [] as Post[]);
+  const collections = useLiveQuery(
+    () => db.collections.orderBy("position").toArray(),
+    [],
+    [] as Collection[],
+  );
+
+  const addPost = async () => {
+    const type = brief.collectionName ?? collections[0]?.name;
+    if (!type) return;
+    const post = await createPost(type, { title: brief.title });
+    if (!post) return;
+    await linkBriefToPost(brief.id, post.id);
+    go({ view: "post", id: post.id });
+  };
+
+  const pickItems: PickItem[] = allPosts
+    .slice()
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((p) => ({ id: p.id, label: p.title || "Untitled", sublabel: p.postId ?? p.slug }));
+
+  return (
+    <FieldStack label="Linked post">
+      {brief.postId != null ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-primary p-2.5 ring-1 ring-secondary ring-inset">
+          <button
+            onClick={() => go({ view: "post", id: brief.postId! })}
+            className="flex min-w-0 items-center gap-2 text-left text-secondary transition hover:text-primary"
+          >
+            <Link01 className="size-4 shrink-0 text-fg-quaternary" />
+            <span className="truncate">{linkedPost?.title || "Untitled post"}</span>
+          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              size="sm"
+              color="secondary"
+              iconLeading={LinkExternal01}
+              onClick={() => go({ view: "post", id: brief.postId! })}
+            >
+              Open
+            </Button>
+            <ButtonUtility
+              size="sm"
+              color="tertiary"
+              tooltip="Unlink post"
+              icon={XClose}
+              onClick={() => void linkBriefToPost(brief.id, null)}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <Button size="sm" color="secondary" iconLeading={Plus} onClick={() => void addPost()}>
+            Add post
+          </Button>
+          <Button size="sm" color="secondary" iconLeading={Link01} onClick={() => setPicking(true)}>
+            Link existing
+          </Button>
+        </div>
+      )}
+      {picking && (
+        <LinkPickerDialog
+          title="Link an existing post"
+          items={pickItems}
+          emptyText="No posts yet."
+          onPick={(id) => void linkBriefToPost(brief.id, Number(id))}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </FieldStack>
   );
 }

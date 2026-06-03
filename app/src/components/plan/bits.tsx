@@ -34,11 +34,14 @@ export function AssigneeAvatar({ id }: { id: string | null }) {
 }
 
 export function AssigneeAvatars({ ids }: { ids: string[] }) {
-  if (ids.length === 0) return <Avatar size="xs" placeholderIcon={User01} alt="Unassigned" />;
+  // 0 or 1 assignee: a plain avatar, no separator ring.
+  if (ids.length <= 1) return <AssigneeAvatar id={ids[0] ?? null} />;
+  // Stacked: each avatar gets a background-matched ring so overlaps read as a
+  // clean cutout (the Untitled avatar-group convention), not a grey halo.
   return (
     <div className="flex items-center -space-x-1.5">
       {ids.slice(0, 3).map((id) => (
-        <span key={id} className="rounded-full ring-2 ring-secondary">
+        <span key={id} className="rounded-full ring-[1.5px] ring-bg-primary">
           <AssigneeAvatar id={id} />
         </span>
       ))}

@@ -99,6 +99,20 @@ export async function updateBrief(
   scheduleSync();
 }
 
+/**
+ * Link a brief to a post (or pass null to unlink). The relationship is 1:1, so
+ * linking also detaches any other brief currently pointing at that post.
+ */
+export async function linkBriefToPost(briefId: string, postId: number | null): Promise<void> {
+  if (postId != null) {
+    const others = await db.briefs.where("postId").equals(postId).toArray();
+    for (const o of others) {
+      if (o.id !== briefId) await updateBrief(o.id, { postId: null });
+    }
+  }
+  await updateBrief(briefId, { postId });
+}
+
 export async function deleteBrief(id: string): Promise<void> {
   const { supabase } = await import("@/lib/supabase");
   const { error } = await supabase.from("briefs").delete().eq("id", id);

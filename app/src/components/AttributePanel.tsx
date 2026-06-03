@@ -9,6 +9,11 @@ import { formatExactDate, relativeTime } from "@/lib/format";
 // Future: make the relative-vs-exact priority configurable per user. See
 // the Propaganda Notion backlog task "Configurable post-date display."
 import { go } from "@/lib/route";
+import { createBrief, linkBriefToPost } from "@/lib/plan/briefs";
+import type { Brief } from "@/lib/plan/types";
+import { statusMeta } from "@/lib/plan/types";
+import { StatusBadge } from "@/components/plan/bits";
+import { LinkPickerDialog, type PickItem } from "@/components/plan/LinkPickerDialog";
 import { DiffModal } from "@/components/DiffModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SharePanel } from "@/components/SharePanel";
@@ -115,7 +120,7 @@ export function AttributePanel({ post }: Props) {
         </Tabs.List>
 
         <Tabs.Panel id="brief">
-          <BriefTab />
+          <BriefTab post={post} />
         </Tabs.Panel>
         <Tabs.Panel id="analytics">
           <AnalyticsTab />
@@ -305,7 +310,54 @@ function FieldStack({ label, children }: { label: string; children: React.ReactN
 
 type TabKey = "details" | "brief" | "analytics";
 
-function BriefTab() {
+function BriefTab({ post }: { post: Post }) {
+  const [picking, setPicking] = useState(false);
+  const linkedBrief = useLiveQuery(
+    () => db.briefs.where("postId").equals(post.id).first(),
+    [post.id],
+  );
+  const allBriefs = useLiveQuery(() => db.briefs.toArray(), [], [] as Brief[]);
+
+  const createLinkedBrief = async () => {
+    const b = await createBrief({ postId: post.id, collectionName: post.type, title: post.title });
+    go({ view: "brief", id: b.id });
+  };
+
+  const pickItems: PickItem[] = allBriefs
+    .slice()
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((b) => ({ id: b.id, label: b.title || "Untitled brief", sublabel: statusMeta(b.status).label }));
+
+  if (linkedBrief) {
+    return (
+      <div className="flex flex-col gap-3 rounded-lg border border-secondary p-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-sm text-primary">
+            {linkedBrief.title || "Untitled brief"}
+          </span>
+          <StatusBadge status={linkedBrief.status} />
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            color="secondary"
+            iconLeading={LinkExternal01}
+            onClick={() => go({ view: "brief", id: linkedBrief.id })}
+          >
+            Open brief
+          </Button>
+          <Button
+            size="sm"
+            color="tertiary"
+            onClick={() => void linkBriefToPost(linkedBrief.id, null)}
+          >
+            Detach
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-secondary p-4">
       <p className="text-sm text-secondary">No brief attached to this post.</p>
@@ -318,7 +370,7 @@ function BriefTab() {
           size="sm"
           color="secondary"
           iconLeading={Plus}
-          onClick={() => go({ view: "brief", id: "new" })}
+          onClick={() => void createLinkedBrief()}
         >
           Create brief
         </Button>
@@ -326,11 +378,20 @@ function BriefTab() {
           size="sm"
           color="secondary"
           iconLeading={Link01}
-          onClick={() => go({ view: "plan" })}
+          onClick={() => setPicking(true)}
         >
           Attach existing
         </Button>
       </div>
+      {picking && (
+        <LinkPickerDialog
+          title="Attach an existing brief"
+          items={pickItems}
+          emptyText="No briefs yet."
+          onPick={(id) => void linkBriefToPost(String(id), post.id)}
+          onClose={() => setPicking(false)}
+        />
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { Badge } from "@/components/base/badges/badges";
 import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
 import { Button } from "@/components/base/buttons/button";
 import { CalendarDateIcon } from "./calendar-date-icon";
-import { CalendarViewDropdown, type ViewOption } from "./calendar-view-dropdown";
+import { type ViewOption } from "./calendar-view-dropdown";
 
 interface CalendarHeaderProps {
     date: Date;
@@ -17,7 +17,7 @@ interface CalendarHeaderProps {
     onClickToday?: () => void;
 }
 
-export const CalendarHeader = ({ date, selectedView, onSelectionChange, viewOptions, onClickPrev, onClickNext, onClickToday }: CalendarHeaderProps) => {
+export const CalendarHeader = ({ date, selectedView, onClickPrev, onClickNext, onClickToday }: CalendarHeaderProps) => {
     const { locale } = useLocale();
     const timeZone = getLocalTimeZone();
 
@@ -80,8 +80,6 @@ export const CalendarHeader = ({ date, selectedView, onSelectionChange, viewOpti
                     </ButtonGroupItem>
                     <ButtonGroupItem id="next" iconLeading={ArrowRight} onClick={onClickNext} />
                 </ButtonGroup>
-
-                <CalendarViewDropdown value={selectedView} onSelectionChange={onSelectionChange} options={viewOptions} />
             </div>
 
             <div className="pointer-events-none absolute bottom-0 left-0 w-full border-t border-secondary"></div>
