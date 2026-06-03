@@ -8,6 +8,8 @@ import { AttributePanel } from "@/components/AttributePanel";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CollectionTabs } from "@/components/CollectionTabs";
 import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
+import { PlanPage } from "@/components/plan/PlanPage";
+import { BriefPage } from "@/components/plan/BriefPage";
 import { HelpFab } from "@/components/HelpFab";
 import { db } from "@/lib/db";
 import { useRoute } from "@/lib/route";
@@ -93,18 +95,25 @@ function Shell() {
   return (
     <div className="flex h-screen w-screen overflow-hidden">
       {layout.sidebar && <Sidebar currentId={route.view === "post" ? route.id : null} />}
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        {route.view === "list" && <CollectionTabs />}
-        {route.view === "analytics" && <AnalyticsPage />}
-        {route.view === "post" && !currentPost && (
-          <div className="flex h-full items-center justify-center text-tertiary">
-            Post not found.
-          </div>
-        )}
-        {route.view === "post" && currentPost && <Editor post={currentPost} />}
-      </main>
-      {layout.attributes && route.view === "post" && currentPost && (
-        <AttributePanel post={currentPost} />
+      {route.view === "brief" ? (
+        <BriefPage key={route.id} id={route.id} />
+      ) : (
+        <>
+          <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+            {route.view === "list" && <CollectionTabs />}
+            {route.view === "plan" && <PlanPage />}
+            {route.view === "analytics" && <AnalyticsPage />}
+            {route.view === "post" && !currentPost && (
+              <div className="flex h-full items-center justify-center text-tertiary">
+                Post not found.
+              </div>
+            )}
+            {route.view === "post" && currentPost && <Editor post={currentPost} />}
+          </main>
+          {layout.attributes && route.view === "post" && currentPost && (
+            <AttributePanel post={currentPost} />
+          )}
+        </>
       )}
       <CommandPalette currentPostId={currentPost?.id ?? null} />
       <HelpFab />
