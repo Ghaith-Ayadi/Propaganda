@@ -1,21 +1,23 @@
 // A brief is its own page, like a post: a BlockNote body editor in the main
-// column and the brief "header" fields in a right side panel. Mock data only.
+// column and the brief "header" fields in a right side panel. Backed by Dexie
+// (lib/plan/briefs); edits persist and sync.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
 import { BlockNoteView } from "@blocknote/mantine";
 import { useCreateBlockNote } from "@blocknote/react";
 import "@blocknote/mantine/style.css";
-import { useLiveQuery } from "dexie-react-hooks";
 import { parseDate } from "@internationalized/date";
 import { ArrowLeft, Link01, LinkExternal01, Plus } from "@untitledui/icons";
 import { go } from "@/lib/route";
 import { db } from "@/lib/db";
 import { useTheme } from "@/lib/theme";
 import { collectionDisplay } from "@/lib/collections";
+import { updateBrief, seedBriefsIfEmpty } from "@/lib/plan/briefs";
 import type { Collection } from "@/types";
 import type { Brief, BriefStatus } from "@/lib/plan/types";
 import { BRIEF_STATUS_ORDER, statusMeta } from "@/lib/plan/types";
-import { MOCK_ASSIGNEES, MOCK_TEMPLATES, mockBriefs } from "@/lib/plan/mock";
+import { MOCK_ASSIGNEES, MOCK_TEMPLATES, assigneeById } from "@/lib/plan/mock";
 import { StatusBadge } from "@/components/plan/bits";
 import { Button } from "@/components/base/buttons/button";
 import { BadgeWithButton } from "@/components/base/badges/badges";
@@ -25,83 +27,71 @@ import { DatePicker } from "@/components/application/date-picker/date-picker";
 
 const NONE = "__none__";
 
-function newBriefSeed(plannedDate: string | null = null): Brief {
-  const now = Date.now();
-  return {
-    id: "new",
-    title: "",
-    status: "backlog",
-    assigneeId: null,
-    plannedDate,
-    tags: [],
-    templateId: null,
-    collectionName: null,
-    body: "",
-    checks: {},
-    postId: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 export function BriefPage({ id }: { id: string }) {
-  const briefs = useMemo(() => mockBriefs(), []);
-  const isNew = id === "new" || id.startsWith("new:");
-  const presetDate = id.startsWith("new:") ? id.slice(4) : null;
-  const source = isNew ? null : (briefs.find((b) => b.id === id) ?? null);
+  useEffect(() => {
+    void seedBriefsIfEmpty();
+  }, []);
 
-  if (!isNew && !source) {
+  const brief = useLiveQuery(() => db.briefs.get(id), [id]);
+
+  if (brief === undefined) {
     return (
-      <div className="flex min-w-0 flex-1 items-center justify-center text-tertiary">
-        Brief not found.
-      </div>
+      <div className="flex min-w-0 flex-1 items-center justify-center text-tertiary">Loading…</div>
     );
   }
 
-  return <BriefView initial={source ?? newBriefSeed(presetDate)} isNew={isNew} />;
+  return <BriefView key={brief.id} brief={brief} />;
 }
 
-function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
+function BriefView({ brief }: { brief: Brief }) {
   const editor = useCreateBlockNote();
   const [theme] = useTheme();
+  const [tagDraft, setTagDraft] = useState("");
   const collectionRows = useLiveQuery(
     () => db.collections.orderBy("position").toArray(),
     [],
     [] as Collection[],
   );
 
-  const [title, setTitle] = useState(initial.title);
-  const [status, setStatus] = useState<BriefStatus>(initial.status);
-  const [assigneeId, setAssigneeId] = useState<string | null>(initial.assigneeId);
-  const [collectionName, setCollectionName] = useState<string | null>(initial.collectionName);
-  const [plannedDate, setPlannedDate] = useState<string | null>(initial.plannedDate);
-  const [tags, setTags] = useState<string[]>(initial.tags);
-  const [tagDraft, setTagDraft] = useState("");
-  const [templateId, setTemplateId] = useState<string | null>(initial.templateId);
+  const persist = (patch: Partial<Brief>) => void updateBrief(brief.id, patch);
 
+  // Seed the body editor once from the brief.
   const seeded = useRef(false);
   useEffect(() => {
     if (seeded.current || !editor) return;
     seeded.current = true;
-    if (initial.body) {
+    if (brief.body) {
       void (async () => {
-        const blocks = await editor.tryParseMarkdownToBlocks(initial.body);
+        const blocks = await editor.tryParseMarkdownToBlocks(brief.body);
         editor.replaceBlocks(editor.document, blocks);
       })();
     }
-  }, [editor, initial.body]);
+  }, [editor, brief.body]);
+
+  // Persist body changes (debounced).
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!editor) return;
+    const unsub = editor.onChange(() => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(async () => {
+        const md = await editor.blocksToMarkdownLossy();
+        void updateBrief(brief.id, { body: md });
+      }, 400);
+    });
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (typeof unsub === "function") unsub();
+    };
+  }, [editor, brief.id]);
 
   const addTag = () => {
     const t = tagDraft.trim().replace(/^#/, "");
-    if (t && !tags.includes(t)) setTags([...tags, t]);
+    if (t && !brief.tags.includes(t)) persist({ tags: [...brief.tags, t] });
     setTagDraft("");
   };
 
   const statusItems = BRIEF_STATUS_ORDER.map((s) => ({ id: s, label: statusMeta(s).label }));
-  const assigneeItems = [
-    { id: NONE, label: "Unassigned" },
-    ...MOCK_ASSIGNEES.map((a) => ({ id: a.id, label: a.name })),
-  ];
   const templateItems = [
     { id: NONE, label: "No template" },
     ...MOCK_TEMPLATES.map((t) => ({ id: t.id, label: t.name })),
@@ -110,9 +100,10 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
     const d = collectionDisplay(c.name, collectionRows);
     return { id: c.name, label: d.emoji ? `${d.emoji}  ${d.label || c.name}` : c.name };
   });
+  const availableAssignees = MOCK_ASSIGNEES.filter((a) => !brief.assigneeIds.includes(a.id));
 
   const hasChecks = Boolean(
-    initial.checks.minWords || initial.checks.maxWords || initial.checks.requiredKeywords?.length,
+    brief.checks.minWords || brief.checks.maxWords || brief.checks.requiredKeywords?.length,
   );
 
   return (
@@ -126,13 +117,13 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
             <ArrowLeft className="size-3.5" />
             Planning
           </button>
-          <StatusBadge status={status} />
+          <StatusBadge status={brief.status} />
         </div>
 
         <div className="mx-auto w-full max-w-[760px] px-10 pt-12 pb-24">
           <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            value={brief.title}
+            onChange={(e) => persist({ title: e.target.value })}
             placeholder="Brief title"
             className="w-full bg-transparent font-title text-4xl leading-tight text-primary outline-none placeholder:text-quaternary"
           />
@@ -149,8 +140,8 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
         <FieldStack label="Status">
           <Select
             size="sm"
-            selectedKey={status}
-            onSelectionChange={(k) => setStatus(k as BriefStatus)}
+            selectedKey={brief.status}
+            onSelectionChange={(k) => persist({ status: k as BriefStatus })}
             items={statusItems}
           >
             {(item) => <Select.Item id={item.id} label={item.label} />}
@@ -160,8 +151,8 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
         <FieldStack label="Collection">
           <Select
             size="sm"
-            selectedKey={collectionName}
-            onSelectionChange={(k) => setCollectionName(k ? String(k) : null)}
+            selectedKey={brief.collectionName}
+            onSelectionChange={(k) => persist({ collectionName: k ? String(k) : null })}
             items={collectionItems}
             placeholder="Choose collection"
           >
@@ -172,12 +163,37 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
           </p>
         </FieldStack>
 
-        <FieldStack label="Assignee">
+        <FieldStack label="Assignees">
+          {brief.assigneeIds.length > 0 && (
+            <div className="mb-1.5 flex flex-wrap gap-1.5">
+              {brief.assigneeIds.map((aid) => {
+                const a = assigneeById(aid);
+                return (
+                  <BadgeWithButton
+                    key={aid}
+                    color="gray"
+                    type="color"
+                    size="sm"
+                    buttonLabel={`Remove ${a?.name ?? aid}`}
+                    onButtonClick={() =>
+                      persist({ assigneeIds: brief.assigneeIds.filter((x) => x !== aid) })
+                    }
+                  >
+                    {a?.name ?? aid}
+                  </BadgeWithButton>
+                );
+              })}
+            </div>
+          )}
           <Select
             size="sm"
-            selectedKey={assigneeId ?? NONE}
-            onSelectionChange={(k) => setAssigneeId(k === NONE ? null : String(k))}
-            items={assigneeItems}
+            selectedKey={null}
+            placeholder={availableAssignees.length ? "Add assignee" : "All added"}
+            isDisabled={availableAssignees.length === 0}
+            onSelectionChange={(k) => {
+              if (k) persist({ assigneeIds: [...brief.assigneeIds, String(k)] });
+            }}
+            items={availableAssignees.map((a) => ({ id: a.id, label: a.name }))}
           >
             {(item) => <Select.Item id={item.id} label={item.label} />}
           </Select>
@@ -185,8 +201,8 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
 
         <FieldStack label="Due date">
           <DatePicker
-            value={plannedDate ? parseDate(plannedDate) : null}
-            onChange={(v) => setPlannedDate(v ? v.toString() : null)}
+            value={brief.plannedDate ? parseDate(brief.plannedDate) : null}
+            onChange={(v) => persist({ plannedDate: v ? v.toString() : null })}
           />
           <p className="mt-1.5 text-[11px] text-quaternary">Projected publish date.</p>
         </FieldStack>
@@ -194,8 +210,8 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
         <FieldStack label="Template">
           <Select
             size="sm"
-            selectedKey={templateId ?? NONE}
-            onSelectionChange={(k) => setTemplateId(k === NONE ? null : String(k))}
+            selectedKey={brief.templateId ?? NONE}
+            onSelectionChange={(k) => persist({ templateId: k === NONE ? null : String(k) })}
             items={templateItems}
           >
             {(item) => <Select.Item id={item.id} label={item.label} />}
@@ -203,16 +219,16 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
         </FieldStack>
 
         <FieldStack label="Tags">
-          {tags.length > 0 && (
+          {brief.tags.length > 0 && (
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-              {tags.map((t) => (
+              {brief.tags.map((t) => (
                 <BadgeWithButton
                   key={t}
                   color="gray"
                   type="color"
                   size="sm"
                   buttonLabel={`Remove ${t}`}
-                  onButtonClick={() => setTags(tags.filter((x) => x !== t))}
+                  onButtonClick={() => persist({ tags: brief.tags.filter((x) => x !== t) })}
                 >
                   #{t}
                 </BadgeWithButton>
@@ -238,12 +254,10 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
         {hasChecks && (
           <FieldStack label="Checks">
             <div className="flex flex-col gap-1 rounded-lg bg-primary p-2.5 text-xs text-tertiary ring-1 ring-secondary ring-inset">
-              {initial.checks.minWords ? (
-                <span>Target: at least {initial.checks.minWords} words</span>
-              ) : null}
-              {initial.checks.maxWords ? <span>Max: {initial.checks.maxWords} words</span> : null}
-              {initial.checks.requiredKeywords?.length ? (
-                <span>Keywords: {initial.checks.requiredKeywords.join(", ")}</span>
+              {brief.checks.minWords ? <span>Target: at least {brief.checks.minWords} words</span> : null}
+              {brief.checks.maxWords ? <span>Max: {brief.checks.maxWords} words</span> : null}
+              {brief.checks.requiredKeywords?.length ? (
+                <span>Keywords: {brief.checks.requiredKeywords.join(", ")}</span>
               ) : null}
               <span className="text-quaternary">Compliance checking comes later (P5).</span>
             </div>
@@ -251,10 +265,10 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
         )}
 
         <FieldStack label="Linked post">
-          {initial.postId ? (
+          {brief.postId ? (
             <div className="flex items-center justify-between gap-2 rounded-lg bg-primary p-2.5 ring-1 ring-secondary ring-inset">
               <span className="flex items-center gap-2 text-secondary">
-                <Link01 className="size-4 text-fg-quaternary" /> Post #{initial.postId}
+                <Link01 className="size-4 text-fg-quaternary" /> Post #{brief.postId}
               </span>
               <Button size="sm" color="secondary" iconLeading={LinkExternal01}>
                 Open
@@ -273,7 +287,7 @@ function BriefView({ initial, isNew }: { initial: Brief; isNew: boolean }) {
         </FieldStack>
 
         <div className="mt-auto border-t border-secondary pt-3 text-[11px] text-quaternary">
-          {isNew ? "New brief (mock), not saved yet." : "Mock data, edits aren't saved yet."}
+          Edits save automatically.
         </div>
       </aside>
     </div>

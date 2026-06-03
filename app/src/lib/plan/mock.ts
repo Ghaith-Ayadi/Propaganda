@@ -73,7 +73,7 @@ export function mockBriefs(): Brief[] {
     id,
     title,
     status,
-    assigneeId,
+    assigneeIds: assigneeId ? [assigneeId] : [],
     plannedDate: day == null ? null : dayThisMonth(day),
     tags,
     templateId: null,

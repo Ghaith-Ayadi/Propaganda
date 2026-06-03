@@ -27,19 +27,22 @@ export interface BriefChecks {
 }
 
 export interface Brief {
-  id: string;
+  id: string; // uuid (client-generated)
   title: string;
   status: BriefStatus;
-  assigneeId: string | null;
-  plannedDate: string | null; // YYYY-MM-DD; null = Unscheduled tray
+  assigneeIds: string[]; // interim freeform multiselect; real people land with multitenancy
+  plannedDate: string | null; // YYYY-MM-DD due/publish date; null = Unscheduled tray
   tags: string[]; // freeform multi-tag
   templateId: string | null;
   collectionName: string | null; // target collection: the produced post goes here, the brief does not
-  body: string; // writing guidance (mock: plain text)
+  body: string; // writing guidance
   checks: BriefChecks;
   postId: number | null; // linked post (1:1 for now)
   createdAt: number;
   updatedAt: number;
+  // sync metadata, local-only
+  syncedAt?: number | null;
+  dirty?: boolean;
 }
 
 export interface BriefStatusMeta {

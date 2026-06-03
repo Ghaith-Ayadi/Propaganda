@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp } from "@untitledui/icons";
 import type { Brief, BriefStatus } from "@/lib/plan/types";
 import { BRIEF_STATUS_ORDER, statusMeta } from "@/lib/plan/types";
 import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
-import { StatusBadge, AssigneeAvatar, TagPill } from "./bits";
+import { StatusBadge, AssigneeAvatars, TagPill } from "./bits";
 
 type StatusFilter = BriefStatus | "all";
 type SortKey = "planned" | "title" | "status";
@@ -140,7 +140,7 @@ export function PlanList({ briefs, onOpen }: Props) {
                     </div>
                   </Td>
                   <Td>
-                    <AssigneeAvatar id={b.assigneeId} />
+                    <AssigneeAvatars ids={b.assigneeIds} />
                   </Td>
                   <Td className="text-xs text-quaternary">
                     {b.plannedDate ? formatDate(b.plannedDate) : "—"}

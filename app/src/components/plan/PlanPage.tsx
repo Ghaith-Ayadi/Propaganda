@@ -1,16 +1,19 @@
 // Top-level "Planning" view (#/plan): the official Untitled UI Calendar of
-// briefs (as events), plus a floating Unscheduled column. Mock data for now.
+// briefs (as events), plus a floating Unscheduled column. Briefs persist in
+// Dexie and sync to Supabase (lib/plan/briefs).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
 import { Calendar as CalendarIcon, Plus, Rows01 } from "@untitledui/icons";
 import { go } from "@/lib/route";
-import { mockBriefs } from "@/lib/plan/mock";
+import { db } from "@/lib/db";
+import { createBrief, seedBriefsIfEmpty } from "@/lib/plan/briefs";
 import type { Brief, BriefStatus } from "@/lib/plan/types";
 import { Button } from "@/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
 import { Calendar, type CalendarEvent } from "@/components/application/calendar/calendar";
 import { PlanList } from "./PlanList";
-import { StatusBadge, AssigneeAvatar } from "./bits";
+import { StatusBadge, AssigneeAvatars } from "./bits";
 
 type PlanView = "calendar" | "list";
 
@@ -42,11 +45,20 @@ function briefsToEvents(briefs: Brief[]): CalendarEvent[] {
 }
 
 export function PlanPage() {
-  const briefs = useMemo(() => mockBriefs(), []);
+  useEffect(() => {
+    void seedBriefsIfEmpty();
+  }, []);
+
+  const briefs = useLiveQuery(() => db.briefs.toArray(), [], [] as Brief[]);
   const [view, setView] = useState<PlanView>("calendar");
   const events = useMemo(() => briefsToEvents(briefs), [briefs]);
   const unscheduled = useMemo(() => briefs.filter((b) => !b.plannedDate), [briefs]);
+
   const openBrief = (id: string) => go({ view: "brief", id });
+  const newBrief = async (plannedDate?: string) => {
+    const b = await createBrief(plannedDate ? { plannedDate } : {});
+    go({ view: "brief", id: b.id });
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -75,7 +87,7 @@ export function PlanPage() {
               List
             </ButtonGroupItem>
           </ButtonGroup>
-          <Button size="sm" color="primary" iconLeading={Plus} onClick={() => openBrief("new")}>
+          <Button size="sm" color="primary" iconLeading={Plus} onClick={() => void newBrief()}>
             New brief
           </Button>
         </div>
@@ -84,7 +96,7 @@ export function PlanPage() {
       {/* body */}
       <div className="min-h-0 flex-1 overflow-hidden">
         {briefs.length === 0 ? (
-          <EmptyState />
+          <EmptyState onCreate={() => void newBrief()} />
         ) : view === "calendar" ? (
           <div className="flex h-full min-h-0 gap-5 overflow-y-auto p-5">
             <div
@@ -93,7 +105,7 @@ export function PlanPage() {
                 const target = e.target as HTMLElement;
                 const addEl = target.closest<HTMLElement>("[data-add-date]");
                 if (addEl?.dataset.addDate) {
-                  go({ view: "brief", id: `new:${addEl.dataset.addDate}` });
+                  void newBrief(addEl.dataset.addDate);
                   return;
                 }
                 const evEl = target.closest<HTMLElement>("[data-event-id]");
@@ -135,10 +147,10 @@ function UnscheduledColumn({
               onClick={() => onOpen(b.id)}
               className="flex w-full flex-col gap-2 rounded-lg border border-secondary bg-primary p-3 text-left shadow-xs transition hover:border-brand"
             >
-              <span className="truncate text-sm text-primary">{b.title}</span>
+              <span className="truncate text-sm text-primary">{b.title || "Untitled brief"}</span>
               <span className="flex items-center justify-between gap-2">
                 <StatusBadge status={b.status} />
-                <AssigneeAvatar id={b.assigneeId} />
+                <AssigneeAvatars ids={b.assigneeIds} />
               </span>
             </button>
           ))
@@ -148,7 +160,7 @@ function UnscheduledColumn({
   );
 }
 
-function EmptyState() {
+function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
       <CalendarIcon className="size-8 text-quaternary" />
@@ -156,7 +168,7 @@ function EmptyState() {
         <p className="text-sm font-medium text-secondary">No briefs yet</p>
         <p className="text-xs text-quaternary">Plan a post by creating your first brief.</p>
       </div>
-      <Button size="sm" color="primary" iconLeading={Plus} onClick={() => go({ view: "brief", id: "new" })}>
+      <Button size="sm" color="primary" iconLeading={Plus} onClick={onCreate}>
         New brief
       </Button>
     </div>

@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { Collection, Post, PostVersion } from "@/types";
+import type { Brief } from "@/lib/plan/types";
 
 interface SyncMetaRow {
   key: string;
@@ -10,6 +11,7 @@ class VerbatimDB extends Dexie {
   posts!: Table<Post, number>;
   versions!: Table<PostVersion, string>;
   collections!: Table<Collection, string>;
+  briefs!: Table<Brief, string>;
   syncMeta!: Table<SyncMetaRow, string>;
 
   constructor() {
@@ -77,6 +79,15 @@ class VerbatimDB extends Dexie {
       posts: "id, slug, postId, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
       versions: "id, postId, [postId+version], createdAt",
       collections: "name, position, updatedAt",
+      syncMeta: "key",
+    });
+
+    // v9: briefs — the Planning data layer (a brief is a task to write a post).
+    this.version(9).stores({
+      posts: "id, slug, postId, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
+      versions: "id, postId, [postId+version], createdAt",
+      collections: "name, position, updatedAt",
+      briefs: "id, status, plannedDate, collectionName, postId, updatedAt",
       syncMeta: "key",
     });
   }

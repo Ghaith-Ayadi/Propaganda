@@ -33,6 +33,20 @@ export function AssigneeAvatar({ id }: { id: string | null }) {
   return <Avatar size="xs" initials={initials(a.name)} alt={a.name} />;
 }
 
+export function AssigneeAvatars({ ids }: { ids: string[] }) {
+  if (ids.length === 0) return <Avatar size="xs" placeholderIcon={User01} alt="Unassigned" />;
+  return (
+    <div className="flex items-center -space-x-1.5">
+      {ids.slice(0, 3).map((id) => (
+        <span key={id} className="rounded-full ring-2 ring-secondary">
+          <AssigneeAvatar id={id} />
+        </span>
+      ))}
+      {ids.length > 3 && <span className="ml-1.5 text-xs text-quaternary">+{ids.length - 3}</span>}
+    </div>
+  );
+}
+
 export function TagPill({ tag }: { tag: string }) {
   return (
     <Badge color="gray" type="color" size="sm">
