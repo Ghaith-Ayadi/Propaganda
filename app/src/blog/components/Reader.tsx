@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { fetchPostBySlug, useBlogData, type BlogPost } from "@/blog/data";
 import { navigateTo, postHref, useBlogRoute } from "@/blog/route";
 import { setActiveTab } from "@/blog/activeTab";
+import { installPageTracker } from "@/blog/track";
 import { Topbar } from "./Topbar";
 import { Colophon } from "./Colophon";
 import { readTime } from "@/lib/format";
@@ -82,6 +83,17 @@ export function Reader({ slug }: Props) {
   useEffect(() => {
     if (post?.title) document.title = `${post.title} — Verbatim`;
   }, [post?.title]);
+
+  // Page-view beacon: one reading session per loaded post. Teardown flushes
+  // on SPA navigation to the next post; pagehide/tab-hide flush on real exit.
+  useEffect(() => {
+    if (!post) return;
+    return installPageTracker({
+      postId: post.slug,
+      collection: post.type,
+      path: `/p/${post.slug}`,
+    });
+  }, [post?.id, post?.slug, post?.type]);
 
   const peers = useMemo(() => {
     if (!post) return [] as BlogPost[];

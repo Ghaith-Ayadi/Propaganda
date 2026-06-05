@@ -7,6 +7,7 @@ import { ArrowLeft } from "@untitledui/icons";
 import { go } from "@/lib/route";
 import type { DateRangePreset } from "@/lib/analytics/types";
 import { useSimMode } from "@/lib/analytics/sim";
+import { liveConfigured } from "@/lib/analytics/live";
 import { SimulationBanner } from "./SimulationBanner";
 import { DateRangePicker } from "./DateRangePicker";
 import { SiteViewsPanel } from "./SiteViewsPanel";
@@ -55,10 +56,10 @@ export function AnalyticsPage() {
           </div>
         </div>
 
-        {!sim && (
+        {!sim && !liveConfigured && (
           <p className="mx-auto mt-8 max-w-[700px] text-center text-xs text-quaternary">
-            Live analytics aren't wired yet. To preview the dashboard with sample data, open the
-            command palette (⌘K) and run <code className="font-mono">/simulateTraffic</code>.
+            No live analytics backend is configured. To preview the dashboard with sample data, open
+            the command palette (⌘K) and run <code className="font-mono">/simulateTraffic</code>.
           </p>
         )}
       </div>

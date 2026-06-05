@@ -1,16 +1,27 @@
 // Unified analytics hook contract. Every dashboard panel reads through
 // these hooks. Two adapters under the hood:
 //   - simulated: in-memory dataset (./dataset.ts), gated on `useSimMode()`
-//   - live: stubbed out for now. When the CF Worker + AE come online,
-//           wire real queries here behind the same interface.
+//   - live:      real aggregates from the CF Worker (./live.ts)
 //
-// Panels never know or care which backend served them.
+// Sim mode wins when active (for demos / screenshots). Otherwise live data is
+// returned when a backend is configured; if neither, hooks return null and
+// panels render their empty state. Panels never know which backend served them.
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
+import { collectionDisplay } from "@/lib/collections";
 import type { Collection, Post } from "@/types";
 import { useSimMode } from "./sim";
 import { getSimDataset } from "./dataset";
+import {
+  useLiveCollectionHitsTime,
+  useLiveCountryMix,
+  useLiveDeviceMix,
+  useLivePostHitsTime,
+  useLiveReferrerMix,
+  useLiveSiteViews,
+  useLiveTopPosts,
+} from "./live";
 import type {
   BucketRow,
   DateRangePreset,
@@ -33,50 +44,65 @@ function usePostsAndCollections(): { posts: Post[]; collections: Collection[] } 
 export function useSiteViews(range: DateRangePreset): SiteViewsResult | null {
   const sim = useSimMode();
   const { posts, collections } = usePostsAndCollections();
-  if (!sim) return null; // live not implemented yet — panels render empty state
-  const ds = getSimDataset(posts, collections);
-  return ds.siteViews(range);
+  const live = useLiveSiteViews(range, !sim);
+  if (sim) return getSimDataset(posts, collections).siteViews(range);
+  return live;
 }
 
 export function useTopPosts(range: DateRangePreset, limit = 10): TopPostRow[] | null {
   const sim = useSimMode();
   const { posts, collections } = usePostsAndCollections();
-  if (!sim) return null;
-  const ds = getSimDataset(posts, collections);
-  return ds.topPosts(range, limit);
+  const live = useLiveTopPosts(range, limit, !sim);
+  if (sim) return getSimDataset(posts, collections).topPosts(range, limit);
+  if (!live) return null;
+  // Enrich raw {postSlug, views, series} with title/collection/emoji from the
+  // local DB — same fields the simulator's TopPostRow carries.
+  const bySlug = new Map(posts.map((p) => [p.slug, p]));
+  return live.map((r) => {
+    const post = bySlug.get(r.postSlug);
+    const type = post?.type ?? "";
+    return {
+      postSlug: r.postSlug,
+      title: post?.title || r.postSlug,
+      collection: type,
+      emoji: type ? collectionDisplay(type, collections).emoji : null,
+      views: r.views,
+      series: r.series,
+    };
+  });
 }
 
 export function useReferrerMix(range: DateRangePreset): ReferrerBucketRow[] | null {
   const sim = useSimMode();
   const { posts, collections } = usePostsAndCollections();
-  if (!sim) return null;
-  const ds = getSimDataset(posts, collections);
-  return ds.referrerMix(range);
+  const live = useLiveReferrerMix(range, !sim);
+  if (sim) return getSimDataset(posts, collections).referrerMix(range);
+  return live;
 }
 
 export function useCountryMix(range: DateRangePreset): BucketRow[] | null {
   const sim = useSimMode();
   const { posts, collections } = usePostsAndCollections();
-  if (!sim) return null;
-  const ds = getSimDataset(posts, collections);
-  return ds.countryMix(range);
+  const live = useLiveCountryMix(range, !sim);
+  if (sim) return getSimDataset(posts, collections).countryMix(range);
+  return live;
 }
 
 export function useDeviceMix(range: DateRangePreset): BucketRow[] | null {
   const sim = useSimMode();
   const { posts, collections } = usePostsAndCollections();
-  if (!sim) return null;
-  const ds = getSimDataset(posts, collections);
-  return ds.deviceMix(range);
+  const live = useLiveDeviceMix(range, !sim);
+  if (sim) return getSimDataset(posts, collections).deviceMix(range);
+  return live;
 }
 
 /** All-time hits + total reading-seconds for one post. */
 export function usePostHitsTime(postSlug: string | null | undefined): HitsAndTime | null {
   const sim = useSimMode();
   const { posts, collections } = usePostsAndCollections();
-  if (!sim || !postSlug) return null;
-  const ds = getSimDataset(posts, collections);
-  return ds.postHitsTime(postSlug);
+  const live = useLivePostHitsTime(postSlug, !sim);
+  if (sim) return postSlug ? getSimDataset(posts, collections).postHitsTime(postSlug) : null;
+  return live;
 }
 
 /** All-time hits + total reading-seconds for a collection. */
@@ -85,7 +111,10 @@ export function useCollectionHitsTime(
 ): HitsAndTime | null {
   const sim = useSimMode();
   const { posts, collections } = usePostsAndCollections();
-  if (!sim || !collectionName) return null;
-  const ds = getSimDataset(posts, collections);
-  return ds.collectionHitsTime(collectionName);
+  const live = useLiveCollectionHitsTime(collectionName, !sim);
+  if (sim)
+    return collectionName
+      ? getSimDataset(posts, collections).collectionHitsTime(collectionName)
+      : null;
+  return live;
 }

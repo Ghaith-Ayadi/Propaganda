@@ -1,0 +1,14 @@
+name = "verbatim-analytics"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+# Account id is not sensitive; the read token + query key are set as secrets:
+#   wrangler secret put CF_API_TOKEN        (Account Analytics Read token)
+#   wrangler secret put ANALYTICS_QUERY_KEY (shared gate for /query)
+[vars]
+CF_ACCOUNT_ID = "2760df0a2c1923b430fa64720726f6c0"
+
+# Analytics Engine binding. The dataset is created lazily on first writeDataPoint().
+[[analytics_engine_datasets]]
+binding = "AE"
+dataset = "verbatim_events"
