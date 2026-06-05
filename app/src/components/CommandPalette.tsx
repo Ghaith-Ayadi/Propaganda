@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Command } from "cmdk";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowDown, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, Moon01, SearchLg, Star01, Sun, Zap } from "@untitledui/icons";
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, HelpCircle, Moon01, SearchLg, Star01, Sun, Tag01, Zap } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import { supabase } from "@/lib/supabase";
 import { search, subscribeSearch } from "@/lib/search";
@@ -16,9 +16,13 @@ import { createCollection } from "@/lib/collections";
 import { NewCollectionDialog } from "@/components/NewCollectionDialog";
 import { setActiveCollection } from "@/lib/activeCollection";
 import { requestTitleFocus } from "@/lib/postFocus";
+import { formatExactDate, relativeTime } from "@/lib/format";
+import { buildDate, COMMIT_SHA, DEPLOY_ENV } from "@/lib/version";
+import { ShortcutsPanel } from "@/components/KeyboardShortcuts";
 import type { Collection, Post } from "@/types";
 
 type Mode = "search" | "commands";
+type PalettePage = null | "shortcuts" | "version";
 
 interface Props {
   currentPostId: number | null;
@@ -29,6 +33,9 @@ const LAST_COLLECTION_KEY = "verbatim:lastCollection";
 export function CommandPalette({ currentPostId }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  // An inline page (keyboard shortcuts, version) shown in place of the command
+  // list. null = the normal command/search view.
+  const [page, setPage] = useState<PalettePage>(null);
   // null = closed, {withPost} = open with that mode
   const [newCollection, setNewCollection] = useState<null | { withPost: boolean }>(null);
   const mode: Mode = q.length === 0 || q.startsWith("/") ? "commands" : "search";
@@ -96,14 +103,22 @@ export function CommandPalette({ currentPostId }: Props) {
     { enableOnFormTags: true, enableOnContentEditable: true },
     [currentPostId],
   );
-  useHotkeys("escape", () => setOpen(false), {
-    enabled: open,
-    enableOnFormTags: true,
-    enableOnContentEditable: true,
-  });
+  useHotkeys(
+    "escape",
+    () => {
+      // Esc backs out of an inline page first, then closes the palette.
+      if (page) setPage(null);
+      else setOpen(false);
+    },
+    { enabled: open, enableOnFormTags: true, enableOnContentEditable: true },
+    [page],
+  );
 
   useEffect(() => {
-    if (!open) setQ("");
+    if (!open) {
+      setQ("");
+      setPage(null);
+    }
   }, [open]);
 
   const results = useMemo(() => {
@@ -284,6 +299,19 @@ export function CommandPalette({ currentPostId }: Props) {
         setOpen(false);
       },
     },
+    {
+      key: "shortcuts",
+      label: "Keyboard shortcuts",
+      icon: <HelpCircle className="size-4" />,
+      onSelect: () => setPage("shortcuts"),
+    },
+    {
+      key: "version",
+      label: "Version",
+      icon: <Tag01 className="size-4" />,
+      hint: COMMIT_SHA || undefined,
+      onSelect: () => setPage("version"),
+    },
   ];
 
   const filteredCommands = commandQuery
@@ -317,6 +345,10 @@ export function CommandPalette({ currentPostId }: Props) {
         className="mt-[12vh] flex w-[680px] max-w-[92vw] flex-col overflow-hidden rounded-2xl border border-secondary bg-secondary shadow-2xl ring-1 ring-primary"
       >
         <Command shouldFilter={false} className="flex w-full flex-col">
+          {page ? (
+            <PalettePageView page={page} onBack={() => setPage(null)} />
+          ) : (
+          <>
           <div className="flex items-center gap-2 border-b border-secondary px-4">
             <SearchLg data-icon className="size-4 shrink-0 text-quaternary" />
             <Command.Input
@@ -375,8 +407,10 @@ export function CommandPalette({ currentPostId }: Props) {
               </Command.Group>
             )}
           </Command.List>
+          </>
+          )}
 
-          <Footer />
+          <Footer inPage={!!page} />
         </Command>
       </div>
     </div>
@@ -396,7 +430,15 @@ function fuzzyMatch(label: string, q: string): boolean {
   return false;
 }
 
-function Footer() {
+function Footer({ inPage = false }: { inPage?: boolean }) {
+  if (inPage) {
+    return (
+      <div className="flex items-center gap-3 border-t border-secondary bg-primary px-4 py-2.5 text-xs text-tertiary">
+        <Kbd>esc</Kbd>
+        <span>back to commands</span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center justify-between gap-4 border-t border-secondary bg-primary px-4 py-2.5 text-xs text-tertiary">
       <div className="flex items-center gap-3">
@@ -428,6 +470,72 @@ function Kbd({ children }: { children: React.ReactNode }) {
     <kbd className="inline-flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-secondary bg-secondary_alt px-1 font-sans text-[11px] font-medium text-secondary">
       {children}
     </kbd>
+  );
+}
+
+function PalettePageView({
+  page,
+  onBack,
+}: {
+  page: "shortcuts" | "version";
+  onBack: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2 border-b border-secondary px-3 py-2.5">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back to commands"
+          className="rounded-md p-1 text-quaternary transition hover:bg-tertiary hover:text-secondary"
+        >
+          <ArrowLeft className="size-4" />
+        </button>
+        <h2 className="text-sm font-semibold text-primary">
+          {page === "shortcuts" ? "Keyboard shortcuts" : "Version"}
+        </h2>
+      </div>
+      <div className="max-h-[60vh] min-h-[120px] overflow-y-auto px-4 py-4">
+        {page === "shortcuts" ? <ShortcutsPanel /> : <VersionPanel />}
+      </div>
+    </>
+  );
+}
+
+function VersionPanel() {
+  const d = buildDate();
+  return (
+    <dl className="space-y-3 text-sm">
+      <VersionRow label="Last deployed">
+        {d ? (
+          <span title={formatExactDate(d.getTime())}>
+            {d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+            <span className="ml-2 text-quaternary">{relativeTime(d.getTime())}</span>
+          </span>
+        ) : (
+          <span className="text-quaternary">unknown (dev build)</span>
+        )}
+      </VersionRow>
+      <VersionRow label="Commit">
+        {COMMIT_SHA ? (
+          <code className="font-mono text-xs text-secondary">{COMMIT_SHA}</code>
+        ) : (
+          <span className="text-quaternary">—</span>
+        )}
+      </VersionRow>
+      <VersionRow label="Environment">
+        <span className="text-secondary capitalize">{DEPLOY_ENV}</span>
+      </VersionRow>
+    </dl>
+  );
+}
+
+function VersionRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="shrink-0 text-quaternary">{label}</dt>
+      <dd className="text-right">{children}</dd>
+    </div>
   );
 }
 

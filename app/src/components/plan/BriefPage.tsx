@@ -1,0 +1,426 @@
+// A brief is its own page, like a post: a BlockNote body editor in the main
+// column and the brief "header" fields in a right side panel. Backed by Dexie
+// (lib/plan/briefs); edits persist and sync.
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { BlockNoteView } from "@blocknote/mantine";
+import { useCreateBlockNote } from "@blocknote/react";
+import "@blocknote/mantine/style.css";
+import { parseDate } from "@internationalized/date";
+import { ArrowLeft, Link01, LinkExternal01, Plus, XClose } from "@untitledui/icons";
+import { go } from "@/lib/route";
+import { db } from "@/lib/db";
+import { useTheme } from "@/lib/theme";
+import { collectionDisplay } from "@/lib/collections";
+import { createPost } from "@/lib/posts";
+import { updateBrief, seedBriefsIfEmpty, linkBriefToPost } from "@/lib/plan/briefs";
+import { seedTemplatesIfEmpty } from "@/lib/plan/templates";
+import type { Collection, Post } from "@/types";
+import type { Brief, BriefStatus, BriefTemplate } from "@/lib/plan/types";
+import { BRIEF_STATUS_ORDER, statusMeta } from "@/lib/plan/types";
+import { MOCK_ASSIGNEES, assigneeById } from "@/lib/plan/mock";
+import { StatusBadge } from "@/components/plan/bits";
+import { LinkPickerDialog, type PickItem } from "@/components/plan/LinkPickerDialog";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { BadgeWithButton } from "@/components/base/badges/badges";
+import { Select } from "@/components/base/select/select";
+import { Input } from "@/components/base/input/input";
+import { DatePicker } from "@/components/application/date-picker/date-picker";
+
+const NONE = "__none__";
+
+export function BriefPage({ id }: { id: string }) {
+  useEffect(() => {
+    void seedBriefsIfEmpty();
+    void seedTemplatesIfEmpty();
+  }, []);
+
+  // undefined = query in flight; null = settled but no brief with this id.
+  const brief = useLiveQuery(async () => (await db.briefs.get(id)) ?? null, [id]);
+
+  if (brief === undefined) {
+    return (
+      <div className="flex min-w-0 flex-1 items-center justify-center text-tertiary">Loading…</div>
+    );
+  }
+
+  if (brief === null) {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 text-center">
+        <p className="text-sm font-medium text-secondary">Brief not found</p>
+        <p className="text-xs text-quaternary">It may have been deleted.</p>
+        <Button
+          size="sm"
+          color="secondary"
+          iconLeading={ArrowLeft}
+          onClick={() => go({ view: "plan" })}
+        >
+          Back to Planning
+        </Button>
+      </div>
+    );
+  }
+
+  return <BriefView key={brief.id} brief={brief} />;
+}
+
+function BriefView({ brief }: { brief: Brief }) {
+  const editor = useCreateBlockNote();
+  const [theme] = useTheme();
+  const [tagDraft, setTagDraft] = useState("");
+  const collectionRows = useLiveQuery(
+    () => db.collections.orderBy("position").toArray(),
+    [],
+    [] as Collection[],
+  );
+  const templates = useLiveQuery(() => db.briefTemplates.toArray(), [], [] as BriefTemplate[]);
+
+  const persist = (patch: Partial<Brief>) => void updateBrief(brief.id, patch);
+
+  // Picking a template stamps templateId and, for a still-empty brief, seeds the
+  // body (into the editor) and the checks from the template. A brief with its own
+  // body/checks is never clobbered.
+  const applyTemplate = async (key: string | null) => {
+    if (!key || key === NONE) {
+      persist({ templateId: null });
+      return;
+    }
+    const tpl = templates.find((t) => t.id === key);
+    const patch: Partial<Brief> = { templateId: key };
+    if (tpl) {
+      const briefHasChecks = Boolean(
+        brief.checks.minWords || brief.checks.maxWords || brief.checks.requiredKeywords?.length,
+      );
+      const tplHasChecks = Boolean(
+        tpl.checks.minWords || tpl.checks.maxWords || tpl.checks.requiredKeywords?.length,
+      );
+      if (!briefHasChecks && tplHasChecks) patch.checks = tpl.checks;
+
+      if (tpl.body.trim() && editor) {
+        const currentMd = (await editor.blocksToMarkdownLossy()).trim();
+        if (!currentMd) {
+          const blocks = await editor.tryParseMarkdownToBlocks(tpl.body);
+          editor.replaceBlocks(editor.document, blocks);
+          patch.body = tpl.body;
+        }
+      }
+    }
+    persist(patch);
+  };
+
+  // Seed the body editor once from the brief.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !editor) return;
+    seeded.current = true;
+    if (brief.body) {
+      void (async () => {
+        const blocks = await editor.tryParseMarkdownToBlocks(brief.body);
+        editor.replaceBlocks(editor.document, blocks);
+      })();
+    }
+  }, [editor, brief.body]);
+
+  // Persist body changes (debounced).
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!editor) return;
+    const unsub = editor.onChange(() => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(async () => {
+        const md = await editor.blocksToMarkdownLossy();
+        void updateBrief(brief.id, { body: md });
+      }, 400);
+    });
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (typeof unsub === "function") unsub();
+    };
+  }, [editor, brief.id]);
+
+  const addTag = () => {
+    const t = tagDraft.trim().replace(/^#/, "");
+    if (t && !brief.tags.includes(t)) persist({ tags: [...brief.tags, t] });
+    setTagDraft("");
+  };
+
+  const statusItems = BRIEF_STATUS_ORDER.map((s) => ({ id: s, label: statusMeta(s).label }));
+  const templateItems = [
+    { id: NONE, label: "No template" },
+    ...[...templates]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((t) => ({ id: t.id, label: t.name || "Untitled template" })),
+  ];
+  const collectionItems = collectionRows.map((c) => {
+    const d = collectionDisplay(c.name, collectionRows);
+    return { id: c.name, label: d.emoji ? `${d.emoji}  ${d.label || c.name}` : c.name };
+  });
+  const availableAssignees = MOCK_ASSIGNEES.filter((a) => !brief.assigneeIds.includes(a.id));
+
+  const hasChecks = Boolean(
+    brief.checks.minWords || brief.checks.maxWords || brief.checks.requiredKeywords?.length,
+  );
+
+  return (
+    <div className="flex min-w-0 flex-1 overflow-hidden">
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="sticky top-0 z-30 flex items-center justify-between border-b border-secondary bg-primary/85 px-6 py-3 text-xs text-tertiary backdrop-blur">
+          <button
+            onClick={() => go({ view: "plan" })}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 transition hover:bg-primary_hover hover:text-secondary"
+          >
+            <ArrowLeft className="size-3.5" />
+            Planning
+          </button>
+          <StatusBadge status={brief.status} />
+        </div>
+
+        <div className="mx-auto w-full max-w-[760px] px-10 pt-12 pb-24">
+          <input
+            value={brief.title}
+            onChange={(e) => persist({ title: e.target.value })}
+            placeholder="Brief title"
+            className="w-full bg-transparent font-title text-4xl leading-tight text-primary outline-none placeholder:text-quaternary"
+          />
+          <p className="mt-2 text-sm text-quaternary">
+            The brief is the task. The post is written separately and linked, never in this body.
+          </p>
+          <div className="mt-8">
+            <BlockNoteView editor={editor} theme={theme} />
+          </div>
+        </div>
+      </main>
+
+      <aside className="flex h-full w-[320px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm">
+        <FieldStack label="Status">
+          <Select
+            size="sm"
+            selectedKey={brief.status}
+            onSelectionChange={(k) => persist({ status: k as BriefStatus })}
+            items={statusItems}
+          >
+            {(item) => <Select.Item id={item.id} label={item.label} />}
+          </Select>
+        </FieldStack>
+
+        <FieldStack label="Collection">
+          <Select
+            size="sm"
+            selectedKey={brief.collectionName}
+            onSelectionChange={(k) => persist({ collectionName: k ? String(k) : null })}
+            items={collectionItems}
+            placeholder="Choose collection"
+          >
+            {(item) => <Select.Item id={item.id} label={item.label} />}
+          </Select>
+          <p className="mt-1.5 text-[11px] text-quaternary">
+            The post this brief produces is created here. The brief itself isn't in the collection.
+          </p>
+        </FieldStack>
+
+        <FieldStack label="Assignees">
+          {brief.assigneeIds.length > 0 && (
+            <div className="mb-1.5 flex flex-wrap gap-1.5">
+              {brief.assigneeIds.map((aid) => {
+                const a = assigneeById(aid);
+                return (
+                  <BadgeWithButton
+                    key={aid}
+                    color="gray"
+                    type="color"
+                    size="sm"
+                    buttonLabel={`Remove ${a?.name ?? aid}`}
+                    onButtonClick={() =>
+                      persist({ assigneeIds: brief.assigneeIds.filter((x) => x !== aid) })
+                    }
+                  >
+                    {a?.name ?? aid}
+                  </BadgeWithButton>
+                );
+              })}
+            </div>
+          )}
+          <Select
+            size="sm"
+            selectedKey={null}
+            placeholder={availableAssignees.length ? "Add assignee" : "All added"}
+            isDisabled={availableAssignees.length === 0}
+            onSelectionChange={(k) => {
+              if (k) persist({ assigneeIds: [...brief.assigneeIds, String(k)] });
+            }}
+            items={availableAssignees.map((a) => ({ id: a.id, label: a.name }))}
+          >
+            {(item) => <Select.Item id={item.id} label={item.label} />}
+          </Select>
+        </FieldStack>
+
+        <FieldStack label="Due date">
+          <DatePicker
+            value={brief.plannedDate ? parseDate(brief.plannedDate) : null}
+            onChange={(v) => persist({ plannedDate: v ? v.toString() : null })}
+          />
+          <p className="mt-1.5 text-[11px] text-quaternary">Projected publish date.</p>
+        </FieldStack>
+
+        <FieldStack label="Template">
+          <Select
+            size="sm"
+            selectedKey={brief.templateId ?? NONE}
+            onSelectionChange={(k) => void applyTemplate(k ? String(k) : null)}
+            items={templateItems}
+          >
+            {(item) => <Select.Item id={item.id} label={item.label} />}
+          </Select>
+          <p className="mt-1.5 text-[11px] text-quaternary">
+            Seeds an empty brief's body and checks. Manage templates in Settings.
+          </p>
+        </FieldStack>
+
+        <FieldStack label="Tags">
+          {brief.tags.length > 0 && (
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+              {brief.tags.map((t) => (
+                <BadgeWithButton
+                  key={t}
+                  color="gray"
+                  type="color"
+                  size="sm"
+                  buttonLabel={`Remove ${t}`}
+                  onButtonClick={() => persist({ tags: brief.tags.filter((x) => x !== t) })}
+                >
+                  #{t}
+                </BadgeWithButton>
+              ))}
+            </div>
+          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              addTag();
+            }}
+          >
+            <Input
+              size="sm"
+              aria-label="Add tag"
+              value={tagDraft}
+              onChange={setTagDraft}
+              placeholder="Add tag, press Enter"
+            />
+          </form>
+        </FieldStack>
+
+        {hasChecks && (
+          <FieldStack label="Checks">
+            <div className="flex flex-col gap-1 rounded-lg bg-primary p-2.5 text-xs text-tertiary ring-1 ring-secondary ring-inset">
+              {brief.checks.minWords ? <span>Target: at least {brief.checks.minWords} words</span> : null}
+              {brief.checks.maxWords ? <span>Max: {brief.checks.maxWords} words</span> : null}
+              {brief.checks.requiredKeywords?.length ? (
+                <span>Keywords: {brief.checks.requiredKeywords.join(", ")}</span>
+              ) : null}
+              <span className="text-quaternary">Compliance checking comes later (P5).</span>
+            </div>
+          </FieldStack>
+        )}
+
+        <LinkedPostField brief={brief} />
+
+        <div className="mt-auto border-t border-secondary pt-3 text-[11px] text-quaternary">
+          Edits save automatically.
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function FieldStack({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1.5 text-sm font-medium text-secondary">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+// The brief↔post link (1:1). "Add post" spins up a draft in the brief's target
+// collection and links it; "Link existing" picks any post. The post the brief
+// produces lives in a collection; the brief itself does not.
+function LinkedPostField({ brief }: { brief: Brief }) {
+  const [picking, setPicking] = useState(false);
+  const linkedPost = useLiveQuery(
+    async () => (brief.postId != null ? await db.posts.get(brief.postId) : undefined),
+    [brief.postId],
+  );
+  const allPosts = useLiveQuery(() => db.posts.toArray(), [], [] as Post[]);
+  const collections = useLiveQuery(
+    () => db.collections.orderBy("position").toArray(),
+    [],
+    [] as Collection[],
+  );
+
+  const addPost = async () => {
+    const type = brief.collectionName ?? collections[0]?.name;
+    if (!type) return;
+    const post = await createPost(type, { title: brief.title });
+    if (!post) return;
+    await linkBriefToPost(brief.id, post.id);
+    go({ view: "post", id: post.id });
+  };
+
+  const pickItems: PickItem[] = allPosts
+    .slice()
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((p) => ({ id: p.id, label: p.title || "Untitled", sublabel: p.postId ?? p.slug }));
+
+  return (
+    <FieldStack label="Linked post">
+      {brief.postId != null ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-primary p-2.5 ring-1 ring-secondary ring-inset">
+          <button
+            onClick={() => go({ view: "post", id: brief.postId! })}
+            className="flex min-w-0 items-center gap-2 text-left text-secondary transition hover:text-primary"
+          >
+            <Link01 className="size-4 shrink-0 text-fg-quaternary" />
+            <span className="truncate">{linkedPost?.title || "Untitled post"}</span>
+          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              size="sm"
+              color="secondary"
+              iconLeading={LinkExternal01}
+              onClick={() => go({ view: "post", id: brief.postId! })}
+            >
+              Open
+            </Button>
+            <ButtonUtility
+              size="sm"
+              color="tertiary"
+              tooltip="Unlink post"
+              icon={XClose}
+              onClick={() => void linkBriefToPost(brief.id, null)}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <Button size="sm" color="secondary" iconLeading={Plus} onClick={() => void addPost()}>
+            Add post
+          </Button>
+          <Button size="sm" color="secondary" iconLeading={Link01} onClick={() => setPicking(true)}>
+            Link existing
+          </Button>
+        </div>
+      )}
+      {picking && (
+        <LinkPickerDialog
+          title="Link an existing post"
+          items={pickItems}
+          emptyText="No posts yet."
+          onPick={(id) => void linkBriefToPost(brief.id, Number(id))}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </FieldStack>
+  );
+}

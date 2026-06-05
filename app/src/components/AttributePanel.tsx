@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Copy04, LinkExternal01, Star01, Trash01 } from "@untitledui/icons";
+import { Copy04, Link01, LinkExternal01, Plus, Star01, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import type { Collection, Post, PostStatus, PostVersion } from "@/types";
 import { deletePost, duplicatePost, setPostStatus, toggleFavorite, updatePost } from "@/lib/posts";
@@ -9,12 +9,20 @@ import { formatExactDate, relativeTime } from "@/lib/format";
 // Future: make the relative-vs-exact priority configurable per user. See
 // the Propaganda Notion backlog task "Configurable post-date display."
 import { go } from "@/lib/route";
+import { createBrief, linkBriefToPost } from "@/lib/plan/briefs";
+import type { Brief } from "@/lib/plan/types";
+import { statusMeta } from "@/lib/plan/types";
+import { StatusBadge } from "@/components/plan/bits";
+import { LinkPickerDialog, type PickItem } from "@/components/plan/LinkPickerDialog";
 import { DiffModal } from "@/components/DiffModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SharePanel } from "@/components/SharePanel";
 import { Input } from "@/components/base/input/input";
 import { Select } from "@/components/base/select/select";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
+import { Tabs } from "@/components/application/tabs/tabs";
 
 interface Props {
   post: Post;
@@ -36,6 +44,7 @@ export function AttributePanel({ post }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [slugWarnDismissed, setSlugWarnDismissed] = useState(false);
   const [slugEdited, setSlugEdited] = useState(false);
+  const [tab, setTab] = useState<"details" | "brief" | "analytics">("details");
 
   const publicUrl = `${window.location.origin}/p/${post.slug}`;
 
@@ -103,6 +112,21 @@ export function AttributePanel({ post }: Props) {
         </div>
       </div>
 
+      <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(k as TabKey)} className="gap-5">
+        <Tabs.List type="underline" size="sm">
+          <Tabs.Item id="details">Details</Tabs.Item>
+          <Tabs.Item id="brief">Brief</Tabs.Item>
+          <Tabs.Item id="analytics">Analytics</Tabs.Item>
+        </Tabs.List>
+
+        <Tabs.Panel id="brief">
+          <BriefTab post={post} />
+        </Tabs.Panel>
+        <Tabs.Panel id="analytics">
+          <AnalyticsTab />
+        </Tabs.Panel>
+
+        <Tabs.Panel id="details" className="flex flex-col gap-5">
       <FieldStack label="Status">
         <StatusGroup
           value={status}
@@ -160,9 +184,7 @@ export function AttributePanel({ post }: Props) {
       <SharePanel post={post} />
 
       <div className="mt-2 border-t border-secondary pt-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-quaternary">
-          History
-        </div>
+        <div className="mb-2 text-sm font-semibold text-secondary">History</div>
         {versions.length === 0 ? (
           <div className="text-xs text-tertiary">No versions yet.</div>
         ) : (
@@ -188,9 +210,7 @@ export function AttributePanel({ post }: Props) {
       </div>
 
       <div className="mt-2 border-t border-secondary pt-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-quaternary">
-          Info
-        </div>
+        <div className="mb-2 text-sm font-semibold text-secondary">Info</div>
         <dl className="space-y-1.5 text-xs">
           <div className="flex items-baseline justify-between gap-2">
             <dt className="shrink-0 text-quaternary">Post ID</dt>
@@ -222,6 +242,8 @@ export function AttributePanel({ post }: Props) {
           </div>
         </dl>
       </div>
+        </Tabs.Panel>
+      </Tabs>
 
       {diffFor && (
         <DiffModal post={post} initialVersion={diffFor} onClose={() => setDiffFor(null)} />
@@ -253,37 +275,134 @@ function StatusGroup({
     { id: "published", label: "Published", dot: "bg-utility-green-500" },
   ];
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-secondary bg-secondary p-0.5">
-      {options.map((o) => {
-        const active = value === o.id;
-        return (
-          <button
-            key={o.id}
-            type="button"
-            onClick={() => onChange(o.id)}
-            className={[
-              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-sm transition",
-              active
-                ? "bg-primary text-primary shadow-xs ring-1 ring-secondary"
-                : "text-secondary hover:text-primary",
-            ].join(" ")}
-          >
-            <span className={["size-1.5 shrink-0 rounded-full", o.dot].join(" ")} />
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
+    <ButtonGroup
+      size="sm"
+      selectedKeys={[value]}
+      disallowEmptySelection
+      onSelectionChange={(keys) => {
+        const next = [...keys][0];
+        if (next) onChange(next as PostStatus);
+      }}
+      className="w-full"
+    >
+      {options.map((o) => (
+        <ButtonGroupItem
+          key={o.id}
+          id={o.id}
+          className="flex-1 justify-center"
+          iconLeading={<span className={`size-1.5 shrink-0 rounded-full ${o.dot}`} />}
+        >
+          {o.label}
+        </ButtonGroupItem>
+      ))}
+    </ButtonGroup>
   );
 }
 
 function FieldStack({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-quaternary">
-        {label}
-      </div>
+      <div className="mb-1.5 text-sm font-medium text-secondary">{label}</div>
       {children}
+    </div>
+  );
+}
+
+type TabKey = "details" | "brief" | "analytics";
+
+function BriefTab({ post }: { post: Post }) {
+  const [picking, setPicking] = useState(false);
+  const linkedBrief = useLiveQuery(
+    () => db.briefs.where("postId").equals(post.id).first(),
+    [post.id],
+  );
+  const allBriefs = useLiveQuery(() => db.briefs.toArray(), [], [] as Brief[]);
+
+  const createLinkedBrief = async () => {
+    const b = await createBrief({ postId: post.id, collectionName: post.type, title: post.title });
+    go({ view: "brief", id: b.id });
+  };
+
+  const pickItems: PickItem[] = allBriefs
+    .slice()
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((b) => ({ id: b.id, label: b.title || "Untitled brief", sublabel: statusMeta(b.status).label }));
+
+  if (linkedBrief) {
+    return (
+      <div className="flex flex-col gap-3 rounded-lg border border-secondary p-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-sm text-primary">
+            {linkedBrief.title || "Untitled brief"}
+          </span>
+          <StatusBadge status={linkedBrief.status} />
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            color="secondary"
+            iconLeading={LinkExternal01}
+            onClick={() => go({ view: "brief", id: linkedBrief.id })}
+          >
+            Open brief
+          </Button>
+          <Button
+            size="sm"
+            color="tertiary"
+            onClick={() => void linkBriefToPost(linkedBrief.id, null)}
+          >
+            Detach
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-secondary p-4">
+      <p className="text-sm text-secondary">No brief attached to this post.</p>
+      <p className="text-xs text-quaternary">
+        A brief is the task to write this post: assignee, schedule, tags and checks. It lives
+        separately and links here.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          color="secondary"
+          iconLeading={Plus}
+          onClick={() => void createLinkedBrief()}
+        >
+          Create brief
+        </Button>
+        <Button
+          size="sm"
+          color="secondary"
+          iconLeading={Link01}
+          onClick={() => setPicking(true)}
+        >
+          Attach existing
+        </Button>
+      </div>
+      {picking && (
+        <LinkPickerDialog
+          title="Attach an existing brief"
+          items={pickItems}
+          emptyText="No briefs yet."
+          onPick={(id) => void linkBriefToPost(String(id), post.id)}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AnalyticsTab() {
+  return (
+    <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-secondary p-4">
+      <p className="text-sm text-secondary">Per-post analytics</p>
+      <p className="text-xs text-quaternary">
+        Views, reading time and referrers for this post will appear here.
+      </p>
     </div>
   );
 }

@@ -315,9 +315,7 @@ function CardPreviewDialog({
 function SectionWrap({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-2 border-t border-secondary pt-4">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-quaternary">
-        Shareable Assets
-      </div>
+      <div className="mb-3 text-sm font-semibold text-secondary">Shareable Assets</div>
       {children}
     </div>
   );

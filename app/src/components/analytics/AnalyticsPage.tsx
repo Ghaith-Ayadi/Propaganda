@@ -3,8 +3,6 @@
 // sim mode is on.
 
 import { useState } from "react";
-import { ArrowLeft } from "@untitledui/icons";
-import { go } from "@/lib/route";
 import type { DateRangePreset } from "@/lib/analytics/types";
 import { useSimMode } from "@/lib/analytics/sim";
 import { liveConfigured } from "@/lib/analytics/live";
@@ -26,14 +24,6 @@ export function AnalyticsPage() {
       <div className="border-b border-secondary px-6 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => go({ view: "list" })}
-              className="rounded-md p-1 text-quaternary transition hover:bg-secondary hover:text-secondary"
-              aria-label="Back"
-            >
-              <ArrowLeft className="size-4" />
-            </button>
             <h1 className="font-title text-2xl text-primary">Analytics</h1>
           </div>
           <DateRangePicker value={range} onChange={setRange} />

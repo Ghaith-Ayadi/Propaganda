@@ -3,6 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   BarChart01,
+  Calendar,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -135,6 +136,13 @@ export function Sidebar({ currentId }: Props) {
       </div>
 
       <div className="flex flex-col gap-0 border-t border-secondary p-2">
+        <button
+          onClick={() => go({ view: "plan" })}
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"
+        >
+          <Calendar className="size-3.5 text-quaternary" />
+          <span>Planning</span>
+        </button>
         <button
           onClick={() => go({ view: "analytics" })}
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"

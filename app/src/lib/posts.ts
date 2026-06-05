@@ -116,6 +116,44 @@ export async function toggleFavorite(id: number): Promise<void> {
 }
 
 /**
+ * Create a blank draft post in `type` (a collection name). The server assigns
+ * the integer id; the collection_seq is computed client-side. Mirrors the
+ * command-palette "new post" flow so a brief can spin up its linked post.
+ */
+export async function createPost(
+  type: string,
+  fields: { title?: string; content?: string } = {},
+): Promise<Post | null> {
+  const { supabase } = await import("@/lib/supabase");
+  const { postSlug } = await import("@/lib/postId");
+
+  const peers = await db.posts.where("type").equals(type).toArray();
+  const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
+  const pid = postSlug(type, nextSeq);
+
+  const { data, error } = await supabase
+    .from("posts")
+    .insert({
+      title: fields.title ?? "",
+      slug: pid,
+      post_id: pid,
+      type,
+      status: "draft",
+      content_md: fields.content ?? "",
+      collection_seq: nextSeq,
+    })
+    .select()
+    .single();
+  if (error) {
+    console.error("createPost failed:", error);
+    return null;
+  }
+  const post = fromRow(data as PostRow);
+  await db.posts.put({ ...post, syncedAt: Date.now(), dirty: false });
+  return post;
+}
+
+/**
  * Duplicate a post in the same collection. Server assigns a new integer id;
  * we compute the next collection_seq client-side.
  */
