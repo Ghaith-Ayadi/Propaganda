@@ -33,6 +33,7 @@ export interface BlogPost {
   slug: string;
   title: string;
   type: string;
+  subtitle: string | null;
   excerpt: string | null;
   content: string;
   publishedAt: number | null;
@@ -47,6 +48,7 @@ interface BlogPostRow {
   slug: string;
   title: string;
   type: string;
+  subtitle: string | null;
   excerpt: string | null;
   content_md: string | null;
   published_at: string | null;
@@ -62,6 +64,7 @@ function fromBlogRow(r: BlogPostRow): BlogPost {
     slug: r.slug,
     title: r.title ?? "",
     type: r.type,
+    subtitle: r.subtitle,
     excerpt: r.excerpt,
     content: r.content_md ?? "",
     publishedAt: r.published_at ? new Date(r.published_at).getTime() : null,
@@ -73,7 +76,7 @@ function fromBlogRow(r: BlogPostRow): BlogPost {
 }
 
 const PUBLIC_COLUMNS =
-  "id, slug, title, type, excerpt, content_md, published_at, updated_at, word_count, collection_seq, status";
+  "id, slug, title, type, subtitle, excerpt, content_md, published_at, updated_at, word_count, collection_seq, status";
 
 export function useBlogData(): {
   loading: boolean;
@@ -130,13 +133,24 @@ export type ReaderFetch =
 
 /** Get a single post by slug for the reader view. */
 export async function fetchPostBySlug(slug: string): Promise<ReaderFetch> {
-  const { data, error } = await supabase
+  // Primary lookup by slug. Fall back to the immutable post_id code
+  // (e.g. "THM·08") so links shared before slugs were derived from titles
+  // keep resolving.
+  let { data } = await supabase
     .from("posts")
     .select(PUBLIC_COLUMNS)
     .eq("slug", slug)
     .eq("status", "published")
-    .single();
-  if (error || !data) return { kind: "missing" };
+    .maybeSingle();
+  if (!data) {
+    ({ data } = await supabase
+      .from("posts")
+      .select(PUBLIC_COLUMNS)
+      .eq("post_id", slug)
+      .eq("status", "published")
+      .maybeSingle());
+  }
+  if (!data) return { kind: "missing" };
   const row = data as BlogPostRow;
   // Check the collection's visibility before exposing the post.
   const { data: col } = await supabase

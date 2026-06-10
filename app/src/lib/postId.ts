@@ -39,3 +39,15 @@ export function slugify(title: string): string {
     .replace(/^-|-$/g, "")     // trim leading/trailing hyphens
     || "untitled";
 }
+
+/**
+ * Make `base` unique against the `taken` set by appending `-2`, `-3`, … until
+ * it no longer collides. `posts.slug` carries a UNIQUE index, so any derived
+ * slug has to be deduped before it hits the DB.
+ */
+export function dedupeSlug(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}

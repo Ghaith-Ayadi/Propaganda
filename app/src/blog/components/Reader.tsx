@@ -162,7 +162,7 @@ export function Reader({ slug }: Props) {
   }
 
   const rtMin = readTime(post.wordCount);
-  const dek = post.excerpt?.trim() || firstParagraph(post.content);
+  const dek = post.subtitle?.trim() || post.excerpt?.trim() || firstParagraph(post.content);
   const prettyPermalink = `verbatim/${colDisplay.toLowerCase().replace(/\s+/g, "-")}/${post.slug}`;
   const postsBySlug = new Map(posts.map((p) => [p.slug, p]));
   const resolvedContent = resolveWikilinks(post.content, postsBySlug);

@@ -151,7 +151,9 @@ export function Home({ collections, posts }: Props) {
                   className="blog-post-row"
                 >
                   <span className="pr-title">{p.title || "Untitled"}</span>
-                  {p.excerpt && <span className="pr-dek">{p.excerpt}</span>}
+                  {(p.subtitle || p.excerpt) && (
+                    <span className="pr-dek">{p.subtitle || p.excerpt}</span>
+                  )}
                   <span className="pr-meta-row">
                     {rt > 0 && <>{rt} min read</>}
                     {rt > 0 && <span className="sep" aria-hidden> · </span>}

@@ -95,8 +95,14 @@ export async function updatePost(
     existing.postId &&
     existing.slug === existing.postId
   ) {
-    const { slugify } = await import("@/lib/postId");
-    patch = { ...patch, slug: slugify(patch.title) };
+    const { slugify, dedupeSlug } = await import("@/lib/postId");
+    const taken = new Set(
+      (await db.posts.toArray())
+        .filter((p) => p.id !== id)
+        .map((p) => p.slug)
+        .filter(Boolean),
+    );
+    patch = { ...patch, slug: dedupeSlug(slugify(patch.title), taken) };
   }
 
   const next: Post = {
@@ -125,17 +131,23 @@ export async function createPost(
   fields: { title?: string; content?: string } = {},
 ): Promise<Post | null> {
   const { supabase } = await import("@/lib/supabase");
-  const { postSlug } = await import("@/lib/postId");
+  const { postSlug, slugify, dedupeSlug } = await import("@/lib/postId");
 
   const peers = await db.posts.where("type").equals(type).toArray();
   const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
   const pid = postSlug(type, nextSeq);
 
+  // Slug defaults to a sluggified title; blank drafts fall back to the post_id
+  // code until the author types a title (updatePost re-derives it then).
+  const title = fields.title ?? "";
+  const taken = new Set((await db.posts.toArray()).map((p) => p.slug).filter(Boolean));
+  const slug = title.trim() ? dedupeSlug(slugify(title), taken) : pid;
+
   const { data, error } = await supabase
     .from("posts")
     .insert({
-      title: fields.title ?? "",
-      slug: pid,
+      title,
+      slug,
       post_id: pid,
       type,
       status: "draft",
@@ -159,17 +171,20 @@ export async function createPost(
  */
 export async function duplicatePost(source: import("@/types").Post): Promise<import("@/types").Post | null> {
   const { supabase } = await import("@/lib/supabase");
-  const { postSlug } = await import("@/lib/postId");
+  const { postSlug, slugify, dedupeSlug } = await import("@/lib/postId");
 
   const peers = await db.posts.where("type").equals(source.type).toArray();
   const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
 
   const pid = postSlug(source.type, nextSeq);
+  const title = source.title ? `${source.title} (copy)` : "";
+  const taken = new Set((await db.posts.toArray()).map((p) => p.slug).filter(Boolean));
+  const slug = title.trim() ? dedupeSlug(slugify(title), taken) : pid;
   const { data, error } = await supabase
     .from("posts")
     .insert({
-      title: source.title ? `${source.title} (copy)` : "",
-      slug: pid,
+      title,
+      slug,
       post_id: pid,
       type: source.type,
       status: "draft",
