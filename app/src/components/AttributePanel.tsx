@@ -142,6 +142,22 @@ export function AttributePanel({ post }: Props) {
             setSlugEdited(true);
             void updatePost(post.id, { slug: v });
           }}
+          onBlur={() => {
+            // Normalize whatever was typed/pasted into a real slug when the
+            // field loses focus, deduping against the UNIQUE slug index.
+            void (async () => {
+              const { slugify, dedupeSlug } = await import("@/lib/postId");
+              const normalized = slugify(post.slug);
+              if (!normalized || normalized === post.slug) return;
+              const taken = new Set(
+                (await db.posts.toArray())
+                  .filter((p) => p.id !== post.id)
+                  .map((p) => p.slug)
+                  .filter(Boolean),
+              );
+              void updatePost(post.id, { slug: dedupeSlug(normalized, taken) });
+            })();
+          }}
         />
         <p className="mt-1.5 select-all truncate text-[11px] text-quaternary">{publicUrl}</p>
         {post.status === "published" && slugEdited && !slugWarnDismissed && (
