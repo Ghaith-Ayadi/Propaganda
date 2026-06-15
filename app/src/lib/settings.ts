@@ -9,6 +9,7 @@ const cache = new Map<string, unknown>();
 const listeners = new Set<() => void>();
 let version = 0;
 let loaded = false;
+let loadPromise: Promise<void> | null = null;
 
 function emit() {
   version++;
@@ -21,10 +22,18 @@ interface SettingRow {
   updated_at: string;
 }
 
-/** Pull every setting from Supabase + subscribe to realtime updates. */
-export async function installSettings(): Promise<void> {
-  if (loaded) return;
-  loaded = true;
+/**
+ * Pull every setting from Supabase + subscribe to realtime updates. Memoized:
+ * every caller awaits the SAME load, so the cache is guaranteed populated when
+ * the returned promise resolves (callers must not race on a half-filled cache).
+ */
+export function installSettings(): Promise<void> {
+  if (loadPromise) return loadPromise;
+  loadPromise = load();
+  return loadPromise;
+}
+
+async function load(): Promise<void> {
   const { data, error } = await supabase.from("app_settings").select("*");
   if (error) {
     console.error("loadSettings failed:", error);
@@ -33,6 +42,7 @@ export async function installSettings(): Promise<void> {
   for (const row of (data ?? []) as SettingRow[]) {
     cache.set(row.key, row.value);
   }
+  loaded = true;
   emit();
 
   supabase

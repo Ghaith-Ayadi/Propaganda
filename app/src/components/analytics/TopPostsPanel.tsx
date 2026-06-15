@@ -23,7 +23,7 @@ export function TopPostsPanel({ range, limit = 10 }: Props) {
 
   return (
     <section className="rounded-xl border border-secondary bg-primary p-5">
-      <h3 className="mb-3 text-[11px] font-medium uppercase tracking-wide text-quaternary">
+      <h3 className="-mx-5 -mt-5 mb-4 border-b border-secondary px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-quaternary">
         Top posts
       </h3>
       {rows == null ? (

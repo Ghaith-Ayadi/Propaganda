@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Eye,
   Folder,
+  Home01,
   SearchLg,
   Settings01,
   Star01,
@@ -69,7 +70,7 @@ export function Sidebar({ currentId }: Props) {
 
   return (
     <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-secondary bg-secondary">
-      <div className="px-3 pt-3 pb-2">
+      <div className="flex items-center justify-between px-3 pt-3 pb-2">
         <a
           href="#/"
           aria-label="Verbatim — home"
@@ -77,11 +78,40 @@ export function Sidebar({ currentId }: Props) {
         >
           Verbatim
         </a>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+            aria-label="Settings"
+            className="rounded-md p-1.5 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+          >
+            <Settings01 className="size-4" />
+          </button>
+          <a
+            href="/"
+            onClick={() => {
+              try { localStorage.setItem(ADMIN_KNOWN, "1"); } catch {}
+            }}
+            title="Preview site"
+            aria-label="Preview site"
+            className="rounded-md p-1.5 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+          >
+            <Eye className="size-4" />
+          </a>
+        </div>
       </div>
 
       <div className="px-3 pb-3">
         <SearchBox value={query} onChange={setQuery} />
       </div>
+
+      <nav className="flex flex-col gap-0 px-2 pb-2">
+        <NavButton icon={<Home01 className="size-3.5 text-quaternary" />} label="Home" onClick={() => go({ view: "home" })} />
+        <NavButton icon={<Calendar className="size-3.5 text-quaternary" />} label="Planning" onClick={() => go({ view: "plan" })} />
+        <NavButton icon={<BarChart01 className="size-3.5 text-quaternary" />} label="Analytics" onClick={() => go({ view: "analytics" })} />
+      </nav>
+
+      <Divider />
 
       <div className="flex-1 overflow-y-auto">
         {query.trim() ? (
@@ -102,7 +132,7 @@ export function Sidebar({ currentId }: Props) {
               </Section>
             )}
 
-            <Divider />
+            {favorites.length > 0 && <Divider />}
 
             <Section label="Collections" defaultOpen>
               <ul className="space-y-0.5">
@@ -135,40 +165,8 @@ export function Sidebar({ currentId }: Props) {
         )}
       </div>
 
-      <div className="flex flex-col gap-0 border-t border-secondary p-2">
-        <button
-          onClick={() => go({ view: "plan" })}
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"
-        >
-          <Calendar className="size-3.5 text-quaternary" />
-          <span>Planning</span>
-        </button>
-        <button
-          onClick={() => go({ view: "analytics" })}
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"
-        >
-          <BarChart01 className="size-3.5 text-quaternary" />
-          <span>Analytics</span>
-        </button>
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"
-        >
-          <Settings01 className="size-3.5 text-quaternary" />
-          <span>Settings</span>
-        </button>
-        <a
-          href="/"
-          onClick={() => {
-            try { localStorage.setItem(ADMIN_KNOWN, "1"); } catch {}
-          }}
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"
-          title="Open the public site in this tab"
-        >
-          <Eye className="size-3.5 text-quaternary" />
-          <span>Preview site</span>
-        </a>
-        <div className="px-2 pt-2 text-[11px] text-quaternary">
+      <div className="border-t border-secondary p-2">
+        <div className="px-2 py-1 text-[11px] text-quaternary">
           {posts.length} {posts.length === 1 ? "post" : "posts"} ·{" "}
           {collectionRows.length} {collectionRows.length === 1 ? "collection" : "collections"}
         </div>
@@ -221,6 +219,26 @@ function Section({
 
 function Divider() {
   return <div className="my-1 border-t border-secondary" />;
+}
+
+function NavButton({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-secondary transition hover:bg-tertiary hover:text-primary"
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
 }
 
 function CollectionFolder({

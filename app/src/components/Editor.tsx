@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
-import { useCreateBlockNote } from "@blocknote/react";
+import {
+  useCreateBlockNote,
+  FormattingToolbar,
+  FormattingToolbarController,
+  getFormattingToolbarItems,
+} from "@blocknote/react";
 import "@blocknote/mantine/style.css";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ArrowLeft, ArrowDown, ArrowUp } from "@untitledui/icons";
@@ -16,6 +21,10 @@ import { consumeTitleFocus } from "@/lib/postFocus";
 import { useEditorStyles } from "@/lib/editorStyles";
 import type { Collection } from "@/types";
 import { WikilinkAutocomplete } from "@/components/WikilinkAutocomplete";
+import {
+  MentionAutocomplete,
+  MentionToolbarButton,
+} from "@/components/PostMention";
 
 interface Props {
   post: Post;
@@ -162,8 +171,22 @@ export function Editor({ post }: Props) {
         />
         <div className="mb-8" />
         <div ref={editorRootRef} className="w-full pb-24">
-          <BlockNoteView editor={editor} theme={theme} />
+          <BlockNoteView editor={editor} theme={theme} formattingToolbar={false}>
+            <FormattingToolbarController
+              formattingToolbar={() => (
+                <FormattingToolbar>
+                  {...getFormattingToolbarItems()}
+                  <MentionToolbarButton key="mention" excludeId={post.id} />
+                </FormattingToolbar>
+              )}
+            />
+          </BlockNoteView>
           <WikilinkAutocomplete rootRef={editorRootRef} />
+          <MentionAutocomplete
+            editor={editor}
+            rootRef={editorRootRef}
+            excludeId={post.id}
+          />
         </div>
       </div>
     </div>

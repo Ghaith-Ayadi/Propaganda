@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 
 export type Route =
+  | { view: "home" }
   | { view: "list" }
   | { view: "post"; id: number }
   | { view: "plan" }
@@ -16,6 +17,7 @@ function parse(): Route {
   if (m) return { view: "post", id: Number(m[1]) };
   const mb = h.match(/^#\/brief\/(.+)$/);
   if (mb) return { view: "brief", id: decodeURIComponent(mb[1]) };
+  if (h === "#/home") return { view: "home" };
   if (h === "#/plan") return { view: "plan" };
   if (h === "#/analytics") return { view: "analytics" };
   return { view: "list" };
@@ -23,6 +25,7 @@ function parse(): Route {
 
 function toHash(r: Route): string {
   if (r.view === "list") return "#/";
+  if (r.view === "home") return "#/home";
   if (r.view === "plan") return "#/plan";
   if (r.view === "brief") return `#/brief/${encodeURIComponent(r.id)}`;
   if (r.view === "analytics") return "#/analytics";

@@ -4,6 +4,7 @@
 import { db } from "@/lib/db";
 import { scheduleSync } from "@/lib/sync";
 import { snapshotVersion } from "@/lib/versions";
+import { emitPostContentSaved } from "@/lib/postEvents";
 import type { Post, PostStatus } from "@/types";
 
 export interface PostRow {
@@ -113,6 +114,17 @@ export async function updatePost(
   };
   await db.posts.put(next);
   scheduleSync();
+
+  // Announce body saves so optional modules can react. Only fires when the
+  // patch carried a word count (i.e. the editor saved content, not a title or
+  // status tweak). Harmless no-op when nothing is subscribed.
+  if (patch.wordCount !== undefined) {
+    emitPostContentSaved({
+      id,
+      prevWordCount: existing.wordCount,
+      wordCount: patch.wordCount ?? null,
+    });
+  }
 }
 
 export async function toggleFavorite(id: number): Promise<void> {

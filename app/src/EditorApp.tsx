@@ -7,6 +7,7 @@ import { Editor } from "@/components/Editor";
 import { AttributePanel } from "@/components/AttributePanel";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CollectionTabs } from "@/components/CollectionTabs";
+import { HomePage } from "@/components/HomePage";
 import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
 import { PlanPage } from "@/components/plan/PlanPage";
 import { BriefPage } from "@/components/plan/BriefPage";
@@ -42,8 +43,16 @@ function Shell() {
     // Anyone who has visited /admin once is considered "admin" for the
     // purpose of showing the back-to-admin strip on the public site.
     try { localStorage.setItem("verbatim:admin-known", "1"); } catch {}
-    // Load app_settings (author bio, favicon, …) into the in-memory cache.
-    void import("@/lib/settings").then((m) => m.installSettings());
+    // Load app_settings (author bio, favicon, …) into the in-memory cache,
+    // then start the Verbose recorder if enabled.
+    void import("@/lib/settings")
+      .then((m) => m.installSettings())
+      .then(() =>
+        // VERBOSE MODULE (optional, personal).
+        import("@/features/verbose").then((v) => {
+          if (v.isVerboseEnabled()) v.installVerbose();
+        }),
+      );
     return () => {
       void flushSync();
       stopRealtime();
@@ -99,6 +108,7 @@ function Shell() {
       ) : (
         <>
           <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+            {route.view === "home" && <HomePage />}
             {route.view === "list" && <CollectionTabs />}
             {route.view === "plan" && <PlanPage />}
             {route.view === "analytics" && <AnalyticsPage />}
