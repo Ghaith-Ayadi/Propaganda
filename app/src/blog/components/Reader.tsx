@@ -173,10 +173,14 @@ export function Reader({ slug }: Props) {
         backLabel={colDisplay || "Index"}
         onBack={backToCollection}
         right={
-          <>
-            {rtMin > 0 && <span>{rtMin} min read</span>}
-            <span>{fmtDate(post.publishedAt)}</span>
-          </>
+          <a
+            className="blog-topbar__share"
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}%20${encodeURIComponent(typeof window !== "undefined" ? window.location.href : "")}`}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            Share
+          </a>
         }
         showProgress
       />
@@ -226,20 +230,6 @@ export function Reader({ slug }: Props) {
                 <span>{rtMin} min read</span>
               </>
             )}
-          </div>
-          <div className="by-right">
-            <a
-              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}%20${encodeURIComponent(typeof window !== "undefined" ? window.location.href : "")}`}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              Share
-            </a>
-            <a
-              href={`mailto:?subject=${encodeURIComponent(post.title)}&body=${encodeURIComponent(typeof window !== "undefined" ? window.location.href : "")}`}
-            >
-              Email
-            </a>
           </div>
         </div>
 

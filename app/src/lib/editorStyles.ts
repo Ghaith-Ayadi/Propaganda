@@ -81,6 +81,39 @@ export function buildEditorCss(
 ): string {
   const lines = (Object.keys(configs) as BlockKey[]).map((b) => blockCss(b, configs[b]));
   lines.push(`.bn-file-caption { text-align: ${captionAlign}; font-size: ${captionSize}; }`);
+  // Links render blue + underlined in the editor, matching the public reader.
+  lines.push(
+    `.bn-editor a, .bn-editor a:visited { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }`,
+    `.bn-editor a:hover { color: #1d4ed8; }`,
+  );
+  // Image blocks expand to the full text column instead of sitting like an
+  // attachment card. Keep the caption/resize chrome but let the image breathe.
+  lines.push(
+    `.bn-editor [data-content-type="image"] img,
+     .bn-editor [data-content-type="image"] .bn-visual-media { width: 100%; max-width: 100%; height: auto; border-radius: 2px; }`,
+  );
+  // Notion-style upload state: while a file is uploading, BlockNote renders
+  // <div class="bn-file-loading-preview">Loading...</div>. Turn that into a
+  // grayed, softly shimmering placeholder block with an "Uploading…" label
+  // instead of bare text.
+  lines.push(
+    `.bn-editor .bn-file-loading-preview {
+       position: relative; width: 100%; min-height: 180px;
+       display: flex; align-items: center; justify-content: center;
+       color: transparent !important; border-radius: 4px; overflow: hidden;
+       background: linear-gradient(90deg,
+         color-mix(in srgb, var(--color-fg, #808080) 10%, transparent) 25%,
+         color-mix(in srgb, var(--color-fg, #808080) 20%, transparent) 37%,
+         color-mix(in srgb, var(--color-fg, #808080) 10%, transparent) 63%);
+       background-size: 400% 100%;
+       animation: bn-upload-shimmer 1.3s ease-in-out infinite;
+     }`,
+    `.bn-editor .bn-file-loading-preview::after {
+       content: "Uploading…"; color: var(--color-fg, #6b6b6b); opacity: 0.7;
+       font-size: 13px; letter-spacing: 0.02em;
+     }`,
+    `@keyframes bn-upload-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }`,
+  );
   return lines.join("\n");
 }
 

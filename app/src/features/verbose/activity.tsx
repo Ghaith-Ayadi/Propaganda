@@ -165,7 +165,7 @@ export function VerboseActivity() {
 
       <div className="flex flex-col gap-6 p-5 lg:flex-row lg:items-center">
         {/* heatmap */}
-        <div className="overflow-x-auto lg:shrink-0">
+        <div className="overflow-hidden lg:shrink-0">
           <div className="inline-block">
             <div className="relative mb-1 h-3">
               {monthLabels.map(({ col, label }) => (

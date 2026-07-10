@@ -19,6 +19,8 @@
   --paper: #ffffff;
   --paper-2: #f4f4f4;
   --accent: oklch(58% 0.13 145);
+  --link: #2563eb;
+  --link-hover: #1d4ed8;
   --serif: "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --ui: "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -130,6 +132,16 @@
 .blog-topbar__back:hover {
   color: var(--mute);
 }
+.blog-topbar__share {
+  font-family: var(--ui);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.blog-topbar__share:hover {
+  color: var(--mute);
+}
 .blog-topbar__progress {
   position: absolute;
   left: 0;
@@ -188,6 +200,16 @@
   gap: 36px;
   align-items: end;
   height: 64px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.blog-tabs::-webkit-scrollbar {
+  display: none;
+}
+.blog-tab {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .blog-tab {
   position: relative;
@@ -555,14 +577,16 @@
   letter-spacing: -0.01em;
 }
 .blog-prose a {
+  color: var(--link);
   text-decoration: underline;
-  text-decoration-color: var(--mute-2);
+  text-decoration-color: var(--link);
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
-  transition: text-decoration-color 0.15s ease;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
 }
 .blog-prose a:hover {
-  text-decoration-color: var(--ink);
+  color: var(--link-hover);
+  text-decoration-color: var(--link-hover);
 }
 .blog-prose em {
   font-style: normal;

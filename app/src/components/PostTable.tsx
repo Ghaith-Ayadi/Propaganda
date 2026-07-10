@@ -147,7 +147,7 @@ export function PostTable({ posts, onAddPost }: Props) {
               }}
               className="group cursor-pointer text-secondary outline-none transition hover:bg-secondary focus:bg-secondary"
             >
-              <Td className="date-pill text-xs text-quaternary">{p.slug || "—"}</Td>
+              <Td className="date-pill text-xs text-quaternary">{p.id ?? "—"}</Td>
               <Td className="truncate text-sm text-primary">
                 {p.title || <span className="text-quaternary">Untitled</span>}
               </Td>

@@ -27,6 +27,61 @@ function localApiPlugin(serverEnv: Record<string, string>): Plugin {
   return {
     name: "local-api",
     configureServer(server: ViteDevServer) {
+      // /api/upload — mirrors api/upload.ts (a Vercel function in prod) so image
+      // uploads work under `vite dev`, which doesn't run the serverless routes.
+      server.middlewares.use("/api/upload", async (req, res) => {
+        if (req.method !== "POST") {
+          res.writeHead(405, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Method not allowed" }));
+          return;
+        }
+        const token = serverEnv["BLOB_READ_WRITE_TOKEN"];
+        if (!token) {
+          res.writeHead(503, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "BLOB_READ_WRITE_TOKEN not set in .env.local" }));
+          return;
+        }
+        try {
+          // Buffer the raw body and let undici's web Request parse the multipart.
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          const webReq = new Request("http://localhost/api/upload", {
+            method: "POST",
+            headers: req.headers as Record<string, string>,
+            body: Buffer.concat(chunks),
+          });
+          const formData = await webReq.formData();
+          const file = formData.get("file");
+          if (!(file instanceof File)) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Missing or invalid file field" }));
+            return;
+          }
+          const year = new Date().getFullYear();
+          const ts = Date.now().toString(36);
+          const safeName =
+            file.name
+              .replace(/\.[^.]+$/, "")
+              .toLowerCase()
+              .replace(/[^a-z0-9-]+/g, "-")
+              .replace(/^-+|-+$/g, "")
+              .slice(0, 40) || "file";
+          const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+          const pathname = `${year}/${ts}-${safeName}.${ext}`;
+          const { put } = await import("@vercel/blob");
+          const blob = await put(pathname, file, {
+            access: "public",
+            token,
+            cacheControlMaxAge: 31_536_000,
+          });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ url: blob.url }));
+        } catch (err) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Upload failed", detail: String(err) }));
+        }
+      });
+
       server.middlewares.use("/api/extract-quotes", async (req, res) => {
         if (req.method !== "POST") {
           res.writeHead(405, { "Content-Type": "application/json" });

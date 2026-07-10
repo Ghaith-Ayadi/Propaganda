@@ -71,6 +71,22 @@ export function Editor({ post }: Props) {
   const subtitleRef = useRef<HTMLTextAreaElement | null>(null);
   const [titleVisible, setTitleVisible] = useState(true);
 
+  // Title/subtitle are edited through LOCAL draft state, not bound straight to
+  // the Dexie-backed `post`. Binding a controlled input's value to an async
+  // store means every keystroke round-trips (onChange → IndexedDB → liveQuery
+  // re-emit → re-render) and every sync pull rewrites the post object; when
+  // React reassigns `value` a tick late the browser drops the caret to the end.
+  // Editing a draft keeps the caret put; we still persist on every change.
+  const [titleDraft, setTitleDraft] = useState(post.title);
+  const [subtitleDraft, setSubtitleDraft] = useState(post.subtitle ?? "");
+  // Re-seed drafts only when switching posts — never on the round-trip that
+  // caused the jump. (Depending on post.id, not post.title/subtitle.)
+  useEffect(() => {
+    setTitleDraft(post.title);
+    setSubtitleDraft(post.subtitle ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.id]);
+
   // Auto-size the subtitle textarea to its content on mount and when the post
   // changes (e.g. navigating between posts or subtitle syncing in).
   useEffect(() => {
@@ -78,7 +94,7 @@ export function Editor({ post }: Props) {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [post.id, post.subtitle]);
+  }, [post.id, subtitleDraft]);
   const editorCss = useEditorStyles();
 
   // When the article title scrolls out of view, the sticky nav switches to
@@ -99,6 +115,25 @@ export function Editor({ post }: Props) {
       titleRef.current?.focus();
     }
   }, [post.id]);
+
+  // Paste a URL while text is selected → wrap the selection in a link (like
+  // Notion / Google Docs), instead of replacing the text with the raw URL.
+  useEffect(() => {
+    const root = editorRootRef.current;
+    if (!root || !editor) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const pasted = e.clipboardData?.getData("text/plain")?.trim();
+      // Only a single bare URL qualifies; multi-line or plain text pastes normally.
+      if (!pasted || /\s/.test(pasted) || !/^https?:\/\/\S+$/i.test(pasted)) return;
+      const selected = editor.getSelectedText();
+      if (!selected) return; // nothing selected → normal paste
+      e.preventDefault();
+      e.stopPropagation();
+      editor.createLink(pasted);
+    };
+    root.addEventListener("paste", onPaste, true);
+    return () => root.removeEventListener("paste", onPaste, true);
+  }, [editor]);
 
   // ArrowUp at the top of the body → subtitle → title.
   useEffect(() => {
@@ -131,8 +166,11 @@ export function Editor({ post }: Props) {
       <div className="pt-12">
         <input
           ref={titleRef}
-          value={post.title}
-          onChange={(e) => void updatePost(post.id, { title: e.target.value })}
+          value={titleDraft}
+          onChange={(e) => {
+            setTitleDraft(e.target.value);
+            void updatePost(post.id, { title: e.target.value });
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -144,12 +182,13 @@ export function Editor({ post }: Props) {
         />
         <textarea
           ref={subtitleRef}
-          value={post.subtitle ?? ""}
+          value={subtitleDraft}
           rows={1}
           onChange={(e) => {
             const el = e.currentTarget;
             el.style.height = "auto";
             el.style.height = `${el.scrollHeight}px`;
+            setSubtitleDraft(e.target.value);
             void updatePost(post.id, { subtitle: e.target.value || null });
           }}
           onKeyDown={(e) => {

@@ -72,17 +72,30 @@ async function pushPending(): Promise<void> {
   const pending = all.filter((p) => p.dirty || !p.syncedAt || p.updatedAt > (p.syncedAt ?? 0));
   if (!pending.length) return;
 
+  // Fast path: one batch upsert. PostgREST fails the whole batch if any single
+  // row is rejected (e.g. a bad enum value), so on error we fall back to
+  // per-row upserts — a single poison row can't silently block all syncing.
   const rows = pending.map(toRow);
-  const { data, error } = await supabase.from("posts").upsert(rows).select();
-  if (error) {
-    console.error("Push failed:", error);
-    return;
+  const batch = await supabase.from("posts").upsert(rows).select();
+  const saved: PostRow[] = [];
+  if (batch.error) {
+    console.error("Batch push failed, retrying row-by-row:", batch.error);
+    for (const p of pending) {
+      const { data, error } = await supabase.from("posts").upsert(toRow(p)).select();
+      if (error) {
+        console.error(`Push failed for post ${p.id} (${p.status}):`, error.message);
+        continue;
+      }
+      if (data?.[0]) saved.push(data[0] as PostRow);
+    }
+  } else {
+    saved.push(...((batch.data ?? []) as PostRow[]));
   }
 
   const now = Date.now();
   await db.transaction("rw", db.posts, async () => {
-    for (const raw of data ?? []) {
-      const server = fromRow(raw as PostRow);
+    for (const raw of saved) {
+      const server = fromRow(raw);
       await db.posts.put({ ...server, syncedAt: now, dirty: false });
     }
   });
