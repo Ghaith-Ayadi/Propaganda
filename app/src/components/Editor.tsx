@@ -13,6 +13,7 @@ import type { Post } from "@/types";
 import { db } from "@/lib/db";
 import { updatePost } from "@/lib/posts";
 import { uploadFile } from "@/lib/uploads";
+import { hasImageFileBlock, normalizeImageBlocks, promoteImageFileBlocks } from "@/lib/images";
 import { go } from "@/lib/route";
 import { collectionDisplay } from "@/lib/collections";
 import { useTheme } from "@/lib/theme";
@@ -37,6 +38,11 @@ export function Editor({ post }: Props) {
   const [theme] = useTheme();
   const lastLoadedId = useRef<number | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while we programmatically replace the document on load. BlockNote fires
+  // onChange for programmatic edits too, so without this guard merely opening a
+  // post would persist it back (bumping updatedAt and, worse, rewriting normalised
+  // image blocks over the stored content). We only save genuine user edits.
+  const loadingRef = useRef(false);
 
   // Load post content into editor when switching documents — same editor instance.
   useEffect(() => {
@@ -45,7 +51,14 @@ export function Editor({ post }: Props) {
     lastLoadedId.current = post.id;
     void (async () => {
       const blocks = await editor.tryParseMarkdownToBlocks(post.content || "");
-      editor.replaceBlocks(editor.document, blocks);
+      loadingRef.current = true;
+      // Render image-URL file blocks / links as real images (legacy content
+      // saved images as `[name](url)` links — see lib/images).
+      editor.replaceBlocks(editor.document, normalizeImageBlocks(blocks) as typeof blocks);
+      // Release on the next tick so the load's own onChange stays unsaved.
+      setTimeout(() => {
+        loadingRef.current = false;
+      }, 0);
     })();
   }, [editor, post.id, post.content]);
 
@@ -54,6 +67,14 @@ export function Editor({ post }: Props) {
   useEffect(() => {
     if (!editor) return;
     const unsub = editor.onChange(() => {
+      if (loadingRef.current) return; // ignore the programmatic load
+      // Pasted/dropped images land as generic file blocks — promote them to
+      // image blocks so they preview and serialise as `![](url)`. The update
+      // re-fires onChange; we defer it out of this dispatch and save on that pass.
+      if (hasImageFileBlock(editor)) {
+        queueMicrotask(() => promoteImageFileBlocks(editor));
+        return;
+      }
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(async () => {
         const md = await editor.blocksToMarkdownLossy();

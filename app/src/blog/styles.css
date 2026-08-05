@@ -558,6 +558,13 @@
   margin: 0 0 1.4em;
   text-wrap: pretty;
 }
+.blog-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.6em auto;
+  border-radius: 3px;
+}
 .blog-prose h2 {
   font-family: inherit;
   font-weight: 700;

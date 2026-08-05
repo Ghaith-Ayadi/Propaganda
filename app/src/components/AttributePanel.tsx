@@ -17,6 +17,7 @@ import { LinkPickerDialog, type PickItem } from "@/components/plan/LinkPickerDia
 import { DiffModal } from "@/components/DiffModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SharePanel } from "@/components/SharePanel";
+import { TagSelect } from "@/components/TagSelect";
 import { Input } from "@/components/base/input/input";
 import { Select } from "@/components/base/select/select";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
@@ -39,6 +40,15 @@ export function AttributePanel({ post }: Props) {
     [post.id],
     [] as PostVersion[],
   );
+  // Tenant-wide tag vocabulary: the union of every tag used across all posts
+  // (fromRow already folds the legacy `category` in), so the dropdown offers
+  // what's been used before while still allowing new tags.
+  const allPosts = useLiveQuery(() => db.posts.toArray(), [], [] as Post[]);
+  const tenantTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of allPosts) for (const t of p.tags ?? []) if (t?.trim()) set.add(t.trim());
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [allPosts]);
 
   const [diffFor, setDiffFor] = useState<PostVersion | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -189,11 +199,11 @@ export function AttributePanel({ post }: Props) {
         </p>
       </FieldStack>
 
-      <FieldStack label="Category">
-        <Input
-          size="sm"
-          value={post.category ?? ""}
-          onChange={(v) => void updatePost(post.id, { category: v })}
+      <FieldStack label="Tags">
+        <TagSelect
+          value={post.tags ?? []}
+          options={tenantTags}
+          onChange={(next) => void updatePost(post.id, { tags: next })}
         />
       </FieldStack>
 

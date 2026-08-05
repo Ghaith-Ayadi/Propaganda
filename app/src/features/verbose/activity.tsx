@@ -121,13 +121,30 @@ export function VerboseActivity() {
     for (let i = 0; i < 30; i++) last30 += map.get(dayKey(addDays(today, -i))) ?? 0;
     const postWords = posts.reduce((a, p) => a + (p.wordCount ?? 0), 0);
 
+    // Calendar buckets for the top row (week starts Sunday, matching the heatmap).
+    const startThisWeek = addDays(today, -today.getDay());
+    let thisWeek = 0;
+    for (let d = new Date(startThisWeek); d <= today; d = addDays(d, 1)) {
+      thisWeek += map.get(dayKey(d)) ?? 0;
+    }
+    const startPastWeek = addDays(startThisWeek, -7);
+    let pastWeek = 0;
+    for (let i = 0; i < 7; i++) pastWeek += map.get(dayKey(addDays(startPastWeek, i))) ?? 0;
+    const pastMonthPrefix = dayKey(new Date(today.getFullYear(), today.getMonth() - 1, 1)).slice(0, 7);
+    let pastMonth = 0;
+    for (const [k, w] of entries) if (k.startsWith(pastMonthPrefix)) pastMonth += w;
+
     const num = (n: number) => Math.round(n).toLocaleString();
     const since = earliest
       ? new Date(`${earliest}T00:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" })
       : null;
 
     const tiles = [
+      { label: "today", value: num(todayWords) },
+      { label: "this week", value: num(thisWeek) },
       { label: "this month", value: num(monthTotal) },
+      { label: "past week", value: num(pastWeek) },
+      { label: "past month", value: num(pastMonth) },
       { label: "this year", value: num(yearTotal) },
       { label: "streak", value: `${current}d` },
       { label: "longest", value: `${longest}d` },
@@ -135,8 +152,6 @@ export function VerboseActivity() {
       { label: "per writing day", value: num(writingDays ? total / writingDays : 0) },
       { label: "per day (30d)", value: num(last30 / 30) },
       { label: "per post", value: num(posts.length ? postWords / posts.length : 0) },
-      { label: "days written", value: num(writingDays) },
-      { label: "posts", value: num(posts.length) },
     ];
 
     return { columns, monthLabels, todayWords, since, tiles };

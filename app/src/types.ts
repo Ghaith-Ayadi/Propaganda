@@ -14,7 +14,8 @@ export interface Post {
   doneAt: number | null;        // first time writing finished (draft → done or draft → published)
   publishedAt: number | null;
   excerpt: string | null;
-  category: string | null;
+  category: string | null;      // legacy single free-text category; superseded by tags, kept as a read fallback
+  tags: string[];               // tenant-wide, multi-value tags (derived from category when unset)
   content: string;              // Markdown body (content_md in the DB)
   notionId: string | null;
   favorited: boolean;

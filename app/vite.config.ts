@@ -179,6 +179,9 @@ export default defineConfig(({ mode }) => {
         registerType: "autoUpdate",
         includeAssets: ["favicon.svg"],
         manifest: {
+          // Stable identity pinned to the admin app so the installed PWA is the
+          // writing tool, not the public reader.
+          id: "/admin",
           name: "Verbatim",
           short_name: "Verbatim",
           description: "Local-first writing.",

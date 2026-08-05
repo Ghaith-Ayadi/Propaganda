@@ -8,6 +8,7 @@ import { installPageTracker } from "@/blog/track";
 import { Topbar } from "./Topbar";
 import { Colophon } from "./Colophon";
 import { readTime } from "@/lib/format";
+import { isImageUrl } from "@/lib/images";
 import { useSetting } from "@/lib/settings";
 
 interface Props {
@@ -42,7 +43,15 @@ function firstParagraph(md: string, maxLen = 220): string {
     const t = block.trim();
     if (!t) continue;
     if (/^([#`>]|-{1,2}\s|\*\s|\d+\.\s|```)/.test(t)) continue;
-    const flat = t.replace(/\s+/g, " ").replace(/[*_`]/g, "").trim();
+    // Skip a block that's just a standalone image or link (e.g. an uploaded
+    // image saved as `![name](url)` or the legacy `[name](url)`), so the dek
+    // never falls back to a raw URL.
+    if (/^!?\[[^\]]*\]\([^)]*\)$/.test(t)) continue;
+    const flat = t
+      .replace(/\s+/g, " ")
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links/images → their text
+      .replace(/[*_`]/g, "")
+      .trim();
     if (flat.length <= maxLen) return flat;
     return flat.slice(0, maxLen).replace(/\s+\S*$/, "") + "…";
   }
@@ -239,6 +248,12 @@ export function Reader({ slug }: Props) {
             components={{
               a: ({ href, children, ...rest }) => {
                 if (!href) return <a {...rest}>{children}</a>;
+                // Legacy content stored uploaded images as `[name](url)` links.
+                // Render any standalone image-URL link as the actual image.
+                if (isImageUrl(href)) {
+                  const alt = typeof children === "string" ? children : "";
+                  return <img src={href} alt={alt} loading="lazy" />;
+                }
                 const external =
                   /^https?:\/\//i.test(href) && !href.includes(window.location.host);
                 const internalPost = href.startsWith("/p/");

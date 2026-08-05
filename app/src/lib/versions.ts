@@ -59,6 +59,7 @@ export async function snapshotVersion(
         type: post.type,
         status: post.status,
         category: post.category,
+        tags: post.tags,
         publishedAt: post.publishedAt,
       },
       created_by: createdBy,

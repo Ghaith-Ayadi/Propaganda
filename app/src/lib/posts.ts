@@ -19,6 +19,7 @@ export interface PostRow {
   published_at: string | null;
   excerpt: string | null;
   category: string | null;
+  tags: string[] | null;
   content_md: string | null;
   notion_id: string | null;
   favorited: boolean;
@@ -45,6 +46,9 @@ export function fromRow(r: PostRow): Post {
     publishedAt: isoToMs(r.published_at),
     excerpt: r.excerpt,
     category: r.category,
+    // Fall back to the legacy single category when tags were never set, so old
+    // posts surface their category as a tag without any data migration.
+    tags: r.tags ?? (r.category ? [r.category] : []),
     content: r.content_md ?? "",
     notionId: r.notion_id,
     favorited: !!r.favorited,
@@ -69,6 +73,7 @@ export function toRow(p: Post): Partial<PostRow> {
     published_at: msToIso(p.publishedAt),
     excerpt: p.excerpt,
     category: p.category,
+    tags: p.tags ?? null,
     content_md: p.content,
     notion_id: p.notionId,
     favorited: p.favorited,
@@ -203,6 +208,7 @@ export async function duplicatePost(source: import("@/types").Post): Promise<imp
       content_md: source.content,
       collection_seq: nextSeq,
       category: source.category,
+      tags: source.tags?.length ? source.tags : null,
     })
     .select()
     .single();
