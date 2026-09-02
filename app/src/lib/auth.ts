@@ -69,6 +69,27 @@ export async function verifyCode(email: string, token: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Send a password-recovery email. The link lands back on /admin with a recovery
+ * token in the URL fragment, which the client picks up (detectSessionInUrl)
+ * and turns into a short-lived session plus a PASSWORD_RECOVERY event.
+ *
+ * `redirectTo` must be listed in Supabase Auth → URL Configuration → Redirect
+ * URLs, or Supabase refuses to redirect and the link dead-ends.
+ */
+export async function sendPasswordReset(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/admin`,
+  });
+  if (error) throw error;
+}
+
+/** Set a new password for the currently-signed-in (or recovering) user. */
+export async function updatePassword(password: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+}
+
 export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }
