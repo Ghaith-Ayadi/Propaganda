@@ -35,7 +35,7 @@ Today the codebase hardcodes the single-tenant assumption in most places. Discip
 
 ## Work tracking
 
-Active issues in Plane project **Propaganda (PPG)**. The previous **Verbatim (VST)** project still exists with the historical issues — disposition pending.
+Active work is tracked in Notion: [Propaganda](https://www.notion.so/ghaith-ayadi/Propaganda-36c73ad56c72803789c3c0911798bfc2). Older commit messages may reference `PPG-N` (Plane) or `VST-N` (older Verbatim Plane project); leave those as-is.
 
 ---
 

@@ -1,0 +1,22 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import pg from "pg";
+import { config as loadEnv } from "dotenv";
+const here = dirname(fileURLToPath(import.meta.url));
+loadEnv({ path: join(here, "..", "..", ".env.local") });
+const url = process.env.VITE_SUPABASE_URL!;
+const ref = new URL(url).hostname.split(".")[0];
+const password = process.env.SUPABASE_DB_PASSWORD!;
+const c = new pg.Client({ connectionString: `postgresql://postgres.${ref}:${encodeURIComponent(password)}@aws-0-eu-west-1.pooler.supabase.com:5432/postgres`, ssl: { rejectUnauthorized: false } });
+await c.connect();
+const v = (await c.query(`select content from public.post_versions where post_id=33 and version=4`)).rows[0];
+const md: string = v.content;
+const wc = (md.replace(/!\[[^\]]*\]\([^)]*\)/g,' ').replace(/[#>*_`\-]/g,' ').trim().match(/\S+/g)||[]).length;
+await c.query(`update public.posts set content_md=$1, word_count=$2, updated_at=now() where id=33`, [md, wc]);
+const r = (await c.query(`select id, length(content_md) md_len, word_count, updated_at from public.posts where id=33`)).rows[0];
+console.log("RESTORED:", JSON.stringify(r));
+console.log("MD length:", md.length, "wordcount:", wc);
+// export the md so the browser can be synced too
+await import("node:fs").then(fs=>fs.writeFileSync(join(here,"..","p33.md"), md));
+console.log("wrote p33.md");
+await c.end();

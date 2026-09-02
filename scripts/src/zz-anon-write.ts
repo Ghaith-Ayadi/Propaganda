@@ -1,0 +1,12 @@
+import { createClient } from "@supabase/supabase-js";
+import { config as loadEnv } from "dotenv";
+loadEnv({ path: "/Users/ghaithayadi/code/Personal/Propaganda/.env.local" });
+const anon = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
+const ins = await anon.from("posts").insert({ title: "rls probe", slug: "rls-probe-should-fail", type: "Test", status: "draft", content_md: "" });
+console.log("anon INSERT post      →", ins.error ? `DENIED (${ins.error.message})` : "!!! ALLOWED !!!");
+const draft = await anon.from("posts").select("id").eq("status", "draft").limit(1);
+console.log("anon SELECT draft     →", draft.error ? `denied (${draft.error.message})` : `${draft.data?.length} rows (want 0)`);
+const ver = await anon.from("post_versions").select("id").limit(1);
+console.log("anon SELECT versions  →", ver.error ? `denied (${ver.error.message})` : `${ver.data?.length} rows (want 0)`);
+const br = await anon.from("briefs").select("id").limit(1);
+console.log("anon SELECT briefs    →", br.error ? `denied (${br.error.message})` : `${br.data?.length} rows (want 0)`);

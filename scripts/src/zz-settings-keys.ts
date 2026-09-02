@@ -1,0 +1,13 @@
+import pg from "pg";
+import { config as loadEnv } from "dotenv";
+loadEnv({ path: "/Users/ghaithayadi/code/Personal/Propaganda/.env.local" });
+const url = process.env.VITE_SUPABASE_URL!;
+const ref = new URL(url).hostname.split(".")[0];
+const password = process.env.SUPABASE_DB_PASSWORD!;
+const c = new pg.Client({ connectionString: `postgresql://postgres.${ref}:${encodeURIComponent(password)}@aws-0-eu-west-1.pooler.supabase.com:5432/postgres`, ssl: { rejectUnauthorized: false } });
+await c.connect();
+console.log("app_settings keys:", (await c.query("select key from app_settings order by key")).rows.map(r => r.key));
+console.log("posts_tags rows:", (await c.query("select count(*) from posts_tags")).rows[0].count);
+console.log("writing_activity rows:", (await c.query("select count(*) from writing_activity")).rows[0].count);
+console.log("auth users:", (await c.query("select email, email_confirmed_at is not null as confirmed from auth.users")).rows);
+await c.end();

@@ -1,0 +1,10 @@
+import { createClient } from "@supabase/supabase-js";
+import { config as loadEnv } from "dotenv";
+loadEnv({ path: "/Users/ghaithayadi/code/Personal/Propaganda/.env.local" });
+const anon = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_PUBLISHABLE_KEY!);
+const sel = await anon.from("posts").select("id,status").eq("status", "published").limit(3);
+console.log("anon SELECT published posts →", sel.error ? sel.error.message : `${sel.data?.length} rows`);
+const cols = await anon.from("collections").select("name").limit(3);
+console.log("anon SELECT collections     →", cols.error ? cols.error.message : `${cols.data?.length} rows`);
+const set = await anon.from("app_settings").select("*").limit(1);
+console.log("anon SELECT app_settings    →", set.error ? set.error.message : `${set.data?.length} rows`);

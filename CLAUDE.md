@@ -30,7 +30,8 @@ Propaganda is tracked in **Notion**, not Plane. **Every** work session touches N
 A change is not complete until Notion reflects it — no matter how the work was asked for
 ("go", "start working on X", "just fix this", or a bare task description all count).
 
-**Scope guard:** use the `notion-personal` MCP only, and only ever read/write within the
+**Scope guard:** use the `notion-personal` MCP, or the claude.ai Notion connector when
+`notion-personal` isn't available (allowed by Ghaith 2026-10-02), and only ever read/write within the
 Propaganda page subtree (page `36c73ad5-6c72-8037-89c3-c0911798bfc2`). If a Notion call
 returns anything outside that subtree, stop and flag it — don't act on it.
 
@@ -49,3 +50,9 @@ returns anything outside that subtree, stop and flag it — don't act on it.
 
 Full Notion structure, field definitions, and IDs live in `~/code/CLAUDE.md` →
 "Notion (Propaganda only)". This file is the loud reminder; that one is the reference.
+
+## Marketing site lives in a separate repo
+
+The marketing site is NOT in this repo. It lives at `~/code/Personal/Propaganda-Site`
+(`github.com/Ghaith-Ayadi/propaganda-marketing-site`, its own Vercel project). Sessions here
+can read it (`additionalDirectories`), but site changes are committed there, never here.

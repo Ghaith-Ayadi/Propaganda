@@ -1,0 +1,13 @@
+import { readdirSync } from "node:fs";
+import pg from "pg";
+import { config as loadEnv } from "dotenv";
+loadEnv({ path: "/Users/ghaithayadi/code/Personal/Propaganda/.env.local" });
+const url = process.env.VITE_SUPABASE_URL!;
+const ref = new URL(url).hostname.split(".")[0];
+const password = process.env.SUPABASE_DB_PASSWORD!;
+const c = new pg.Client({ connectionString: `postgresql://postgres.${ref}:${encodeURIComponent(password)}@aws-0-eu-west-1.pooler.supabase.com:5432/postgres`, ssl: { rejectUnauthorized: false } });
+await c.connect();
+const applied = new Set((await c.query("select name from public._verbatim_migrations")).rows.map(r => r.name));
+const files = readdirSync("/Users/ghaithayadi/code/Personal/Propaganda/scripts/sql").filter(f => f.endsWith(".sql")).sort();
+for (const f of files) console.log(`${applied.has(f) ? "applied" : "WOULD RUN"}  ${f}`);
+await c.end();

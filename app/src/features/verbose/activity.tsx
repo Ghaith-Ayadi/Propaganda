@@ -117,8 +117,6 @@ export function VerboseActivity() {
       } else run = 0;
     }
 
-    let last30 = 0;
-    for (let i = 0; i < 30; i++) last30 += map.get(dayKey(addDays(today, -i))) ?? 0;
     const postWords = posts.reduce((a, p) => a + (p.wordCount ?? 0), 0);
 
     // Calendar buckets for the top row (week starts Sunday, matching the heatmap).
@@ -140,7 +138,6 @@ export function VerboseActivity() {
       : null;
 
     const tiles = [
-      { label: "today", value: num(todayWords) },
       { label: "this week", value: num(thisWeek) },
       { label: "this month", value: num(monthTotal) },
       { label: "past week", value: num(pastWeek) },
@@ -150,7 +147,6 @@ export function VerboseActivity() {
       { label: "longest", value: `${longest}d` },
       { label: "best day", value: num(best) },
       { label: "per writing day", value: num(writingDays ? total / writingDays : 0) },
-      { label: "per day (30d)", value: num(last30 / 30) },
       { label: "per post", value: num(posts.length ? postWords / posts.length : 0) },
     ];
 
