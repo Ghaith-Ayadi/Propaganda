@@ -13,7 +13,9 @@ export type Route =
 
 function parse(): Route {
   const h = window.location.hash;
-  const m = h.match(/^#\/post\/(\d+)$/);
+  // Allow a leading "-": locally-created posts carry a negative temp id until
+  // sync assigns the real one.
+  const m = h.match(/^#\/post\/(-?\d+)$/);
   if (m) return { view: "post", id: Number(m[1]) };
   const mb = h.match(/^#\/brief\/(.+)$/);
   if (mb) return { view: "brief", id: decodeURIComponent(mb[1]) };

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Copy04, DotsHorizontal, Eye, EyeOff, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
-import { supabase } from "@/lib/supabase";
 import { go } from "@/lib/route";
 import {
   deleteCollection,
@@ -11,7 +10,7 @@ import {
   upsertCollection,
 } from "@/lib/collections";
 import { useActiveCollection } from "@/lib/activeCollection";
-import { fromRow, type PostRow } from "@/lib/posts";
+import { createPost } from "@/lib/posts";
 import { ActionMenu } from "@/components/Menu";
 import { ConfirmTypeDialog } from "@/components/ConfirmTypeDialog";
 import { PostTable } from "@/components/PostTable";
@@ -107,28 +106,12 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
   };
 
   async function addPost() {
-    const peers = await db.posts.where("type").equals(collection.name).toArray();
-    const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
-    const { postSlug } = await import("@/lib/postId");
-    const { data, error } = await supabase
-      .from("posts")
-      .insert({
-        title: "",
-        slug: postSlug(collection.name, nextSeq),
-        type: collection.name,
-        status: "draft",
-        content_md: "",
-        collection_seq: nextSeq,
-      })
-      .select()
-      .single();
-    if (error) {
-      console.error(error);
-      window.alert(`New post failed: ${error.message}`);
+    // Offline-first: staged in Dexie with a temp id, INSERTed on next sync.
+    const post = await createPost(collection.name);
+    if (!post) {
+      window.alert("New post failed.");
       return;
     }
-    const post = fromRow(data as PostRow);
-    await db.posts.put({ ...post, syncedAt: Date.now(), dirty: false });
     go({ view: "post", id: post.id });
   }
 

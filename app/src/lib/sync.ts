@@ -12,6 +12,8 @@ import { fromBriefRow, toBriefRow, type BriefRow } from "@/lib/plan/briefs";
 import { fromTemplateRow, toTemplateRow, type BriefTemplateRow } from "@/lib/plan/templates";
 import { pullAllVersions } from "@/lib/versions";
 import { fromCollectionRow } from "@/lib/collections";
+import { postSlug } from "@/lib/postId";
+import type { Post } from "@/types";
 
 const LAST_PULL_KEY = "lastPullIso";
 const LAST_BRIEF_PULL_KEY = "lastBriefPullIso";
@@ -72,15 +74,33 @@ async function pushPending(): Promise<void> {
   const pending = all.filter((p) => p.dirty || !p.syncedAt || p.updatedAt > (p.syncedAt ?? 0));
   if (!pending.length) return;
 
+  // New posts (negative temp id) have never been to the server, which owns the
+  // id sequence — they must INSERT (no id) so Postgres assigns one, then get the
+  // temp id swapped for the real one. Everything else is an in-place upsert.
+  const news = pending.filter((p) => p.id < 0);
+  const existing = pending.filter((p) => p.id >= 0);
+
+  for (const p of news) {
+    // Isolate failures: one bad insert (network drop, constraint) must not
+    // block the rest of the queue. It stays dirty and retries next sync.
+    try {
+      await insertNewPost(p);
+    } catch (err) {
+      console.error(`Insert failed for local post ${p.id}:`, err);
+    }
+  }
+
+  if (!existing.length) return;
+
   // Fast path: one batch upsert. PostgREST fails the whole batch if any single
   // row is rejected (e.g. a bad enum value), so on error we fall back to
   // per-row upserts — a single poison row can't silently block all syncing.
-  const rows = pending.map(toRow);
+  const rows = existing.map(toRow);
   const batch = await supabase.from("posts").upsert(rows).select();
   const saved: PostRow[] = [];
   if (batch.error) {
     console.error("Batch push failed, retrying row-by-row:", batch.error);
-    for (const p of pending) {
+    for (const p of existing) {
       const { data, error } = await supabase.from("posts").upsert(toRow(p)).select();
       if (error) {
         console.error(`Push failed for post ${p.id} (${p.status}):`, error.message);
@@ -99,6 +119,80 @@ async function pushPending(): Promise<void> {
       await db.posts.put({ ...server, syncedAt: now, dirty: false });
     }
   });
+}
+
+// Postgres error codes we handle specially when inserting a locally-created post.
+const FK_VIOLATION = "23503"; // e.g. collection deleted while we were offline
+const UNIQUE_VIOLATION = "23505"; // e.g. another device already took this slug/seq
+
+/**
+ * INSERT a post the server has never seen and swap its temp id for the real one.
+ *
+ * Recovers from the two things that can go wrong after an offline stretch:
+ *  - the target collection was deleted → retarget to "Uncategorized"
+ *  - slug/seq was taken by another device → re-derive the seq from the server
+ * On a network error the row throws out to pushPending, stays dirty, and retries.
+ */
+async function insertNewPost(local: Post): Promise<void> {
+  const tempId = local.id;
+  const row = toRow(local);
+  delete (row as { id?: number }).id; // let Postgres assign the real id
+
+  let res = await supabase.from("posts").insert(row).select().single();
+
+  if (res.error?.code === FK_VIOLATION) {
+    // Collection gone. Move to Uncategorized and re-key the post_id to match.
+    const seq = await nextServerSeq("Uncategorized");
+    row.type = "Uncategorized";
+    row.collection_seq = seq;
+    row.post_id = postSlug("Uncategorized", seq);
+    if (row.slug === local.postId) row.slug = row.post_id; // untitled draft
+    res = await supabase.from("posts").insert(row).select().single();
+  } else if (res.error?.code === UNIQUE_VIOLATION) {
+    // Another device took this slug/seq. Re-derive from the server and retry.
+    const seq = await nextServerSeq(local.type);
+    row.collection_seq = seq;
+    row.post_id = postSlug(local.type, seq);
+    if (row.slug === local.postId) row.slug = row.post_id;
+    res = await supabase.from("posts").insert(row).select().single();
+  }
+
+  if (res.error) {
+    // Non-recoverable (bad enum, RLS, …). Leave it dirty; log and move on.
+    console.error(`Insert new post failed for ${tempId}:`, res.error.message);
+    return;
+  }
+
+  const server = fromRow(res.data as PostRow);
+  const now = Date.now();
+  await db.transaction("rw", db.posts, db.versions, async () => {
+    await db.posts.delete(tempId);
+    await db.posts.put({ ...server, syncedAt: now, dirty: false });
+    // Re-point any local version rows that referenced the temp id.
+    const vs = await db.versions.where("postId").equals(tempId).toArray();
+    for (const v of vs) {
+      await db.versions.delete(v.id);
+      await db.versions.put({ ...v, postId: server.id });
+    }
+  });
+
+  // If the author is looking at the just-created post, follow it to its real id
+  // so the open editor doesn't 404 out from under them.
+  if (typeof window !== "undefined" && window.location.hash === `#/post/${tempId}`) {
+    window.location.replace(`#/post/${server.id}`);
+  }
+}
+
+/** Next collection_seq for `type`, read straight from the server (authoritative). */
+async function nextServerSeq(type: string): Promise<number> {
+  const { data } = await supabase
+    .from("posts")
+    .select("collection_seq")
+    .eq("type", type)
+    .order("collection_seq", { ascending: false })
+    .limit(1);
+  const max = (data?.[0] as { collection_seq: number | null } | undefined)?.collection_seq ?? 0;
+  return max + 1;
 }
 
 async function pullChanges(): Promise<void> {

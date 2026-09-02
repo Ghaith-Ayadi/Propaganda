@@ -85,6 +85,20 @@ export function toRow(p: Post): Partial<PostRow> {
 
 // ---- local mutations ----
 
+/**
+ * Mint the next local-only id for a post the server hasn't seen yet.
+ *
+ * Server ids are positive and serial. We use *negative* ids for posts created
+ * locally (typically offline): the sign is an unambiguous "needs INSERT" flag
+ * that can never collide with a server id. `pushPending` INSERTs these, gets the
+ * real id back, and swaps it in. Ids decrease monotonically so concurrent local
+ * drafts stay distinct.
+ */
+export async function nextTempId(): Promise<number> {
+  const smallest = await db.posts.orderBy("id").first();
+  return Math.min(0, smallest?.id ?? 0) - 1;
+}
+
 export async function updatePost(
   id: number,
   patch: Partial<Omit<Post, "id" | "createdAt">>,
@@ -139,15 +153,20 @@ export async function toggleFavorite(id: number): Promise<void> {
 }
 
 /**
- * Create a blank draft post in `type` (a collection name). The server assigns
- * the integer id; the collection_seq is computed client-side. Mirrors the
- * command-palette "new post" flow so a brief can spin up its linked post.
+ * Assemble a brand-new local draft and stage it in Dexie. Offline-first: no
+ * network — the post gets a negative temp id and `dirty: true`, so it renders
+ * immediately and `pushPending` INSERTs it (assigning the real id) on the next
+ * sync. Shared by createPost / duplicatePost / the command-palette new-post.
  */
-export async function createPost(
+async function stageNewPost(
   type: string,
-  fields: { title?: string; content?: string } = {},
-): Promise<Post | null> {
-  const { supabase } = await import("@/lib/supabase");
+  fields: {
+    title?: string;
+    content?: string;
+    category?: string | null;
+    tags?: string[] | null;
+  } = {},
+): Promise<Post> {
   const { postSlug, slugify, dedupeSlug } = await import("@/lib/postId");
 
   const peers = await db.posts.where("type").equals(type).toArray();
@@ -160,76 +179,74 @@ export async function createPost(
   const taken = new Set((await db.posts.toArray()).map((p) => p.slug).filter(Boolean));
   const slug = title.trim() ? dedupeSlug(slugify(title), taken) : pid;
 
-  const { data, error } = await supabase
-    .from("posts")
-    .insert({
-      title,
-      slug,
-      post_id: pid,
-      type,
-      status: "draft",
-      content_md: fields.content ?? "",
-      collection_seq: nextSeq,
-    })
-    .select()
-    .single();
-  if (error) {
-    console.error("createPost failed:", error);
-    return null;
-  }
-  const post = fromRow(data as PostRow);
-  await db.posts.put({ ...post, syncedAt: Date.now(), dirty: false });
+  const now = Date.now();
+  const post: Post = {
+    id: await nextTempId(),
+    title,
+    slug,
+    postId: pid,
+    type,
+    status: "draft",
+    subtitle: null,
+    doneAt: null,
+    publishedAt: null,
+    excerpt: null,
+    category: fields.category ?? null,
+    tags: fields.tags ?? [],
+    content: fields.content ?? "",
+    notionId: null,
+    favorited: false,
+    collectionSeq: nextSeq,
+    wordCount: null,
+    shareableQuotes: null,
+    createdAt: now,
+    updatedAt: now,
+    syncedAt: null,
+    dirty: true,
+  };
+  await db.posts.put(post);
+  scheduleSync();
   return post;
 }
 
 /**
- * Duplicate a post in the same collection. Server assigns a new integer id;
- * we compute the next collection_seq client-side.
+ * Create a blank draft post in `type` (a collection name). Written to Dexie
+ * first with a temp id (works offline); the server assigns the real id when
+ * sync pushes it. Returns the local post immediately.
  */
-export async function duplicatePost(source: import("@/types").Post): Promise<import("@/types").Post | null> {
-  const { supabase } = await import("@/lib/supabase");
-  const { postSlug, slugify, dedupeSlug } = await import("@/lib/postId");
+export async function createPost(
+  type: string,
+  fields: { title?: string; content?: string } = {},
+): Promise<Post | null> {
+  return stageNewPost(type, fields);
+}
 
-  const peers = await db.posts.where("type").equals(source.type).toArray();
-  const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
-
-  const pid = postSlug(source.type, nextSeq);
-  const title = source.title ? `${source.title} (copy)` : "";
-  const taken = new Set((await db.posts.toArray()).map((p) => p.slug).filter(Boolean));
-  const slug = title.trim() ? dedupeSlug(slugify(title), taken) : pid;
-  const { data, error } = await supabase
-    .from("posts")
-    .insert({
-      title,
-      slug,
-      post_id: pid,
-      type: source.type,
-      status: "draft",
-      content_md: source.content,
-      collection_seq: nextSeq,
-      category: source.category,
-      tags: source.tags?.length ? source.tags : null,
-    })
-    .select()
-    .single();
-  if (error) {
-    console.error("duplicatePost failed:", error);
-    return null;
-  }
-  const post = fromRow(data as PostRow);
-  await db.posts.put({ ...post, syncedAt: Date.now(), dirty: false });
-  return post;
+/**
+ * Duplicate a post in the same collection. Same offline-first path as
+ * createPost — the copy gets a temp id and is INSERTed on next sync.
+ */
+export async function duplicatePost(source: Post): Promise<Post | null> {
+  return stageNewPost(source.type, {
+    title: source.title ? `${source.title} (copy)` : "",
+    content: source.content,
+    category: source.category,
+    tags: source.tags?.length ? source.tags : null,
+  });
 }
 
 /**
  * Hard delete. Versions cascade via the DB FK.
  */
 export async function deletePost(id: number): Promise<void> {
-  const { supabase } = await import("@/lib/supabase");
-  const { error } = await supabase.from("posts").delete().eq("id", id);
-  if (error) {
-    console.error("deletePost failed:", error);
-    return;
+  // A negative id means the post was never pushed — there's nothing on the
+  // server to delete, so drop it locally (works offline).
+  if (id >= 0) {
+    const { supabase } = await import("@/lib/supabase");
+    const { error } = await supabase.from("posts").delete().eq("id", id);
+    if (error) {
+      console.error("deletePost failed:", error);
+      return;
+    }
   }
   await db.posts.delete(id);
   await db.versions.where("postId").equals(id).delete();

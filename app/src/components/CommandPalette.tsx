@@ -4,12 +4,11 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ArrowDown, ArrowLeft, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, HelpCircle, Moon01, SearchLg, Star01, Sun, Tag01, Zap } from "@untitledui/icons";
 import { db } from "@/lib/db";
-import { supabase } from "@/lib/supabase";
 import { search, subscribeSearch } from "@/lib/search";
 import { go } from "@/lib/route";
 import { useLayout } from "@/lib/layout";
 import { collectionDisplay } from "@/lib/collections";
-import { duplicatePost, fromRow, setPostStatus, toggleFavorite, type PostRow } from "@/lib/posts";
+import { createPost, duplicatePost, setPostStatus, toggleFavorite } from "@/lib/posts";
 import { toggleTheme, useTheme } from "@/lib/theme";
 import { setSimMode, useSimMode } from "@/lib/analytics/sim";
 import { createCollection } from "@/lib/collections";
@@ -127,31 +126,12 @@ export function CommandPalette({ currentPostId }: Props) {
   }, [q, mode]);
 
   async function newPost(type: string) {
-    // Next sequential id within the collection. Slug = {prefix}·{NN}.
-    const peers = await db.posts.where("type").equals(type).toArray();
-    const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
-    const { postSlug } = await import("@/lib/postId");
-    const pid = postSlug(type, nextSeq);
-    const { data, error } = await supabase
-      .from("posts")
-      .insert({
-        title: "",
-        slug: pid,
-        post_id: pid,
-        type,
-        status: "draft",
-        content_md: "",
-        collection_seq: nextSeq,
-      })
-      .select()
-      .single();
-    if (error) {
-      console.error("New post failed:", error);
-      window.alert(`New post failed: ${error.message}`);
+    // Offline-first: staged in Dexie with a temp id, INSERTed on next sync.
+    const post = await createPost(type);
+    if (!post) {
+      window.alert("New post failed.");
       return;
     }
-    const post = fromRow(data as PostRow);
-    await db.posts.put({ ...post, syncedAt: Date.now(), dirty: false });
     localStorage.setItem(LAST_COLLECTION_KEY, type);
     setOpen(false);
     requestTitleFocus(post.id);
