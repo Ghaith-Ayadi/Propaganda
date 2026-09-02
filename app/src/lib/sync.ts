@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { fromRow, toRow, type PostRow } from "@/lib/posts";
 import { fromBriefRow, toBriefRow, type BriefRow } from "@/lib/plan/briefs";
 import { fromTemplateRow, toTemplateRow, type BriefTemplateRow } from "@/lib/plan/templates";
-import { pullAllVersions } from "@/lib/versions";
+import { pullAllVersions, pushPendingVersions } from "@/lib/versions";
 import { fromCollectionRow } from "@/lib/collections";
 import { postSlug } from "@/lib/postId";
 import type { Post } from "@/types";
@@ -54,6 +54,9 @@ export async function runSync(): Promise<void> {
   syncInFlight = true;
   try {
     await pushPending();
+    // After pushPending: versions staged against a local-only post can only go
+    // out once that post has its real server id.
+    await pushPendingVersions();
     await pushBriefs();
     await pushBriefTemplates();
     await pullChanges();

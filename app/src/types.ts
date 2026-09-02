@@ -50,4 +50,7 @@ export interface PostVersion {
   createdAt: number;
   createdBy: "user" | "mcp:claude-code" | "migration";
   message: string | null;
+  // sync metadata, local-only. Set when the snapshot was taken while the server
+  // was unreachable (or before its post had a real id); cleared once pushed.
+  dirty?: boolean;
 }

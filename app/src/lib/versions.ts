@@ -1,6 +1,8 @@
 // Append-only version history.
-// Versions are written directly to Supabase (small row, infrequent) — no Dexie staging.
-// Pulled into Dexie via the sync engine so the UI is offline-readable.
+// Offline-first, same contract as posts: a snapshot is written to Dexie first
+// and pushed to Supabase straight after. If that push can't happen (no network,
+// or the post itself hasn't been INSERTed yet) the row stays `dirty` and the
+// sync engine retries it, so a snapshot is never lost to a failed request.
 
 import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db";
@@ -8,6 +10,10 @@ import { updatePost } from "@/lib/posts";
 import type { Post, PostVersion } from "@/types";
 
 export type VersionAuthor = "user" | "mcp:claude-code" | "migration";
+
+// Postgres unique-violation; on post_versions it is either the pkey (our own
+// row, already pushed) or the (post_id, version) pair (another writer).
+const UNIQUE_VIOLATION = "23505";
 
 interface VersionRow {
   id: string;
@@ -47,40 +53,105 @@ export async function snapshotVersion(
     .first();
   const nextVersion = (latest?.version ?? 0) + 1;
 
-  const { data, error } = await supabase
-    .from("post_versions")
-    .insert({
-      post_id: post.id,
-      version: nextVersion,
-      content: post.content,
-      attributes: {
-        title: post.title,
-        slug: post.slug,
-        type: post.type,
-        status: post.status,
-        category: post.category,
-        tags: post.tags,
-        publishedAt: post.publishedAt,
-      },
-      created_by: createdBy,
-      message: message ?? null,
-    })
-    .select()
-    .single();
+  // Mint the id here rather than letting Postgres do it, so the row is complete
+  // locally and the eventual INSERT is the same row rather than a second one.
+  const staged: PostVersion = {
+    id: crypto.randomUUID(),
+    postId: post.id,
+    version: nextVersion,
+    content: post.content,
+    attributes: {
+      title: post.title,
+      slug: post.slug,
+      type: post.type,
+      status: post.status,
+      category: post.category,
+      tags: post.tags,
+      publishedAt: post.publishedAt,
+    },
+    createdAt: Date.now(),
+    createdBy,
+    message: message ?? null,
+    dirty: true,
+  };
+  await db.versions.put(staged);
 
-  if (error) {
-    // Race: someone else inserted the same version number. Refresh from server and bump.
-    if (error.code === "23505") {
-      await pullVersionsForPost(post.id);
-      return snapshotVersion(post, createdBy, message);
-    }
-    console.error("snapshotVersion failed:", error);
-    return null;
+  // A negative post id means the post is still local-only; the FK would reject
+  // this. `insertNewPost` re-points the row after the post lands, and the next
+  // sync pushes it.
+  if (post.id >= 0) await pushVersion(staged);
+
+  return (await db.versions.get(staged.id)) ?? staged;
+}
+
+function toVersionRow(v: PostVersion): VersionRow {
+  return {
+    id: v.id,
+    post_id: v.postId,
+    version: v.version,
+    content: v.content,
+    attributes: v.attributes,
+    // Send the authored timestamp rather than letting the server default it, so
+    // history reads in the order it was written, not the order it was uploaded.
+    created_at: new Date(v.createdAt).toISOString(),
+    created_by: v.createdBy,
+    message: v.message,
+  };
+}
+
+/**
+ * INSERT one staged version and clear its dirty flag. Returns false when the row
+ * still needs a retry (offline, or its post isn't on the server yet).
+ *
+ * The only expected conflict is the unique (post_id, version) pair, which means
+ * another writer took that number while we were offline. We renumber past what
+ * the server has and retry once — an append-only log doesn't care that a version
+ * number moved, only that nothing is dropped.
+ */
+async function pushVersion(v: PostVersion): Promise<boolean> {
+  if (v.postId < 0) return false;
+
+  const { error } = await supabase.from("post_versions").insert(toVersionRow(v));
+  if (!error) {
+    await db.versions.put({ ...v, dirty: false });
+    return true;
   }
 
-  const v = fromVersionRow(data as VersionRow);
-  await db.versions.put(v);
-  return v;
+  if (error.code === UNIQUE_VIOLATION) {
+    // Our own row already made it to the server on an earlier attempt.
+    if (error.message.includes("post_versions_pkey")) {
+      await db.versions.put({ ...v, dirty: false });
+      return true;
+    }
+    await pullVersionsForPost(v.postId);
+    const latest = await db.versions
+      .where("[postId+version]")
+      .between([v.postId, -Infinity], [v.postId, Infinity])
+      .reverse()
+      .first();
+    const renumbered = { ...v, version: Math.max(latest?.version ?? 0, v.version) + 1 };
+    const retry = await supabase.from("post_versions").insert(toVersionRow(renumbered));
+    if (retry.error) {
+      console.error(`Version push failed for post ${v.postId}:`, retry.error.message);
+      return false;
+    }
+    await db.versions.put({ ...renumbered, dirty: false });
+    return true;
+  }
+
+  // Network failure or something unrecoverable — keep it dirty and retry later.
+  console.error(`Version push failed for post ${v.postId}:`, error.message);
+  return false;
+}
+
+/**
+ * Flush every version still staged locally. Called by the sync engine after
+ * posts are pushed, so versions belonging to a just-INSERTed post go out in the
+ * same cycle.
+ */
+export async function pushPendingVersions(): Promise<void> {
+  const pending = (await db.versions.toArray()).filter((v) => v.dirty);
+  for (const v of pending) await pushVersion(v);
 }
 
 export async function pullVersionsForPost(postId: number): Promise<void> {
