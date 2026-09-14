@@ -294,9 +294,34 @@ export function CommandPalette({ currentPostId }: Props) {
     },
   ];
 
+  // Rank rather than just filter: typing a collection name should float
+  // "New post in <that collection>" to the top instead of leaving it wherever
+  // it happens to sit in the static list.
   const filteredCommands = commandQuery
-    ? allCommands.filter((c) => fuzzyMatch(c.label, commandQuery))
+    ? allCommands
+        .map((c, i) => ({ c, i, score: matchScore(c.label, commandQuery) }))
+        .filter((x) => x.score >= 0)
+        .sort((a, b) => b.score - a.score || a.i - b.i)
+        .map((x) => x.c)
     : allCommands;
+
+  // Post search doubles as collection search: when the query names a
+  // collection, offer "New post in <collection>" above the post hits so ⏎
+  // creates it. Substring-quality matches only (a loose subsequence would
+  // outrank a good post title), and not for a single character.
+  const searchQuery = mode === "search" ? q.trim().toLowerCase() : "";
+  const createActions =
+    searchQuery.length >= 2
+      ? [defaultCollection, ...otherCollections]
+          .filter(Boolean)
+          .map((c) => {
+            const d = collectionDisplay(c, collectionRows);
+            return { name: c, display: d, score: matchScore(d.label || c, searchQuery) };
+          })
+          .filter((x) => x.score >= SUBSTRING_SCORE)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3)
+      : [];
 
   // The dialog and the palette are mutually exclusive but the dialog needs to
   // outlive the palette closing animation.
@@ -364,6 +389,20 @@ export function CommandPalette({ currentPostId }: Props) {
               </Command.Group>
             )}
 
+            {mode === "search" && createActions.length > 0 && (
+              <Command.Group heading="Create">
+                {createActions.map((a) => (
+                  <Item
+                    key={`create-${a.name}`}
+                    label={`New post in ${a.display.label || a.name}`}
+                    emoji={a.display.emoji ?? undefined}
+                    icon={<FilePlus02 className="size-4" />}
+                    onSelect={() => void newPost(a.name)}
+                  />
+                ))}
+              </Command.Group>
+            )}
+
             {mode === "search" && q && (
               <Command.Group heading="Posts">
                 {results.map((r) => {
@@ -399,15 +438,30 @@ export function CommandPalette({ currentPostId }: Props) {
   );
 }
 
-function fuzzyMatch(label: string, q: string): boolean {
+// Score floor for "the query appears verbatim in the label". Anything below is
+// a loose subsequence match, which is fine for narrowing a command list but too
+// weak to promote an action above real search results.
+const SUBSTRING_SCORE = 400;
+
+/**
+ * Rank `label` against a lower-cased query. Higher is better, -1 = no match.
+ * Exact beats prefix beats word-start beats mid-word beats subsequence, so
+ * "examp" puts "New post in Example 1" ahead of anything that merely contains
+ * those letters in order.
+ */
+function matchScore(label: string, q: string): number {
   const haystack = label.toLowerCase();
-  if (haystack.includes(q)) return true;
+  if (haystack === q) return 1000;
+  if (haystack.startsWith(q)) return 800;
+  const at = haystack.indexOf(q);
+  if (at > 0) return /[\s\-–—_\/([]/.test(haystack[at - 1]) ? 600 : SUBSTRING_SCORE;
+  // Subsequence fallback: every query character in order, gaps allowed.
   let i = 0;
   for (const ch of haystack) {
     if (ch === q[i]) i++;
-    if (i === q.length) return true;
+    if (i === q.length) return 100;
   }
-  return false;
+  return -1;
 }
 
 function Footer({ inPage = false }: { inPage?: boolean }) {
