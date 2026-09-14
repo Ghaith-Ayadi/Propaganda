@@ -106,23 +106,28 @@ export async function updatePost(
   const existing = await db.posts.get(id);
   if (!existing) return;
 
-  // Auto-derive slug from title while the post is unpublished and slug
-  // hasn't been manually customised (i.e., slug still equals postId).
+  // Auto-derive slug from title while the post is unpublished and the slug
+  // hasn't been manually customised. "Customised" is judged against the slug we
+  // would have derived from the *previous* title, not against postId: titles
+  // save per keystroke, so comparing to postId only ever matched the very first
+  // character and left the slug stuck there ("m" for "My brief").
   if (
     patch.title !== undefined &&
     (existing.status ?? "draft") !== "published" &&
-    !patch.slug &&
-    existing.postId &&
-    existing.slug === existing.postId
+    !patch.slug
   ) {
-    const { slugify, dedupeSlug } = await import("@/lib/postId");
-    const taken = new Set(
-      (await db.posts.toArray())
-        .filter((p) => p.id !== id)
-        .map((p) => p.slug)
-        .filter(Boolean),
-    );
-    patch = { ...patch, slug: dedupeSlug(slugify(patch.title), taken) };
+    const { slugify, dedupeSlug, isDerivedSlug } = await import("@/lib/postId");
+    if (isDerivedSlug(existing.slug, existing.title, existing.postId)) {
+      const taken = new Set(
+        (await db.posts.toArray())
+          .filter((p) => p.id !== id)
+          .map((p) => p.slug)
+          .filter(Boolean),
+      );
+      // A blank title falls back to the post_id code, matching a fresh draft.
+      const base = patch.title.trim() ? slugify(patch.title) : existing.postId;
+      if (base) patch = { ...patch, slug: dedupeSlug(base, taken) };
+    }
   }
 
   const next: Post = {

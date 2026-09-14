@@ -51,3 +51,26 @@ export function dedupeSlug(base: string, taken: Set<string>): string {
   while (taken.has(`${base}-${n}`)) n++;
   return `${base}-${n}`;
 }
+
+/**
+ * True when `slug` still looks machine-derived rather than author-chosen:
+ * either the untouched post_id placeholder, or `slugify(title)` — optionally
+ * carrying a `-2`, `-3`, … dedupe suffix.
+ *
+ * The title field saves on every keystroke, so "has the author customised the
+ * slug?" can't be answered by comparing against the post_id alone: one
+ * character into the title the slug is already "m", and a stricter check would
+ * freeze it there for the life of the post.
+ */
+export function isDerivedSlug(
+  slug: string | null | undefined,
+  title: string | null | undefined,
+  postId: string | null | undefined,
+): boolean {
+  if (!slug) return true;
+  if (postId && slug === postId) return true;
+  const base = (title ?? "").trim() ? slugify(title!) : "";
+  if (!base) return false;
+  if (slug === base) return true;
+  return slug.replace(/-\d+$/, "") === base;
+}
