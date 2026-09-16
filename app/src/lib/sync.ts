@@ -3,29 +3,31 @@
 // Trigger model:
 //  - scheduleSync() debounces by 2s of idle (PRD §4)
 //  - flushSync() forces a push (window blur / before unload)
-//  - runSync() runs once (push pending → pull updated_at > cursor)
+//  - runSync() runs once (push pending -> pull updated > cursor)
+//
+// Identity: every record is created locally with its final PocketBase id (see
+// lib/pocketbase.ts newId), so a push is "create if never synced, else update"
+// and nothing is ever re-keyed. The server owns `updated`; conflicts resolve by
+// server clock, and a dirty local edit newer than the server's copy wins locally
+// until it is pushed.
 
 import { db } from "@/lib/db";
-import { supabase } from "@/lib/supabase";
-import { fromRow, toRow, type PostRow } from "@/lib/posts";
-import { fromBriefRow, toBriefRow, type BriefRow } from "@/lib/plan/briefs";
-import { fromTemplateRow, toTemplateRow, type BriefTemplateRow } from "@/lib/plan/templates";
+import { fieldError, httpStatus, pb, pbDateToMs } from "@/lib/pocketbase";
+import { fromRecord, toRecord, type PostRecord } from "@/lib/posts";
+import { fromBriefRecord, toBriefRecord, type BriefRecord } from "@/lib/plan/briefs";
+import { fromTemplateRecord, toTemplateRecord, type BriefTemplateRecord } from "@/lib/plan/templates";
 import { pullAllVersions, pushPendingVersions } from "@/lib/versions";
-import { fromCollectionRow } from "@/lib/collections";
-import { postSlug } from "@/lib/postId";
-import type { Post } from "@/types";
+import { fromCollectionRecord, type CollectionRecord } from "@/lib/collections";
+import type { Table } from "dexie";
 
-const LAST_PULL_KEY = "lastPullIso";
-const LAST_BRIEF_PULL_KEY = "lastBriefPullIso";
-const LAST_TEMPLATE_PULL_KEY = "lastTemplatePullIso";
 const DEBOUNCE_MS = 2000;
 
-let currentUserId: number | null = null;
+let currentUserId: string | null = null;
 let syncInFlight = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let onSyncComplete: (() => void) | null = null;
 
-export function setSyncUser(userId: number | null) {
+export function setSyncUser(userId: string | null) {
   currentUserId = userId;
 }
 
@@ -53,17 +55,17 @@ export async function runSync(): Promise<void> {
   if (currentUserId == null || syncInFlight) return;
   syncInFlight = true;
   try {
-    await pushPending();
-    // After pushPending: versions staged against a local-only post can only go
-    // out once that post has its real server id.
+    await pushTable(db.posts, "posts", toRecord, fromRecord);
+    // After posts: versions staged against a not-yet-synced post can only go
+    // out once that post exists server-side.
     await pushPendingVersions();
-    await pushBriefs();
-    await pushBriefTemplates();
-    await pullChanges();
+    await pushTable(db.briefs, "briefs", toBriefRecord, fromBriefRecord);
+    await pushTable(db.briefTemplates, "brief_templates", toTemplateRecord, fromTemplateRecord);
+    await pullTable(db.posts, "posts", "lastPullPb.posts", fromRecord);
     await pullAllVersions();
     await pullCollections();
-    await pullBriefs();
-    await pullBriefTemplates();
+    await pullTable(db.briefs, "briefs", "lastPullPb.briefs", fromBriefRecord);
+    await pullTable(db.briefTemplates, "brief_templates", "lastPullPb.brief_templates", fromTemplateRecord);
     onSyncComplete?.();
   } catch (err) {
     console.error("Sync failed:", err);
@@ -72,281 +74,114 @@ export async function runSync(): Promise<void> {
   }
 }
 
-async function pushPending(): Promise<void> {
-  const all = await db.posts.toArray();
+interface Synced {
+  id: string;
+  updatedAt: number;
+  syncedAt?: number | null;
+  dirty?: boolean;
+}
+
+interface Stamped {
+  id: string;
+  updated: string;
+}
+
+/**
+ * Push every dirty row of a table. Failures are isolated per row: one rejected
+ * record (validation, network) stays dirty and retries next sync without
+ * blocking the rest of the queue.
+ */
+async function pushTable<L extends Synced, R extends Stamped>(
+  table: Table<L, string>,
+  collection: string,
+  toBody: (local: L) => Record<string, unknown>,
+  fromRec: (r: R) => Omit<L, "syncedAt" | "dirty">,
+): Promise<void> {
+  const all = await table.toArray();
   const pending = all.filter((p) => p.dirty || !p.syncedAt || p.updatedAt > (p.syncedAt ?? 0));
   if (!pending.length) return;
 
-  // New posts (negative temp id) have never been to the server, which owns the
-  // id sequence — they must INSERT (no id) so Postgres assigns one, then get the
-  // temp id swapped for the real one. Everything else is an in-place upsert.
-  const news = pending.filter((p) => p.id < 0);
-  const existing = pending.filter((p) => p.id >= 0);
-
-  for (const p of news) {
-    // Isolate failures: one bad insert (network drop, constraint) must not
-    // block the rest of the queue. It stays dirty and retries next sync.
+  const col = pb.collection<R>(collection);
+  for (const local of pending) {
+    const body = toBody(local);
+    let saved: R;
     try {
-      await insertNewPost(p);
-    } catch (err) {
-      console.error(`Insert failed for local post ${p.id}:`, err);
-    }
-  }
-
-  if (!existing.length) return;
-
-  // Fast path: one batch upsert. PostgREST fails the whole batch if any single
-  // row is rejected (e.g. a bad enum value), so on error we fall back to
-  // per-row upserts — a single poison row can't silently block all syncing.
-  const rows = existing.map(toRow);
-  const batch = await supabase.from("posts").upsert(rows).select();
-  const saved: PostRow[] = [];
-  if (batch.error) {
-    console.error("Batch push failed, retrying row-by-row:", batch.error);
-    for (const p of existing) {
-      const { data, error } = await supabase.from("posts").upsert(toRow(p)).select();
-      if (error) {
-        console.error(`Push failed for post ${p.id} (${p.status}):`, error.message);
-        continue;
+      if (local.syncedAt) {
+        try {
+          saved = await col.update(local.id, body);
+        } catch (err) {
+          if (httpStatus(err) !== 404) throw err;
+          saved = await col.create({ id: local.id, ...body }); // deleted elsewhere; the local edit wins
+        }
+      } else {
+        try {
+          saved = await col.create({ id: local.id, ...body });
+        } catch (err) {
+          if (!fieldError(err, "id")) throw err;
+          saved = await col.update(local.id, body); // an earlier attempt did land
+        }
       }
-      if (data?.[0]) saved.push(data[0] as PostRow);
+    } catch (err) {
+      console.error(`Push failed for ${collection}/${local.id}:`, err);
+      continue;
     }
-  } else {
-    saved.push(...((batch.data ?? []) as PostRow[]));
+    await table.put({ ...(fromRec(saved) as L), syncedAt: Date.now(), dirty: false });
   }
-
-  const now = Date.now();
-  await db.transaction("rw", db.posts, async () => {
-    for (const raw of saved) {
-      const server = fromRow(raw);
-      await db.posts.put({ ...server, syncedAt: now, dirty: false });
-    }
-  });
 }
 
-// Postgres error codes we handle specially when inserting a locally-created post.
-const FK_VIOLATION = "23503"; // e.g. collection deleted while we were offline
-const UNIQUE_VIOLATION = "23505"; // e.g. another device already took this slug/seq
+/** Pull everything whose `updated` is newer than the stored cursor. */
+async function pullTable<L extends Synced, R extends Stamped>(
+  table: Table<L, string>,
+  collection: string,
+  cursorKey: string,
+  fromRec: (r: R) => Omit<L, "syncedAt" | "dirty">,
+): Promise<void> {
+  const meta = await db.syncMeta.get(cursorKey);
+  const since = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
 
-/**
- * INSERT a post the server has never seen and swap its temp id for the real one.
- *
- * Recovers from the two things that can go wrong after an offline stretch:
- *  - the target collection was deleted → retarget to "Uncategorized"
- *  - slug/seq was taken by another device → re-derive the seq from the server
- * On a network error the row throws out to pushPending, stays dirty, and retries.
- */
-async function insertNewPost(local: Post): Promise<void> {
-  const tempId = local.id;
-  const row = toRow(local);
-  delete (row as { id?: number }).id; // let Postgres assign the real id
-
-  let res = await supabase.from("posts").insert(row).select().single();
-
-  if (res.error?.code === FK_VIOLATION) {
-    // Collection gone. Move to Uncategorized and re-key the post_id to match.
-    const seq = await nextServerSeq("Uncategorized");
-    row.type = "Uncategorized";
-    row.collection_seq = seq;
-    row.post_id = postSlug("Uncategorized", seq);
-    if (row.slug === local.postId) row.slug = row.post_id; // untitled draft
-    res = await supabase.from("posts").insert(row).select().single();
-  } else if (res.error?.code === UNIQUE_VIOLATION) {
-    // Another device took this slug/seq. Re-derive from the server and retry.
-    const seq = await nextServerSeq(local.type);
-    row.collection_seq = seq;
-    row.post_id = postSlug(local.type, seq);
-    if (row.slug === local.postId) row.slug = row.post_id;
-    res = await supabase.from("posts").insert(row).select().single();
-  }
-
-  if (res.error) {
-    // Non-recoverable (bad enum, RLS, …). Leave it dirty; log and move on.
-    console.error(`Insert new post failed for ${tempId}:`, res.error.message);
+  let records: R[];
+  try {
+    records = await pb.collection<R>(collection).getFullList({
+      filter: pb.filter("updated > {:since}", { since: new Date(since) }),
+      sort: "updated",
+    });
+  } catch (err) {
+    console.error(`Pull ${collection} failed:`, err);
     return;
   }
-
-  const server = fromRow(res.data as PostRow);
-  const now = Date.now();
-  await db.transaction("rw", db.posts, db.versions, async () => {
-    await db.posts.delete(tempId);
-    await db.posts.put({ ...server, syncedAt: now, dirty: false });
-    // Re-point any local version rows that referenced the temp id.
-    const vs = await db.versions.where("postId").equals(tempId).toArray();
-    for (const v of vs) {
-      await db.versions.delete(v.id);
-      await db.versions.put({ ...v, postId: server.id });
-    }
-  });
-
-  // If the author is looking at the just-created post, follow it to its real id
-  // so the open editor doesn't 404 out from under them.
-  if (typeof window !== "undefined" && window.location.hash === `#/post/${tempId}`) {
-    window.location.replace(`#/post/${server.id}`);
-  }
-}
-
-/** Next collection_seq for `type`, read straight from the server (authoritative). */
-async function nextServerSeq(type: string): Promise<number> {
-  const { data } = await supabase
-    .from("posts")
-    .select("collection_seq")
-    .eq("type", type)
-    .order("collection_seq", { ascending: false })
-    .limit(1);
-  const max = (data?.[0] as { collection_seq: number | null } | undefined)?.collection_seq ?? 0;
-  return max + 1;
-}
-
-async function pullChanges(): Promise<void> {
-  const meta = await db.syncMeta.get(LAST_PULL_KEY);
-  const lastPullIso = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
-
-  const { data, error } = await supabase
-    .from("posts")
-    .select("*")
-    .gt("updated_at", lastPullIso)
-    .order("updated_at", { ascending: true });
-  if (error) {
-    console.error("Pull failed:", error);
-    return;
-  }
-  if (!data?.length) return;
+  if (!records.length) return;
 
   const now = Date.now();
-  let maxIso = lastPullIso;
-  await db.transaction("rw", db.posts, async () => {
-    for (const raw of data) {
-      const row = raw as PostRow;
-      if (row.updated_at > maxIso) maxIso = row.updated_at;
-      const local = await db.posts.get(row.id);
+  let maxMs = Date.parse(since);
+  await db.transaction("rw", table, async () => {
+    for (const r of records) {
+      const serverMs = pbDateToMs(r.updated) ?? 0;
+      if (serverMs > maxMs) maxMs = serverMs;
+      const local = await table.get(r.id);
       // Don't clobber a dirty local edit with a stale server pull.
-      if (local?.dirty && local.updatedAt > new Date(row.updated_at).getTime()) continue;
-      const incoming = fromRow(row);
-      await db.posts.put({ ...incoming, syncedAt: now, dirty: false });
+      if (local?.dirty && local.updatedAt > serverMs) continue;
+      await table.put({ ...(fromRec(r) as L), syncedAt: now, dirty: false });
     }
   });
-  await db.syncMeta.put({ key: LAST_PULL_KEY, value: maxIso });
+  await db.syncMeta.put({ key: cursorKey, value: new Date(maxMs).toISOString() });
 }
 
 async function pullCollections(): Promise<void> {
-  // Full replace — collections are small and deletes must propagate to Dexie.
-  const { data, error } = await supabase
-    .from("collections")
-    .select("*")
-    .order("position", { ascending: true });
-  if (error) {
-    console.error("Pull collections failed:", error);
+  // Full replace: collections are small and deletes must propagate to Dexie.
+  let records: CollectionRecord[];
+  try {
+    records = await pb.collection<CollectionRecord>("collections").getFullList({ sort: "position" });
+  } catch (err) {
+    console.error("Pull collections failed:", err);
     return;
   }
   const now = Date.now();
   await db.transaction("rw", db.collections, async () => {
     await db.collections.clear();
-    for (const raw of data ?? []) {
-      const row = raw as Parameters<typeof fromCollectionRow>[0];
-      await db.collections.put({ ...fromCollectionRow(row), syncedAt: now, dirty: false });
+    for (const r of records) {
+      await db.collections.put({ ...fromCollectionRecord(r), syncedAt: now, dirty: false });
     }
   });
-}
-
-async function pushBriefs(): Promise<void> {
-  const all = await db.briefs.toArray();
-  const pending = all.filter((b) => b.dirty || !b.syncedAt || b.updatedAt > (b.syncedAt ?? 0));
-  if (!pending.length) return;
-
-  const rows = pending.map(toBriefRow);
-  const { data, error } = await supabase.from("briefs").upsert(rows).select();
-  if (error) {
-    console.error("Push briefs failed:", error);
-    return;
-  }
-
-  const now = Date.now();
-  await db.transaction("rw", db.briefs, async () => {
-    for (const raw of data ?? []) {
-      const server = fromBriefRow(raw as BriefRow);
-      await db.briefs.put({ ...server, syncedAt: now, dirty: false });
-    }
-  });
-}
-
-async function pullBriefs(): Promise<void> {
-  const meta = await db.syncMeta.get(LAST_BRIEF_PULL_KEY);
-  const lastPullIso = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
-
-  const { data, error } = await supabase
-    .from("briefs")
-    .select("*")
-    .gt("updated_at", lastPullIso)
-    .order("updated_at", { ascending: true });
-  if (error) {
-    console.error("Pull briefs failed:", error);
-    return;
-  }
-  if (!data?.length) return;
-
-  const now = Date.now();
-  let maxIso = lastPullIso;
-  await db.transaction("rw", db.briefs, async () => {
-    for (const raw of data) {
-      const row = raw as BriefRow;
-      if (row.updated_at > maxIso) maxIso = row.updated_at;
-      const local = await db.briefs.get(row.id);
-      if (local?.dirty && local.updatedAt > new Date(row.updated_at).getTime()) continue;
-      await db.briefs.put({ ...fromBriefRow(row), syncedAt: now, dirty: false });
-    }
-  });
-  await db.syncMeta.put({ key: LAST_BRIEF_PULL_KEY, value: maxIso });
-}
-
-async function pushBriefTemplates(): Promise<void> {
-  const all = await db.briefTemplates.toArray();
-  const pending = all.filter((t) => t.dirty || !t.syncedAt || t.updatedAt > (t.syncedAt ?? 0));
-  if (!pending.length) return;
-
-  const rows = pending.map(toTemplateRow);
-  const { data, error } = await supabase.from("brief_templates").upsert(rows).select();
-  if (error) {
-    console.error("Push brief templates failed:", error);
-    return;
-  }
-
-  const now = Date.now();
-  await db.transaction("rw", db.briefTemplates, async () => {
-    for (const raw of data ?? []) {
-      const server = fromTemplateRow(raw as BriefTemplateRow);
-      await db.briefTemplates.put({ ...server, syncedAt: now, dirty: false });
-    }
-  });
-}
-
-async function pullBriefTemplates(): Promise<void> {
-  const meta = await db.syncMeta.get(LAST_TEMPLATE_PULL_KEY);
-  const lastPullIso = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
-
-  const { data, error } = await supabase
-    .from("brief_templates")
-    .select("*")
-    .gt("updated_at", lastPullIso)
-    .order("updated_at", { ascending: true });
-  if (error) {
-    console.error("Pull brief templates failed:", error);
-    return;
-  }
-  if (!data?.length) return;
-
-  const now = Date.now();
-  let maxIso = lastPullIso;
-  await db.transaction("rw", db.briefTemplates, async () => {
-    for (const raw of data) {
-      const row = raw as BriefTemplateRow;
-      if (row.updated_at > maxIso) maxIso = row.updated_at;
-      const local = await db.briefTemplates.get(row.id);
-      if (local?.dirty && local.updatedAt > new Date(row.updated_at).getTime()) continue;
-      await db.briefTemplates.put({ ...fromTemplateRow(row), syncedAt: now, dirty: false });
-    }
-  });
-  await db.syncMeta.put({ key: LAST_TEMPLATE_PULL_KEY, value: maxIso });
 }
 
 export async function resetSyncState() {
@@ -364,3 +199,5 @@ export function installLifecycleHandlers() {
   window.addEventListener("beforeunload", () => void flushSync());
   window.addEventListener("focus", () => void runSync());
 }
+
+export type { PostRecord, BriefRecord, BriefTemplateRecord };

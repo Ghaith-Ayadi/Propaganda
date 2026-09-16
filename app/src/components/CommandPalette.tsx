@@ -24,7 +24,7 @@ type Mode = "search" | "commands";
 type PalettePage = null | "shortcuts" | "version";
 
 interface Props {
-  currentPostId: number | null;
+  currentPostId: string | null;
 }
 
 const LAST_COLLECTION_KEY = "verbatim:lastCollection";
@@ -406,7 +406,7 @@ export function CommandPalette({ currentPostId }: Props) {
             {mode === "search" && q && (
               <Command.Group heading="Posts">
                 {results.map((r) => {
-                  const id = Number(r.id);
+                  const id = String(r.id);
                   const status = (r as unknown as { status?: string | null }).status;
                   const type = (r as unknown as { type?: string }).type;
                   const emoji = type ? collectionDisplay(type, collectionRows).emoji : null;

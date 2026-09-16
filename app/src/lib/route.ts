@@ -6,17 +6,17 @@ import { useEffect, useState } from "react";
 export type Route =
   | { view: "home" }
   | { view: "list" }
-  | { view: "post"; id: number }
+  | { view: "post"; id: string }
   | { view: "plan" }
   | { view: "brief"; id: string }
   | { view: "analytics" };
 
 function parse(): Route {
   const h = window.location.hash;
-  // Allow a leading "-": locally-created posts carry a negative temp id until
-  // sync assigns the real one.
-  const m = h.match(/^#\/post\/(-?\d+)$/);
-  if (m) return { view: "post", id: Number(m[1]) };
+  // Post ids are PocketBase record ids, minted on the client, so a draft keeps
+  // its id from the first keystroke to the server.
+  const m = h.match(/^#\/post\/([A-Za-z0-9_-]+)$/);
+  if (m) return { view: "post", id: m[1] };
   const mb = h.match(/^#\/brief\/(.+)$/);
   if (mb) return { view: "brief", id: decodeURIComponent(mb[1]) };
   if (h === "#/home") return { view: "home" };
@@ -53,7 +53,7 @@ export function go(r: Route) {
   window.location.hash = toHash(r);
 }
 
-export function postHref(id: number): string {
+export function postHref(id: string): string {
   return `#/post/${id}`;
 }
 

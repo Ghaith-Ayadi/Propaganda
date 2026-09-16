@@ -7,8 +7,12 @@ interface SyncMetaRow {
   value: unknown;
 }
 
+// A new database for the PocketBase era: post ids changed from Postgres
+// integers to PocketBase record ids, and Dexie cannot change a primary key's
+// type in place. The server is the source of truth, so a fresh cache costs one
+// full pull. The old "verbatim-db" is dropped below so it stops taking space.
 class VerbatimDB extends Dexie {
-  posts!: Table<Post, number>;
+  posts!: Table<Post, string>;
   versions!: Table<PostVersion, string>;
   collections!: Table<Collection, string>;
   briefs!: Table<Brief, string>;
@@ -16,84 +20,9 @@ class VerbatimDB extends Dexie {
   syncMeta!: Table<SyncMetaRow, string>;
 
   constructor() {
-    super("verbatim-db");
+    super("verbatim-pb");
 
-    // v1: initial schema with a separate `collections` table.
     this.version(1).stores({
-      posts: "id, slug, status, type, favorited, collectionId, updatedAt, publishedAt",
-      collections: "id, position, createdAt",
-      versions: "id, postId, [postId+version], createdAt",
-      syncMeta: "key",
-    });
-
-    // v2: collections dropped — `type` carried the identity.
-    this.version(2).stores({
-      posts: "id, slug, status, type, favorited, updatedAt, publishedAt",
-      collections: null,
-      versions: "id, postId, [postId+version], createdAt",
-      syncMeta: "key",
-    });
-
-    // v3: ephemeral collectionMeta (color-only); never shipped.
-    this.version(3).stores({
-      posts: "id, slug, status, type, favorited, updatedAt, publishedAt",
-      versions: "id, postId, [postId+version], createdAt",
-      collectionMeta: "name, updatedAt",
-      syncMeta: "key",
-    });
-
-    // v4: real `collections` with name PK + emoji + description + position.
-    this.version(4).stores({
-      posts: "id, slug, status, type, favorited, updatedAt, publishedAt",
-      versions: "id, postId, [postId+version], createdAt",
-      collectionMeta: null,
-      collections: "name, position, updatedAt",
-      syncMeta: "key",
-    });
-
-    // v5: per-collection sequential id, indexed for next() / prev() nav.
-    this.version(5).stores({
-      posts: "id, slug, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
-      versions: "id, postId, [postId+version], createdAt",
-      collections: "name, position, updatedAt",
-      syncMeta: "key",
-    });
-
-    // v6: doneAt — writing-finished timestamp, independent of publishedAt.
-    this.version(6).stores({
-      posts: "id, slug, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
-      versions: "id, postId, [postId+version], createdAt",
-      collections: "name, position, updatedAt",
-      syncMeta: "key",
-    });
-
-    // v7: subtitle — short standfirst line shown below the title.
-    this.version(7).stores({
-      posts: "id, slug, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
-      versions: "id, postId, [postId+version], createdAt",
-      collections: "name, position, updatedAt",
-      syncMeta: "key",
-    });
-
-    // v8: postId — system-managed {PREFIX}·{SEQ}, decoupled from the URL slug.
-    this.version(8).stores({
-      posts: "id, slug, postId, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
-      versions: "id, postId, [postId+version], createdAt",
-      collections: "name, position, updatedAt",
-      syncMeta: "key",
-    });
-
-    // v9: briefs — the Planning data layer (a brief is a task to write a post).
-    this.version(9).stores({
-      posts: "id, slug, postId, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
-      versions: "id, postId, [postId+version], createdAt",
-      collections: "name, position, updatedAt",
-      briefs: "id, status, plannedDate, collectionName, postId, updatedAt",
-      syncMeta: "key",
-    });
-
-    // v10: brief templates — reusable presets (body + checks) for new briefs.
-    this.version(10).stores({
       posts: "id, slug, postId, status, type, favorited, updatedAt, publishedAt, [type+collectionSeq]",
       versions: "id, postId, [postId+version], createdAt",
       collections: "name, position, updatedAt",
@@ -105,3 +34,7 @@ class VerbatimDB extends Dexie {
 }
 
 export const db = new VerbatimDB();
+
+// The Supabase-era cache. Nothing in it is needed: everything was migrated
+// server-side and the first sync repopulates this database.
+void Dexie.delete("verbatim-db").catch(() => undefined);

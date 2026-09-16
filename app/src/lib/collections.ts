@@ -1,31 +1,50 @@
-// Collections: first-class records with name (PK), emoji, description, position.
+// Collections: first-class records with name (unique), emoji, description, position.
 // Display rule: prefer the stored emoji; fall back to a leading emoji grapheme
-// inside the name itself so legacy data (no row in `collections`) still renders.
+// inside the name itself so legacy data (no collection record) still renders.
+//
+// The app addresses collections by name everywhere; PocketBase's record id is
+// looked up once per name and cached here.
 
 import { db } from "@/lib/db";
-import { supabase } from "@/lib/supabase";
+import { httpStatus, pb, pbDateToMs } from "@/lib/pocketbase";
 import type { Collection } from "@/types";
 
-interface CollectionRow {
+export interface CollectionRecord {
+  id: string;
   name: string;
-  emoji: string | null;
-  description: string | null;
+  emoji: string;
+  description: string;
   position: number;
-  is_hidden: boolean | null;
-  created_at: string;
-  updated_at: string;
+  is_hidden: boolean;
+  created: string;
+  updated: string;
 }
 
-export function fromCollectionRow(r: CollectionRow): Collection {
+const recordIds = new Map<string, string>();
+
+export function fromCollectionRecord(r: CollectionRecord): Collection {
+  recordIds.set(r.name, r.id);
   return {
     name: r.name,
-    emoji: r.emoji,
-    description: r.description,
+    emoji: r.emoji || null,
+    description: r.description || null,
     position: r.position,
-    isHidden: r.is_hidden ?? false,
-    createdAt: new Date(r.created_at).getTime(),
-    updatedAt: new Date(r.updated_at).getTime(),
+    isHidden: !!r.is_hidden,
+    createdAt: pbDateToMs(r.created) ?? Date.now(),
+    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
   };
+}
+
+const collections = () => pb.collection<CollectionRecord>("collections");
+
+async function recordIdFor(name: string): Promise<string | null> {
+  const cached = recordIds.get(name);
+  if (cached) return cached;
+  const found = await collections()
+    .getFirstListItem(pb.filter("name = {:n}", { n: name }))
+    .catch(() => null);
+  if (found) recordIds.set(name, found.id);
+  return found?.id ?? null;
 }
 
 // --- emoji extraction (legacy fallback) ---
@@ -56,7 +75,7 @@ function leadingEmoji(name: string): { emoji: string | null; rest: string } {
 
 /**
  * Visual representation for a given collection name.
- * If a row exists in `collections`, use its stored emoji + name verbatim.
+ * If a collection record exists, use its stored emoji + name verbatim.
  * Otherwise fall back to "leading emoji in name" so legacy posts still render.
  */
 export function collectionDisplay(
@@ -98,25 +117,27 @@ export async function upsertCollection(
   };
   await db.collections.put(next);
 
-  const { error } = await supabase
-    .from("collections")
-    .upsert({
-      name,
-      emoji: next.emoji,
-      description: next.description,
-      position: next.position,
-      is_hidden: next.isHidden,
-    });
-  if (error) {
-    console.error("upsertCollection failed:", error);
+  const body = {
+    name,
+    emoji: next.emoji ?? "",
+    description: next.description ?? "",
+    position: next.position,
+    is_hidden: next.isHidden,
+  };
+  try {
+    const id = await recordIdFor(name);
+    const saved = id ? await collections().update(id, body) : await collections().create(body);
+    recordIds.set(name, saved.id);
+  } catch (err) {
+    console.error("upsertCollection failed:", err);
     // Mark dirty so the next sync retries.
     await db.collections.put({ ...next, dirty: true });
   }
 }
 
 /**
- * Rename a collection. Bulk-updates `posts.type` from the old name to the new
- * one in a single SQL UPDATE, then upserts the new row and deletes the old.
+ * Rename a collection. Moves every post from the old name to the new one,
+ * then upserts the new record and deletes the old.
  */
 export async function renameCollection(oldName: string, newName: string): Promise<void> {
   if (oldName === newName || !newName) return;
@@ -131,26 +152,17 @@ export async function renameCollection(oldName: string, newName: string): Promis
   } else {
     await upsertCollection(newName, {});
   }
-  // Bulk-update type from old → new in one SQL UPDATE.
-  const { error } = await supabase
-    .from("posts")
-    .update({ type: newName })
-    .eq("type", oldName);
-  if (error) {
-    console.error("renameCollection update posts failed:", error);
-    return;
-  }
-  // Cascade post_id rewrites — they encode the collection prefix.
+  // Cascade post_id rewrites: they encode the collection prefix.
   // Note: slug is NOT rewritten here; it belongs to the URL and must stay stable.
   const affected = await db.posts.where("type").equals(oldName).toArray();
   const { postSlug } = await import("@/lib/postId");
-  const postIdUpdates = affected.map((p) => ({
-    id: p.id,
-    post_id: postSlug(newName, p.collectionSeq),
-  }));
-  if (postIdUpdates.length) {
-    const { error: pidErr } = await supabase.from("posts").upsert(postIdUpdates);
-    if (pidErr) console.error("renameCollection post_id rewrite failed:", pidErr);
+  const posts = pb.collection("posts");
+  for (const p of affected) {
+    try {
+      await posts.update(p.id, { type: newName, post_id: postSlug(newName, p.collectionSeq) });
+    } catch (err) {
+      console.error(`renameCollection: post ${p.id} not updated:`, err);
+    }
   }
   // Mirror in Dexie so the UI updates without waiting for the next pull.
   await db.transaction("rw", db.posts, async () => {
@@ -158,10 +170,20 @@ export async function renameCollection(oldName: string, newName: string): Promis
       await db.posts.put({ ...p, type: newName, postId: postSlug(newName, p.collectionSeq) });
     }
   });
-  // Delete the old collection row.
+  // Delete the old collection record.
   await db.collections.delete(oldName);
-  const { error: delErr } = await supabase.from("collections").delete().eq("name", oldName);
-  if (delErr) console.error("renameCollection delete old failed:", delErr);
+  await deleteRemote(oldName);
+}
+
+async function deleteRemote(name: string): Promise<void> {
+  const id = await recordIdFor(name);
+  if (!id) return;
+  try {
+    await collections().delete(id);
+    recordIds.delete(name);
+  } catch (err) {
+    if (httpStatus(err) !== 404) console.error("deleteCollection failed:", err);
+  }
 }
 
 export async function createCollection(
@@ -175,9 +197,9 @@ export async function createCollection(
 }
 
 /**
- * Duplicate a collection. Copies the row metadata under a new name (auto-
- * suffixed " copy") and leaves posts in the original — duplicating posts in
- * bulk is rarely what you want.
+ * Duplicate a collection. Copies the record metadata under a new name (auto-
+ * suffixed " copy") and leaves posts in the original, since duplicating posts
+ * in bulk is rarely what you want.
  */
 export async function duplicateCollection(source: string): Promise<string | null> {
   const existing = await db.collections.get(source);
@@ -196,12 +218,11 @@ export async function duplicateCollection(source: string): Promise<string | null
 }
 
 /**
- * Delete a collection. Posts in it keep their `type` text — they're no
+ * Delete a collection. Posts in it keep their `type` text: they're no
  * longer grouped under a known collection but their content is intact.
  * Caller is responsible for confirmation (typing the name).
  */
 export async function deleteCollection(name: string): Promise<void> {
   await db.collections.delete(name);
-  const { error } = await supabase.from("collections").delete().eq("name", name);
-  if (error) console.error("deleteCollection failed:", error);
+  await deleteRemote(name);
 }

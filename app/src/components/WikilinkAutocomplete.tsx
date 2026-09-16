@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { search } from "@/lib/search";
 
 interface Match {
-  id: number;
+  id: string;
   slug: string;
   title: string;
 }
@@ -23,7 +23,7 @@ export function WikilinkAutocomplete({ rootRef }: { rootRef: React.RefObject<HTM
     matchesRef.current = !query
       ? []
       : search(query, 8).map((r) => ({
-          id: r.id as number,
+          id: r.id as string,
           slug: (r as unknown as { slug?: string }).slug ?? "",
           title: (r as unknown as { title?: string }).title ?? "Untitled",
         }));

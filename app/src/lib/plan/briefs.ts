@@ -1,65 +1,62 @@
-// Row<->domain mappers and the local brief repository. Writes go to Dexie and
-// scheduleSync() pushes to Supabase on idle. Mirrors lib/posts.ts.
+// Record<->domain mappers and the local brief repository. Writes go to Dexie and
+// scheduleSync() pushes to PocketBase on idle. Mirrors lib/posts.ts.
 
 import { db } from "@/lib/db";
+import { httpStatus, newId, pb, pbDateToMs } from "@/lib/pocketbase";
 import { scheduleSync } from "@/lib/sync";
 import type { Brief, BriefChecks, BriefStatus } from "@/lib/plan/types";
 import { mockBriefs } from "@/lib/plan/mock";
 
-export interface BriefRow {
+/** A `briefs` record as PocketBase returns it. Relations are ids or "". */
+export interface BriefRecord {
   id: string;
   title: string;
   status: string;
   assignee_ids: string[] | null;
-  planned_date: string | null; // YYYY-MM-DD
+  planned_date: string; // YYYY-MM-DD or ""
   tags: string[] | null;
-  template_id: string | null;
-  collection_name: string | null;
-  body: string | null;
+  template: string;
+  collection_name: string;
+  body: string;
   checks: BriefChecks | null;
-  post_id: number | null;
-  created_at: string;
-  updated_at: string;
+  post: string;
+  tenant: string;
+  created: string;
+  updated: string;
 }
 
-export function fromBriefRow(r: BriefRow): Brief {
+export function fromBriefRecord(r: BriefRecord): Brief {
   return {
     id: r.id,
     title: r.title ?? "",
-    status: (r.status as BriefStatus) ?? "backlog",
+    status: (r.status as BriefStatus) || "backlog",
     assigneeIds: r.assignee_ids ?? [],
-    plannedDate: r.planned_date ?? null,
+    plannedDate: r.planned_date || null,
     tags: r.tags ?? [],
-    templateId: r.template_id ?? null,
-    collectionName: r.collection_name ?? null,
+    templateId: r.template || null,
+    collectionName: r.collection_name || null,
     body: r.body ?? "",
     checks: r.checks ?? {},
-    postId: r.post_id ?? null,
-    createdAt: new Date(r.created_at).getTime(),
-    updatedAt: new Date(r.updated_at).getTime(),
+    postId: r.post || null,
+    createdAt: pbDateToMs(r.created) ?? Date.now(),
+    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
   };
 }
 
-export function toBriefRow(b: Brief): Partial<BriefRow> {
+export function toBriefRecord(b: Brief) {
   return {
-    id: b.id,
     title: b.title,
     status: b.status,
     assignee_ids: b.assigneeIds,
-    planned_date: b.plannedDate,
+    planned_date: b.plannedDate ?? "",
     tags: b.tags,
-    template_id: b.templateId,
-    collection_name: b.collectionName,
+    template: b.templateId ?? "",
+    collection_name: b.collectionName ?? "",
     body: b.body,
     checks: b.checks,
-    post_id: b.postId,
+    post: b.postId ?? "",
+    tenant: "verbatim",
   };
-}
-
-function uuid(): string {
-  return typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `br-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // ---- local mutations ----
@@ -67,7 +64,7 @@ function uuid(): string {
 export async function createBrief(partial: Partial<Brief> = {}): Promise<Brief> {
   const now = Date.now();
   const brief: Brief = {
-    id: uuid(),
+    id: newId(),
     title: "",
     status: "backlog",
     assigneeIds: [],
@@ -103,7 +100,7 @@ export async function updateBrief(
  * Link a brief to a post (or pass null to unlink). The relationship is 1:1, so
  * linking also detaches any other brief currently pointing at that post.
  */
-export async function linkBriefToPost(briefId: string, postId: number | null): Promise<void> {
+export async function linkBriefToPost(briefId: string, postId: string | null): Promise<void> {
   if (postId != null) {
     const others = await db.briefs.where("postId").equals(postId).toArray();
     for (const o of others) {
@@ -114,17 +111,19 @@ export async function linkBriefToPost(briefId: string, postId: number | null): P
 }
 
 export async function deleteBrief(id: string): Promise<void> {
-  const { supabase } = await import("@/lib/supabase");
-  const { error } = await supabase.from("briefs").delete().eq("id", id);
-  if (error) console.error("deleteBrief failed:", error);
+  try {
+    await pb.collection("briefs").delete(id);
+  } catch (err) {
+    if (httpStatus(err) !== 404) console.error("deleteBrief failed:", err);
+  }
   await db.briefs.delete(id);
 }
 
 let seeded = false;
 /**
  * First run only: seed the demo briefs locally so the planner isn't empty.
- * Seeded rows are not dirty — they stay local until the Supabase `briefs`
- * table exists; any edits afterwards sync normally.
+ * Seeded rows are not dirty, so they stay local; any edits afterwards sync
+ * normally.
  */
 export async function seedBriefsIfEmpty(): Promise<void> {
   if (seeded) return;

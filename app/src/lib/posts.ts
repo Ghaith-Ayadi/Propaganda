@@ -1,106 +1,92 @@
-// Row<->domain mappers and the local post repository (writes go to Dexie,
-// scheduleSync() pushes to Supabase on idle).
+// Record<->domain mappers and the local post repository (writes go to Dexie,
+// scheduleSync() pushes to PocketBase on idle).
 
 import { db } from "@/lib/db";
+import { httpStatus, msToPbDate, newId, pb, pbDateToMs } from "@/lib/pocketbase";
 import { scheduleSync } from "@/lib/sync";
 import { snapshotVersion } from "@/lib/versions";
 import { emitPostContentSaved } from "@/lib/postEvents";
 import type { Post, PostStatus } from "@/types";
 
-export interface PostRow {
-  id: number;
+/** A `posts` record as PocketBase returns it. Empty text is "", empty number 0, empty date "". */
+export interface PostRecord {
+  id: string;
+  legacy_id: number;
   title: string;
   slug: string;
-  post_id: string | null;
+  post_id: string;
   type: string;
-  status: PostStatus | null;
-  subtitle: string | null;
-  done_at: string | null;
-  published_at: string | null;
-  excerpt: string | null;
-  category: string | null;
+  status: PostStatus | "";
+  subtitle: string;
+  done_at: string;
+  published_at: string;
+  excerpt: string;
+  category: string;
   tags: string[] | null;
-  content_md: string | null;
-  notion_id: string | null;
+  content_md: string;
+  notion_id: string;
   favorited: boolean;
-  collection_seq: number | null;
-  word_count: number | null;
+  collection_seq: number;
+  word_count: number;
   shareable_quotes: string[] | null;
-  created_at: string;
-  updated_at: string;
+  created: string;
+  updated: string;
 }
 
-const isoToMs = (s: string | null): number | null => (s ? new Date(s).getTime() : null);
-const msToIso = (n: number | null): string | null => (n ? new Date(n).toISOString() : null);
-
-export function fromRow(r: PostRow): Post {
+export function fromRecord(r: PostRecord): Post {
   return {
     id: r.id,
     title: r.title ?? "",
     slug: r.slug ?? "",
-    postId: r.post_id ?? null,
+    postId: r.post_id || null,
     type: r.type,
-    status: r.status,
-    subtitle: r.subtitle ?? null,
-    doneAt: isoToMs(r.done_at),
-    publishedAt: isoToMs(r.published_at),
-    excerpt: r.excerpt,
-    category: r.category,
+    status: r.status || null,
+    subtitle: r.subtitle || null,
+    doneAt: pbDateToMs(r.done_at),
+    publishedAt: pbDateToMs(r.published_at),
+    excerpt: r.excerpt || null,
+    category: r.category || null,
     // Fall back to the legacy single category when tags were never set, so old
     // posts surface their category as a tag without any data migration.
     tags: r.tags ?? (r.category ? [r.category] : []),
     content: r.content_md ?? "",
-    notionId: r.notion_id,
+    notionId: r.notion_id || null,
     favorited: !!r.favorited,
-    collectionSeq: r.collection_seq ?? null,
-    wordCount: r.word_count ?? null,
+    collectionSeq: r.collection_seq || null,
+    wordCount: r.word_count || null,
     shareableQuotes: r.shareable_quotes ?? null,
-    createdAt: new Date(r.created_at).getTime(),
-    updatedAt: new Date(r.updated_at).getTime(),
+    createdAt: pbDateToMs(r.created) ?? Date.now(),
+    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
   };
 }
 
-export function toRow(p: Post): Partial<PostRow> {
+/** The writable fields. The id travels separately: on create it is the id we minted locally. */
+export function toRecord(p: Post) {
   return {
-    id: p.id,
     title: p.title,
     slug: p.slug,
-    post_id: p.postId ?? null,
+    post_id: p.postId ?? "",
     type: p.type,
-    status: p.status,
-    subtitle: p.subtitle ?? null,
-    done_at: msToIso(p.doneAt),
-    published_at: msToIso(p.publishedAt),
-    excerpt: p.excerpt,
-    category: p.category,
-    tags: p.tags ?? null,
+    status: p.status ?? "",
+    subtitle: p.subtitle ?? "",
+    done_at: msToPbDate(p.doneAt),
+    published_at: msToPbDate(p.publishedAt),
+    excerpt: p.excerpt ?? "",
+    category: p.category ?? "",
+    tags: p.tags ?? [],
     content_md: p.content,
-    notion_id: p.notionId,
+    notion_id: p.notionId ?? "",
     favorited: p.favorited,
-    collection_seq: p.collectionSeq ?? null,
-    word_count: p.wordCount ?? null,
+    collection_seq: p.collectionSeq ?? 0,
+    word_count: p.wordCount ?? 0,
     shareable_quotes: p.shareableQuotes ?? null,
   };
 }
 
 // ---- local mutations ----
 
-/**
- * Mint the next local-only id for a post the server hasn't seen yet.
- *
- * Server ids are positive and serial. We use *negative* ids for posts created
- * locally (typically offline): the sign is an unambiguous "needs INSERT" flag
- * that can never collide with a server id. `pushPending` INSERTs these, gets the
- * real id back, and swaps it in. Ids decrease monotonically so concurrent local
- * drafts stay distinct.
- */
-export async function nextTempId(): Promise<number> {
-  const smallest = await db.posts.orderBy("id").first();
-  return Math.min(0, smallest?.id ?? 0) - 1;
-}
-
 export async function updatePost(
-  id: number,
+  id: string,
   patch: Partial<Omit<Post, "id" | "createdAt">>,
 ): Promise<void> {
   const existing = await db.posts.get(id);
@@ -151,7 +137,7 @@ export async function updatePost(
   }
 }
 
-export async function toggleFavorite(id: number): Promise<void> {
+export async function toggleFavorite(id: string): Promise<void> {
   const p = await db.posts.get(id);
   if (!p) return;
   await updatePost(id, { favorited: !p.favorited });
@@ -159,9 +145,10 @@ export async function toggleFavorite(id: number): Promise<void> {
 
 /**
  * Assemble a brand-new local draft and stage it in Dexie. Offline-first: no
- * network — the post gets a negative temp id and `dirty: true`, so it renders
- * immediately and `pushPending` INSERTs it (assigning the real id) on the next
- * sync. Shared by createPost / duplicatePost / the command-palette new-post.
+ * network. The post gets its final PocketBase id right here (ids are minted on
+ * the client) and `dirty: true`, so it renders immediately and `pushPending`
+ * creates it server-side on the next sync. Shared by createPost /
+ * duplicatePost / the command-palette new-post.
  */
 async function stageNewPost(
   type: string,
@@ -186,7 +173,7 @@ async function stageNewPost(
 
   const now = Date.now();
   const post: Post = {
-    id: await nextTempId(),
+    id: newId(),
     title,
     slug,
     postId: pid,
@@ -216,8 +203,8 @@ async function stageNewPost(
 
 /**
  * Create a blank draft post in `type` (a collection name). Written to Dexie
- * first with a temp id (works offline); the server assigns the real id when
- * sync pushes it. Returns the local post immediately.
+ * first (works offline); sync creates it server-side with the same id.
+ * Returns the local post immediately.
  */
 export async function createPost(
   type: string,
@@ -228,7 +215,7 @@ export async function createPost(
 
 /**
  * Duplicate a post in the same collection. Same offline-first path as
- * createPost — the copy gets a temp id and is INSERTed on next sync.
+ * createPost.
  */
 export async function duplicatePost(source: Post): Promise<Post | null> {
   return stageNewPost(source.type, {
@@ -240,16 +227,15 @@ export async function duplicatePost(source: Post): Promise<Post | null> {
 }
 
 /**
- * Hard delete. Versions cascade via the DB FK.
+ * Hard delete. Versions cascade server-side through the relation.
  */
-export async function deletePost(id: number): Promise<void> {
-  // A negative id means the post was never pushed — there's nothing on the
-  // server to delete, so drop it locally (works offline).
-  if (id >= 0) {
-    const { supabase } = await import("@/lib/supabase");
-    const { error } = await supabase.from("posts").delete().eq("id", id);
-    if (error) {
-      console.error("deletePost failed:", error);
+export async function deletePost(id: string): Promise<void> {
+  try {
+    await pb.collection("posts").delete(id);
+  } catch (err) {
+    // 404: the post was never pushed, so there is nothing on the server to delete.
+    if (httpStatus(err) !== 404) {
+      console.error("deletePost failed:", err);
       return;
     }
   }
@@ -257,7 +243,7 @@ export async function deletePost(id: number): Promise<void> {
   await db.versions.where("postId").equals(id).delete();
 }
 
-export async function setPostStatus(id: number, status: PostStatus): Promise<void> {
+export async function setPostStatus(id: string, status: PostStatus): Promise<void> {
   const before = await db.posts.get(id);
   const patch: Partial<Post> = { status };
   const now = Date.now();

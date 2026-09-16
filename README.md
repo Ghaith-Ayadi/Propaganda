@@ -6,9 +6,9 @@ The multi-tenant work is the medium-term direction. The current PRD is being rew
 
 ## Stack
 
-Vite + React 19 + TanStack Router/Query, BlockNote editor on TipTap, Dexie (IndexedDB) as the source-of-truth UI store, Supabase (Postgres + Storage) for cloud sync, Vercel for hosting.
+Vite + React 19 + TanStack Router/Query, BlockNote editor on TipTap, Dexie (IndexedDB) as the source-of-truth UI store, PocketBase on Bedrock ([Ghaith-Ayadi/Bedrock](https://github.com/Ghaith-Ayadi/Bedrock)) for cloud sync and Google sign-in, Vercel Blob for images, Vercel for hosting.
 
-**Infra constraint:** minimize providers. Vercel + Supabase is the entire stack target — adding a third provider needs justification. Be cautious about Next.js: Vite is the default, and "Vercel hosting" doesn't automatically mean "Next.js framework." Reach for Next.js only when there's a real reason that holds up off-Vercel too.
+**Infra constraint:** minimize providers. Vercel + Bedrock (one self-hosted PocketBase per app) is the entire stack target — adding a third provider needs justification. Be cautious about Next.js: Vite is the default, and "Vercel hosting" doesn't automatically mean "Next.js framework." Reach for Next.js only when there's a real reason that holds up off-Vercel too.
 
 ## Layout
 

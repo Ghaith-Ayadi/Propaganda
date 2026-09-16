@@ -37,7 +37,7 @@ export interface Brief {
   collectionName: string | null; // target collection: the produced post goes here, the brief does not
   body: string; // writing guidance
   checks: BriefChecks;
-  postId: number | null; // linked post (1:1 for now)
+  postId: string | null; // linked post (1:1 for now)
   createdAt: number;
   updatedAt: number;
   // sync metadata, local-only
