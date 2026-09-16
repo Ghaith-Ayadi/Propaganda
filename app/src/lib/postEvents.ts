@@ -4,7 +4,7 @@
 // core even when every optional module is stripped out for distribution.
 
 export interface PostContentSaved {
-  id: number;
+  id: string;
   /** Word count before this save (null if the post had none yet). */
   prevWordCount: number | null;
   /** Word count after this save. */

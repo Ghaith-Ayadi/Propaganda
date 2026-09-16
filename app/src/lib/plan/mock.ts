@@ -82,7 +82,7 @@ export function mockBriefs(): Brief[] {
     assigneeId: string | null,
     day: number | null,
     tags: string[],
-    postId: number | null,
+    postId: string | null,
     checks: BriefChecks = {},
   ): Brief => ({
     id,
@@ -101,22 +101,22 @@ export function mockBriefs(): Brief[] {
   });
 
   cache = [
-    b("br-1", "The case against infinite scroll", "in_progress", "u-ghaith", 3, ["essay", "ux"], 101, {
+    b("br-1", "The case against infinite scroll", "in_progress", "u-ghaith", 3, ["essay", "ux"], "demo-post-101", {
       minWords: 1200,
       requiredKeywords: ["attention", "feed"],
     }),
     b("br-2", "Weeknotes: shipping the planner", "todo", "u-mira", 5, ["weeknotes"], null),
-    b("br-3", "Interview: a typographer's desk", "in_review", "u-sol", 9, ["interview", "craft"], 102, {
+    b("br-3", "Interview: a typographer's desk", "in_review", "u-sol", 9, ["interview", "craft"], "demo-post-102", {
       minWords: 2000,
     }),
     b("br-4", "Why we left Notion (then came back)", "backlog", null, 12, ["tools", "meta"], null),
-    b("br-5", "A short history of the pull-quote", "done", "u-ghaith", 2, ["essay", "history"], 103),
+    b("br-5", "A short history of the pull-quote", "done", "u-ghaith", 2, ["essay", "history"], "demo-post-103"),
     b("br-6", "Field guide to RSS in 2026", "todo", "u-sol", 16, ["guide", "web"], null, { minWords: 1500 }),
-    b("br-7", "The newsletter is the product", "in_progress", "u-mira", 18, ["essay", "growth"], 104),
+    b("br-7", "The newsletter is the product", "in_progress", "u-mira", 18, ["essay", "growth"], "demo-post-104"),
     b("br-8", "Crypto explainer", "cancelled", null, 19, ["explainer"], null),
     b("br-9", "Reading list: this month", "todo", "u-ghaith", 23, ["list"], null),
     b("br-10", "On writing in public", "backlog", "u-mira", 25, ["essay"], null),
-    b("br-13", "Podcast notes: episode 12", "in_review", "u-mira", 27, ["podcast", "notes"], 105),
+    b("br-13", "Podcast notes: episode 12", "in_review", "u-mira", 27, ["podcast", "notes"], "demo-post-105"),
     // Unscheduled (no plannedDate) — these live in the Unscheduled tray.
     b("br-11", "Template: the 5-paragraph brief", "todo", "u-sol", null, ["meta"], null),
     b("br-12", "Untitled draft idea", "backlog", null, null, [], null),

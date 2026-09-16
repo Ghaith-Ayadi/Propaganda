@@ -4,7 +4,8 @@
 export type PostStatus = "draft" | "done" | "published";
 
 export interface Post {
-  id: number;
+  /** PocketBase record id, minted on the client (lib/pocketbase.ts newId). */
+  id: string;
   title: string;
   slug: string;                 // URL slug (editable, auto-generated from title while draft)
   postId: string | null;        // system-managed identifier: {PREFIX}·{SEQ}, changes with collection
@@ -43,7 +44,7 @@ export interface Collection {
 
 export interface PostVersion {
   id: string;
-  postId: number;
+  postId: string;
   version: number;
   content: string;
   attributes: Record<string, unknown>;

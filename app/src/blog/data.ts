@@ -1,35 +1,37 @@
-// Public-blog reads against Supabase. No Dexie, no sync engine — this view
-// is read-only and visited by anonymous readers.
+// Public-blog reads against PocketBase. No Dexie, no sync engine: this view is
+// read-only and visited by anonymous readers. The collection rules let anyone
+// list published posts and collections, nothing else.
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { pb, pbDateToMs } from "@/lib/pocketbase";
 import type { Collection } from "@/types";
 
-// Inline the row mapper so the blog bundle doesn't pull in the editor's
-// Dexie schema. Same shape as lib/collections.ts:fromCollectionRow.
-interface CollectionRow {
+// Inline the record mapper so the blog bundle doesn't pull in the editor's
+// Dexie schema. Same shape as lib/collections.ts:fromCollectionRecord.
+interface CollectionRecord {
+  id: string;
   name: string;
-  emoji: string | null;
-  description: string | null;
+  emoji: string;
+  description: string;
   position: number;
-  is_hidden: boolean | null;
-  created_at: string;
-  updated_at: string;
+  is_hidden: boolean;
+  created: string;
+  updated: string;
 }
-function fromCollectionRow(r: CollectionRow): Collection {
+function fromCollectionRecord(r: CollectionRecord): Collection {
   return {
     name: r.name,
-    emoji: r.emoji,
-    description: r.description,
+    emoji: r.emoji || null,
+    description: r.description || null,
     position: r.position,
-    isHidden: r.is_hidden ?? false,
-    createdAt: new Date(r.created_at).getTime(),
-    updatedAt: new Date(r.updated_at).getTime(),
+    isHidden: !!r.is_hidden,
+    createdAt: pbDateToMs(r.created) ?? Date.now(),
+    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
   };
 }
 
 export interface BlogPost {
-  id: number;
+  id: string;
   slug: string;
   title: string;
   type: string;
@@ -40,43 +42,46 @@ export interface BlogPost {
   updatedAt: number;
   wordCount: number | null;
   collectionSeq: number | null;
-  status: "draft" | "published" | null;
+  status: "draft" | "done" | "published" | "";
 }
 
-interface BlogPostRow {
-  id: number;
+interface BlogPostRecord {
+  id: string;
   slug: string;
   title: string;
   type: string;
-  subtitle: string | null;
-  excerpt: string | null;
-  content_md: string | null;
-  published_at: string | null;
-  updated_at: string;
-  word_count: number | null;
-  collection_seq: number | null;
-  status: "draft" | "published" | null;
+  subtitle: string;
+  excerpt: string;
+  content_md: string;
+  published_at: string;
+  updated: string;
+  word_count: number;
+  collection_seq: number;
+  status: "draft" | "done" | "published" | "";
 }
 
-function fromBlogRow(r: BlogPostRow): BlogPost {
+function fromBlogRecord(r: BlogPostRecord): BlogPost {
   return {
     id: r.id,
     slug: r.slug,
     title: r.title ?? "",
     type: r.type,
-    subtitle: r.subtitle,
-    excerpt: r.excerpt,
+    subtitle: r.subtitle || null,
+    excerpt: r.excerpt || null,
     content: r.content_md ?? "",
-    publishedAt: r.published_at ? new Date(r.published_at).getTime() : null,
-    updatedAt: new Date(r.updated_at).getTime(),
-    wordCount: r.word_count,
-    collectionSeq: r.collection_seq,
+    publishedAt: pbDateToMs(r.published_at),
+    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
+    wordCount: r.word_count || null,
+    collectionSeq: r.collection_seq || null,
     status: r.status,
   };
 }
 
-const PUBLIC_COLUMNS =
-  "id, slug, title, type, subtitle, excerpt, content_md, published_at, updated_at, word_count, collection_seq, status";
+const PUBLIC_FIELDS =
+  "id,slug,title,type,subtitle,excerpt,content_md,published_at,updated,word_count,collection_seq,status";
+
+const posts = () => pb.collection<BlogPostRecord>("posts");
+const collections = () => pb.collection<CollectionRecord>("collections");
 
 export function useBlogData(): {
   loading: boolean;
@@ -85,27 +90,21 @@ export function useBlogData(): {
   error: string | null;
 } {
   const [loading, setLoading] = useState(true);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [cols, setCols] = useState<Collection[]>([]);
+  const [items, setItems] = useState<BlogPost[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const [colRes, postRes] = await Promise.all([
-          supabase.from("collections").select("*").order("position"),
-          supabase
-            .from("posts")
-            .select(PUBLIC_COLUMNS)
-            .eq("status", "published")
-            .order("published_at", { ascending: false }),
+        const [colRecords, postRecords] = await Promise.all([
+          collections().getFullList({ sort: "position" }),
+          posts().getFullList({ filter: 'status = "published"', sort: "-published_at", fields: PUBLIC_FIELDS }),
         ]);
-        if (colRes.error) throw colRes.error;
-        if (postRes.error) throw postRes.error;
         if (cancelled) return;
-        setCollections((colRes.data ?? []).map((r) => fromCollectionRow(r as CollectionRow)));
-        setPosts((postRes.data ?? []).map((r) => fromBlogRow(r as BlogPostRow)));
+        setCols(colRecords.map(fromCollectionRecord));
+        setItems(postRecords.map(fromBlogRecord));
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
@@ -118,7 +117,7 @@ export function useBlogData(): {
     };
   }, []);
 
-  return { loading, collections, posts, error };
+  return { loading, collections: cols, posts: items, error };
 }
 
 /**
@@ -136,28 +135,19 @@ export async function fetchPostBySlug(slug: string): Promise<ReaderFetch> {
   // Primary lookup by slug. Fall back to the immutable post_id code
   // (e.g. "THM·08") so links shared before slugs were derived from titles
   // keep resolving.
-  let { data } = await supabase
-    .from("posts")
-    .select(PUBLIC_COLUMNS)
-    .eq("slug", slug)
-    .eq("status", "published")
-    .maybeSingle();
-  if (!data) {
-    ({ data } = await supabase
-      .from("posts")
-      .select(PUBLIC_COLUMNS)
-      .eq("post_id", slug)
-      .eq("status", "published")
-      .maybeSingle());
+  let record = await posts()
+    .getFirstListItem(pb.filter('slug = {:s} && status = "published"', { s: slug }), { fields: PUBLIC_FIELDS })
+    .catch(() => null);
+  if (!record) {
+    record = await posts()
+      .getFirstListItem(pb.filter('post_id = {:s} && status = "published"', { s: slug }), { fields: PUBLIC_FIELDS })
+      .catch(() => null);
   }
-  if (!data) return { kind: "missing" };
-  const row = data as BlogPostRow;
+  if (!record) return { kind: "missing" };
   // Check the collection's visibility before exposing the post.
-  const { data: col } = await supabase
-    .from("collections")
-    .select("is_hidden")
-    .eq("name", row.type)
-    .maybeSingle();
+  const col = await collections()
+    .getFirstListItem(pb.filter("name = {:n}", { n: record.type }), { fields: "is_hidden" })
+    .catch(() => null);
   if (col?.is_hidden) return { kind: "hidden" };
-  return { kind: "post", post: fromBlogRow(row) };
+  return { kind: "post", post: fromBlogRecord(record) };
 }

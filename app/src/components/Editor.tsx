@@ -36,7 +36,7 @@ const SAVE_DEBOUNCE_MS = 100;
 export function Editor({ post }: Props) {
   const editor = useCreateBlockNote({ uploadFile });
   const [theme] = useTheme();
-  const lastLoadedId = useRef<number | null>(null);
+  const lastLoadedId = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while we programmatically replace the document on load. BlockNote fires
   // onChange for programmatic edits too, so without this guard merely opening a

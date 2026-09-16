@@ -1,72 +1,57 @@
-// Realtime: watch posts + post_versions; updates Dexie so dexie-react-hooks reflows the UI.
+// Realtime: watch posts, post_versions and collections over PocketBase's
+// server-sent events; updates Dexie so dexie-react-hooks reflows the UI.
 
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { db } from "@/lib/db";
-import { supabase } from "@/lib/supabase";
-import { fromRow, type PostRow } from "@/lib/posts";
-import { fromVersionRow } from "@/lib/versions";
-import { fromCollectionRow } from "@/lib/collections";
+import { pb, pbDateToMs } from "@/lib/pocketbase";
+import { fromRecord, type PostRecord } from "@/lib/posts";
+import { fromVersionRecord, type VersionRecord } from "@/lib/versions";
+import { fromCollectionRecord, type CollectionRecord } from "@/lib/collections";
 import { runSync } from "@/lib/sync";
 
-let channel: RealtimeChannel | null = null;
+type Unsubscribe = () => Promise<void>;
+let subscriptions: Unsubscribe[] = [];
 
-export function startRealtime() {
-  stopRealtime();
+export async function startRealtime() {
+  await stopRealtime();
 
-  channel = supabase
-    .channel("verbatim:rt")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "posts" },
-      async (payload) => {
-        const now = Date.now();
-        if (payload.eventType === "DELETE") {
-          const old = payload.old as { id?: number };
-          if (old.id != null) await db.posts.delete(old.id);
-          return;
-        }
-        const row = payload.new as PostRow;
-        if (!row?.id) return;
-        const local = await db.posts.get(row.id);
-        if (local?.dirty && local.updatedAt > new Date(row.updated_at).getTime()) return;
-        await db.posts.put({ ...fromRow(row), syncedAt: now, dirty: false });
-      },
-    )
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "post_versions" },
-      async (payload) => {
-        const row = payload.new as Parameters<typeof fromVersionRow>[0];
-        if (!row?.id) return;
-        await db.versions.put(fromVersionRow(row));
-      },
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "collections" },
-      async (payload) => {
-        if (payload.eventType === "DELETE") {
-          const old = payload.old as { name?: string };
-          if (old.name) await db.collections.delete(old.name);
-          return;
-        }
-        const row = payload.new as Parameters<typeof fromCollectionRow>[0];
-        if (!row?.name) return;
-        await db.collections.put({
-          ...fromCollectionRow(row),
-          syncedAt: Date.now(),
-          dirty: false,
-        });
-      },
-    )
-    .subscribe((status) => {
-      if (status === "SUBSCRIBED") void runSync();
-    });
+  const posts = await pb.collection<PostRecord>("posts").subscribe("*", async (e) => {
+    if (e.action === "delete") {
+      await db.posts.delete(e.record.id);
+      await db.versions.where("postId").equals(e.record.id).delete();
+      return;
+    }
+    const local = await db.posts.get(e.record.id);
+    if (local?.dirty && local.updatedAt > (pbDateToMs(e.record.updated) ?? 0)) return;
+    await db.posts.put({ ...fromRecord(e.record), syncedAt: Date.now(), dirty: false });
+  });
+
+  const versions = await pb.collection<VersionRecord>("post_versions").subscribe("*", async (e) => {
+    if (e.action === "delete") {
+      await db.versions.delete(e.record.id);
+      return;
+    }
+    await db.versions.put(fromVersionRecord(e.record));
+  });
+
+  const collections = await pb.collection<CollectionRecord>("collections").subscribe("*", async (e) => {
+    if (e.action === "delete") {
+      await db.collections.delete(e.record.name);
+      return;
+    }
+    await db.collections.put({ ...fromCollectionRecord(e.record), syncedAt: Date.now(), dirty: false });
+  });
+
+  // PB_CONNECT fires on the first connection and after every automatic
+  // reconnect, which is the moment to reconcile anything missed.
+  const connect = await pb.realtime.subscribe("PB_CONNECT", () => {
+    void runSync();
+  });
+
+  subscriptions = [posts, versions, collections, connect];
 }
 
-export function stopRealtime() {
-  if (channel) {
-    supabase.removeChannel(channel);
-    channel = null;
-  }
+export async function stopRealtime() {
+  const current = subscriptions;
+  subscriptions = [];
+  for (const unsubscribe of current) await unsubscribe();
 }

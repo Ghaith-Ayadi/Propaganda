@@ -417,7 +417,7 @@ function LinkedPostField({ brief }: { brief: Brief }) {
           title="Link an existing post"
           items={pickItems}
           emptyText="No posts yet."
-          onPick={(id) => void linkBriefToPost(brief.id, Number(id))}
+          onPick={(id) => void linkBriefToPost(brief.id, String(id))}
           onClose={() => setPicking(false)}
         />
       )}

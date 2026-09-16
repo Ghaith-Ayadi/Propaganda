@@ -196,7 +196,7 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
-          // Cache the shell. Supabase requests pass through; Dexie holds the data.
+          // Cache the shell. PocketBase requests pass through; Dexie holds the data.
           navigateFallback: "/index.html",
           globPatterns: ["**/*.{js,css,html,svg,ico,woff2}"],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,

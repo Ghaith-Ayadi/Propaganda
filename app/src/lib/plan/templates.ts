@@ -1,44 +1,40 @@
-// Row<->domain mappers and the local brief-template repository. Writes go to
-// Dexie and scheduleSync() pushes to Supabase on idle. Mirrors lib/plan/briefs.ts.
+// Record<->domain mappers and the local brief-template repository. Writes go to
+// Dexie and scheduleSync() pushes to PocketBase on idle. Mirrors lib/plan/briefs.ts.
 
 import { db } from "@/lib/db";
+import { httpStatus, newId, pb, pbDateToMs } from "@/lib/pocketbase";
 import { scheduleSync } from "@/lib/sync";
 import type { BriefChecks, BriefTemplate } from "@/lib/plan/types";
 import { SEED_TEMPLATES } from "@/lib/plan/mock";
 
-export interface BriefTemplateRow {
+export interface BriefTemplateRecord {
   id: string;
   name: string;
-  body: string | null;
+  body: string;
   checks: BriefChecks | null;
-  created_at: string;
-  updated_at: string;
+  tenant: string;
+  created: string;
+  updated: string;
 }
 
-export function fromTemplateRow(r: BriefTemplateRow): BriefTemplate {
+export function fromTemplateRecord(r: BriefTemplateRecord): BriefTemplate {
   return {
     id: r.id,
     name: r.name ?? "",
     body: r.body ?? "",
     checks: r.checks ?? {},
-    createdAt: new Date(r.created_at).getTime(),
-    updatedAt: new Date(r.updated_at).getTime(),
+    createdAt: pbDateToMs(r.created) ?? Date.now(),
+    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
   };
 }
 
-export function toTemplateRow(t: BriefTemplate): Partial<BriefTemplateRow> {
+export function toTemplateRecord(t: BriefTemplate) {
   return {
-    id: t.id,
     name: t.name,
     body: t.body,
     checks: t.checks,
+    tenant: "verbatim",
   };
-}
-
-function uuid(): string {
-  return typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // ---- local mutations ----
@@ -48,7 +44,7 @@ export async function createTemplate(
 ): Promise<BriefTemplate> {
   const now = Date.now();
   const tpl: BriefTemplate = {
-    id: uuid(),
+    id: newId(),
     name: "",
     body: "",
     checks: {},
@@ -74,17 +70,19 @@ export async function updateTemplate(
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
-  const { supabase } = await import("@/lib/supabase");
-  const { error } = await supabase.from("brief_templates").delete().eq("id", id);
-  if (error) console.error("deleteTemplate failed:", error);
+  try {
+    await pb.collection("brief_templates").delete(id);
+  } catch (err) {
+    if (httpStatus(err) !== 404) console.error("deleteTemplate failed:", err);
+  }
   await db.briefTemplates.delete(id);
 }
 
 let seeded = false;
 /**
  * First run only: seed the demo templates locally so the Template picker isn't
- * empty. Seeded rows are not dirty — they stay local until the Supabase
- * `brief_templates` table exists; any edits afterwards sync normally.
+ * empty. Seeded rows are not dirty, so they stay local; any edits afterwards
+ * sync normally.
  */
 export async function seedTemplatesIfEmpty(): Promise<void> {
   if (seeded) return;

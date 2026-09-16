@@ -1,11 +1,12 @@
-// Tiny key/value settings store backed by `public.app_settings`. Holds things
-// like the author bio + favicon URL. Cached in module memory; subscribers get
-// notified on change.
+// Tiny key/value settings store backed by the `app_settings` collection. Holds
+// things like the author bio + favicon URL. Cached in module memory;
+// subscribers get notified on change.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { supabase } from "@/lib/supabase";
+import { pb } from "@/lib/pocketbase";
 
 const cache = new Map<string, unknown>();
+const recordIds = new Map<string, string>();
 const listeners = new Set<() => void>();
 let version = 0;
 let loaded = false;
@@ -16,14 +17,17 @@ function emit() {
   for (const l of listeners) l();
 }
 
-interface SettingRow {
+interface SettingRecord {
+  id: string;
   key: string;
   value: unknown;
-  updated_at: string;
+  updated: string;
 }
 
+const settings = () => pb.collection<SettingRecord>("app_settings");
+
 /**
- * Pull every setting from Supabase + subscribe to realtime updates. Memoized:
+ * Pull every setting from PocketBase + subscribe to realtime updates. Memoized:
  * every caller awaits the SAME load, so the cache is guaranteed populated when
  * the returned promise resolves (callers must not race on a half-filled cache).
  */
@@ -34,38 +38,33 @@ export function installSettings(): Promise<void> {
 }
 
 async function load(): Promise<void> {
-  const { data, error } = await supabase.from("app_settings").select("*");
-  if (error) {
-    console.error("loadSettings failed:", error);
+  let records: SettingRecord[];
+  try {
+    records = await settings().getFullList();
+  } catch (err) {
+    console.error("loadSettings failed:", err);
     return;
   }
-  for (const row of (data ?? []) as SettingRow[]) {
-    cache.set(row.key, row.value);
+  for (const r of records) {
+    cache.set(r.key, r.value);
+    recordIds.set(r.key, r.id);
   }
   loaded = true;
   emit();
 
-  supabase
-    .channel("verbatim:app_settings")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "app_settings" },
-      (payload) => {
-        if (payload.eventType === "DELETE") {
-          const old = payload.old as { key?: string };
-          if (old.key) {
-            cache.delete(old.key);
-            emit();
-          }
-          return;
-        }
-        const row = payload.new as SettingRow;
-        if (!row?.key) return;
-        cache.set(row.key, row.value);
+  void settings()
+    .subscribe("*", (e) => {
+      if (e.action === "delete") {
+        cache.delete(e.record.key);
+        recordIds.delete(e.record.key);
         emit();
-      },
-    )
-    .subscribe();
+        return;
+      }
+      cache.set(e.record.key, e.record.value);
+      recordIds.set(e.record.key, e.record.id);
+      emit();
+    })
+    .catch((err) => console.error("settings realtime failed:", err));
 }
 
 export function getSetting<T = unknown>(key: string, fallback?: T): T | undefined {
@@ -76,10 +75,21 @@ export function getSetting<T = unknown>(key: string, fallback?: T): T | undefine
 export async function setSetting<T>(key: string, value: T): Promise<void> {
   cache.set(key, value);
   emit();
-  const { error } = await supabase
-    .from("app_settings")
-    .upsert({ key, value });
-  if (error) console.error("setSetting failed:", error);
+  try {
+    let id = recordIds.get(key);
+    if (!id) {
+      const found = await settings()
+        .getFirstListItem(pb.filter("key = {:k}", { k: key }))
+        .catch(() => null);
+      id = found?.id;
+    }
+    const saved = id
+      ? await settings().update(id, { value })
+      : await settings().create({ key, value });
+    recordIds.set(key, saved.id);
+  } catch (err) {
+    console.error("setSetting failed:", err);
+  }
 }
 
 /** Subscribe to all setting changes. */

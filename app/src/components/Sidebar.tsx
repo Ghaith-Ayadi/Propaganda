@@ -23,7 +23,7 @@ import { useSyncExternalStore } from "react";
 import type { Collection, Post } from "@/types";
 
 interface Props {
-  currentId: number | null;
+  currentId: string | null;
 }
 
 const ADMIN_KNOWN = "verbatim:admin-known";
@@ -250,7 +250,7 @@ function CollectionFolder({
 }: {
   collection: Collection;
   items: Post[];
-  currentId: number | null;
+  currentId: string | null;
   isActive: boolean;
   allCollections: Collection[];
 }) {
@@ -312,7 +312,7 @@ function PostList({
   collectionRows,
 }: {
   posts: Post[];
-  currentId: number | null;
+  currentId: string | null;
   collectionRows: Collection[];
 }) {
   return (
@@ -330,7 +330,7 @@ function VirtualPostList({
   collectionRows,
 }: {
   posts: Post[];
-  currentId: number | null;
+  currentId: string | null;
   collectionRows: Collection[];
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -372,7 +372,7 @@ function SearchResults({
   collectionRows,
 }: {
   posts: Post[];
-  currentId: number | null;
+  currentId: string | null;
   collectionRows: Collection[];
 }) {
   return (

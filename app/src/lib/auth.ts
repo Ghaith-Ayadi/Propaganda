@@ -1,95 +1,58 @@
 import { useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { pb, type PbUser } from "@/lib/pocketbase";
 
-export function useSession(): { session: Session | null; loading: boolean } {
-  const [session, setSession] = useState<Session | null>(null);
+// Sign-in is Google only. PocketBase runs the OAuth2 flow in a popup and keeps
+// the session in localStorage; `authStore.onChange` is where the app learns
+// about sign-in and sign-out.
+
+export function useSession(): { user: PbUser | null; loading: boolean } {
+  const [user, setUser] = useState<PbUser | null>(() =>
+    pb.authStore.isValid ? (pb.authStore.record as PbUser) : null,
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    void supabase.auth.getSession().then(({ data }) => {
+    const unsubscribe = pb.authStore.onChange((_token, record) => {
       if (!mounted) return;
-      setSession(data.session ?? null);
-      setLoading(false);
+      setUser(pb.authStore.isValid ? (record as PbUser | null) : null);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      if (!mounted) return;
-      setSession(s);
-    });
+    // Validate a stored session once per load; a stale token signs out, unless
+    // we are offline, where AuthGate's grace period keeps the drafts reachable.
+    (async () => {
+      if (pb.authStore.isValid && navigator.onLine) {
+        try {
+          await pb.collection("users").authRefresh();
+        } catch (err) {
+          if ((err as { status?: number }).status === 401) pb.authStore.clear();
+        }
+      }
+      if (mounted) setLoading(false);
+    })();
     return () => {
       mounted = false;
-      sub.subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
-  return { session, loading };
+  return { user, loading };
+}
+
+export async function signInWithGoogle(): Promise<void> {
+  await pb.collection("users").authWithOAuth2({ provider: "google" });
 }
 
 /**
- * Password sign-in. Preferred over the OTP flow below because it sends no
- * email, so it works regardless of whether the Resend SMTP integration does.
- */
-export async function signInWithPassword(email: string, password: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-}
-
-/**
- * True when a Supabase session is sitting in localStorage, whether or not it is
- * still valid. Used to keep the editor open offline: the token can't be
+ * True when a PocketBase session is sitting in localStorage, whether or not it
+ * is still valid. Used to keep the editor open offline: the token can't be
  * refreshed without a network, and locking the author out of drafts that only
  * exist in IndexedDB would be far worse than trusting a stale token that the
  * server will reject anyway.
  */
 export function hasStoredSession(): boolean {
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && /^sb-.*-auth-token$/.test(k)) return true;
-    }
-  } catch {
-    // Storage blocked (private mode): fall back to requiring a live session.
-  }
-  return false;
-}
-
-export async function sendCode(email: string): Promise<void> {
-  // Supabase sends both a 6-digit OTP and a magic link via the configured
-  // email provider (Resend, in this project). The user can use either.
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.origin },
-  });
-  if (error) throw error;
-}
-
-export async function verifyCode(email: string, token: string): Promise<void> {
-  const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
-  if (error) throw error;
-}
-
-/**
- * Send a password-recovery email. The link lands back on /admin with a recovery
- * token in the URL fragment, which the client picks up (detectSessionInUrl)
- * and turns into a short-lived session plus a PASSWORD_RECOVERY event.
- *
- * `redirectTo` must be listed in Supabase Auth → URL Configuration → Redirect
- * URLs, or Supabase refuses to redirect and the link dead-ends.
- */
-export async function sendPasswordReset(email: string): Promise<void> {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/admin`,
-  });
-  if (error) throw error;
-}
-
-/** Set a new password for the currently-signed-in (or recovering) user. */
-export async function updatePassword(password: string): Promise<void> {
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) throw error;
+  return Boolean(pb.authStore.token);
 }
 
 export async function signOut(): Promise<void> {
-  await supabase.auth.signOut();
+  pb.authStore.clear();
 }

@@ -4,9 +4,8 @@
 
 import { db } from "@/lib/db";
 import { getSetting, setSetting } from "@/lib/settings";
-import { supabase } from "@/lib/supabase";
 import { vdb } from "./db";
-import { dayKey, notifyChanged } from "./store";
+import { dayKey, incrementRemote, notifyChanged } from "./store";
 
 const TENANT = (import.meta.env.VITE_ANALYTICS_TENANT as string) || "verbatim";
 const FLAG = "verbose.backfilledAt";
@@ -31,11 +30,7 @@ export async function backfillOnce(): Promise<void> {
     const local = (await vdb.activity.get(day))?.words ?? 0;
     await vdb.activity.put({ day, words: Math.max(local, words) });
     try {
-      await supabase.rpc("increment_writing_activity", {
-        p_tenant: TENANT,
-        p_day: day,
-        p_delta: words,
-      });
+      await incrementRemote(day, words);
     } catch (err) {
       console.warn("[verbose] backfill increment failed:", err);
     }

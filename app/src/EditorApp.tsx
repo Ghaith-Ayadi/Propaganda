@@ -17,6 +17,7 @@ import { useLayout } from "@/lib/layout";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { installLifecycleHandlers, setSyncUser, runSync, flushSync } from "@/lib/sync";
 import { startRealtime, stopRealtime } from "@/lib/realtime";
+import { pb } from "@/lib/pocketbase";
 import { installSearchIndex } from "@/lib/search";
 import { snapshotVersion } from "@/lib/versions";
 import { toggleTheme } from "@/lib/theme";
@@ -33,13 +34,13 @@ function Shell() {
   const [route] = useRoute();
   const [layout, , toggleAuthorMode] = useLayout();
 
-  // Auth bypassed for now — sync runs unconditionally.
+  // AuthGate only renders this once a session exists (or offline grace applies).
   useEffect(() => {
     installLifecycleHandlers();
     installSearchIndex();
-    setSyncUser(1);
+    setSyncUser(pb.authStore.record?.id ?? "offline");
     void runSync();
-    startRealtime();
+    void startRealtime();
     // Anyone who has visited /admin once is considered "admin" for the
     // purpose of showing the back-to-admin strip on the public site.
     try { localStorage.setItem("verbatim:admin-known", "1"); } catch {}
@@ -55,7 +56,7 @@ function Shell() {
       );
     return () => {
       void flushSync();
-      stopRealtime();
+      void stopRealtime();
       setSyncUser(null);
     };
   }, []);

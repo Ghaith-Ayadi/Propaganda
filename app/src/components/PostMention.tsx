@@ -19,7 +19,7 @@ import { search } from "@/lib/search";
 type Editor = BlockNoteEditor<any, any, any>;
 
 interface Match {
-  id: number;
+  id: string;
   slug: string;
   title: string;
 }
@@ -29,11 +29,11 @@ function postHref(slug: string): string {
   return `/p/${encodeURIComponent(slug)}`;
 }
 
-function searchPosts(query: string, limit: number, excludeId?: number): Match[] {
+function searchPosts(query: string, limit: number, excludeId?: string): Match[] {
   if (!query.trim()) return [];
   return search(query, limit + 1)
     .map((r) => ({
-      id: r.id as number,
+      id: r.id as string,
       slug: (r as unknown as { slug?: string }).slug ?? "",
       title: (r as unknown as { title?: string }).title ?? "Untitled",
     }))
@@ -122,7 +122,7 @@ export function MentionAutocomplete({
 }: {
   editor: Editor;
   rootRef: React.RefObject<HTMLElement | null>;
-  excludeId?: number;
+  excludeId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -224,7 +224,7 @@ export function MentionAutocomplete({
 // 2. Formatting-toolbar "@" button (links the current selection)
 // ---------------------------------------------------------------------------
 
-export function MentionToolbarButton({ excludeId }: { excludeId?: number }) {
+export function MentionToolbarButton({ excludeId }: { excludeId?: string }) {
   const editor = useBlockNoteEditor();
   const Components = useComponentsContext()!;
   const [open, setOpen] = useState(false);
