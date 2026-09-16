@@ -8,21 +8,47 @@ This is a **Propaganda** working tree (personal IP, owned by Ghaith). Worktrees 
 **NEVER edit, overwrite, empty, delete, re-title, change the status of, or run any
 mutating operation on an existing article/post unless Ghaith EXPRESSLY instructs it for
 that specific article.** This includes "harmless" testing, undo/redo experiments, sync
-pushes, migrations, and browser-driven edits — a real article's content and version
-history are irreplaceable and there is no reliable backup.
+pushes, migrations, and browser-driven edits. Bedrock now takes nightly backups and
+every post has a version history, but a restore is a manual, whole-database operation:
+treat content as irreplaceable anyway.
 
 - **All experimentation, test edits, and demos happen in the `Test` collection only.**
   You may freely add, modify, and delete posts whose `type = 'Test'`. Nothing else.
 - Adding brand-new posts (in `Test`) is fine. Touching any post outside `Test` is not.
 - Never test destructive editor behaviour (paste, undo, delete, image ops) on a real post.
   Create a throwaway post in `Test` and use that.
-- Applying a DB migration or any schema/data change that could trigger the live app's sync
-  to overwrite local drafts is also off-limits without explicit go-ahead — it can silently
-  clobber unsynced writing.
+- Applying a schema migration (a `pb_migrations` change in the Bedrock repo) or any
+  server-side data change that could trigger the live app's sync to overwrite local
+  drafts is also off-limits without explicit go-ahead — it can silently clobber
+  unsynced writing.
 - If a fix seems to require touching a real article, STOP and ask first.
 
 This rule exists because a balcony draft and other content were lost to careless edits and
 a sync-unblocking migration. It overrides convenience, "just to verify", and everything else.
+
+## Backend: PocketBase on Bedrock
+
+Data, realtime and sign-in live on **Bedrock**
+([Ghaith-Ayadi/Bedrock](https://github.com/Ghaith-Ayadi/Bedrock)), on Propaganda's own
+PocketBase instance. Read
+[docs/apps.md](https://github.com/Ghaith-Ayadi/Bedrock/blob/main/docs/apps.md) there
+before touching anything that talks to the server.
+
+- One origin: `verbatim.ayadighaith.com` serves the app from Vercel and PocketBase under
+  `/api/*` and `/_/` (dashboard). `VITE_PB_URL` is that host. Editor at `/admin`.
+- **Sign-in is Google only** (`app/src/lib/auth.ts`). No passwords, no email codes.
+- **Ids are PocketBase record ids minted on the client** (`app/src/lib/pocketbase.ts`
+  `newId()`). `Post.id`, `PostVersion.postId`, `Brief.postId` are strings. There is no
+  temp-id swap any more; do not reintroduce numeric ids. `posts.legacy_id` is the old
+  Postgres integer, for audit only.
+- **Schema is not edited here or in the dashboard.** It is `pb/propaganda/pb_migrations/*.js`
+  in the Bedrock repo, deployed with its `scripts/deploy.sh`. Server logic
+  (the writing-activity increment) is `pb/propaganda/pb_hooks/`.
+- Sync: `app/src/lib/sync.ts` (generic push/pull per table), realtime in
+  `app/src/lib/realtime.ts`. Dexie database is `verbatim-pb`.
+- Images: Vercel Blob through `api/upload.ts`. Never call Blob from the browser.
+- `scripts/src/*` are Supabase-era tools and stop working when the Supabase project is
+  deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 
 ## Notion is mandatory and is part of "done"
 
