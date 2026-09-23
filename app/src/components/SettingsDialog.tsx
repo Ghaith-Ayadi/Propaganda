@@ -165,7 +165,9 @@ function AuthorTab() {
 }
 
 function SiteTab() {
-  const manifesto = useSetting<string>("site.manifesto", DEFAULT_MANIFESTO);
+  // The built-in manifesto is Verbatim's; other sites start blank.
+  const { site } = useWorkspace();
+  const manifesto = useSetting<string>("site.manifesto", site.slug === "verbatim" ? DEFAULT_MANIFESTO : "");
   return (
     <div className="space-y-5">
       <SiteIdentityFields />

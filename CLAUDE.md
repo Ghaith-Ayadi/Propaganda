@@ -17,7 +17,7 @@ treat content as irreplaceable anyway.
 - Adding brand-new posts (in `Test`) is fine. Touching any post outside `Test` is not.
 - Never test destructive editor behaviour (paste, undo, delete, image ops) on a real post.
   Create a throwaway post in `Test` and use that.
-- Applying a schema migration (a `pb_migrations` change in the Bedrock repo) or any
+- Applying a schema migration (a `pb/pb_migrations` change deployed to the box) or any
   server-side data change that could trigger the live app's sync to overwrite local
   drafts is also off-limits without explicit go-ahead — it can silently clobber
   unsynced writing.
@@ -36,17 +36,27 @@ before touching anything that talks to the server.
 
 - One origin: `verbatim.ayadighaith.com` serves the app from Vercel and PocketBase under
   `/api/*` and `/_/` (dashboard). `VITE_PB_URL` is that host. Editor at `/admin`.
-- **Sign-in is Google only** (`app/src/lib/auth.ts`). No passwords, no email codes.
+- **Multi-tenant.** Content belongs to a **site** (`sites`, `site_members` with owner/editor
+  roles). Every content collection has a required `site` relation; every query, pull and
+  realtime subscription must filter by it (published posts of *all* sites are public).
+  The pre-multi-tenant data is the Verbatim site, id `verbatimsite000`.
+- **Sign-in: Google or an emailed one-time code** (`app/src/lib/accounts.ts`). No
+  passwords. One browser holds several accounts (one PocketBase client + session key per
+  account); `app/src/lib/scope.ts` is the active (account, site); `components/Workspace.tsx`
+  switches, signs in and onboards.
 - **Ids are PocketBase record ids minted on the client** (`app/src/lib/pocketbase.ts`
   `newId()`). `Post.id`, `PostVersion.postId`, `Brief.postId` are strings. There is no
   temp-id swap any more; do not reintroduce numeric ids. `posts.legacy_id` is the old
   Postgres integer, for audit only.
-- **Schema is not edited here or in the dashboard.** It is `pb/propaganda/pb_migrations/*.js`
-  in the Bedrock repo, deployed with its `scripts/deploy.sh`. Server logic
-  (the writing-activity increment) is `pb/propaganda/pb_hooks/`.
+- **Schema lives here, in `pb/`** (`pb/pb_migrations/*.js`, `pb/pb_hooks/`), never in the
+  dashboard. Bedrock's `scripts/deploy.sh` checks it out on the box at the ref in Bedrock's
+  `compose/propaganda/schema.env`. Rehearse every schema change with
+  `pb/rehearsal/rehearse.sh` before deploying.
 - Sync: `app/src/lib/sync.ts` (generic push/pull per table), realtime in
-  `app/src/lib/realtime.ts`. Dexie database is `verbatim-pb`.
-- Images: Vercel Blob through `api/upload.ts`. Never call Blob from the browser.
+  `app/src/lib/realtime.ts`. One Dexie database per (account, site),
+  `propaganda-<user>-<site>`; the single-tenant `verbatim-pb` is adopted, never deleted.
+- Images: Vercel Blob through `api/upload.ts` (site members only). Never call Blob from
+  the browser. Public blogs: Verbatim at `/` on its domain, every site at `/@<slug>/`.
 - `scripts/src/*` are Supabase-era tools and stop working when the Supabase project is
   deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 

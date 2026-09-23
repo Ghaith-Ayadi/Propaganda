@@ -64,7 +64,12 @@ export function Topbar({ backLabel, onBack, right, showProgress }: Props) {
         className="blog-topbar__brand"
         aria-label={`${currentBlogSite()?.name ?? "Verbatim"} — home`}
       >
-        <Wordmark height={18} />
+        {/* The drawn wordmark spells "Verbatim"; other sites set their name in the title face. */}
+        {currentBlogSite()?.slug === "verbatim" ? (
+          <Wordmark height={18} />
+        ) : (
+          <span className="font-title text-xl leading-none">{currentBlogSite()?.name}</span>
+        )}
       </a>
       <div className="blog-topbar__right">{right}</div>
       {showProgress && (

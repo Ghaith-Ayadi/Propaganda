@@ -173,8 +173,10 @@ export function Workspace({ children }: { children: React.ReactNode }) {
         setSyncEnabled(false);
         // Saves started by unmounting components (the editor's last keystroke)
         // land in the old database first. IndexedDB only: milliseconds.
-        await waitForWrites(60);
-        await stopRealtime();
+        await waitForWrites(30);
+        // Unsubscribing is network; the new scope's handlers are pinned to
+        // their own site anyway, so don't make the switch wait for it.
+        void stopRealtime();
         if (currentScope()) {
           const leaving = captureCtx();
           void pushInBackground(leaving);
