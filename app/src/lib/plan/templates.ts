@@ -4,6 +4,7 @@
 import { db } from "@/lib/db";
 import { httpStatus, newId, pb, pbDateToMs } from "@/lib/pocketbase";
 import { scheduleSync } from "@/lib/sync";
+import { onScopeReset } from "@/lib/scope";
 import type { BriefChecks, BriefTemplate } from "@/lib/plan/types";
 import { SEED_TEMPLATES } from "@/lib/plan/mock";
 
@@ -79,6 +80,9 @@ export async function deleteTemplate(id: string): Promise<void> {
 }
 
 let seeded = false;
+onScopeReset(() => {
+  seeded = false;
+});
 /**
  * First run only: seed the demo templates locally so the Template picker isn't
  * empty. Seeded rows are not dirty, so they stay local; any edits afterwards

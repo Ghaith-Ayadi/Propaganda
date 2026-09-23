@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useHotkeys } from "react-hotkeys-hook";
-import { AuthGate } from "@/components/AuthGate";
+import { Workspace } from "@/components/Workspace";
 import { Sidebar } from "@/components/Sidebar";
 import { Editor } from "@/components/Editor";
 import { AttributePanel } from "@/components/AttributePanel";
@@ -15,18 +15,17 @@ import { db } from "@/lib/db";
 import { useRoute } from "@/lib/route";
 import { useLayout } from "@/lib/layout";
 import { useActiveCollection } from "@/lib/activeCollection";
-import { installLifecycleHandlers, setSyncUser, runSync, flushSync } from "@/lib/sync";
+import { installLifecycleHandlers, runSync } from "@/lib/sync";
 import { startRealtime, stopRealtime } from "@/lib/realtime";
-import { pb } from "@/lib/pocketbase";
 import { installSearchIndex } from "@/lib/search";
 import { snapshotVersion } from "@/lib/versions";
 import { toggleTheme } from "@/lib/theme";
 
 export function EditorApp() {
   return (
-    <AuthGate>
+    <Workspace>
       <Shell />
-    </AuthGate>
+    </Workspace>
   );
 }
 
@@ -34,11 +33,11 @@ function Shell() {
   const [route] = useRoute();
   const [layout, , toggleAuthorMode] = useLayout();
 
-  // AuthGate only renders this once a session exists (or offline grace applies).
+  // Workspace renders this once per scope (account + site), keyed by it, so
+  // this effect runs again on every switch, against the new site.
   useEffect(() => {
     installLifecycleHandlers();
     installSearchIndex();
-    setSyncUser(pb.authStore.record?.id ?? "offline");
     void runSync();
     void startRealtime();
     // Anyone who has visited /admin once is considered "admin" for the
@@ -54,10 +53,9 @@ function Shell() {
           if (v.isVerboseEnabled()) v.installVerbose();
         }),
       );
+    // Leaving: Workspace drains writes and pushes this site in the background.
     return () => {
-      void flushSync();
       void stopRealtime();
-      setSyncUser(null);
     };
   }, []);
 

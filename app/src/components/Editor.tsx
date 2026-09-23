@@ -12,6 +12,7 @@ import { ArrowLeft, ArrowDown, ArrowUp } from "@untitledui/icons";
 import type { Post } from "@/types";
 import { db } from "@/lib/db";
 import { updatePost } from "@/lib/posts";
+import { beginWrite } from "@/lib/db";
 import { uploadFile } from "@/lib/uploads";
 import { hasImageFileBlock, normalizeImageBlocks, promoteImageFileBlocks } from "@/lib/images";
 import { go } from "@/lib/route";
@@ -76,14 +77,29 @@ export function Editor({ post }: Props) {
         return;
       }
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(async () => {
-        const md = await editor.blocksToMarkdownLossy();
-        await updatePost(post.id, { content: md, wordCount: countWords(md) });
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        void save();
       }, SAVE_DEBOUNCE_MS);
     });
+    const postId = post.id;
+    async function save() {
+      const md = await editor!.blocksToMarkdownLossy();
+      await updatePost(postId, { content: md, wordCount: countWords(md) });
+    }
     return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
       if (typeof unsub === "function") unsub();
+      // A keystroke still inside the debounce is saved now rather than dropped
+      // (leaving the post, or switching site/account). beginWrite() makes a
+      // scope switch wait for it, so it lands in this post's database.
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+        const done = beginWrite();
+        void save()
+          .catch((err) => console.error("Final save failed:", err))
+          .finally(done);
+      }
     };
   }, [editor, post.id]);
 

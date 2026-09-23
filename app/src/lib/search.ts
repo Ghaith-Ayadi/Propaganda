@@ -2,7 +2,8 @@
 // Rebuilt on every Dexie change via a thin observable layer; the palette pulls results synchronously.
 
 import MiniSearch from "minisearch";
-import { db } from "@/lib/db";
+import { db, type VerbatimDB } from "@/lib/db";
+import { onScopeReset } from "@/lib/scope";
 import type { Post } from "@/types";
 
 let index: MiniSearch<Post> | null = null;
@@ -39,13 +40,27 @@ export function subscribeSearch(fn: () => void): () => void {
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 async function rebuild() {
-  const posts = await db.posts.toArray();
+  const source = db;
+  const posts = await source.posts.toArray();
+  if (source !== db) return; // switched site meanwhile
   index = build(posts);
   for (const l of listeners) l();
 }
 
+// Hooks are attached per database; each site's database gets them once.
+const hooked = new WeakSet<VerbatimDB>();
+
+onScopeReset(() => {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  index = null;
+  for (const l of listeners) l();
+});
+
 export function installSearchIndex() {
   void rebuild();
+  if (hooked.has(db)) return;
+  hooked.add(db);
   // dexie-react-hooks would also work but we want one global index, not per-component.
   // Listen to all post table changes via Dexie hooks API.
   db.posts.hook("creating", scheduleRebuild);

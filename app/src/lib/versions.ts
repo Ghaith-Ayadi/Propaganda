@@ -5,9 +5,10 @@
 // `dirty` and the sync engine retries it, so a snapshot is never lost to a
 // failed request.
 
-import { fieldError, msToPbDate, newId, pb, pbDateToMs } from "@/lib/pocketbase";
+import { fieldError, msToPbDate, newId, pbDateToMs } from "@/lib/pocketbase";
 import { db } from "@/lib/db";
 import { updatePost } from "@/lib/posts";
+import { captureCtx, type Ctx } from "@/lib/sync";
 import type { Post, PostVersion } from "@/types";
 
 export type VersionAuthor = "user" | "mcp:claude-code" | "migration";
@@ -39,9 +40,10 @@ export function fromVersionRecord(r: VersionRecord): PostVersion {
   };
 }
 
-function toVersionRecord(v: PostVersion) {
+function toVersionRecord(v: PostVersion, site: string) {
   return {
     id: v.id,
+    site,
     post: v.postId,
     version: v.version,
     content: v.content,
@@ -54,13 +56,15 @@ function toVersionRecord(v: PostVersion) {
   };
 }
 
-const versions = () => pb.collection<VersionRecord>("post_versions");
+const versions = (ctx: Ctx) => ctx.pb.collection<VersionRecord>("post_versions");
 
 export async function snapshotVersion(
   post: Post,
   createdBy: VersionAuthor = "user",
   message?: string,
 ): Promise<PostVersion | null> {
+  const ctx = captureCtx();
+  const { db } = ctx;
   // Compute next version number from local cache (good enough; the unique index
   // on (post, version) will reject duplicates if we race with another writer).
   const latest = await db.versions
@@ -95,7 +99,7 @@ export async function snapshotVersion(
 
   // A post that has never been synced is not on the server yet; the relation
   // would be rejected. The sync engine pushes posts first, then versions.
-  if (post.syncedAt) await pushVersion(staged);
+  if (post.syncedAt) await pushVersion(ctx, staged);
 
   return (await db.versions.get(staged.id)) ?? staged;
 }
@@ -109,9 +113,10 @@ export async function snapshotVersion(
  * the server has and retry once: an append-only log doesn't care that a version
  * number moved, only that nothing is dropped.
  */
-async function pushVersion(v: PostVersion): Promise<boolean> {
+async function pushVersion(ctx: Ctx, v: PostVersion): Promise<boolean> {
+  const { db } = ctx;
   try {
-    await versions().create(toVersionRecord(v));
+    await versions(ctx).create(toVersionRecord(v, ctx.site));
     await db.versions.put({ ...v, dirty: false });
     return true;
   } catch (err) {
@@ -124,7 +129,7 @@ async function pushVersion(v: PostVersion): Promise<boolean> {
     if (fieldError(err, "post")) return false;
 
     if (fieldError(err, "version")) {
-      await pullVersionsForPost(v.postId);
+      await pullVersionsForPost(v.postId, ctx);
       const latest = await db.versions
         .where("[postId+version]")
         .between([v.postId, -Infinity], [v.postId, Infinity])
@@ -132,7 +137,7 @@ async function pushVersion(v: PostVersion): Promise<boolean> {
         .first();
       const renumbered = { ...v, version: Math.max(latest?.version ?? 0, v.version) + 1 };
       try {
-        await versions().create(toVersionRecord(renumbered));
+        await versions(ctx).create(toVersionRecord(renumbered, ctx.site));
         await db.versions.put({ ...renumbered, dirty: false });
         return true;
       } catch (retryErr) {
@@ -152,16 +157,17 @@ async function pushVersion(v: PostVersion): Promise<boolean> {
  * posts are pushed, so versions belonging to a just-created post go out in the
  * same cycle.
  */
-export async function pushPendingVersions(): Promise<void> {
-  const pending = (await db.versions.toArray()).filter((v) => v.dirty);
-  for (const v of pending) await pushVersion(v);
+export async function pushPendingVersions(ctx: Ctx): Promise<void> {
+  const pending = (await ctx.db.versions.toArray()).filter((v) => v.dirty);
+  for (const v of pending) await pushVersion(ctx, v);
 }
 
-export async function pullVersionsForPost(postId: string): Promise<void> {
+export async function pullVersionsForPost(postId: string, ctx: Ctx = captureCtx()): Promise<void> {
+  const { db, pb } = ctx;
   let records: VersionRecord[];
   try {
-    records = await versions().getFullList({
-      filter: pb.filter("post = {:p}", { p: postId }),
+    records = await versions(ctx).getFullList({
+      filter: pb.filter("site = {:site} && post = {:p}", { site: ctx.site, p: postId }),
       sort: "version",
     });
   } catch (err) {
@@ -175,13 +181,14 @@ export async function pullVersionsForPost(postId: string): Promise<void> {
 
 const VERSION_CURSOR_KEY = "lastVersionPullPb";
 
-export async function pullAllVersions(): Promise<void> {
+export async function pullAllVersions(ctx: Ctx): Promise<void> {
+  const { db, pb } = ctx;
   const meta = await db.syncMeta.get(VERSION_CURSOR_KEY);
   const since = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
   let records: VersionRecord[];
   try {
-    records = await versions().getFullList({
-      filter: pb.filter("created > {:since}", { since: new Date(since) }),
+    records = await versions(ctx).getFullList({
+      filter: pb.filter("site = {:site} && created > {:since}", { site: ctx.site, since: new Date(since) }),
       sort: "created",
     });
   } catch (err) {

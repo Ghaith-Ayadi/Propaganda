@@ -2,16 +2,26 @@
 // via Gemini, validate each as an exact substring, return the survivors.
 //
 // The Gemini API key is server-only; this proxies the call so it never touches
-// the browser bundle.
+// the browser bundle. Requires a signed-in PocketBase user — it spends Gemini
+// credits per call.
 //
 // POST /api/extract-quotes
 // Body: { postId: number; content: string }
 // Returns: { quotes: string[] }   (0–3 items; only verbatim matches included)
 
+import { requireUser } from "./_auth";
+
 const GEMINI_MODEL = "gemini-2.5-flash-lite";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 export async function POST(request: Request): Promise<Response> {
+  try {
+    await requireUser(request);
+  } catch (err) {
+    if (err instanceof Response) return err;
+    return json({ error: "Auth failed" }, 500);
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return json({ error: "Gemini not configured" }, 503);

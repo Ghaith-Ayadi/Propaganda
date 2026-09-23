@@ -3,6 +3,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { File02, Globe01, PenTool01, Plus, Trash01, Upload01, User01, XClose } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
+import { useWorkspace } from "@/components/Workspace";
+import { updateSite } from "@/lib/accounts";
 import { db } from "@/lib/db";
 import { useSetting, setSetting, useSettingsVersion } from "@/lib/settings";
 import { uploadFile } from "@/lib/uploads";
@@ -166,17 +168,73 @@ function SiteTab() {
   const manifesto = useSetting<string>("site.manifesto", DEFAULT_MANIFESTO);
   return (
     <div className="space-y-5">
-      <Field
-        label="Manifesto"
-        hint="Shown on the public home page above the post list."
-      >
-        <textarea
-          value={manifesto ?? ""}
-          onChange={(e) => void setSetting("site.manifesto", e.target.value)}
-          rows={5}
-          className="w-full resize-none rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs outline-none ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus:ring-2 focus:ring-inset focus:ring-brand"
-        />
+      <SiteIdentityFields />
+      <div className="border-t border-secondary pt-5">
+        <Field
+          label="Manifesto"
+          hint="Shown on the public home page above the post list."
+        >
+          <textarea
+            value={manifesto ?? ""}
+            onChange={(e) => void setSetting("site.manifesto", e.target.value)}
+            rows={5}
+            className="w-full resize-none rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs outline-none ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus:ring-2 focus:ring-inset focus:ring-brand"
+          />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+/** Site name + address, editable by the site's owner only (lib/accounts.ts `updateSite`). */
+function SiteIdentityFields() {
+  const { account, site, refreshSite } = useWorkspace();
+  const canEdit = site.role === "owner";
+
+  const [name, setName] = useState(site.name);
+  const [slug, setSlug] = useState(site.slug);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(site.name);
+    setSlug(site.slug);
+  }, [site.id, site.name, site.slug]);
+
+  const dirty = name.trim() !== site.name || slug.trim() !== site.slug;
+
+  async function save() {
+    setError(null);
+    setSaving(true);
+    try {
+      const updated = await updateSite(account, site.id, { name: name.trim(), slug: slug.trim() });
+      refreshSite(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Field label="Site name">
+        <Input size="sm" value={name} onChange={setName} isDisabled={!canEdit} />
       </Field>
+      <Field
+        label="Address"
+        hint={canEdit ? "Changing this breaks any existing /@slug links to this site." : "Only the site's owner can change this."}
+      >
+        <Input size="sm" value={slug} onChange={setSlug} isDisabled={!canEdit} />
+      </Field>
+      {error && <p className="text-sm text-error-primary">{error}</p>}
+      {canEdit && (
+        <div className="flex justify-end">
+          <Button size="sm" color="secondary" isDisabled={!dirty || saving} onClick={() => void save()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

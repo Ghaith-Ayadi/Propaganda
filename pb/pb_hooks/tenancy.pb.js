@@ -31,11 +31,14 @@ onRecordCreateRequest((e) => {
   }
   // A version always lives in its post's site.
   if (e.collection.name === "post_versions") {
-    let postSite = "";
+    let postSite = null;
     try {
       postSite = e.app.findRecordById("posts", e.record.getString("post")).getString("site");
-    } catch (_) {}
-    if (postSite !== e.record.getString("site")) {
+    } catch (_) {
+      // No such post: record validation below reports it on the `post` field,
+      // which the app reads as "push the post first, retry the version later".
+    }
+    if (postSite !== null && postSite !== e.record.getString("site")) {
       throw new BadRequestError("A version must be in its post's site.", { site: "mismatch" });
     }
   }

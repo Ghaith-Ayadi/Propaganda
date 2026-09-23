@@ -6,6 +6,13 @@
 //   /        → Home
 //   /p/:slug → Single post
 //
+// Multi-tenant: every path lives under the resolved site's base path ("" at
+// its own domain's root, "/@slug" otherwise — see lib/siteUrl.ts). BlogApp
+// calls setBasePath() once the site is resolved, before anything else reads
+// or navigates; parse()/toPath() strip and re-add that prefix so the rest of
+// this module (and every component using it) only ever deals with the
+// site-relative path.
+//
 // The active home tab is component-local state (not in the URL): tab
 // clicks shouldn't push history or scroll.
 
@@ -15,15 +22,27 @@ export type BlogRoute =
   | { view: "home" }
   | { view: "post"; slug: string };
 
+let basePath = "";
+
+/** Site-relative pathname (prefix stripped), e.g. "/p/foo" or "/". */
+function relativePath(pathname: string): string {
+  if (!basePath) return pathname;
+  if (pathname === basePath) return "/";
+  if (pathname.startsWith(basePath + "/")) return pathname.slice(basePath.length);
+  return pathname;
+}
+
 function parse(): BlogRoute {
   if (typeof window === "undefined") return { view: "home" };
-  const m = window.location.pathname.match(/^\/p\/([^/]+)\/?$/);
+  const path = relativePath(window.location.pathname);
+  const m = path.match(/^\/p\/([^/]+)\/?$/);
   if (m) return { view: "post", slug: decodeURIComponent(m[1]) };
   return { view: "home" };
 }
 
 function toPath(r: BlogRoute): string {
-  return r.view === "post" ? `/p/${encodeURIComponent(r.slug)}` : "/";
+  const rel = r.view === "post" ? `/p/${encodeURIComponent(r.slug)}` : "/";
+  return basePath + rel;
 }
 
 // --- singleton store ---
@@ -38,6 +57,18 @@ if (typeof window !== "undefined") {
     current = parse();
     emit();
   });
+}
+
+/**
+ * Set the site's base path ("" or "/@slug") and re-derive the current route
+ * from the (unchanged) URL under it. Called once by BlogApp right after the
+ * site resolves, before any navigation happens.
+ */
+export function setBasePath(bp: string): void {
+  if (basePath === bp) return;
+  basePath = bp;
+  current = parse();
+  emit();
 }
 
 export function navigateTo(r: BlogRoute, opts?: { replace?: boolean }) {
@@ -67,4 +98,8 @@ export function useBlogRoute(): [BlogRoute, typeof navigateTo] {
 
 export function postHref(slug: string): string {
   return toPath({ view: "post", slug });
+}
+
+export function homeHref(): string {
+  return toPath({ view: "home" });
 }

@@ -14,11 +14,14 @@ import {
   Star01,
 } from "@untitledui/icons";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { SiteSwitcher } from "@/components/workspace/SiteSwitcher";
+import { useWorkspace } from "@/components/Workspace";
 import { db } from "@/lib/db";
 import { postHref, go } from "@/lib/route";
 import { collectionDisplay } from "@/lib/collections";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { search, subscribeSearch } from "@/lib/search";
+import { siteBasePath, sitePublicUrl } from "@/lib/siteUrl";
 import { useSyncExternalStore } from "react";
 import type { Collection, Post } from "@/types";
 
@@ -30,6 +33,7 @@ const ADMIN_KNOWN = "verbatim:admin-known";
 
 export function Sidebar({ currentId }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { site } = useWorkspace();
   const posts = useLiveQuery(
     () => db.posts.orderBy("updatedAt").reverse().toArray(),
     [],
@@ -71,13 +75,7 @@ export function Sidebar({ currentId }: Props) {
   return (
     <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-secondary bg-secondary">
       <div className="flex items-center justify-between px-3 pt-3 pb-2">
-        <a
-          href="#/"
-          aria-label="Verbatim — home"
-          className="-mx-1 block rounded-md px-2 py-1 font-title text-xl tracking-tight text-primary transition hover:bg-primary_hover"
-        >
-          Verbatim
-        </a>
+        <SiteSwitcher />
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => setSettingsOpen(true)}
@@ -88,7 +86,7 @@ export function Sidebar({ currentId }: Props) {
             <Settings01 className="size-4" />
           </button>
           <a
-            href="/"
+            href={siteBasePath(site) ? sitePublicUrl(site) : `${siteBasePath(site)}/`}
             onClick={() => {
               try { localStorage.setItem(ADMIN_KNOWN, "1"); } catch {}
             }}

@@ -1,0 +1,125 @@
+import { Check, ChevronDown, LogOut01, Plus, UserPlus01 } from "@untitledui/icons";
+import {
+  Button as AriaButton,
+  Header as AriaHeader,
+  Menu as AriaMenu,
+  MenuItem as AriaMenuItem,
+  MenuSection as AriaMenuSection,
+  MenuTrigger as AriaMenuTrigger,
+  Popover as AriaPopover,
+  Separator as AriaSeparator,
+} from "react-aria-components";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { useWorkspace } from "@/components/Workspace";
+import { cx } from "@/utils/cx";
+
+/**
+ * Trigger + menu for the active site, replacing the old hardcoded title link.
+ * Lists every account on this browser, each account's sites underneath, and
+ * the usual account-level actions. Switching is IndexedDB-only (lib/scope.ts),
+ * so nothing here waits on the network.
+ */
+export function SiteSwitcher() {
+  const { account, site, accounts, sitesOf, switchTo, addAccount, newSite, signOut, isSignedIn } = useWorkspace();
+
+  return (
+    <AriaMenuTrigger>
+      <AriaButton
+        aria-label="Switch site"
+        className="-mx-1 flex items-center gap-1 rounded-md px-2 py-1 outline-none transition hover:bg-primary_hover data-[pressed]:bg-primary_hover"
+      >
+        <span className="truncate font-title text-xl tracking-tight text-primary">{site.name}</span>
+        <ChevronDown className="size-4 shrink-0 text-quaternary" />
+      </AriaButton>
+
+      <AriaPopover
+        placement="bottom start"
+        className={cx(
+          "z-50 w-[300px] max-h-[70vh] overflow-y-auto rounded-xl border border-secondary bg-secondary p-1.5 shadow-2xl ring-1 ring-primary",
+          "entering:animate-in entering:fade-in entering:zoom-in-95 entering:duration-100",
+          "exiting:animate-out exiting:fade-out exiting:zoom-out-95 exiting:duration-75",
+        )}
+      >
+        <AriaMenu className="outline-none" onAction={(key) => onAction(String(key))}>
+          {accounts.flatMap((a) => {
+            const signedIn = isSignedIn(a.userId);
+            const sites = sitesOf(a.userId);
+            return [
+              <AriaMenuSection key={`section-${a.userId}`}>
+                <AriaHeader className="flex items-center gap-2 px-2.5 pt-2 pb-1.5">
+                  <Avatar size="xs" src={a.avatar || undefined} initials={initialsOf(a)} alt={a.email} />
+                  <span className="truncate text-xs text-quaternary">{a.email}</span>
+                </AriaHeader>
+
+                {!signedIn && (
+                  <AriaMenuItem
+                    id={`resignin:${a.userId}`}
+                    className="mx-1 cursor-pointer rounded-md px-2.5 py-1.5 text-sm text-error-primary outline-none hover:bg-error-primary/10 focus:bg-error-primary/10"
+                  >
+                    Session expired — sign in
+                  </AriaMenuItem>
+                )}
+
+                {signedIn &&
+                  sites.map((s) => (
+                    <AriaMenuItem
+                      key={s.id}
+                      id={`site:${a.userId}:${s.id}`}
+                      className="mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-secondary outline-none hover:bg-tertiary hover:text-primary focus:bg-tertiary focus:text-primary"
+                    >
+                      <Check
+                        className={cx(
+                          "size-3.5 shrink-0 text-fg-brand-primary",
+                          (a.userId !== account.userId || s.id !== site.id) && "invisible",
+                        )}
+                      />
+                      <span className="truncate">{s.name}</span>
+                    </AriaMenuItem>
+                  ))}
+              </AriaMenuSection>,
+              <AriaSeparator key={`sep-${a.userId}`} className="my-1 h-px bg-border-secondary" />,
+            ];
+          })}
+
+          <AriaMenuItem
+            id="new-site"
+            className="mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-secondary outline-none hover:bg-tertiary hover:text-primary focus:bg-tertiary focus:text-primary"
+          >
+            <Plus className="size-3.5 shrink-0 text-quaternary" />
+            <span>New site</span>
+          </AriaMenuItem>
+          <AriaMenuItem
+            id="add-account"
+            className="mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-secondary outline-none hover:bg-tertiary hover:text-primary focus:bg-tertiary focus:text-primary"
+          >
+            <UserPlus01 className="size-3.5 shrink-0 text-quaternary" />
+            <span>Add another account</span>
+          </AriaMenuItem>
+          <AriaMenuItem
+            id="sign-out"
+            className="mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-error-primary outline-none hover:bg-error-primary/10 focus:bg-error-primary/10"
+          >
+            <LogOut01 className="size-3.5 shrink-0" />
+            <span className="truncate">Sign out of {account.email}</span>
+          </AriaMenuItem>
+        </AriaMenu>
+      </AriaPopover>
+    </AriaMenuTrigger>
+  );
+
+  function onAction(key: string) {
+    if (key === "new-site") return newSite();
+    if (key === "add-account") return addAccount();
+    if (key === "sign-out") return signOut(account.userId);
+    if (key.startsWith("resignin:")) return addAccount();
+    if (key.startsWith("site:")) {
+      const [, userId, siteId] = key.split(":");
+      return switchTo(userId, siteId);
+    }
+  }
+}
+
+function initialsOf(a: { name: string; email: string }): string {
+  const src = a.name || a.email;
+  return src.slice(0, 1).toUpperCase();
+}
