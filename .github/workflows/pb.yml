@@ -2,8 +2,8 @@
 # upgrade from the base branch), then pb/ci.sh (the rehearsal). See Bedrock docs/ci.md.
 name: pb
 on:
-  pull_request: { paths: ["pb/**"] }
-  push: { branches: [main], paths: ["pb/**"] }
+  pull_request: { paths: ["pb/**", ".github/workflows/pb.yml"] }
+  push: { branches: [main], paths: ["pb/**", ".github/workflows/pb.yml"] }
 jobs:
   schema:
     uses: Ghaith-Ayadi/Bedrock/.github/workflows/pb-check.yml@main
