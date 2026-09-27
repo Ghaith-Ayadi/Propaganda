@@ -49,8 +49,9 @@ before touching anything that talks to the server.
   temp-id swap any more; do not reintroduce numeric ids. `posts.legacy_id` is the old
   Postgres integer, for audit only.
 - **Schema lives here, in `pb/`** (`pb/pb_migrations/*.js`, `pb/pb_hooks/`), never in the
-  dashboard. Bedrock's `scripts/deploy.sh` checks it out on the box at the ref in Bedrock's
-  `compose/propaganda/schema.env`. Rehearse every schema change with
+  dashboard. Bedrock's CI deploy checks it out on the box at the ref in Bedrock's
+  `compose/propaganda/schema.env` (`main`) whenever Bedrock deploys (a merge to its
+  `main`, or its `ci` workflow run by hand), archiving `pb_data` first if `pb/` changed. Rehearse every schema change with
   `pb/rehearsal/rehearse.sh` before deploying.
 - Sync: `app/src/lib/sync.ts` (generic push/pull per table), realtime in
   `app/src/lib/realtime.ts`. One Dexie database per (account, site),
