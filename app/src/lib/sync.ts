@@ -2,7 +2,7 @@
 //
 // Trigger model:
 //  - scheduleSync() debounces by 2s of idle (PRD §4)
-//  - flushSync() forces a push (window blur / before unload)
+//  - flushSync() forces a push (window blur / before unload / scope switch)
 //  - runSync() runs once (push pending -> pull updated > cursor)
 //
 // Identity: every record is created locally with its final PocketBase id (see
@@ -10,8 +10,15 @@
 // and nothing is ever re-keyed. The server owns `updated`; conflicts resolve by
 // server clock, and a dirty local edit newer than the server's copy wins locally
 // until it is pushed.
+//
+// Scope: a run captures the active client and database once, at its start, and
+// uses only those (a `Ctx`), so switching account or site mid-run can't mix
+// them. Pushes carry `site: db.siteId` (the database's own site) and pulls are
+// filtered to it: published posts of other sites are publicly readable and
+// must never land in this site's cache.
 
-import { db } from "@/lib/db";
+import type PocketBase from "pocketbase";
+import { db, type VerbatimDB } from "@/lib/db";
 import { fieldError, httpStatus, pb, pbDateToMs } from "@/lib/pocketbase";
 import { fromRecord, toRecord, type PostRecord } from "@/lib/posts";
 import { fromBriefRecord, toBriefRecord, type BriefRecord } from "@/lib/plan/briefs";
@@ -22,13 +29,31 @@ import type { Table } from "dexie";
 
 const DEBOUNCE_MS = 2000;
 
-let currentUserId: string | null = null;
-let syncInFlight = false;
+export interface Ctx {
+  pb: PocketBase;
+  db: VerbatimDB;
+  site: string;
+}
+
+/** The active client + database, captured together. */
+export function captureCtx(): Ctx {
+  return { pb, db, site: db.siteId };
+}
+
+let enabled = false;
+// One run at a time per database. Different databases (the site just left,
+// still pushing, and the site just opened) may sync concurrently.
+const running = new Map<VerbatimDB, Promise<void>>();
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let onSyncComplete: (() => void) | null = null;
 
-export function setSyncUser(userId: string | null) {
-  currentUserId = userId;
+/** On while a scope is mounted; off while switching or signed out. */
+export function setSyncEnabled(on: boolean) {
+  enabled = on;
+  if (!on && debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
 }
 
 export function setSyncListener(listener: (() => void) | null) {
@@ -36,42 +61,80 @@ export function setSyncListener(listener: (() => void) | null) {
 }
 
 export function scheduleSync() {
-  if (currentUserId == null) return;
+  if (!enabled) return;
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     void runSync();
   }, DEBOUNCE_MS);
 }
 
-export function flushSync(): Promise<void> {
+function usable(d: VerbatimDB | null): d is VerbatimDB {
+  return Boolean(d && d.isOpen());
+}
+
+/**
+ * Push now. Waits for a run already in flight on this database, then runs
+ * again, so everything written before the call is pushed when it resolves (if
+ * the network allows).
+ */
+export async function flushSync(): Promise<void> {
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
-  return runSync();
+  if (!usable(db)) return;
+  const ctx = captureCtx();
+  await running.get(ctx.db)?.catch(() => undefined);
+  await start(ctx, "full");
 }
 
 export async function runSync(): Promise<void> {
-  if (currentUserId == null || syncInFlight) return;
-  syncInFlight = true;
-  try {
-    await pushTable(db.posts, "posts", toRecord, fromRecord);
-    // After posts: versions staged against a not-yet-synced post can only go
-    // out once that post exists server-side.
-    await pushPendingVersions();
-    await pushTable(db.briefs, "briefs", toBriefRecord, fromBriefRecord);
-    await pushTable(db.briefTemplates, "brief_templates", toTemplateRecord, fromTemplateRecord);
-    await pullTable(db.posts, "posts", "lastPullPb.posts", fromRecord);
-    await pullAllVersions();
-    await pullCollections();
-    await pullTable(db.briefs, "briefs", "lastPullPb.briefs", fromBriefRecord);
-    await pullTable(db.briefTemplates, "brief_templates", "lastPullPb.brief_templates", fromTemplateRecord);
-    onSyncComplete?.();
-  } catch (err) {
-    console.error("Sync failed:", err);
-  } finally {
-    syncInFlight = false;
-  }
+  if (!enabled || !usable(db) || running.has(db)) return;
+  await start(captureCtx(), "full");
+}
+
+/**
+ * Push a scope's pending writes without blocking the caller: used when leaving
+ * a site, so switching is instant and the drafts still reach the server,
+ * pinned to the database (and site) they were written in.
+ */
+export function pushInBackground(ctx: Ctx): Promise<void> {
+  const previous = running.get(ctx.db);
+  return (previous ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => start(ctx, "push"));
+}
+
+/** Resolves when no sync is running on any database. */
+export async function waitForSyncIdle(): Promise<void> {
+  while (running.size) await Promise.allSettled([...running.values()]);
+}
+
+function start(ctx: Ctx, mode: "full" | "push"): Promise<void> {
+  const run = (async () => {
+    try {
+      await pushTable(ctx, ctx.db.posts, "posts", toRecord, fromRecord);
+      // After posts: versions staged against a not-yet-synced post can only go
+      // out once that post exists server-side.
+      await pushPendingVersions(ctx);
+      await pushTable(ctx, ctx.db.briefs, "briefs", toBriefRecord, fromBriefRecord);
+      await pushTable(ctx, ctx.db.briefTemplates, "brief_templates", toTemplateRecord, fromTemplateRecord);
+      if (mode === "push") return;
+      await pullTable(ctx, ctx.db.posts, "posts", "lastPullPb.posts", fromRecord);
+      await pullAllVersions(ctx);
+      await pullCollections(ctx);
+      await pullTable(ctx, ctx.db.briefs, "briefs", "lastPullPb.briefs", fromBriefRecord);
+      await pullTable(ctx, ctx.db.briefTemplates, "brief_templates", "lastPullPb.brief_templates", fromTemplateRecord);
+      if (ctx.db === db) onSyncComplete?.();
+    } catch (err) {
+      console.error("Sync failed:", err);
+    }
+  })();
+  const tracked: Promise<void> = run.finally(() => {
+    if (running.get(ctx.db) === tracked) running.delete(ctx.db);
+  });
+  running.set(ctx.db, tracked);
+  return tracked;
 }
 
 interface Synced {
@@ -92,6 +155,7 @@ interface Stamped {
  * blocking the rest of the queue.
  */
 async function pushTable<L extends Synced, R extends Stamped>(
+  ctx: Ctx,
   table: Table<L, string>,
   collection: string,
   toBody: (local: L) => Record<string, unknown>,
@@ -101,9 +165,10 @@ async function pushTable<L extends Synced, R extends Stamped>(
   const pending = all.filter((p) => p.dirty || !p.syncedAt || p.updatedAt > (p.syncedAt ?? 0));
   if (!pending.length) return;
 
-  const col = pb.collection<R>(collection);
+  const col = ctx.pb.collection<R>(collection);
   for (const local of pending) {
-    const body = toBody(local);
+    // The database's site, never the "active" one: see the header.
+    const body = { ...toBody(local), site: ctx.site };
     let saved: R;
     try {
       if (local.syncedAt) {
@@ -131,18 +196,20 @@ async function pushTable<L extends Synced, R extends Stamped>(
 
 /** Pull everything whose `updated` is newer than the stored cursor. */
 async function pullTable<L extends Synced, R extends Stamped>(
+  ctx: Ctx,
   table: Table<L, string>,
   collection: string,
   cursorKey: string,
   fromRec: (r: R) => Omit<L, "syncedAt" | "dirty">,
 ): Promise<void> {
+  const { db, pb } = ctx;
   const meta = await db.syncMeta.get(cursorKey);
   const since = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
 
   let records: R[];
   try {
     records = await pb.collection<R>(collection).getFullList({
-      filter: pb.filter("updated > {:since}", { since: new Date(since) }),
+      filter: pb.filter("site = {:site} && updated > {:since}", { site: ctx.site, since: new Date(since) }),
       sort: "updated",
     });
   } catch (err) {
@@ -166,11 +233,15 @@ async function pullTable<L extends Synced, R extends Stamped>(
   await db.syncMeta.put({ key: cursorKey, value: new Date(maxMs).toISOString() });
 }
 
-async function pullCollections(): Promise<void> {
+async function pullCollections(ctx: Ctx): Promise<void> {
+  const { db, pb } = ctx;
   // Full replace: collections are small and deletes must propagate to Dexie.
   let records: CollectionRecord[];
   try {
-    records = await pb.collection<CollectionRecord>("collections").getFullList({ sort: "position" });
+    records = await pb.collection<CollectionRecord>("collections").getFullList({
+      filter: pb.filter("site = {:site}", { site: ctx.site }),
+      sort: "position",
+    });
   } catch (err) {
     console.error("Pull collections failed:", err);
     return;
@@ -182,11 +253,6 @@ async function pullCollections(): Promise<void> {
       await db.collections.put({ ...fromCollectionRecord(r), syncedAt: now, dirty: false });
     }
   });
-}
-
-export async function resetSyncState() {
-  await db.syncMeta.clear();
-  await db.posts.clear();
 }
 
 // ---- lifecycle wiring (call from App) ----

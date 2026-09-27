@@ -3,6 +3,7 @@ import type { Collection } from "@/types";
 import type { BlogPost } from "@/blog/data";
 import { navigateTo, postHref } from "@/blog/route";
 import { useActiveTab } from "@/blog/activeTab";
+import type { BlogSite } from "@/blog/site";
 import { readTime } from "@/lib/format";
 import { Topbar } from "./Topbar";
 import { Hero } from "./Hero";
@@ -13,6 +14,7 @@ type SortMode = "latest" | "az";
 interface Props {
   collections: Collection[];
   posts: BlogPost[];
+  site: BlogSite;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -22,7 +24,7 @@ function fmtDate(ms: number | null): string {
   return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-export function Home({ collections, posts }: Props) {
+export function Home({ collections, posts, site }: Props) {
   const [storedTab, setStoredTab] = useActiveTab();
   const [sort, setSort] = useState<SortMode>("latest");
 
@@ -52,10 +54,12 @@ export function Home({ collections, posts }: Props) {
     storedTab && publicCollections.some((c) => c.name === storedTab) ? storedTab : fallbackName;
 
   // Keep document.title pinned to the brand on home (tabs don't change URL,
-  // so they shouldn't change the page title either).
+  // so they shouldn't change the page title either). BlogApp's site.title
+  // setting effect overrides this once settings load; this is just the
+  // instant-paint fallback while they're loading.
   useEffect(() => {
-    document.title = "Verbatim";
-  }, []);
+    document.title = site.name;
+  }, [site.name]);
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {};

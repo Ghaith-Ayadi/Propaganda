@@ -1,4 +1,5 @@
 import { useSetting } from "@/lib/settings";
+import { currentBlogSite } from "@/blog/site";
 
 interface Props {
   postCount: number;
@@ -19,10 +20,15 @@ function fmtDate(ms: number | null): string {
 }
 
 export function Hero({ postCount, collectionCount, lastUpdate }: Props) {
-  const manifesto = useSetting<string>("site.manifesto", DEFAULT_MANIFESTO) ?? DEFAULT_MANIFESTO;
+  // The built-in manifesto and founding year are Verbatim's own; other sites
+  // show their manifesto setting, else the author's tagline, else nothing.
+  const isVerbatim = currentBlogSite()?.slug === "verbatim";
+  const tagline = useSetting<string>("author.tagline", "") ?? "";
+  const fallback = isVerbatim ? DEFAULT_MANIFESTO : tagline;
+  const manifesto = useSetting<string>("site.manifesto", fallback) ?? fallback;
   return (
     <section className="blog-hero">
-      <p className="manifesto">{manifesto}</p>
+      {manifesto && <p className="manifesto">{manifesto}</p>}
       <div className="meta">
         <span>
           <b>{postCount}</b> posts
@@ -30,9 +36,11 @@ export function Hero({ postCount, collectionCount, lastUpdate }: Props) {
         <span>
           <b>{collectionCount}</b> collections
         </span>
-        <span>
-          Est. <b>MMXXII</b>
-        </span>
+        {isVerbatim && (
+          <span>
+            Est. <b>MMXXII</b>
+          </span>
+        )}
         {lastUpdate && (
           <span>
             Last update <b>{fmtDate(lastUpdate)}</b>

@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { toPng } from "html-to-image";
 import { useSetting } from "@/lib/settings";
 import { updatePost } from "@/lib/posts";
+import { pb } from "@/lib/pocketbase";
 import { formatDate } from "@/lib/format";
 import { StoryCard } from "@/shareable/StoryCard";
 import type { CardData, TemplateId } from "@/shareable/StoryCard";
@@ -55,7 +56,10 @@ export function SharePanel({ post }: Props) {
     try {
       const res = await fetch("/api/extract-quotes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: pb.authStore.token,
+        },
         body: JSON.stringify({ postId: post.id, content: post.content }),
       });
       const data = await res.json() as { quotes?: string[]; error?: string };

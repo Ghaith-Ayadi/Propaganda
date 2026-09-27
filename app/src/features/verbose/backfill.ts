@@ -7,7 +7,6 @@ import { getSetting, setSetting } from "@/lib/settings";
 import { vdb } from "./db";
 import { dayKey, incrementRemote, notifyChanged } from "./store";
 
-const TENANT = (import.meta.env.VITE_ANALYTICS_TENANT as string) || "verbatim";
 const FLAG = "verbose.backfilledAt";
 
 export async function backfillOnce(): Promise<void> {
@@ -27,8 +26,8 @@ export async function backfillOnce(): Promise<void> {
   }
 
   for (const [day, words] of byDay) {
-    const local = (await vdb.activity.get(day))?.words ?? 0;
-    await vdb.activity.put({ day, words: Math.max(local, words) });
+    const local = (await vdb().activity.get(day))?.words ?? 0;
+    await vdb().activity.put({ day, words: Math.max(local, words) });
     try {
       await incrementRemote(day, words);
     } catch (err) {

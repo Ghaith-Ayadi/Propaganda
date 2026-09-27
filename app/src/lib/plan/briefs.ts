@@ -4,6 +4,7 @@
 import { db } from "@/lib/db";
 import { httpStatus, newId, pb, pbDateToMs } from "@/lib/pocketbase";
 import { scheduleSync } from "@/lib/sync";
+import { onScopeReset } from "@/lib/scope";
 import type { Brief, BriefChecks, BriefStatus } from "@/lib/plan/types";
 import { mockBriefs } from "@/lib/plan/mock";
 
@@ -120,6 +121,9 @@ export async function deleteBrief(id: string): Promise<void> {
 }
 
 let seeded = false;
+onScopeReset(() => {
+  seeded = false;
+});
 /**
  * First run only: seed the demo briefs locally so the planner isn't empty.
  * Seeded rows are not dirty, so they stay local; any edits afterwards sync

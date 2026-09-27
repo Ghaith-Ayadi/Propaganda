@@ -6,8 +6,9 @@
 // Worker derives country (request.cf) and device (UA) server-side; the client
 // only sends what it alone knows: which post, how long, how far scrolled.
 
+import { currentBlogSite } from "@/blog/site";
+
 const BASE = (import.meta.env.VITE_ANALYTICS_URL as string | undefined)?.replace(/\/$/, "");
-const TENANT = (import.meta.env.VITE_ANALYTICS_TENANT as string) || "verbatim";
 
 export interface TrackOpts {
   postId?: string;
@@ -41,7 +42,7 @@ export function installPageTracker(opts: TrackOpts): () => void {
     if (sent) return;
     sent = true;
     const payload = JSON.stringify({
-      t: TENANT,
+      t: currentBlogSite()?.analyticsTenant || "verbatim",
       e: "view",
       p: opts.postId ?? "",
       c: opts.collection ?? "",

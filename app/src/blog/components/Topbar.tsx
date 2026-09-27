@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { navigateTo } from "@/blog/route";
+import { navigateTo, homeHref } from "@/blog/route";
+import { currentBlogSite } from "@/blog/site";
 import { Wordmark } from "./Wordmark";
 
 interface Props {
@@ -55,15 +56,20 @@ export function Topbar({ backLabel, onBack, right, showProgress }: Props) {
         )}
       </div>
       <a
-        href="/"
+        href={homeHref()}
         onClick={(e) => {
           e.preventDefault();
           navigateTo({ view: "home" });
         }}
         className="blog-topbar__brand"
-        aria-label="Verbatim — home"
+        aria-label={`${currentBlogSite()?.name ?? "Verbatim"} — home`}
       >
-        <Wordmark height={18} />
+        {/* The drawn wordmark spells "Verbatim"; other sites set their name in the title face. */}
+        {currentBlogSite()?.slug === "verbatim" ? (
+          <Wordmark height={18} />
+        ) : (
+          <span className="font-title text-xl leading-none">{currentBlogSite()?.name}</span>
+        )}
       </a>
       <div className="blog-topbar__right">{right}</div>
       {showProgress && (

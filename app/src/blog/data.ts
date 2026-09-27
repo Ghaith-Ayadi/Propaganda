@@ -3,7 +3,7 @@
 // list published posts and collections, nothing else.
 
 import { useEffect, useState } from "react";
-import { pb, pbDateToMs } from "@/lib/pocketbase";
+import { publicPb, pbDateToMs } from "@/lib/pocketbase";
 import type { Collection } from "@/types";
 
 // Inline the record mapper so the blog bundle doesn't pull in the editor's
@@ -80,10 +80,10 @@ function fromBlogRecord(r: BlogPostRecord): BlogPost {
 const PUBLIC_FIELDS =
   "id,slug,title,type,subtitle,excerpt,content_md,published_at,updated,word_count,collection_seq,status";
 
-const posts = () => pb.collection<BlogPostRecord>("posts");
-const collections = () => pb.collection<CollectionRecord>("collections");
+const posts = () => publicPb.collection<BlogPostRecord>("posts");
+const collections = () => publicPb.collection<CollectionRecord>("collections");
 
-export function useBlogData(): {
+export function useBlogData(siteId: string): {
   loading: boolean;
   collections: Collection[];
   posts: BlogPost[];
@@ -98,9 +98,14 @@ export function useBlogData(): {
     let cancelled = false;
     void (async () => {
       try {
+        const siteFilter = publicPb.filter("site = {:site}", { site: siteId });
         const [colRecords, postRecords] = await Promise.all([
-          collections().getFullList({ sort: "position" }),
-          posts().getFullList({ filter: 'status = "published"', sort: "-published_at", fields: PUBLIC_FIELDS }),
+          collections().getFullList({ filter: siteFilter, sort: "position" }),
+          posts().getFullList({
+            filter: publicPb.filter('site = {:site} && status = "published"', { site: siteId }),
+            sort: "-published_at",
+            fields: PUBLIC_FIELDS,
+          }),
         ]);
         if (cancelled) return;
         setCols(colRecords.map(fromCollectionRecord));
@@ -115,7 +120,7 @@ export function useBlogData(): {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [siteId]);
 
   return { loading, collections: cols, posts: items, error };
 }
@@ -131,22 +136,29 @@ export type ReaderFetch =
   | { kind: "missing" };
 
 /** Get a single post by slug for the reader view. */
-export async function fetchPostBySlug(slug: string): Promise<ReaderFetch> {
+export async function fetchPostBySlug(siteId: string, slug: string): Promise<ReaderFetch> {
   // Primary lookup by slug. Fall back to the immutable post_id code
   // (e.g. "THM·08") so links shared before slugs were derived from titles
   // keep resolving.
   let record = await posts()
-    .getFirstListItem(pb.filter('slug = {:s} && status = "published"', { s: slug }), { fields: PUBLIC_FIELDS })
+    .getFirstListItem(publicPb.filter('site = {:site} && slug = {:s} && status = "published"', { site: siteId, s: slug }), {
+      fields: PUBLIC_FIELDS,
+    })
     .catch(() => null);
   if (!record) {
     record = await posts()
-      .getFirstListItem(pb.filter('post_id = {:s} && status = "published"', { s: slug }), { fields: PUBLIC_FIELDS })
+      .getFirstListItem(
+        publicPb.filter('site = {:site} && post_id = {:s} && status = "published"', { site: siteId, s: slug }),
+        { fields: PUBLIC_FIELDS },
+      )
       .catch(() => null);
   }
   if (!record) return { kind: "missing" };
   // Check the collection's visibility before exposing the post.
   const col = await collections()
-    .getFirstListItem(pb.filter("name = {:n}", { n: record.type }), { fields: "is_hidden" })
+    .getFirstListItem(publicPb.filter("site = {:site} && name = {:n}", { site: siteId, n: record.type }), {
+      fields: "is_hidden",
+    })
     .catch(() => null);
   if (col?.is_hidden) return { kind: "hidden" };
   return { kind: "post", post: fromBlogRecord(record) };

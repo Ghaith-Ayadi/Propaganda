@@ -1,4 +1,4 @@
-import PocketBase, { type RecordModel } from "pocketbase";
+import PocketBase, { BaseAuthStore, LocalAuthStore, type RecordModel } from "pocketbase";
 
 // The backend: Propaganda's PocketBase instance on Bedrock (Ghaith-Ayadi/Bedrock).
 const url = import.meta.env.VITE_PB_URL as string | undefined;
@@ -7,11 +7,44 @@ if (!url) {
   throw new Error("Missing VITE_PB_URL");
 }
 
-export const pb = new PocketBase(url);
+export const PB_URL = url;
 
-// The editor fires overlapping list requests; the SDK's default cancels the
-// earlier one, which the sync engine would read as a failure.
-pb.autoCancellation(false);
+/**
+ * A client whose session lives in localStorage under `storeKey`. Every account
+ * signed in on this browser has its own (see lib/accounts.ts), which is what
+ * makes switching accounts instant: nothing is re-authenticated, the app just
+ * starts talking through a different client.
+ */
+export function createClient(storeKey: string): PocketBase {
+  const client = new PocketBase(url, new LocalAuthStore(storeKey));
+  // The editor fires overlapping list requests; the SDK's default cancels the
+  // earlier one, which the sync engine would read as a failure.
+  client.autoCancellation(false);
+  return client;
+}
+
+function anonymousClient(): PocketBase {
+  const client = new PocketBase(url, new BaseAuthStore());
+  client.autoCancellation(false);
+  return client;
+}
+
+/** Signed-out reads (the public blog). Never carries a session. */
+export const publicPb = anonymousClient();
+
+/**
+ * The client of the active account. A live binding: lib/scope.ts swaps it when
+ * the author switches account, and every `import { pb }` sees the new client.
+ * Signed out, it is an anonymous client.
+ *
+ * Code that awaits between two uses of `pb` and must stay on one account
+ * captures it first (`const client = pb`); see lib/scope.ts.
+ */
+export let pb: PocketBase = anonymousClient();
+
+export function setActiveClient(client: PocketBase | null): void {
+  pb = client ?? anonymousClient();
+}
 
 export type PbUser = RecordModel & {
   email: string;

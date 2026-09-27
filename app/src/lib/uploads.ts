@@ -3,6 +3,8 @@
 // Non-image files are sent as-is (no compression).
 
 import imageCompression from "browser-image-compression";
+import { pb } from "@/lib/pocketbase";
+import { siteId } from "@/lib/scope";
 
 const ACCEPTED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -49,8 +51,13 @@ export async function uploadFile(file: File): Promise<string> {
 
   const form = new FormData();
   form.append("file", toUpload);
+  form.append("site", siteId());
 
-  const res = await fetch("/api/upload", { method: "POST", body: form });
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    headers: { Authorization: pb.authStore.token },
+    body: form,
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`Upload failed (${res.status}): ${text}`);

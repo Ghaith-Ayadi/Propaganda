@@ -5,6 +5,7 @@ import { fetchPostBySlug, useBlogData, type BlogPost } from "@/blog/data";
 import { navigateTo, postHref, useBlogRoute } from "@/blog/route";
 import { setActiveTab } from "@/blog/activeTab";
 import { installPageTracker } from "@/blog/track";
+import type { BlogSite } from "@/blog/site";
 import { Topbar } from "./Topbar";
 import { Colophon } from "./Colophon";
 import { readTime } from "@/lib/format";
@@ -13,6 +14,7 @@ import { useSetting } from "@/lib/settings";
 
 interface Props {
   slug: string;
+  site: BlogSite;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -59,14 +61,14 @@ function firstParagraph(md: string, maxLen = 220): string {
 }
 
 
-export function Reader({ slug }: Props) {
+export function Reader({ slug, site }: Props) {
   const [, _navigate] = useBlogRoute(); // subscribe so re-renders propagate
   void _navigate;
-  const { collections, posts } = useBlogData();
+  const { collections, posts } = useBlogData(site.id);
   const [post, setPost] = useState<BlogPost | null>(null);
   const [hidden, setHidden] = useState(false);
   const [loading, setLoading] = useState(true);
-  const authorName = useSetting<string>("author.name", "Ghaith Ayadi");
+  const authorName = useSetting<string>("author.name", "");
   const authorTagline = useSetting<string>("author.tagline", "");
   const authorLocation = useSetting<string>("author.location", "");
 
@@ -77,7 +79,7 @@ export function Reader({ slug }: Props) {
     setHidden(false);
     window.scrollTo({ top: 0, behavior: "instant" });
     void (async () => {
-      const result = await fetchPostBySlug(slug);
+      const result = await fetchPostBySlug(site.id, slug);
       if (cancelled) return;
       if (result.kind === "post") setPost(result.post);
       else if (result.kind === "hidden") setHidden(true);
@@ -86,12 +88,12 @@ export function Reader({ slug }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, site.id]);
 
   // Tab title (SEO + nicety).
   useEffect(() => {
-    if (post?.title) document.title = `${post.title} — Verbatim`;
-  }, [post?.title]);
+    if (post?.title) document.title = `${post.title} — ${site.name}`;
+  }, [post?.title, site.name]);
 
   // Page-view beacon: one reading session per loaded post. Teardown flushes
   // on SPA navigation to the next post; pagehide/tab-hide flush on real exit.
@@ -172,7 +174,7 @@ export function Reader({ slug }: Props) {
 
   const rtMin = readTime(post.wordCount);
   const dek = post.subtitle?.trim() || post.excerpt?.trim() || firstParagraph(post.content);
-  const prettyPermalink = `verbatim/${colDisplay.toLowerCase().replace(/\s+/g, "-")}/${post.slug}`;
+  const prettyPermalink = `${site.slug}/${colDisplay.toLowerCase().replace(/\s+/g, "-")}/${post.slug}`;
   const postsBySlug = new Map(posts.map((p) => [p.slug, p]));
   const resolvedContent = resolveWikilinks(post.content, postsBySlug);
 
@@ -256,16 +258,18 @@ export function Reader({ slug }: Props) {
                 }
                 const external =
                   /^https?:\/\//i.test(href) && !href.includes(window.location.host);
-                const internalPost = href.startsWith("/p/");
-                if (internalPost) {
+                // Matches "/p/slug" (root-domain sites) and "/@slug/p/slug"
+                // (path-prefixed sites) — wikilinks (see resolveWikilinks
+                // above) always produce one of these via postHref().
+                const internalPostMatch = href.match(/^\/(?:@[^/]+\/)?p\/(.+)$/);
+                if (internalPostMatch) {
                   return (
                     <a
                       href={href}
                       onClick={(e) => {
                         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
                         e.preventDefault();
-                        const slug = decodeURIComponent(href.replace(/^\/p\//, ""));
-                        navigateTo({ view: "post", slug });
+                        navigateTo({ view: "post", slug: decodeURIComponent(internalPostMatch[1]) });
                       }}
                       {...rest}
                     >

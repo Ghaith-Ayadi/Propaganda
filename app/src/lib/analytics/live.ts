@@ -1,14 +1,17 @@
-// Live analytics adapter: fetches real aggregates from the Cloudflare Worker
-// (/query) and maps them onto the same panel contracts the simulator returns.
-// hook.ts picks sim vs. live; panels never know which served them.
+// Live analytics adapter: fetches real aggregates via /api/analytics (which
+// proxies to the Cloudflare Worker's /query) and maps them onto the same
+// panel contracts the simulator returns. hook.ts picks sim vs. live; panels
+// never know which served them.
 //
-// The Worker holds the CF read token; the browser only holds the query gate
-// key (VITE_ANALYTICS_QUERY_KEY). That key is shipped in the admin bundle,
-// which is itself unauthenticated today — so it raises the bar without being
-// real auth. Tech debt: replace with Supabase-auth'd requests when AuthGate
-// is enabled.
+// The Worker's query gate key used to ship in the browser bundle
+// (VITE_ANALYTICS_QUERY_KEY) — any visitor could read any tenant's numbers.
+// It's now server-only (api/analytics.ts): the browser sends its PocketBase
+// session + the active site id, and the function checks membership, looks up
+// that site's tenant, and attaches the real key itself.
 
 import { useEffect, useState } from "react";
+import { pb } from "@/lib/pocketbase";
+import { onScopeReset, siteId } from "@/lib/scope";
 import type {
   BucketRow,
   DateRangePreset,
@@ -18,28 +21,43 @@ import type {
   SiteViewsResult,
 } from "./types";
 
-const BASE = (import.meta.env.VITE_ANALYTICS_URL as string | undefined)?.replace(/\/$/, "");
-const KEY = import.meta.env.VITE_ANALYTICS_QUERY_KEY as string | undefined;
-const TENANT = (import.meta.env.VITE_ANALYTICS_TENANT as string) || "verbatim";
+// Still just an env presence check — whether a live backend exists at all.
+// The key that used to live here now lives only on the server.
+const BASE = !!(import.meta.env.VITE_ANALYTICS_URL as string | undefined);
 
 /** Whether a live backend is configured. When false, live hooks return null. */
-export const liveConfigured = !!BASE;
+export const liveConfigured = BASE;
 
-function headers(): HeadersInit | undefined {
-  return KEY ? { "x-analytics-key": KEY } : undefined;
+function headers(): HeadersInit {
+  return { Authorization: pb.authStore.token };
 }
 
-/** Fetch JSON from the Worker. `path` null disables the fetch (sim mode). */
+/** Build an /api/analytics URL from a Worker-shaped `path?query` string. */
+function apiUrl(pathAndQuery: string): string | null {
+  let site: string;
+  try {
+    site = siteId();
+  } catch {
+    return null;
+  }
+  const [pathname, query = ""] = pathAndQuery.split("?");
+  const params = new URLSearchParams(query);
+  params.set("site", site);
+  params.set("path", pathname);
+  return `/api/analytics?${params.toString()}`;
+}
+
+/** Fetch JSON via the analytics proxy. `path` null disables the fetch (sim mode). */
 function useJson<T>(path: string | null): T | null {
   const [data, setData] = useState<T | null>(null);
   useEffect(() => {
-    if (!path || !BASE) {
+    const url = path && BASE ? apiUrl(path) : null;
+    if (!url) {
       setData(null);
       return;
     }
     let cancelled = false;
-    const sep = path.includes("?") ? "&" : "?";
-    fetch(`${BASE}${path}${sep}tenant=${encodeURIComponent(TENANT)}`, { headers: headers() })
+    fetch(url, { headers: headers() })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (cancelled) return;
@@ -123,10 +141,22 @@ let hitsCache: HitsBundle | null = null;
 let hitsInflight = false;
 const hitsSubs = new Set<() => void>();
 
+// The bundle is keyed to whichever site was active when it was fetched — on
+// an account/site switch it's stale (wrong tenant), so drop it and let
+// subscribers refetch for the new scope.
+onScopeReset(() => {
+  hitsCache = null;
+  hitsInflight = false;
+  hitsSubs.forEach((f) => f());
+  if (hitsSubs.size > 0) loadHits();
+});
+
 function loadHits() {
   if (!BASE || hitsCache || hitsInflight) return;
+  const url = apiUrl("/query?metric=hits");
+  if (!url) return;
   hitsInflight = true;
-  fetch(`${BASE}/query?metric=hits&tenant=${encodeURIComponent(TENANT)}`, { headers: headers() })
+  fetch(url, { headers: headers() })
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => {
       if (j && !(j as { error?: unknown }).error) {

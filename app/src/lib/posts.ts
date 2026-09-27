@@ -1,8 +1,8 @@
 // Record<->domain mappers and the local post repository (writes go to Dexie,
 // scheduleSync() pushes to PocketBase on idle).
 
-import { db } from "@/lib/db";
-import { httpStatus, msToPbDate, newId, pb, pbDateToMs } from "@/lib/pocketbase";
+import { beginWrite, db as activeDb } from "@/lib/db";
+import { httpStatus, msToPbDate, newId, pb as activePb, pbDateToMs } from "@/lib/pocketbase";
 import { scheduleSync } from "@/lib/sync";
 import { snapshotVersion } from "@/lib/versions";
 import { emitPostContentSaved } from "@/lib/postEvents";
@@ -89,6 +89,20 @@ export async function updatePost(
   id: string,
   patch: Partial<Omit<Post, "id" | "createdAt">>,
 ): Promise<void> {
+  const done = beginWrite();
+  try {
+    await updatePostIn(activeDb, id, patch);
+  } finally {
+    done();
+  }
+}
+
+async function updatePostIn(
+  // Captured once, by the caller: a scope switch mid-call must not move the write.
+  db: typeof activeDb,
+  id: string,
+  patch: Partial<Omit<Post, "id" | "createdAt">>,
+): Promise<void> {
   const existing = await db.posts.get(id);
   if (!existing) return;
 
@@ -138,6 +152,8 @@ export async function updatePost(
 }
 
 export async function toggleFavorite(id: string): Promise<void> {
+  // Captured once: a scope switch mid-call must not move the write.
+  const db = activeDb;
   const p = await db.posts.get(id);
   if (!p) return;
   await updatePost(id, { favorited: !p.favorited });
@@ -159,6 +175,8 @@ async function stageNewPost(
     tags?: string[] | null;
   } = {},
 ): Promise<Post> {
+  // Captured once: a scope switch mid-call must not move the write.
+  const db = activeDb;
   const { postSlug, slugify, dedupeSlug } = await import("@/lib/postId");
 
   const peers = await db.posts.where("type").equals(type).toArray();
@@ -230,6 +248,9 @@ export async function duplicatePost(source: Post): Promise<Post | null> {
  * Hard delete. Versions cascade server-side through the relation.
  */
 export async function deletePost(id: string): Promise<void> {
+  // Captured once: a scope switch mid-call must not move the write.
+  const db = activeDb;
+  const pb = activePb;
   try {
     await pb.collection("posts").delete(id);
   } catch (err) {
@@ -244,6 +265,8 @@ export async function deletePost(id: string): Promise<void> {
 }
 
 export async function setPostStatus(id: string, status: PostStatus): Promise<void> {
+  // Captured once: a scope switch mid-call must not move the write.
+  const db = activeDb;
   const before = await db.posts.get(id);
   const patch: Partial<Post> = { status };
   const now = Date.now();

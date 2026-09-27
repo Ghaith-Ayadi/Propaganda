@@ -7,6 +7,7 @@
 
 import { db } from "@/lib/db";
 import { httpStatus, pb, pbDateToMs } from "@/lib/pocketbase";
+import { onScopeReset, siteId } from "@/lib/scope";
 import type { Collection } from "@/types";
 
 export interface CollectionRecord {
@@ -20,7 +21,9 @@ export interface CollectionRecord {
   updated: string;
 }
 
+// name -> record id, for the active site only.
 const recordIds = new Map<string, string>();
+onScopeReset(() => recordIds.clear());
 
 export function fromCollectionRecord(r: CollectionRecord): Collection {
   recordIds.set(r.name, r.id);
@@ -40,8 +43,9 @@ const collections = () => pb.collection<CollectionRecord>("collections");
 async function recordIdFor(name: string): Promise<string | null> {
   const cached = recordIds.get(name);
   if (cached) return cached;
+  // Collections are publicly listable across sites: always scope the lookup.
   const found = await collections()
-    .getFirstListItem(pb.filter("name = {:n}", { n: name }))
+    .getFirstListItem(pb.filter("site = {:site} && name = {:n}", { site: siteId(), n: name }))
     .catch(() => null);
   if (found) recordIds.set(name, found.id);
   return found?.id ?? null;
@@ -118,6 +122,7 @@ export async function upsertCollection(
   await db.collections.put(next);
 
   const body = {
+    site: siteId(),
     name,
     emoji: next.emoji ?? "",
     description: next.description ?? "",

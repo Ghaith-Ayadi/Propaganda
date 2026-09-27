@@ -15,21 +15,32 @@ Vite + React 19 + TanStack Router/Query, BlockNote editor on TipTap, Dexie (Inde
 | Path | What |
 |---|---|
 | `app/` | Editor SPA and public blog (`app/src/blog`), one Vite build |
-| `api/` | Vercel functions: `upload.ts` (images to Vercel Blob) |
+| `api/` | Vercel functions: `upload.ts` (images to Vercel Blob), `analytics.ts` (dashboard analytics proxy), `extract-quotes.ts` |
+| `pb/` | PocketBase schema (`pb_migrations`), server hooks (`pb_hooks`) and the migration rehearsal |
 | `blog/` | Design handoff bundle for the blog (HTML prototypes), not code that runs |
 | `scripts/` | Supabase-era one-off admin and Notion import tools; legacy since the move to Bedrock |
 | `docs/screenshots/` | Screenshots |
 | `docs/archive/` | Old planning artifacts, Supabase-era; reference, not authority |
 
-The backend (schema, hooks, instance config) lives in the Bedrock repo under
-`pb/propaganda/`: [docs/apps.md](https://github.com/Ghaith-Ayadi/Bedrock/blob/main/docs/apps.md)
+The schema and hooks live here in `pb/`; the instance itself (compose, Caddy,
+backups) is in the Bedrock repo, whose
+[docs/apps.md](https://github.com/Ghaith-Ayadi/Bedrock/blob/main/docs/apps.md)
 is the reference for how this app talks to it.
 
 ## Tenant model
 
-In the multi-tenant build, Verbatim becomes a tenant row — content + brand + domain + theme overrides as data, not code. The platform code lives here; tenants live in the database.
+Propaganda is multi-tenant. A **site** is a tenant: its posts, collections, briefs,
+settings (author, manifesto, favicon) and writing activity, plus a slug and an optional
+custom domain. People reach sites through **memberships** (owner or editor). Verbatim is
+the first site. New accounts are onboarded into a new site (name, address, author,
+collections).
 
-Today the codebase hardcodes the single-tenant assumption in most places. Discipline going forward: every new feature decision passes the "would this still work with 100 tenants?" check. If the answer requires a tenant column, fine. If it only works because it's one user, log it in PPG as known debt to repay at promotion time.
+- Public blog: `/@<slug>/` on any host; a site with a custom `domain` is served at that
+  domain's root (Verbatim at verbatim.ayadighaith.com). Mapping a domain is a superuser
+  action today (the `domain` field, plus the domain in Vercel and Caddy).
+- One browser holds several accounts and switches between their sites instantly.
+- Every new feature passes the "would this still work with 100 sites?" check: filter by
+  `site`, keep per-site state out of module globals (or reset it with `onScopeReset`).
 
 ## Known migration debt
 
