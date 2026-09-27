@@ -1,0 +1,9 @@
+# Schema check on every change to pb/: Bedrock's shared pb-check (parse, boot,
+# upgrade from the base branch), then pb/ci.sh (the rehearsal). See Bedrock docs/ci.md.
+name: pb
+on:
+  pull_request: { paths: ["pb/**"] }
+  push: { branches: [main], paths: ["pb/**"] }
+jobs:
+  schema:
+    uses: Ghaith-Ayadi/Bedrock/.github/workflows/pb-check.yml@main
