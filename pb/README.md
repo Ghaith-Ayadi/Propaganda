@@ -15,6 +15,7 @@ multi-tenancy, so a schema change and the app change that needs it ship together
 
 | Hook | What |
 |---|---|
+| `addresses.pb.js` | Post numbers (a per-site counter, never reused or edited), collection slugs, and a `post_redirects` row whenever a published post changes slug or collection |
 | `auth.pb.js` | Sign-in policy from env: Google, emailed one-time codes (when SMTP is set), 90-day sessions |
 | `settings.pb.js` | Instance settings from env (SMTP, backups, trusted proxy) |
 | `sites.pb.js` | `POST /api/propaganda/sites`, `PATCH /api/propaganda/sites/{id}` |

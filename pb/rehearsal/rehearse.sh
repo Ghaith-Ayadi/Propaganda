@@ -2,7 +2,8 @@
 # Rehearse the schema on a throwaway PocketBase: build a pre-multi-tenant
 # instance from the migrations before 1758000006, seed it (seed.mjs), snapshot
 # every row, apply the current pb/ (migrations + hooks), snapshot again and
-# compare, then run the access-rule suite (rules.mjs).
+# compare, then run the access-rule suite (rules.mjs) and the post-address
+# suite (addresses.mjs: numbers, collection slugs, redirects).
 #
 #   PB_BIN=/path/to/pocketbase-0.40.4 pb/rehearsal/rehearse.sh
 #
@@ -45,4 +46,4 @@ import json,sys
 a=json.load(open('before.json')); b=json.load(open('after.json'))
 ok=all(a[k]==b[k] for k in a)
 print('content + updated timestamps unchanged:', ok)
-sys.exit(0 if ok else 1)" && node rules.mjs)
+sys.exit(0 if ok else 1)" && node rules.mjs && node addresses.mjs)
