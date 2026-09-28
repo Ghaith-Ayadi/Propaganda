@@ -198,6 +198,11 @@ export default defineConfig(({ mode }) => {
         workbox: {
           // Cache the shell. PocketBase requests pass through; Dexie holds the data.
           navigateFallback: "/index.html",
+          // PocketBase shares this origin (Caddy sends /api/* and /_/ to it), so
+          // page loads there must reach the network. Otherwise the worker answers
+          // Google's OAuth2 callback (/api/oauth2-redirect) with the app shell,
+          // the code never reaches PocketBase and sign-in hangs.
+          navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
           globPatterns: ["**/*.{js,css,html,svg,ico,woff2}"],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
