@@ -74,3 +74,4 @@ const su = new PocketBase(URL); await su.collection("_superusers").authWithPassw
 const uc = await su.collections.getOne("users");
 console.log("users rules", JSON.stringify({ c: uc.createRule, l: uc.listRule, v: uc.viewRule, u: uc.updateRule }), "tokenDuration", uc.authToken.duration, "otp", uc.otp.enabled);
 console.log(fails ? `${fails} FAILED` : "ALL PASS (2)");
+process.exitCode = fails ? 1 : 0;
