@@ -47,12 +47,20 @@ before touching anything that talks to the server.
 - **Ids are PocketBase record ids minted on the client** (`app/src/lib/pocketbase.ts`
   `newId()`). `Post.id`, `PostVersion.postId`, `Brief.postId` are strings. There is no
   temp-id swap any more; do not reintroduce numeric ids. `posts.legacy_id` is the old
-  Postgres integer, for audit only.
+  Postgres integer, for audit only (it seeded Verbatim's post numbers).
 - **Schema lives here, in `pb/`** (`pb/pb_migrations/*.js`, `pb/pb_hooks/`), never in the
   dashboard. Bedrock's CI deploy checks it out on the box at the ref in Bedrock's
   `compose/propaganda/schema.env` (`main`) whenever Bedrock deploys (a merge to its
   `main`, or its `ci` workflow run by hand), archiving `pb_data` first if `pb/` changed. Rehearse every schema change with
   `pb/rehearsal/rehearse.sh` before deploying.
+- **Post numbers and addresses** (`pb/pb_hooks/addresses.pb.js`, `app/src/lib/slug.ts`).
+  `posts.number` is a per-site counter the server hands out on create: never reused, never
+  edited, never sent by clients. A post's public address is `/<collection slug>/<post slug>`
+  under the site's base path. The slug follows the title until the first publish, then
+  changes only when edited; every move of a published post (new slug or collection) leaves a
+  `post_redirects` row, and old `/p/<slug>` links forward. Collection slugs come from names.
+- Toasts: `app/src/components/base/toast/toast.tsx` (shadcn's Base UI toast, ported). Use it
+  for every toast; no `window.alert`.
 - Sync: `app/src/lib/sync.ts` (generic push/pull per table), realtime in
   `app/src/lib/realtime.ts`. One Dexie database per (account, site),
   `propaganda-<user>-<site>`; the single-tenant `verbatim-pb` is adopted, never deleted.

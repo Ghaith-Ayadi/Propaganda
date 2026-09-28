@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Workspace } from "@/components/Workspace";
+import { Toaster } from "@/components/base/toast/toast";
 import { Sidebar } from "@/components/Sidebar";
 import { Editor } from "@/components/Editor";
 import { AttributePanel } from "@/components/AttributePanel";
@@ -23,9 +24,13 @@ import { toggleTheme } from "@/lib/theme";
 
 export function EditorApp() {
   return (
-    <Workspace>
-      <Shell />
-    </Workspace>
+    <>
+      <Workspace>
+        <Shell />
+      </Workspace>
+      {/* Outside Workspace so a toast outlives a site switch or sign-in screen. */}
+      <Toaster />
+    </>
   );
 }
 

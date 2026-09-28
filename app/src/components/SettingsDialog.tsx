@@ -22,6 +22,7 @@ import {
   CAPTION_ALIGN_KEY, CAPTION_SIZE_KEY, CAPTION_ALIGN_DEFAULT, CAPTION_SIZE_DEFAULT,
   setCaptionAlign, setCaptionSize,
 } from "@/lib/editorStyles";
+import { toast } from "@/components/base/toast/toast";
 
 interface Props {
   onClose: () => void;
@@ -272,7 +273,7 @@ function FaviconField({ current }: { current: string | null }) {
       await setSetting("favicon.url", url);
     } catch (e) {
       console.error(e);
-      alert(`Upload failed: ${(e as Error).message}`);
+      toast.add({ type: "error", title: "Upload failed", description: (e as Error).message });
     } finally {
       setUploading(false);
     }

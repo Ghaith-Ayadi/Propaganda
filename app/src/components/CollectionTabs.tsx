@@ -8,6 +8,7 @@ import {
   duplicateCollection,
   renameCollection,
   upsertCollection,
+  isRenaming,
 } from "@/lib/collections";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { createPost } from "@/lib/posts";
@@ -15,6 +16,7 @@ import { ActionMenu } from "@/components/Menu";
 import { ConfirmTypeDialog } from "@/components/ConfirmTypeDialog";
 import { PostTable } from "@/components/PostTable";
 import type { Collection, Post } from "@/types";
+import { toast } from "@/components/base/toast/toast";
 
 /**
  * Home view. The tab bar lives in App so it's visible everywhere; this
@@ -33,7 +35,8 @@ export function CollectionTabs() {
   );
   const [active, setActive] = useActiveCollection();
 
-  // Auto-create rows for any post type without a registry entry.
+  // Auto-create rows for any post type without a registry entry (legacy posts),
+  // except mid-rename, when posts briefly carry a name whose record is on its way.
   const referenced = useMemo(() => {
     const s = new Set<string>();
     for (const p of posts) if (p.type) s.add(p.type);
@@ -42,7 +45,7 @@ export function CollectionTabs() {
   useEffect(() => {
     const have = new Set(collections.map((c) => c.name));
     for (const name of referenced) {
-      if (!have.has(name)) void upsertCollection(name, {});
+      if (!have.has(name) && !isRenaming(name)) void upsertCollection(name, {});
     }
   }, [collections, referenced]);
 
@@ -95,7 +98,8 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
   };
   const saveName = () => {
     const next = nameDraft.trim();
-    if (next && next !== collection.name) void renameCollection(collection.name, next);
+    // Stay on the collection under its new name once the rename lands.
+    if (next && next !== collection.name) void renameCollection(collection.name, next).then(() => setActive(next));
     else setNameDraft(collection.name);
   };
   const saveDesc = () => {
@@ -109,7 +113,7 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
     // Offline-first: staged in Dexie with a temp id, INSERTed on next sync.
     const post = await createPost(collection.name);
     if (!post) {
-      window.alert("New post failed.");
+      toast.add({ type: "error", title: "Couldn't create a post", description: "Try again in a moment." });
       return;
     }
     go({ view: "post", id: post.id });

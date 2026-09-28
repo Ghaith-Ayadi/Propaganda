@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/types";
-import type { BlogPost } from "@/blog/data";
+import { blogAddress, type BlogPost } from "@/blog/data";
 import { navigateTo, postHref } from "@/blog/route";
 import { useActiveTab } from "@/blog/activeTab";
 import type { BlogSite } from "@/blog/site";
@@ -146,11 +146,11 @@ export function Home({ collections, posts, site }: Props) {
               return (
                 <a
                   key={p.id}
-                  href={postHref(p.slug)}
+                  href={postHref(blogAddress(p, collections).collection, p.slug)}
                   onClick={(e) => {
                     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
                     e.preventDefault();
-                    navigateTo({ view: "post", slug: p.slug });
+                    navigateTo({ view: "post", ...blogAddress(p, collections) });
                   }}
                   className="blog-post-row"
                 >

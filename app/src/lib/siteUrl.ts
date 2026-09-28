@@ -5,6 +5,8 @@
 // that serves the app: /@<slug>/…  Custom domains are mapped by a superuser
 // (the `domain` field) and must also be added to the Vercel project.
 
+import { postPath } from "@/lib/slug";
+
 export interface SiteAddress {
   slug: string;
   domain: string;
@@ -19,6 +21,11 @@ export function siteBasePath(site: SiteAddress, host: string = location.hostname
 export function sitePublicUrl(site: SiteAddress): string {
   if (site.domain) return `https://${site.domain}/`;
   return `${location.origin}/@${site.slug}/`;
+}
+
+/** Absolute URL of a post: /<collection slug>/<post slug> on its site (see lib/slug.ts). */
+export function postPublicUrl(site: SiteAddress, collectionSlug: string, slug: string): string {
+  return sitePublicUrl(site) + postPath(collectionSlug, slug).slice(1);
 }
 
 /** "/@slug/rest" → { slug, rest }. Null when the path has no site prefix. */

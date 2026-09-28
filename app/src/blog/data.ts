@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { publicPb, pbDateToMs } from "@/lib/pocketbase";
+import { collectionSlugOf, slugify } from "@/lib/slug";
 import type { Collection } from "@/types";
 
 // Inline the record mapper so the blog bundle doesn't pull in the editor's
@@ -11,6 +12,7 @@ import type { Collection } from "@/types";
 interface CollectionRecord {
   id: string;
   name: string;
+  slug: string;
   emoji: string;
   description: string;
   position: number;
@@ -21,6 +23,7 @@ interface CollectionRecord {
 function fromCollectionRecord(r: CollectionRecord): Collection {
   return {
     name: r.name,
+    slug: r.slug ?? "",
     emoji: r.emoji || null,
     description: r.description || null,
     position: r.position,
@@ -126,40 +129,93 @@ export function useBlogData(siteId: string): {
 }
 
 /**
- * Reader fetch result: either the post, or a sentinel saying the collection
- * is hidden. We resolve hidden-ness server-side so the Reader never holds
- * the body of a private post in memory.
+ * What the Reader gets for a URL: the post; where it lives now (an old address,
+ * which it replaces in the URL bar); or a sentinel. Hidden-ness is resolved
+ * here so the Reader never holds the body of a post in a private collection.
  */
 export type ReaderFetch =
   | { kind: "post"; post: BlogPost }
+  | { kind: "moved"; collection: string; slug: string }
   | { kind: "hidden" }
   | { kind: "missing" };
 
-/** Get a single post by slug for the reader view. */
-export async function fetchPostBySlug(siteId: string, slug: string): Promise<ReaderFetch> {
-  // Primary lookup by slug. Fall back to the immutable post_id code
-  // (e.g. "THM·08") so links shared before slugs were derived from titles
-  // keep resolving.
-  let record = await posts()
-    .getFirstListItem(publicPb.filter('site = {:site} && slug = {:s} && status = "published"', { site: siteId, s: slug }), {
-      fields: PUBLIC_FIELDS,
-    })
+interface RedirectRecord {
+  post: string;
+}
+
+const redirects = () => publicPb.collection<RedirectRecord>("post_redirects");
+const published = (siteId: string, extra: string, params: Record<string, string>) =>
+  publicPb.filter(`site = {:site} && status = "published" && ${extra}`, { site: siteId, ...params });
+
+async function collectionNamed(siteId: string, name: string): Promise<CollectionRecord | null> {
+  return collections()
+    .getFirstListItem(publicPb.filter("site = {:site} && name = {:n}", { site: siteId, n: name }))
     .catch(() => null);
-  if (!record) {
-    record = await posts()
-      .getFirstListItem(
-        publicPb.filter('site = {:site} && post_id = {:s} && status = "published"', { site: siteId, s: slug }),
-        { fields: PUBLIC_FIELDS },
-      )
-      .catch(() => null);
-  }
-  if (!record) return { kind: "missing" };
-  // Check the collection's visibility before exposing the post.
+}
+
+/** Where a post lives: its collection's slug (or its type slugified, for legacy posts without one) and its slug. */
+async function addressOf(siteId: string, record: BlogPostRecord): Promise<ReaderFetch> {
+  const col = await collectionNamed(siteId, record.type);
+  return { kind: "moved", collection: col?.slug || slugify(record.type) || "collection", slug: record.slug };
+}
+
+async function publishedById(siteId: string, id: string): Promise<BlogPostRecord | null> {
+  return posts()
+    .getFirstListItem(published(siteId, "id = {:id}", { id }), { fields: PUBLIC_FIELDS })
+    .catch(() => null);
+}
+
+/** A post by its address, /<collection slug>/<post slug>, or where that address now points. */
+export async function fetchPostAt(siteId: string, collection: string, slug: string): Promise<ReaderFetch> {
   const col = await collections()
-    .getFirstListItem(publicPb.filter("site = {:site} && name = {:n}", { site: siteId, n: record.type }), {
-      fields: "is_hidden",
-    })
+    .getFirstListItem(publicPb.filter("site = {:site} && slug = {:c}", { site: siteId, c: collection }))
     .catch(() => null);
-  if (col?.is_hidden) return { kind: "hidden" };
-  return { kind: "post", post: fromBlogRecord(record) };
+  let record: BlogPostRecord | null = null;
+  if (col) {
+    record = await posts()
+      .getFirstListItem(published(siteId, "type = {:t} && slug = {:s}", { t: col.name, s: slug }), { fields: PUBLIC_FIELDS })
+      .catch(() => null);
+  } else {
+    // Posts whose collection has no record live under their type, slugified.
+    const bySlug = await posts()
+      .getFullList({ filter: published(siteId, "slug = {:s}", { s: slug }), fields: PUBLIC_FIELDS })
+      .catch(() => [] as BlogPostRecord[]);
+    record = bySlug.find((r) => slugify(r.type) === collection) ?? null;
+  }
+  if (record) {
+    if (col?.is_hidden) return { kind: "hidden" };
+    return { kind: "post", post: fromBlogRecord(record) };
+  }
+  // An old address: the post moved (new slug or collection) after it was published.
+  const r = await redirects()
+    .getFirstListItem(publicPb.filter("site = {:site} && collection = {:c} && slug = {:s}", { site: siteId, c: collection, s: slug }))
+    .catch(() => null);
+  const moved = r ? await publishedById(siteId, r.post) : null;
+  return moved ? addressOf(siteId, moved) : { kind: "missing" };
+}
+
+/**
+ * A post by the address it had before collections were part of it, /p/<slug>:
+ * always "moved" (or missing). Also takes the legacy post_id code ("THM·08"),
+ * and a slug the post has since left behind.
+ */
+export async function fetchLegacyPost(siteId: string, slug: string): Promise<ReaderFetch> {
+  const bySlug = await posts()
+    .getFullList({ filter: published(siteId, "slug = {:s}", { s: slug }), sort: "published_at", fields: PUBLIC_FIELDS })
+    .catch(() => [] as BlogPostRecord[]);
+  if (bySlug[0]) return addressOf(siteId, bySlug[0]);
+  const byCode = await posts()
+    .getFirstListItem(published(siteId, "post_id = {:s}", { s: slug }), { fields: PUBLIC_FIELDS })
+    .catch(() => null);
+  if (byCode) return addressOf(siteId, byCode);
+  const r = await redirects()
+    .getFirstListItem(publicPb.filter("site = {:site} && slug = {:s}", { site: siteId, s: slug }))
+    .catch(() => null);
+  const moved = r ? await publishedById(siteId, r.post) : null;
+  return moved ? addressOf(siteId, moved) : { kind: "missing" };
+}
+
+/** A post's address from the blog's loaded collections (no request). */
+export function blogAddress(post: BlogPost, cols: Collection[]): { collection: string; slug: string } {
+  return { collection: collectionSlugOf(post.type, cols), slug: post.slug };
 }

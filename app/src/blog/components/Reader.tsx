@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { fetchPostBySlug, useBlogData, type BlogPost } from "@/blog/data";
-import { navigateTo, postHref, useBlogRoute } from "@/blog/route";
+import { blogAddress, fetchLegacyPost, fetchPostAt, useBlogData, type BlogPost } from "@/blog/data";
+import { legacyPostHref, navigateTo, postHref, routeHref, routeOfHref, useBlogRoute, type BlogRoute } from "@/blog/route";
+import { postPublicUrl } from "@/lib/siteUrl";
+import { postPath } from "@/lib/slug";
+import type { Collection } from "@/types";
 import { setActiveTab } from "@/blog/activeTab";
 import { installPageTracker } from "@/blog/track";
 import type { BlogSite } from "@/blog/site";
@@ -13,7 +16,8 @@ import { isImageUrl } from "@/lib/images";
 import { useSetting } from "@/lib/settings";
 
 interface Props {
-  slug: string;
+  /** A post's address, or a pre-collections /p/<slug> link to forward. */
+  route: Extract<BlogRoute, { view: "post" } | { view: "legacy" }>;
   site: BlogSite;
 }
 
@@ -29,12 +33,13 @@ function fmtDate(ms: number | null | undefined): string {
  * Replace `[[slug]]` wikilinks with regular markdown links so they render as
  * real anchors. Resolves against the set of known posts for nicer label text.
  */
-function resolveWikilinks(md: string, postsBySlug: Map<string, BlogPost>): string {
+function resolveWikilinks(md: string, postsBySlug: Map<string, BlogPost>, cols: Collection[]): string {
   return md.replace(/\[\[([^\[\]\n]+?)\]\]/g, (_, raw: string) => {
     const slug = raw.trim();
     const target = postsBySlug.get(slug);
     const label = target?.title || slug;
-    return `[${label}](${postHref(slug)})`;
+    const href = target ? postHref(blogAddress(target, cols).collection, target.slug) : legacyPostHref(slug);
+    return `[${label}](${href})`;
   });
 }
 
@@ -61,7 +66,7 @@ function firstParagraph(md: string, maxLen = 220): string {
 }
 
 
-export function Reader({ slug, site }: Props) {
+export function Reader({ route, site }: Props) {
   const [, _navigate] = useBlogRoute(); // subscribe so re-renders propagate
   void _navigate;
   const { collections, posts } = useBlogData(site.id);
@@ -79,8 +84,16 @@ export function Reader({ slug, site }: Props) {
     setHidden(false);
     window.scrollTo({ top: 0, behavior: "instant" });
     void (async () => {
-      const result = await fetchPostBySlug(site.id, slug);
+      const result =
+        route.view === "legacy"
+          ? await fetchLegacyPost(site.id, route.slug)
+          : await fetchPostAt(site.id, route.collection, route.slug);
       if (cancelled) return;
+      if (result.kind === "moved") {
+        // An old address: show the current one in the URL bar, then load it.
+        navigateTo({ view: "post", collection: result.collection, slug: result.slug }, { replace: true });
+        return;
+      }
       if (result.kind === "post") setPost(result.post);
       else if (result.kind === "hidden") setHidden(true);
       setLoading(false);
@@ -88,7 +101,7 @@ export function Reader({ slug, site }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [slug, site.id]);
+  }, [route.view, route.view === "post" ? route.collection : "", route.slug, site.id]);
 
   // Tab title (SEO + nicety).
   useEffect(() => {
@@ -102,9 +115,9 @@ export function Reader({ slug, site }: Props) {
     return installPageTracker({
       postId: post.slug,
       collection: post.type,
-      path: `/p/${post.slug}`,
+      path: postPath(blogAddress(post, collections).collection, post.slug),
     });
-  }, [post?.id, post?.slug, post?.type]);
+  }, [post?.id, post?.slug, post?.type, collections]);
 
   const peers = useMemo(() => {
     if (!post) return [] as BlogPost[];
@@ -174,9 +187,9 @@ export function Reader({ slug, site }: Props) {
 
   const rtMin = readTime(post.wordCount);
   const dek = post.subtitle?.trim() || post.excerpt?.trim() || firstParagraph(post.content);
-  const prettyPermalink = `${site.slug}/${colDisplay.toLowerCase().replace(/\s+/g, "-")}/${post.slug}`;
+  const prettyPermalink = postPublicUrl(site, blogAddress(post, collections).collection, post.slug).replace(/^https?:\/\//, "");
   const postsBySlug = new Map(posts.map((p) => [p.slug, p]));
-  const resolvedContent = resolveWikilinks(post.content, postsBySlug);
+  const resolvedContent = resolveWikilinks(post.content, postsBySlug, collections);
 
   return (
     <div className="blog-app">
@@ -258,18 +271,17 @@ export function Reader({ slug, site }: Props) {
                 }
                 const external =
                   /^https?:\/\//i.test(href) && !href.includes(window.location.host);
-                // Matches "/p/slug" (root-domain sites) and "/@slug/p/slug"
-                // (path-prefixed sites) — wikilinks (see resolveWikilinks
-                // above) always produce one of these via postHref().
-                const internalPostMatch = href.match(/^\/(?:@[^/]+\/)?p\/(.+)$/);
-                if (internalPostMatch) {
+                // A post of this site: its address, an old /p/ link (in older
+                // posts and wikilinks), with or without this site's /@ prefix.
+                const internal = routeOfHref(href);
+                if (internal) {
                   return (
                     <a
-                      href={href}
+                      href={routeHref(internal)}
                       onClick={(e) => {
                         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
                         e.preventDefault();
-                        navigateTo({ view: "post", slug: decodeURIComponent(internalPostMatch[1]) });
+                        navigateTo(internal);
                       }}
                       {...rest}
                     >
@@ -324,7 +336,7 @@ export function Reader({ slug, site }: Props) {
             <button
               type="button"
               className="blog-np prev"
-              onClick={() => navigateTo({ view: "post", slug: prev.slug })}
+              onClick={() => navigateTo({ view: "post", ...blogAddress(prev, collections) })}
             >
               <div className="npl">← Previous</div>
               <div className="npt">{prev.title || "Untitled"}</div>
@@ -336,7 +348,7 @@ export function Reader({ slug, site }: Props) {
             <button
               type="button"
               className="blog-np next"
-              onClick={() => navigateTo({ view: "post", slug: next.slug })}
+              onClick={() => navigateTo({ view: "post", ...blogAddress(next, collections) })}
             >
               <div className="npl">Next →</div>
               <div className="npt">{next.title || "Untitled"}</div>

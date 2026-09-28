@@ -1,6 +1,8 @@
 // "@mention" linking to other posts. Two entry points, one mechanism:
 //   1. MentionAutocomplete — type "@query" inline; Enter pastes the post's full
-//      title as a link to its public URL (/p/slug), Notion-style.
+//      title as a link to its address (/<collection>/<slug>), Notion-style.
+//      Site-relative, so the link works at the site's own domain and under
+//      /@slug alike (the Reader treats it as internal either way).
 //   2. MentionToolbarButton — an "@" button at the end of the selection
 //      formatting toolbar; links the highlighted text to a post you pick.
 // Both share the same MiniSearch-backed picker and write a real BlockNote link
@@ -12,7 +14,11 @@ import { createPortal } from "react-dom";
 import { AtSign } from "@untitledui/icons";
 import { useBlockNoteEditor, useComponentsContext } from "@blocknote/react";
 import type { BlockNoteEditor } from "@blocknote/core";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/lib/db";
 import { search } from "@/lib/search";
+import { collectionSlugOf, postPath } from "@/lib/slug";
+import type { Collection } from "@/types";
 
 // Permissive editor type: the concrete instance from useCreateBlockNote and the
 // generic one from useBlockNoteEditor have incompatible schema generics.
@@ -22,29 +28,28 @@ interface Match {
   id: string;
   slug: string;
   title: string;
+  /** The post's address, site-relative. */
+  href: string;
 }
 
-/** The in-app public URL for a post. Reader treats "/p/" hrefs as internal. */
-function postHref(slug: string): string {
-  return `/p/${encodeURIComponent(slug)}`;
-}
-
-function searchPosts(query: string, limit: number, excludeId?: string): Match[] {
+function searchPosts(query: string, limit: number, collections: Collection[], excludeId?: string): Match[] {
   if (!query.trim()) return [];
   return search(query, limit + 1)
-    .map((r) => ({
-      id: r.id as string,
-      slug: (r as unknown as { slug?: string }).slug ?? "",
-      title: (r as unknown as { title?: string }).title ?? "Untitled",
-    }))
+    .map((r) => {
+      const { slug = "", title = "Untitled", type = "" } = r as unknown as { slug?: string; title?: string; type?: string };
+      return { id: r.id as string, slug, title, href: postPath(collectionSlugOf(type, collections), slug) };
+    })
     .filter((m) => m.slug && m.id !== excludeId)
     .slice(0, limit);
 }
 
+function useCollections(): Collection[] {
+  return useLiveQuery(() => db.collections.toArray(), [], [] as Collection[]);
+}
+
 /** Mark an existing doc range [from, to] as a link to the post. */
-function linkRange(editor: Editor, from: number, to: number, slug: string) {
+function linkRange(editor: Editor, from: number, to: number, href: string) {
   if (!editor || from === to) return;
-  const href = postHref(slug);
   const schema = editor.prosemirrorState.schema;
   editor.transact((tr) => {
     tr.addMark(from, to, schema.mark("link", { href }));
@@ -56,7 +61,7 @@ function linkRange(editor: Editor, from: number, to: number, slug: string) {
  * linked to its public URL. Positions are derived from the DOM via posAtDOM
  * (rather than the editor's selection) so this is robust regardless of focus.
  */
-function replaceMentionWithLink(editor: Editor, slug: string, title: string) {
+function replaceMentionWithLink(editor: Editor, href: string, title: string) {
   if (!editor) return;
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount) return;
@@ -71,7 +76,6 @@ function replaceMentionWithLink(editor: Editor, slug: string, title: string) {
   const view = editor.prosemirrorView;
   const from = view.posAtDOM(node, m.index); // the "@"
   const to = view.posAtDOM(node, caret);
-  const href = postHref(slug);
   const schema = editor.prosemirrorState.schema;
   editor.transact((tr) => {
     // Replace "@query" with the title plus a trailing (unlinked) space so the
@@ -129,8 +133,9 @@ export function MentionAutocomplete({
   const [query, setQuery] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
   const matchesRef = useRef<Match[]>([]);
+  const collections = useCollections();
 
-  matchesRef.current = open ? searchPosts(query, 3, excludeId) : [];
+  matchesRef.current = open ? searchPosts(query, 3, collections, excludeId) : [];
 
   useEffect(() => {
     const root = rootRef.current;
@@ -184,7 +189,7 @@ export function MentionAutocomplete({
         const m = matches[activeIdx];
         if (m) {
           e.preventDefault();
-          replaceMentionWithLink(editor, m.slug, m.title);
+          replaceMentionWithLink(editor, m.href, m.title);
           close();
         }
       }
@@ -211,7 +216,7 @@ export function MentionAutocomplete({
         matches={matches}
         activeIdx={activeIdx}
         onPick={(m) => {
-          replaceMentionWithLink(editor, m.slug, m.title);
+          replaceMentionWithLink(editor, m.href, m.title);
           setOpen(false);
           setQuery("");
         }}
@@ -233,10 +238,11 @@ export function MentionToolbarButton({ excludeId }: { excludeId?: string }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const rangeRef = useRef<{ from: number; to: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const collections = useCollections();
 
   const matches = useMemo(
-    () => (open ? searchPosts(query, 6, excludeId) : []),
-    [open, query, excludeId],
+    () => (open ? searchPosts(query, 6, collections, excludeId) : []),
+    [open, query, collections, excludeId],
   );
 
   useEffect(() => {
@@ -260,7 +266,7 @@ export function MentionToolbarButton({ excludeId }: { excludeId?: string }) {
 
   function choose(m: Match) {
     const r = rangeRef.current;
-    if (r) linkRange(editor, r.from, r.to, m.slug);
+    if (r) linkRange(editor, r.from, r.to, m.href);
     setOpen(false);
     setQuery("");
   }

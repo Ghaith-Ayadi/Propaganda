@@ -3,8 +3,11 @@
 // the caller's component re-rendered on navigate().
 //
 // Routes:
-//   /        → Home
-//   /p/:slug → Single post
+//   /                       → Home
+//   /:collection/:slug      → a post, by its address (lib/slug.ts)
+//   /p/:slug                → the address posts had before collections were in
+//                             it: forwarded to the current one. Links in older
+//                             posts and around the web still use it.
 //
 // Multi-tenant: every path lives under the resolved site's base path ("" at
 // its own domain's root, "/@slug" otherwise — see lib/siteUrl.ts). BlogApp
@@ -17,10 +20,12 @@
 // clicks shouldn't push history or scroll.
 
 import { useEffect, useState } from "react";
+import { postPath } from "@/lib/slug";
 
 export type BlogRoute =
   | { view: "home" }
-  | { view: "post"; slug: string };
+  | { view: "post"; collection: string; slug: string }
+  | { view: "legacy"; slug: string };
 
 let basePath = "";
 
@@ -32,16 +37,22 @@ function relativePath(pathname: string): string {
   return pathname;
 }
 
-function parse(): BlogRoute {
-  if (typeof window === "undefined") return { view: "home" };
-  const path = relativePath(window.location.pathname);
-  const m = path.match(/^\/p\/([^/]+)\/?$/);
-  if (m) return { view: "post", slug: decodeURIComponent(m[1]) };
+function routeOf(path: string): BlogRoute {
+  const legacy = path.match(/^\/p\/([^/]+)\/?$/);
+  if (legacy) return { view: "legacy", slug: decodeURIComponent(legacy[1]) };
+  const m = path.match(/^\/([^/]+)\/([^/]+)\/?$/);
+  if (m) return { view: "post", collection: decodeURIComponent(m[1]), slug: decodeURIComponent(m[2]) };
   return { view: "home" };
 }
 
+function parse(): BlogRoute {
+  if (typeof window === "undefined") return { view: "home" };
+  return routeOf(relativePath(window.location.pathname));
+}
+
 function toPath(r: BlogRoute): string {
-  const rel = r.view === "post" ? `/p/${encodeURIComponent(r.slug)}` : "/";
+  const rel =
+    r.view === "post" ? postPath(r.collection, r.slug) : r.view === "legacy" ? `/p/${encodeURIComponent(r.slug)}` : "/";
   return basePath + rel;
 }
 
@@ -96,8 +107,41 @@ export function useBlogRoute(): [BlogRoute, typeof navigateTo] {
   return [route, navigateTo];
 }
 
-export function postHref(slug: string): string {
-  return toPath({ view: "post", slug });
+export function postHref(collection: string, slug: string): string {
+  return toPath({ view: "post", collection, slug });
+}
+
+/** /p/<slug>: resolved to the post's address when followed (see fetchLegacyPost). */
+export function legacyPostHref(slug: string): string {
+  return toPath({ view: "legacy", slug });
+}
+
+/**
+ * The blog route a link in a post points at, when it's a post of this site.
+ * Links in content are stored site-relative ("/essays/foo", or "/p/foo" in
+ * older posts), because a site is read both at its own domain and under
+ * "/@slug"; this site's "/@slug" form and full URLs on this host count too.
+ * Null for anything else: external, another site's "/@…", the home page.
+ */
+export function routeOfHref(href: string): BlogRoute | null {
+  if (typeof window === "undefined") return null;
+  let path: string;
+  try {
+    const url = new URL(href, window.location.href);
+    if (url.host !== window.location.host) return null;
+    path = url.pathname;
+  } catch {
+    return null;
+  }
+  if (basePath && path.startsWith(basePath + "/")) path = path.slice(basePath.length);
+  else if (path.startsWith("/@")) return null;
+  const r = routeOf(path);
+  return r.view === "home" ? null : r;
+}
+
+/** The href of a route on this site (with its "/@slug" prefix where it has one). */
+export function routeHref(r: BlogRoute): string {
+  return toPath(r);
 }
 
 export function homeHref(): string {

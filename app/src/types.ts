@@ -6,9 +6,11 @@ export type PostStatus = "draft" | "done" | "published";
 export interface Post {
   /** PocketBase record id, minted on the client (lib/pocketbase.ts newId). */
   id: string;
+  /** The post's number in its site: 1, 2, 3… Set by the server on create, never reused or edited; null until then. */
+  number: number | null;
   title: string;
-  slug: string;                 // URL slug (editable, auto-generated from title while draft)
-  postId: string | null;        // system-managed identifier: {PREFIX}·{SEQ}, changes with collection
+  slug: string;                 // URL slug: follows the title until first published, then fixed (lib/slug.ts)
+  postId: string | null;        // legacy {PREFIX}·{SEQ} code; old links by it still resolve. Not shown.
   type: string;                 // free-form collection name (hokum, journal, brief, …)
   status: PostStatus | null;
   subtitle: string | null;      // short standfirst shown below the title
@@ -32,6 +34,8 @@ export interface Post {
 
 export interface Collection {
   name: string;
+  /** URL segment, set by the server from the name ("" until it has answered; see lib/slug.ts collectionSlugOf). */
+  slug: string;
   emoji: string | null;
   description: string | null;
   position: number;

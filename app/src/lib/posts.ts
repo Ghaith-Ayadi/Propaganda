@@ -4,6 +4,8 @@
 import { beginWrite, db as activeDb } from "@/lib/db";
 import { httpStatus, msToPbDate, newId, pb as activePb, pbDateToMs } from "@/lib/pocketbase";
 import { scheduleSync } from "@/lib/sync";
+import { dedupe, hasAddress, titleSlug } from "@/lib/slug";
+import { announcePublished } from "@/lib/publish";
 import { snapshotVersion } from "@/lib/versions";
 import { emitPostContentSaved } from "@/lib/postEvents";
 import type { Post, PostStatus } from "@/types";
@@ -12,6 +14,8 @@ import type { Post, PostStatus } from "@/types";
 export interface PostRecord {
   id: string;
   legacy_id: number;
+  /** Assigned by the server (pb_hooks/addresses.pb.js); never sent back. */
+  number: number;
   title: string;
   slug: string;
   post_id: string;
@@ -36,6 +40,7 @@ export interface PostRecord {
 export function fromRecord(r: PostRecord): Post {
   return {
     id: r.id,
+    number: r.number || null,
     title: r.title ?? "",
     slug: r.slug ?? "",
     postId: r.post_id || null,
@@ -60,7 +65,10 @@ export function fromRecord(r: PostRecord): Post {
   };
 }
 
-/** The writable fields. The id travels separately: on create it is the id we minted locally. */
+/**
+ * The writable fields. The id travels separately: on create it is the id we
+ * minted locally. `number` is the server's alone and never sent.
+ */
 export function toRecord(p: Post) {
   return {
     title: p.title,
@@ -106,28 +114,10 @@ async function updatePostIn(
   const existing = await db.posts.get(id);
   if (!existing) return;
 
-  // Auto-derive slug from title while the post is unpublished and the slug
-  // hasn't been manually customised. "Customised" is judged against the slug we
-  // would have derived from the *previous* title, not against postId: titles
-  // save per keystroke, so comparing to postId only ever matched the very first
-  // character and left the slug stuck there ("m" for "My brief").
-  if (
-    patch.title !== undefined &&
-    (existing.status ?? "draft") !== "published" &&
-    !patch.slug
-  ) {
-    const { slugify, dedupeSlug, isDerivedSlug } = await import("@/lib/postId");
-    if (isDerivedSlug(existing.slug, existing.title, existing.postId)) {
-      const taken = new Set(
-        (await db.posts.toArray())
-          .filter((p) => p.id !== id)
-          .map((p) => p.slug)
-          .filter(Boolean),
-      );
-      // A blank title falls back to the post_id code, matching a fresh draft.
-      const base = patch.title.trim() ? slugify(patch.title) : existing.postId;
-      if (base) patch = { ...patch, slug: dedupeSlug(base, taken) };
-    }
+  // Until a post has a public address, its slug is its title's: the address is
+  // fixed when it's first published (setPostStatus), not before.
+  if (patch.title !== undefined && patch.slug === undefined && !hasAddress(existing)) {
+    patch = { ...patch, slug: titleSlug(patch.title) };
   }
 
   const next: Post = {
@@ -177,21 +167,20 @@ async function stageNewPost(
 ): Promise<Post> {
   // Captured once: a scope switch mid-call must not move the write.
   const db = activeDb;
-  const { postSlug, slugify, dedupeSlug } = await import("@/lib/postId");
+  const { postSlug } = await import("@/lib/postId");
 
   const peers = await db.posts.where("type").equals(type).toArray();
   const nextSeq = peers.reduce((m, p) => Math.max(m, p.collectionSeq ?? 0), 0) + 1;
   const pid = postSlug(type, nextSeq);
 
-  // Slug defaults to a sluggified title; blank drafts fall back to the post_id
-  // code until the author types a title (updatePost re-derives it then).
+  // The slug follows the title until the post is first published.
   const title = fields.title ?? "";
-  const taken = new Set((await db.posts.toArray()).map((p) => p.slug).filter(Boolean));
-  const slug = title.trim() ? dedupeSlug(slugify(title), taken) : pid;
+  const slug = titleSlug(title);
 
   const now = Date.now();
   const post: Post = {
     id: newId(),
+    number: null, // the server hands it out on the first push
     title,
     slug,
     postId: pid,
@@ -278,8 +267,20 @@ export async function setPostStatus(id: string, status: PostStatus): Promise<voi
   if (status === "published" && before && !before.publishedAt) {
     patch.publishedAt = now;
   }
+  // First publish: the post gets its address. The slug stops following the
+  // title here, made unique among the collection's public posts. The server
+  // also counts old addresses kept as redirects, and adds a -2 if it must.
+  if (status === "published" && before && !hasAddress(before)) {
+    const taken = new Set(
+      (await db.posts.where("type").equals(before.type).toArray())
+        .filter((p) => p.id !== id && hasAddress(p))
+        .map((p) => p.slug),
+    );
+    patch.slug = dedupe(titleSlug(before.title), taken);
+  }
 
   await updatePost(id, patch);
+  if (status === "published" && before && before.status !== "published") announcePublished(db, id);
 
   // Snapshot version on meaningful status transitions
   const snapshotMessage = status === "done" ? "Done" : status === "published" ? "Published" : null;
