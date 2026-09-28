@@ -16,7 +16,7 @@
 // account is adopted as-is (same key) the first time this build runs.
 
 import type PocketBase from "pocketbase";
-import { createClient, newId, type PbUser } from "@/lib/pocketbase";
+import { createClient, newId, publicPb, type PbUser } from "@/lib/pocketbase";
 
 export const LEGACY_STORE_KEY = "pocketbase_auth";
 const ACCOUNTS_KEY = "propaganda:accounts";
@@ -160,20 +160,92 @@ function freshClient(): { client: PocketBase; key: string } {
   return { client: createClient(key), key };
 }
 
-/** Google sign-in in a popup. Must be called straight from a click. */
+/** Thrown when the Google window was closed before signing in. Not an error to show. */
+export class SignInCancelled extends Error {
+  constructor() {
+    super("Google sign-in was cancelled.");
+  }
+}
+
+/** A code already on its way when the popup closes gets this long to land. */
+const POPUP_CLOSE_GRACE_MS = 2500;
+
+function openGooglePopup(): Window | null {
+  const width = Math.min(520, window.screen.availWidth);
+  const height = Math.min(640, window.screen.availHeight);
+  const left = window.screenX + Math.max(0, (window.outerWidth - width) / 2);
+  const top = window.screenY + Math.max(0, (window.outerHeight - height) / 2);
+  return window.open("", "propaganda-google", `popup,width=${width},height=${height},left=${left},top=${top}`);
+}
+
+/**
+ * Google sign-in in a popup. Must be called straight from a click: the popup is
+ * opened before anything is awaited, which is the only way browsers allow it.
+ *
+ * The SDK waits for Google's answer over realtime and never notices a popup
+ * that was closed or blocked, so the caller would wait forever. Both end here:
+ * a blocked popup throws at once, a closed one throws SignInCancelled.
+ */
 export async function addAccountWithGoogle(): Promise<Account> {
+  const popup = openGooglePopup();
+  if (!popup) {
+    throw new Error("Your browser blocked the Google window. Allow pop-ups for this site and try again.");
+  }
   const { client, key } = freshClient();
+  // Cancelling goes through the SDK's request key, which only exists with
+  // auto-cancellation on. This client keeps it off everywhere else.
+  client.autoCancellation(true);
+  const requestKey = `google-sign-in:${key}`;
+  let settled = false;
+  const watch = window.setInterval(() => {
+    if (!popup.closed) return;
+    window.clearInterval(watch);
+    window.setTimeout(() => {
+      // The SDK drops its abort handler once the code has arrived: then it is
+      // exchanging the code and must be left to finish.
+      const pending = (client as unknown as { cancelControllers?: Record<string, AbortController> })
+        .cancelControllers?.[requestKey]?.signal.onabort;
+      if (!settled && pending !== null) client.cancelRequest(requestKey);
+    }, POPUP_CLOSE_GRACE_MS);
+  }, 400);
   try {
-    await client.collection("users").authWithOAuth2({ provider: "google" });
+    await client.collection("users").authWithOAuth2({
+      provider: "google",
+      requestKey,
+      // Already closed: the watcher above cancels it.
+      urlCallback: (url) => {
+        if (!popup.closed) popup.location.href = url;
+      },
+    });
   } catch (err) {
     try {
       localStorage.removeItem(key);
     } catch {
       // ignore
     }
+    if ((err as { isAbort?: boolean }).isAbort) throw new SignInCancelled();
     throw err;
+  } finally {
+    settled = true;
+    window.clearInterval(watch);
+    client.autoCancellation(false);
+    if (!popup.closed) popup.close();
   }
   return register(client, key);
+}
+
+/**
+ * Whether the server can email sign-in codes: pb_hooks/auth.pb.js turns them on
+ * only once SMTP is configured. Without it, asking for a code fails after
+ * creating an account for the address, so the sign-in screen doesn't offer it.
+ */
+export async function emailCodesEnabled(): Promise<boolean> {
+  try {
+    const methods = await publicPb.collection("users").listAuthMethods();
+    return Boolean(methods.otp?.enabled);
+  } catch {
+    return false;
+  }
 }
 
 export interface PendingCode {

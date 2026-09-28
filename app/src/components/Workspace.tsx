@@ -253,12 +253,21 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   }
 
   if (phase.kind === "onboarding") {
+    const { account } = phase;
     return (
       <Onboarding
-        account={phase.account}
+        account={account}
         onCancel={phase.cancellable ? cancel : undefined}
-        onSignOut={() => signOut(phase.account.userId)}
-        onDone={(site) => leaveThen(phase.account, site)}
+        onSignOut={() => {
+          const open = currentScope();
+          signOut(account.userId);
+          // signOut leaves the open site when it is this account's. Otherwise
+          // this account has nothing open here (a first sign-in, or one added
+          // from the switcher): go back to the open site, or start over with
+          // whoever is still signed in.
+          if (open?.account.userId !== account.userId) cancel();
+        }}
+        onDone={(site) => leaveThen(account, site)}
       />
     );
   }
