@@ -1,4 +1,6 @@
-// Post identifier scheme: `${COLLECTION_PREFIX}·${SEQ}` — e.g. "HKM·01".
+// Legacy post codes like "HKM·01" (`${COLLECTION_PREFIX}·${SEQ}`). Still stored
+// on new posts so old links by code keep resolving (blog/data.ts), but no longer
+// shown: a post's number (Post.number) and address (lib/slug.ts) replaced them.
 //
 //  - prefix: first 3 consonants of the collection name (upper-case),
 //    falling back to any letters when the name doesn't have enough.
@@ -24,53 +26,4 @@ export function padSeq(seq: number | null | undefined): string {
 
 export function postSlug(collectionName: string, seq: number | null | undefined): string {
   return `${collectionPrefix(collectionName)}·${padSeq(seq)}`;
-}
-
-/**
- * Derive a URL slug from a post title.
- * Lowercases, replaces spaces/special chars with hyphens, collapses runs.
- */
-export function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")  // strip non-word, non-space, non-hyphen
-    .replace(/[\s_]+/g, "-")   // spaces/underscores → hyphens
-    .replace(/-+/g, "-")       // collapse multiple hyphens
-    .replace(/^-|-$/g, "")     // trim leading/trailing hyphens
-    || "untitled";
-}
-
-/**
- * Make `base` unique against the `taken` set by appending `-2`, `-3`, … until
- * it no longer collides. `posts.slug` carries a UNIQUE index, so any derived
- * slug has to be deduped before it hits the DB.
- */
-export function dedupeSlug(base: string, taken: Set<string>): string {
-  if (!taken.has(base)) return base;
-  let n = 2;
-  while (taken.has(`${base}-${n}`)) n++;
-  return `${base}-${n}`;
-}
-
-/**
- * True when `slug` still looks machine-derived rather than author-chosen:
- * either the untouched post_id placeholder, or `slugify(title)` — optionally
- * carrying a `-2`, `-3`, … dedupe suffix.
- *
- * The title field saves on every keystroke, so "has the author customised the
- * slug?" can't be answered by comparing against the post_id alone: one
- * character into the title the slug is already "m", and a stricter check would
- * freeze it there for the life of the post.
- */
-export function isDerivedSlug(
-  slug: string | null | undefined,
-  title: string | null | undefined,
-  postId: string | null | undefined,
-): boolean {
-  if (!slug) return true;
-  if (postId && slug === postId) return true;
-  const base = (title ?? "").trim() ? slugify(title!) : "";
-  if (!base) return false;
-  if (slug === base) return true;
-  return slug.replace(/-\d+$/, "") === base;
 }

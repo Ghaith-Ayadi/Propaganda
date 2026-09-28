@@ -371,7 +371,7 @@ function LinkedPostField({ brief }: { brief: Brief }) {
   const pickItems: PickItem[] = allPosts
     .slice()
     .sort((a, b) => b.updatedAt - a.updatedAt)
-    .map((p) => ({ id: p.id, label: p.title || "Untitled", sublabel: p.postId ?? p.slug }));
+    .map((p) => ({ id: p.id, label: p.title || "Untitled", sublabel: p.number ? `#${p.number}` : p.slug }));
 
   return (
     <FieldStack label="Linked post">

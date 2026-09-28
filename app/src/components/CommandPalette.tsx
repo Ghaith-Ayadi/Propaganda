@@ -19,6 +19,7 @@ import { formatExactDate, relativeTime } from "@/lib/format";
 import { buildDate, COMMIT_SHA, DEPLOY_ENV } from "@/lib/version";
 import { ShortcutsPanel } from "@/components/KeyboardShortcuts";
 import type { Collection, Post } from "@/types";
+import { toast } from "@/components/base/toast/toast";
 
 type Mode = "search" | "commands";
 type PalettePage = null | "shortcuts" | "version";
@@ -129,7 +130,7 @@ export function CommandPalette({ currentPostId }: Props) {
     // Offline-first: staged in Dexie with a temp id, INSERTed on next sync.
     const post = await createPost(type);
     if (!post) {
-      window.alert("New post failed.");
+      toast.add({ type: "error", title: "Couldn't create a post", description: "Try again in a moment." });
       return;
     }
     localStorage.setItem(LAST_COLLECTION_KEY, type);

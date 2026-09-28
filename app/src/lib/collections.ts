@@ -13,6 +13,8 @@ import type { Collection } from "@/types";
 export interface CollectionRecord {
   id: string;
   name: string;
+  /** Set by the server from the name (pb_hooks/addresses.pb.js); clients never send it. */
+  slug: string;
   emoji: string;
   description: string;
   position: number;
@@ -29,6 +31,7 @@ export function fromCollectionRecord(r: CollectionRecord): Collection {
   recordIds.set(r.name, r.id);
   return {
     name: r.name,
+    slug: r.slug ?? "",
     emoji: r.emoji || null,
     description: r.description || null,
     position: r.position,
@@ -109,6 +112,7 @@ export async function upsertCollection(
   const now = Date.now();
   const next: Collection = {
     name,
+    slug: existing?.slug ?? "",
     emoji: patch.emoji !== undefined ? patch.emoji : existing?.emoji ?? null,
     description:
       patch.description !== undefined ? patch.description : existing?.description ?? null,
@@ -133,6 +137,7 @@ export async function upsertCollection(
     const id = await recordIdFor(name);
     const saved = id ? await collections().update(id, body) : await collections().create(body);
     recordIds.set(name, saved.id);
+    if (saved.slug !== next.slug) await db.collections.update(name, { slug: saved.slug });
   } catch (err) {
     console.error("upsertCollection failed:", err);
     // Mark dirty so the next sync retries.
@@ -140,44 +145,72 @@ export async function upsertCollection(
   }
 }
 
+/** Names in the middle of a rename: nothing may auto-create a record for them. */
+const renaming = new Set<string>();
+
+export function isRenaming(name: string): boolean {
+  return renaming.has(name);
+}
+
 /**
- * Rename a collection. Moves every post from the old name to the new one,
- * then upserts the new record and deletes the old.
+ * Rename a collection, keeping its record (and so its id and slug history).
+ *
+ * On the server, the posts move first, while the record still has the old name:
+ * the server writes a redirect from each public post's old address, which it
+ * finds through the collection's old name. Then the record is renamed in place
+ * and the server gives it a slug from the new name.
+ *
+ * Locally, posts and record change in one transaction, and both names are
+ * marked as renaming meanwhile: realtime brings the moved posts in one by one,
+ * and CollectionTabs would otherwise create a second record for the new name.
+ *
+ * The legacy post_id codes are left alone: old links by code keep working.
  */
 export async function renameCollection(oldName: string, newName: string): Promise<void> {
   if (oldName === newName || !newName) return;
-  const existing = await db.collections.get(oldName);
-  if (existing) {
-    await upsertCollection(newName, {
-      emoji: existing.emoji,
-      description: existing.description,
-      position: existing.position,
-      isHidden: existing.isHidden,
-    });
-  } else {
-    await upsertCollection(newName, {});
-  }
-  // Cascade post_id rewrites: they encode the collection prefix.
-  // Note: slug is NOT rewritten here; it belongs to the URL and must stay stable.
-  const affected = await db.posts.where("type").equals(oldName).toArray();
-  const { postSlug } = await import("@/lib/postId");
-  const posts = pb.collection("posts");
-  for (const p of affected) {
-    try {
-      await posts.update(p.id, { type: newName, post_id: postSlug(newName, p.collectionSeq) });
-    } catch (err) {
-      console.error(`renameCollection: post ${p.id} not updated:`, err);
-    }
-  }
-  // Mirror in Dexie so the UI updates without waiting for the next pull.
-  await db.transaction("rw", db.posts, async () => {
+  renaming.add(oldName);
+  renaming.add(newName);
+  try {
+    const id = await recordIdFor(oldName);
+    const affected = await db.posts.where("type").equals(oldName).toArray();
+    const posts = pb.collection("posts");
     for (const p of affected) {
-      await db.posts.put({ ...p, type: newName, postId: postSlug(newName, p.collectionSeq) });
+      try {
+        await posts.update(p.id, { type: newName });
+      } catch (err) {
+        console.error(`renameCollection: post ${p.id} not updated:`, err);
+      }
     }
-  });
-  // Delete the old collection record.
-  await db.collections.delete(oldName);
-  await deleteRemote(oldName);
+    let saved: CollectionRecord | null = null;
+    if (id) {
+      try {
+        saved = await collections().update(id, { name: newName });
+      } catch (err) {
+        console.error("renameCollection: collection not renamed:", err);
+      }
+    }
+    const existing = await db.collections.get(oldName);
+    await db.transaction("rw", db.posts, db.collections, async () => {
+      for (const p of affected) await db.posts.update(p.id, { type: newName });
+      await db.collections.delete(oldName);
+      if (saved) await db.collections.put({ ...fromCollectionRecord(saved), syncedAt: Date.now(), dirty: false });
+    });
+    if (saved) {
+      recordIds.delete(oldName);
+      recordIds.set(newName, saved.id);
+    } else {
+      // No record to rename (offline, or legacy posts that never had one): make one.
+      await upsertCollection(newName, {
+        emoji: existing?.emoji ?? null,
+        description: existing?.description ?? null,
+        position: existing?.position ?? 0,
+        isHidden: existing?.isHidden ?? false,
+      });
+    }
+  } finally {
+    renaming.delete(oldName);
+    renaming.delete(newName);
+  }
 }
 
 async function deleteRemote(name: string): Promise<void> {

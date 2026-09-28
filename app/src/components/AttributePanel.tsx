@@ -17,6 +17,10 @@ import { LinkPickerDialog, type PickItem } from "@/components/plan/LinkPickerDia
 import { DiffModal } from "@/components/DiffModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SharePanel } from "@/components/SharePanel";
+import { SlugField } from "@/components/SlugField";
+import { useWorkspace } from "@/components/Workspace";
+import { postPublicUrl } from "@/lib/siteUrl";
+import { collectionSlugOf } from "@/lib/slug";
 import { TagSelect } from "@/components/TagSelect";
 import { Input } from "@/components/base/input/input";
 import { Select } from "@/components/base/select/select";
@@ -52,11 +56,10 @@ export function AttributePanel({ post }: Props) {
 
   const [diffFor, setDiffFor] = useState<PostVersion | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [slugWarnDismissed, setSlugWarnDismissed] = useState(false);
-  const [slugEdited, setSlugEdited] = useState(false);
   const [tab, setTab] = useState<"details" | "brief" | "analytics">("details");
 
-  const publicUrl = `${window.location.origin}/p/${post.slug}`;
+  const { site } = useWorkspace();
+  const publicUrl = postPublicUrl(site, collectionSlugOf(post.type, collectionRows), post.slug);
 
   async function onDuplicate() {
     const dup = await duplicatePost(post);
@@ -145,43 +148,7 @@ export function AttributePanel({ post }: Props) {
       </FieldStack>
 
       <FieldStack label="Slug">
-        <Input
-          size="sm"
-          value={post.slug}
-          onChange={(v) => {
-            setSlugEdited(true);
-            void updatePost(post.id, { slug: v });
-          }}
-          onBlur={() => {
-            // Normalize whatever was typed/pasted into a real slug when the
-            // field loses focus, deduping against the UNIQUE slug index.
-            void (async () => {
-              const { slugify, dedupeSlug } = await import("@/lib/postId");
-              const normalized = slugify(post.slug);
-              if (!normalized || normalized === post.slug) return;
-              const taken = new Set(
-                (await db.posts.toArray())
-                  .filter((p) => p.id !== post.id)
-                  .map((p) => p.slug)
-                  .filter(Boolean),
-              );
-              void updatePost(post.id, { slug: dedupeSlug(normalized, taken) });
-            })();
-          }}
-        />
-        <p className="mt-1.5 select-all truncate text-[11px] text-quaternary">{publicUrl}</p>
-        {post.status === "published" && slugEdited && !slugWarnDismissed && (
-          <div className="mt-2 flex items-start justify-between gap-1.5 rounded-md bg-utility-yellow-100 px-2.5 py-1.5 text-[11px] text-utility-yellow-700">
-            <span>Changing the slug will break any existing public links to this post.</span>
-            <button
-              onClick={() => setSlugWarnDismissed(true)}
-              className="mt-0.5 shrink-0 opacity-60 hover:opacity-100"
-              aria-label="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-        )}
+        <SlugField post={post} collections={collectionRows} />
       </FieldStack>
 
       <FieldStack label="Collection">
@@ -239,8 +206,8 @@ export function AttributePanel({ post }: Props) {
         <div className="mb-2 text-sm font-semibold text-secondary">Info</div>
         <dl className="space-y-1.5 text-xs">
           <div className="flex items-baseline justify-between gap-2">
-            <dt className="shrink-0 text-quaternary">Post ID</dt>
-            <dd className="select-all truncate font-mono text-secondary">{post.postId ?? post.slug}</dd>
+            <dt className="shrink-0 text-quaternary">ID</dt>
+            <dd className="select-all truncate font-mono text-secondary">{post.number ?? "Pending"}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <dt className="shrink-0 text-quaternary">Published</dt>

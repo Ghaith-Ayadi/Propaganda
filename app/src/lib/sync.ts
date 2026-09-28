@@ -121,6 +121,7 @@ function start(ctx: Ctx, mode: "full" | "push"): Promise<void> {
       await pushTable(ctx, ctx.db.briefTemplates, "brief_templates", toTemplateRecord, fromTemplateRecord);
       if (mode === "push") return;
       await pullTable(ctx, ctx.db.posts, "posts", "lastPullPb.posts", fromRecord);
+      await pullNumbers(ctx);
       await pullAllVersions(ctx);
       await pullCollections(ctx);
       await pullTable(ctx, ctx.db.briefs, "briefs", "lastPullPb.briefs", fromBriefRecord);
@@ -231,6 +232,37 @@ async function pullTable<L extends Synced, R extends Stamped>(
     }
   });
   await db.syncMeta.put({ key: cursorKey, value: new Date(maxMs).toISOString() });
+}
+
+/**
+ * Post numbers for posts this device already has. The migration that
+ * introduced them (1758000007) didn't bump `updated`, on purpose: a bump would
+ * make every device re-download its posts over unsynced drafts. So the
+ * incremental pull never brings them; fetch just id -> number and fill in that
+ * one field. Numbers never change, so this runs only while some are missing.
+ */
+async function pullNumbers(ctx: Ctx): Promise<void> {
+  const { db, pb } = ctx;
+  const missing = await db.posts.filter((p) => !p.number && !!p.syncedAt).count();
+  if (!missing) return;
+  let rows: { id: string; number: number }[];
+  try {
+    rows = await pb.collection("posts").getFullList<{ id: string; number: number }>({
+      filter: pb.filter("site = {:site} && number > 0", { site: ctx.site }),
+      fields: "id,number",
+      batch: 1000,
+    });
+  } catch (err) {
+    console.error("Pull numbers failed:", err);
+    return;
+  }
+  await db.transaction("rw", db.posts, async () => {
+    for (const r of rows) {
+      const local = await db.posts.get(r.id);
+      // update() touches only `number`: dirty edits and their timestamps stay as they are.
+      if (local && !local.number) await db.posts.update(r.id, { number: r.number });
+    }
+  });
 }
 
 async function pullCollections(ctx: Ctx): Promise<void> {

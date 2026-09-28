@@ -37,8 +37,9 @@ export function PostTable({ posts, onAddPost }: Props) {
     }
     const q = query.trim().toLowerCase();
     if (q) {
+      const num = /^#?\d+$/.test(q) ? Number(q.replace("#", "")) : null;
       xs = xs.filter(
-        (p) => p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q),
+        (p) => p.number === num || p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q),
       );
     }
     const field = sortKey === "updated" ? "updatedAt" : "createdAt";
@@ -85,7 +86,7 @@ export function PostTable({ posts, onAddPost }: Props) {
       <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
         <thead className="sticky top-[57px] z-20">
           <tr>
-            <Th className="w-20">ID</Th>
+            <Th className="w-16">ID</Th>
             <Th>Title</Th>
             <Th className="w-28">Status</Th>
             <Th className="w-36">Length</Th>
@@ -147,7 +148,8 @@ export function PostTable({ posts, onAddPost }: Props) {
               }}
               className="group cursor-pointer text-secondary outline-none transition hover:bg-secondary focus:bg-secondary"
             >
-              <Td className="date-pill text-xs text-quaternary">{p.id ?? "—"}</Td>
+              {/* The server numbers a post on its first push; until then it has none. */}
+              <Td className="font-mono text-xs tabular-nums text-quaternary">{p.number ?? ""}</Td>
               <Td className="truncate text-sm text-primary">
                 {p.title || <span className="text-quaternary">Untitled</span>}
               </Td>

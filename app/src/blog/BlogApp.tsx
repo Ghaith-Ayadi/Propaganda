@@ -93,8 +93,8 @@ function BlogAppInner({ site }: { site: BlogSite }) {
   return (
     <>
       <AdminStrip />
-      {route.view === "post" ? (
-        <Reader slug={route.slug} site={site} />
+      {route.view !== "home" ? (
+        <Reader route={route} site={site} />
       ) : (
         <Home collections={collections} posts={posts} site={site} />
       )}
