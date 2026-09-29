@@ -20,9 +20,18 @@ check("a lookalike suffix isn't the platform", (await tls("verbatim.propaganda.p
 check("another domain isn't one (custom domains come later)", (await tls("verbatim.ayadighaith.com")) === 404);
 check("no domain at all", (await tls("")) === 404);
 
+// Sign-ins are rate-limited (PocketBase's default: 2 every 3 s per client) and
+// the suites before this one just used them: wait out a 429 and try again.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const signIn = async (pb, email, pass) => {
+  for (let attempt = 1; ; attempt++) {
+    try { return await pb.collection("users").authWithPassword(email, pass); }
+    catch (e) { if (e.status !== 429 || attempt >= 5) throw e; await sleep(4000); }
+  }
+};
 const stranger = new PocketBase(URL);
 stranger.autoCancellation(false);
-await stranger.collection("users").authWithPassword("stranger@test.local", "strangerpass1");
+await signIn(stranger, "stranger@test.local", "strangerpass1");
 const create = async (slug) => {
   try { await stranger.send("/api/propaganda/sites", { method: "POST", body: { name: "X", slug } }); return 200; }
   catch (e) { return e.status; }
