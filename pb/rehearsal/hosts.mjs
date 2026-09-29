@@ -13,7 +13,7 @@ check("an existing site's subdomain gets a certificate", (await tls("verbatim.pr
 check("…in any case, with a trailing dot", (await tls("Verbatim.Propaganda.pub.")) === 200);
 check("…and so does a site created later", (await tls("propaganda.propaganda.pub")) === 200);
 check("an unknown subdomain doesn't", (await tls("nobody-here.propaganda.pub")) === 404);
-check("the app host isn't a blog", (await tls("app.propaganda.pub")) === 404);
+check("the app host gets a certificate too", (await tls("app.propaganda.pub")) === 200);
 check("two labels deep isn't a blog", (await tls("a.verbatim.propaganda.pub")) === 404);
 check("the bare platform domain isn't a blog", (await tls("propaganda.pub")) === 404);
 check("a lookalike suffix isn't the platform", (await tls("verbatim.propaganda.pub.evil.test")) === 404);

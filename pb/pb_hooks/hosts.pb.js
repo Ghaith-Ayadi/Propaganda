@@ -7,7 +7,9 @@
 //
 // and only goes ahead on a 200. Blogs live at <slug>.<platform domain>
 // (PROPAGANDA_PLATFORM_DOMAIN, default propaganda.pub), so the answer is 200
-// for the subdomain of an existing site and 404 for anything else. Without the
+// for the subdomain of an existing site, and for the app host
+// (app.<platform domain>, the editor and API), which sits under the same
+// wildcard and gets its certificate on demand too. 404 for anything else. Without the
 // check, anyone could point hostnames at the box and make Caddy request
 // certificates for them. Site slugs are public already (the `sites` list
 // rule), so the answer reveals nothing new. Custom domains join here once
@@ -17,6 +19,7 @@ routerAdd("GET", "/api/propaganda/tls-check", (e) => {
   const domain = String(e.requestInfo().query["domain"] || "").trim().toLowerCase().replace(/\.$/, "");
   const platform = String($os.getenv("PROPAGANDA_PLATFORM_DOMAIN") || "propaganda.pub").toLowerCase();
   const suffix = "." + platform;
+  if (domain === "app" + suffix) return e.string(200, "ok");
   if (domain.endsWith(suffix)) {
     const slug = domain.slice(0, -suffix.length);
     if (slug && slug.indexOf(".") === -1) {
