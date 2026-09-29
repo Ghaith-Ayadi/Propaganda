@@ -68,6 +68,8 @@ export interface WorkspaceApi {
   signOut: (userId: string) => void;
   /** Re-read the active site's details after an edit (e.g. rename). */
   refreshSite: (site: SiteRef) => void;
+  /** The open site was deleted: leave it, then open the account's next site, or onboarding. */
+  siteDeleted: () => void;
   /** False when the account's session expired; it needs signing in again. */
   isSignedIn: (userId: string) => boolean;
 }
@@ -224,6 +226,21 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     [boot],
   );
 
+  // Leave a site that was just deleted the way a sign-out leaves one, minus the
+  // push: there's nowhere to push to. Its local database stays.
+  const siteDeleted = useCallback(() => {
+    const cur = currentScope();
+    if (!cur) return;
+    setPhase({ kind: "loading" });
+    void (async () => {
+      setSyncEnabled(false);
+      await waitForWrites(60);
+      await stopRealtime();
+      deactivateScope();
+      await boot(cur.account.userId);
+    })();
+  }, [boot]);
+
   // Back from sign-in / onboarding without finishing.
   const cancel = useCallback(() => {
     const cur = currentScope();
@@ -293,6 +310,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
       updateActiveSite(site);
       setPhase({ kind: "ready", key: phase.key });
     },
+    siteDeleted,
     isSignedIn: (userId) => {
       const a = getAccount(userId);
       return Boolean(a && usable(a));

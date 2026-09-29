@@ -19,6 +19,9 @@
    check (`/api/propaganda/tls-check`) says yes only to an existing site's
    subdomain, and site slugs refuse the platform's own hosts and IDN-style
    labels.
+7. runs `sites.mjs`: deleting a site. Owner only, refused while the site has
+   any post (Verbatim can't go), everything it owned removed, and its slug
+   free to create again.
 
 Every suite exits non-zero on a failed check, and `snapshot.mjs` ignores only
 the fields a migration adds on purpose (`posts.number`, `collections.slug`).
