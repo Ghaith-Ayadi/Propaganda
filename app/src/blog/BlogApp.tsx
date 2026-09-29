@@ -6,7 +6,7 @@ import { Home } from "./components/Home";
 import { Reader } from "./components/Reader";
 import { AdminStrip } from "./components/AdminStrip";
 import { SiteNotFound } from "./components/SiteNotFound";
-import { legacyAddressTarget, resolveBlogSite, type BlogSite } from "./site";
+import { customDomainTarget, legacyAddressTarget, resolveBlogSite, type BlogSite } from "./site";
 import { bindPublicSettings, installSettings, useSetting } from "@/lib/settings";
 import { publicPb } from "@/lib/pocketbase";
 
@@ -42,6 +42,11 @@ export function BlogApp() {
         return;
       }
       const s = await resolveBlogSite();
+      const elsewhere = s && customDomainTarget(s);
+      if (elsewhere) {
+        window.location.replace(elsewhere);
+        return;
+      }
       // Must happen before anything reads settings or navigates.
       if (s) bindPublicSettings(publicPb, s.id);
       setSite(s);

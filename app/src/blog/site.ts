@@ -7,7 +7,8 @@
 // An unknown subdomain is also "no site", not a fallback.
 //
 // Addresses from before blogs had their own hosts, "/@slug/…", forward to the
-// same path at the site's address: see legacyAddressTarget().
+// same path at the site's address (legacyAddressTarget()), and so does the
+// subdomain of a blog with a custom domain (customDomainTarget()).
 //
 // Resolved once and cached at module scope: every blog component reads the
 // same site through currentBlogSite() without re-fetching or prop-drilling.
@@ -89,6 +90,17 @@ async function resolve(): Promise<BlogSite | null> {
   if (fallbackSlug) return bySlug(fallbackSlug);
 
   return null;
+}
+
+/**
+ * Where a blog with a custom domain is read: its subdomain forwards there,
+ * same path, so every post has one address. Only from the subdomain, so a
+ * preview host resolved by VITE_DEFAULT_SITE_SLUG stays put. Null to stay.
+ */
+export function customDomainTarget(site: BlogSite): string | null {
+  if (typeof window === "undefined" || !site.domain || !platformSlugOf(window.location.hostname)) return null;
+  const { pathname, search, hash } = window.location;
+  return sitePublicUrl(site) + pathname.slice(1) + search + hash;
 }
 
 /**
