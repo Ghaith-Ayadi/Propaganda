@@ -1,0 +1,40 @@
+<script>
+/* Harness entry: renders straight into this document so the viewport is real. */
+(function () {
+  const E = window.PPGD_ENGINE, FX = window.PPGD_FIXTURES.fixtures();
+  const themeEl = document.getElementById("theme");
+  function swapBroken() {
+    document.querySelectorAll(".pg-site img").forEach((img) => {
+      const swap = () => {
+        const box = img.closest(".pg-media, .pg-avatar");
+        if (box) { box.setAttribute("data-placeholder", ""); box.innerHTML = `<span aria-hidden="true">${E.esc(img.dataset.initial || "·")}</span>`; }
+        else { const fig = img.closest("figure"); if (fig) fig.setAttribute("data-broken", ""); img.remove(); }
+      };
+      if (img.complete && img.naturalWidth === 0) swap(); else img.addEventListener("error", swap, { once: true });
+    });
+  }
+  window.PPGD = {
+    fixtures: FX, engine: E,
+    registerThemes(list) { for (const t of list) E.THEMES[t.id] = t; return Object.keys(E.THEMES); },
+    render(state) {
+      const fx = FX[state.fixture || "sample"];
+      const route = Object.assign({ tpl: "home" }, state.route);
+      if (route.tpl === "collection" && !route.collection) route.collection = (fx.collections.find((c) => fx.posts.some((p) => p.collection === c.slug)) || fx.collections[0] || {}).slug;
+      if (route.tpl === "post" && !route.post) route.post = fx.posts[0]?.slug;
+      const out = E.renderSite(fx, state.theme || "rubric", state.overrides || {}, route, state);
+      themeEl.textContent = out.css;
+      document.body.innerHTML = out.html;
+      document.title = out.title;
+      window.scrollTo(0, 0);
+      // Load everything now (lazy images below the fold would never settle), with a timeout as a backstop.
+      const settle = [...document.querySelectorAll(".pg-site img")].map((img) => {
+        img.loading = "eager";
+        return Promise.race([img.decode().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
+      });
+      return Promise.all(settle).then(() => { swapBroken(); return { title: out.title, dropped: out.dropped, report: out.compiled.report }; });
+    },
+  };
+  const q = new URLSearchParams(location.search);
+  if (q.get("theme")) window.PPGD.render({ theme: q.get("theme"), fixture: q.get("fixture") || "sample", route: { tpl: q.get("tpl") || "home", collection: q.get("c") || undefined, post: q.get("p") || undefined }, overrides: q.get("o") ? JSON.parse(q.get("o")) : {} });
+})();
+</script>
