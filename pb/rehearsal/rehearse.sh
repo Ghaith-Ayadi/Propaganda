@@ -4,7 +4,8 @@
 # every row, apply the current pb/ (migrations + hooks), snapshot again and
 # compare, then run the access-rule suite (rules.mjs), the post-address
 # suite (addresses.mjs: numbers, collection slugs, redirects) and the host
-# suite (hosts.mjs: the on-demand TLS check, subdomain-shaped slugs).
+# suite (hosts.mjs: the on-demand TLS check, subdomain-shaped slugs) and the
+# site deletion suite (sites.mjs).
 #
 #   PB_BIN=/path/to/pocketbase-0.40.4 pb/rehearsal/rehearse.sh
 #
@@ -47,4 +48,4 @@ import json,sys
 a=json.load(open('before.json')); b=json.load(open('after.json'))
 ok=all(a[k]==b[k] for k in a)
 print('content + updated timestamps unchanged:', ok)
-sys.exit(0 if ok else 1)" && node rules.mjs && node addresses.mjs && node hosts.mjs)
+sys.exit(0 if ok else 1)" && node rules.mjs && node addresses.mjs && node hosts.mjs && node sites.mjs)

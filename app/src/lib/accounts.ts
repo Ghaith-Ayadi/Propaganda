@@ -422,6 +422,18 @@ export async function updateSite(
   return cachedSites(account.userId).find((s) => s.id === siteId)!;
 }
 
+/**
+ * Delete a site (owners only; the server refuses one that has posts) and drop
+ * it from the cache. Its local database stays, like every local database.
+ */
+export async function deleteSite(account: Account, siteId: string): Promise<void> {
+  await clientFor(account).send(`/api/propaganda/sites/${siteId}`, { method: "DELETE" });
+  cacheSites(
+    account.userId,
+    cachedSites(account.userId).filter((s) => s.id !== siteId),
+  );
+}
+
 /** Whether an address is free, for the onboarding form. */
 export async function isSlugAvailable(client: PocketBase, slug: string): Promise<boolean> {
   try {

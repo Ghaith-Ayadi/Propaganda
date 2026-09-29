@@ -4,7 +4,7 @@ import { File02, Globe01, PenTool01, Plus, Trash01, Upload01, User01, XClose } f
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { useWorkspace } from "@/components/Workspace";
-import { updateSite } from "@/lib/accounts";
+import { deleteSite, updateSite } from "@/lib/accounts";
 import { siteHost } from "@/lib/siteUrl";
 import { db } from "@/lib/db";
 import { useSetting, setSetting, useSettingsVersion } from "@/lib/settings";
@@ -186,6 +186,93 @@ function SiteTab() {
           />
         </Field>
       </div>
+      <DeleteSiteSection />
+    </div>
+  );
+}
+
+/**
+ * Owner only: delete the site, confirmed by typing its slug. The server refuses
+ * a site with any post, so only one without (made to try onboarding, say) can
+ * go, and its address is free again. Not a <Field>: a click on a label's text
+ * would press the first button inside it.
+ */
+function DeleteSiteSection() {
+  const { account, site, siteDeleted } = useWorkspace();
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (site.role !== "owner") return null;
+
+  async function remove() {
+    setError(null);
+    // Posts on this device count too, synced or not: deleting would strand them.
+    if ((await db.posts.count()) > 0) {
+      setError("This site has posts. Only a site without posts can be deleted.");
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteSite(account, site.id);
+      toast.add({ type: "success", title: `Deleted ${site.name}` });
+      siteDeleted();
+    } catch (err) {
+      setError((err as Error).message);
+      setDeleting(false);
+    }
+  }
+
+  function cancel() {
+    setConfirming(false);
+    setTyped("");
+    setError(null);
+  }
+
+  return (
+    <div className="space-y-3 border-t border-secondary pt-5">
+      <div>
+        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">Delete site</div>
+        <p className="text-xs text-tertiary">
+          Removes {site.name}, its collections and settings, and frees {siteHost(site)}. Only a site
+          without posts can be deleted.
+        </p>
+      </div>
+      {confirming ? (
+        <div className="space-y-3">
+          <Input
+            size="sm"
+            placeholder={site.slug}
+            value={typed}
+            onChange={setTyped}
+            aria-label={`Type ${site.slug} to confirm`}
+          />
+          <p className="text-xs text-tertiary">
+            Type <span className="font-medium text-secondary">{site.slug}</span> to confirm.
+          </p>
+          {error && <p className="text-sm text-error-primary">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" color="secondary" isDisabled={deleting} onClick={cancel}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              color="primary-destructive"
+              isDisabled={typed.trim() !== site.slug || deleting}
+              onClick={() => void remove()}
+            >
+              {deleting ? "Deleting…" : "Delete site"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex justify-end">
+          <Button size="sm" color="secondary-destructive" onClick={() => setConfirming(true)}>
+            Delete site…
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

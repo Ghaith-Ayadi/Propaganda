@@ -3,8 +3,9 @@
 // and its owner membership always appear together and slugs are checked
 // against the reserved list.
 //
-//   POST  /api/propaganda/sites        {"name":"Propaganda","slug":"propaganda"}
-//   PATCH /api/propaganda/sites/{id}   {"name":"…","slug":"…"}          owner only
+//   POST   /api/propaganda/sites        {"name":"Propaganda","slug":"propaganda"}
+//   PATCH  /api/propaganda/sites/{id}   {"name":"…","slug":"…"}          owner only
+//   DELETE /api/propaganda/sites/{id}   only while it has no posts      owner only
 //
 // `domain` is not editable here: mapping a hostname is a superuser action in the
 // dashboard (it has to be configured in Vercel too).
@@ -73,4 +74,26 @@ routerAdd("PATCH", "/api/propaganda/sites/{id}", (e) => {
   }
   e.app.save(site);
   return e.json(200, { site: site });
+}, $apis.requireAuth("users"));
+
+// Deleting a site, from its settings. Refused while the site has any post,
+// drafts included: a real blog can't go this way, and a site made to try
+// onboarding (collections and settings, no posts) goes cleanly, its slug free
+// again. Memberships and post redirects follow the site (cascade); the other
+// site-scoped records don't, so they go first, in the same transaction.
+routerAdd("DELETE", "/api/propaganda/sites/{id}", (e) => {
+  const t = require(`${__hooks}/lib/tenancy.js`);
+  const id = e.request.pathValue("id");
+  const m = t.membership(e.app, id, e.auth.id);
+  if (!m || m.getString("role") !== "owner") throw new ForbiddenError("Only the site's owner can delete it.");
+  if (e.app.findRecordsByFilter("posts", "site = {:s}", "", 1, 0, { s: id }).length) {
+    throw new BadRequestError("This site has posts. Only a site without posts can be deleted.", { site: "has_posts" });
+  }
+  e.app.runInTransaction((tx) => {
+    for (const name of ["post_versions", "briefs", "brief_templates", "collections", "app_settings", "writing_activity"]) {
+      for (const r of tx.findAllRecords(name, $dbx.hashExp({ site: id }))) tx.delete(r);
+    }
+    tx.delete(tx.findRecordById("sites", id));
+  });
+  return e.json(200, { deleted: id });
 }, $apis.requireAuth("users"));
