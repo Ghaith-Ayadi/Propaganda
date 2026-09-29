@@ -1,8 +1,8 @@
 // "@mention" linking to other posts. Two entry points, one mechanism:
 //   1. MentionAutocomplete — type "@query" inline; Enter pastes the post's full
 //      title as a link to its address (/<collection>/<slug>), Notion-style.
-//      Site-relative, so the link works at the site's own domain and under
-//      /@slug alike (the Reader treats it as internal either way).
+//      Site-relative, so the link works on the blog's subdomain and its custom
+//      domain alike (the Reader treats it as internal on either).
 //   2. MentionToolbarButton — an "@" button at the end of the selection
 //      formatting toolbar; links the highlighted text to a post you pick.
 // Both share the same MiniSearch-backed picker and write a real BlockNote link

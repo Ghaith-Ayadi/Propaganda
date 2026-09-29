@@ -177,6 +177,8 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: "autoUpdate",
+        // EditorApp registers the worker itself: blogs never load it.
+        injectRegister: false,
         includeAssets: ["favicon.svg"],
         manifest: {
           // Stable identity pinned to the admin app so the installed PWA is the

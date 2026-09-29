@@ -1,18 +1,19 @@
-// Resolves which site the public blog is showing.
+// Resolves which site the public blog is showing, from the host. Every blog is
+// served at the root of its own host (see lib/siteUrl.ts):
+//   1. <slug>.<platform domain> (verbatim.propaganda.pub): that site;
+//   2. a custom domain: the site whose `domain` matches the hostname;
+//   3. VITE_DEFAULT_SITE_SLUG, for hosts with neither (Vercel's preview URLs);
+//   4. none of the above: no site (BlogApp shows a "Site not found" page).
+// An unknown subdomain is also "no site", not a fallback.
 //
-// Precedence (see lib/siteUrl.ts for the address rules):
-//   1. a "/@slug" path prefix — wins even on a domain-mapped host, so a site
-//      is always reachable there regardless of which domain is loaded;
-//   2. the site whose `domain` matches the current hostname;
-//   3. VITE_DEFAULT_SITE_SLUG, for local dev / preview hosts with neither;
-//   4. none of the above → no site (BlogApp shows a "Site not found" page).
-// An unknown slug in the path is also "no site", not a fallback.
+// Addresses from before blogs had their own hosts, "/@slug/…", forward to the
+// same path at the site's address: see legacyAddressTarget().
 //
 // Resolved once and cached at module scope: every blog component reads the
 // same site through currentBlogSite() without re-fetching or prop-drilling.
 
 import { publicPb } from "@/lib/pocketbase";
-import { parseSitePath } from "@/lib/siteUrl";
+import { parseLegacySitePath, platformSlugOf, sitePublicUrl } from "@/lib/siteUrl";
 
 export interface BlogSite {
   id: string;
@@ -76,11 +77,11 @@ async function byDomain(domain: string): Promise<BlogSite | null> {
 
 async function resolve(): Promise<BlogSite | null> {
   if (typeof window === "undefined") return null;
-
-  const parsed = parseSitePath(window.location.pathname);
-  if (parsed) return bySlug(parsed.slug);
-
   const host = window.location.hostname;
+
+  const slug = platformSlugOf(host);
+  if (slug) return bySlug(slug);
+
   const mapped = host ? await byDomain(host) : null;
   if (mapped) return mapped;
 
@@ -88,4 +89,18 @@ async function resolve(): Promise<BlogSite | null> {
   if (fallbackSlug) return bySlug(fallbackSlug);
 
   return null;
+}
+
+/**
+ * Where an old "/@slug/…" address lives now: the same path, query and hash at
+ * that site's address (its custom domain when it has one). Null when the path
+ * isn't one, or names no site.
+ */
+export async function legacyAddressTarget(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const parsed = parseLegacySitePath(window.location.pathname);
+  if (!parsed) return null;
+  const site = await bySlug(parsed.slug);
+  if (!site) return null;
+  return sitePublicUrl(site) + parsed.rest.slice(1) + window.location.search + window.location.hash;
 }

@@ -24,7 +24,8 @@ export interface TrackOpts {
 export function installPageTracker(opts: TrackOpts): () => void {
   if (!BASE || typeof window === "undefined" || !("sendBeacon" in navigator)) return () => {};
   const host = window.location.hostname;
-  if (host === "localhost" || host === "127.0.0.1" || host === "") return () => {};
+  // Dev blogs live at <slug>.localhost too (VITE_PLATFORM_DOMAIN=localhost).
+  if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1" || host === "") return () => {};
 
   const sid = sessionId();
   const start = Date.now();

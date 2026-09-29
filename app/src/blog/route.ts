@@ -9,12 +9,12 @@
 //                             it: forwarded to the current one. Links in older
 //                             posts and around the web still use it.
 //
-// Multi-tenant: every path lives under the resolved site's base path ("" at
-// its own domain's root, "/@slug" otherwise — see lib/siteUrl.ts). BlogApp
-// calls setBasePath() once the site is resolved, before anything else reads
-// or navigates; parse()/toPath() strip and re-add that prefix so the rest of
-// this module (and every component using it) only ever deals with the
-// site-relative path.
+// Multi-tenant: every blog is served at the root of its own host (its
+// subdomain or custom domain; see lib/siteUrl.ts), so paths are site-relative
+// as they stand. setBasePath() remains for a host that serves a blog under a
+// prefix (a members' preview on the app host): parse()/toPath() strip and
+// re-add that prefix so the rest of this module, and every component using
+// it, only ever deals with the site-relative path.
 //
 // The active home tab is component-local state (not in the URL): tab
 // clicks shouldn't push history or scroll.
@@ -71,9 +71,9 @@ if (typeof window !== "undefined") {
 }
 
 /**
- * Set the site's base path ("" or "/@slug") and re-derive the current route
- * from the (unchanged) URL under it. Called once by BlogApp right after the
- * site resolves, before any navigation happens.
+ * Set the site's base path ("" at the root of its own host) and re-derive the
+ * current route from the (unchanged) URL under it. Call it once the site is
+ * resolved, before any navigation happens.
  */
 export function setBasePath(bp: string): void {
   if (basePath === bp) return;
@@ -119,9 +119,10 @@ export function legacyPostHref(slug: string): string {
 /**
  * The blog route a link in a post points at, when it's a post of this site.
  * Links in content are stored site-relative ("/essays/foo", or "/p/foo" in
- * older posts), because a site is read both at its own domain and under
- * "/@slug"; this site's "/@slug" form and full URLs on this host count too.
- * Null for anything else: external, another site's "/@…", the home page.
+ * older posts), so they work on the blog's subdomain and its custom domain
+ * alike; full URLs on this host count too. Null for anything else: external,
+ * the home page, or an old "/@slug/…" link, which a full page load forwards
+ * (blog/site.ts).
  */
 export function routeOfHref(href: string): BlogRoute | null {
   if (typeof window === "undefined") return null;
@@ -139,7 +140,7 @@ export function routeOfHref(href: string): BlogRoute | null {
   return r.view === "home" ? null : r;
 }
 
-/** The href of a route on this site (with its "/@slug" prefix where it has one). */
+/** The href of a route on this site (under its base path, where it has one). */
 export function routeHref(r: BlogRoute): string {
   return toPath(r);
 }
