@@ -3,6 +3,7 @@ import { Plus, Trash01 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { clientFor, createSite, isSlugAvailable, type Account, type SiteRef } from "@/lib/accounts";
+import { siteHost } from "@/lib/siteUrl";
 import { cx } from "@/utils/cx";
 
 /** A collection row while onboarding — not yet a `collections` record. */
@@ -139,7 +140,7 @@ export function Onboarding({
     onDone(site);
   }
 
-  const url = `${location.origin}/@${slug || "…"}`;
+  const url = siteHost({ slug: slug || "…", domain: "" });
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-primary">

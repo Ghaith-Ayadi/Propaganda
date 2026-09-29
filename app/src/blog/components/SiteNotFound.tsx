@@ -1,5 +1,5 @@
-// Shown when the current host/path resolves to no site: an unmapped domain,
-// no /@slug prefix and no VITE_DEFAULT_SITE_SLUG fallback, or an unknown slug.
+// Shown when the current host resolves to no site: a subdomain no site has, or
+// an unmapped domain with no VITE_DEFAULT_SITE_SLUG fallback.
 
 export function SiteNotFound() {
   return (

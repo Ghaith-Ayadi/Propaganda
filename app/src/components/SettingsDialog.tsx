@@ -5,6 +5,7 @@ import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { useWorkspace } from "@/components/Workspace";
 import { updateSite } from "@/lib/accounts";
+import { siteHost } from "@/lib/siteUrl";
 import { db } from "@/lib/db";
 import { useSetting, setSetting, useSettingsVersion } from "@/lib/settings";
 import { uploadFile } from "@/lib/uploads";
@@ -226,7 +227,11 @@ function SiteIdentityFields() {
       </Field>
       <Field
         label="Address"
-        hint={canEdit ? "Changing this breaks any existing /@slug links to this site." : "Only the site's owner can change this."}
+        hint={
+          canEdit
+            ? `The blog lives at ${siteHost({ slug: slug.trim() || "…", domain: "" })}. Changing this moves it, and the old address stops working.`
+            : "Only the site's owner can change this."
+        }
       >
         <Input size="sm" value={slug} onChange={setSlug} isDisabled={!canEdit} />
       </Field>

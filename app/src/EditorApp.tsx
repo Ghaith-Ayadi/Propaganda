@@ -22,6 +22,13 @@ import { installSearchIndex } from "@/lib/search";
 import { snapshotVersion } from "@/lib/versions";
 import { toggleTheme } from "@/lib/theme";
 
+// The service worker is the editor's offline shell, so only the editor
+// registers it: blog readers never download the whole app. The same call
+// vite-plugin-pwa used to inject into every page (injectRegister: false).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
+}
+
 export function EditorApp() {
   return (
     <>

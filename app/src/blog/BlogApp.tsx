@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 import "./styles.css";
 import { useBlogData } from "./data";
-import { useBlogRoute, setBasePath } from "./route";
+import { useBlogRoute } from "./route";
 import { Home } from "./components/Home";
 import { Reader } from "./components/Reader";
 import { AdminStrip } from "./components/AdminStrip";
 import { SiteNotFound } from "./components/SiteNotFound";
-import { resolveBlogSite, type BlogSite } from "./site";
+import { customDomainTarget, legacyAddressTarget, resolveBlogSite, type BlogSite } from "./site";
 import { bindPublicSettings, installSettings, useSetting } from "@/lib/settings";
 import { publicPb } from "@/lib/pocketbase";
-import { siteBasePath } from "@/lib/siteUrl";
 
 function Loading() {
   return (
@@ -35,14 +34,23 @@ export function BlogApp() {
   const [site, setSite] = useState<BlogSite | null | undefined>(undefined);
 
   useEffect(() => {
-    void resolveBlogSite().then((s) => {
-      if (s) {
-        // Must happen before anything reads settings or navigates.
-        bindPublicSettings(publicPb, s.id);
-        setBasePath(siteBasePath(s));
+    void (async () => {
+      // An old "/@slug/…" address: the blog lives on its own host now.
+      const target = await legacyAddressTarget();
+      if (target) {
+        window.location.replace(target);
+        return;
       }
+      const s = await resolveBlogSite();
+      const elsewhere = s && customDomainTarget(s);
+      if (elsewhere) {
+        window.location.replace(elsewhere);
+        return;
+      }
+      // Must happen before anything reads settings or navigates.
+      if (s) bindPublicSettings(publicPb, s.id);
       setSite(s);
-    });
+    })();
   }, []);
 
   if (site === undefined) return <Loading />;

@@ -272,7 +272,7 @@ export function Reader({ route, site }: Props) {
                 const external =
                   /^https?:\/\//i.test(href) && !href.includes(window.location.host);
                 // A post of this site: its address, an old /p/ link (in older
-                // posts and wikilinks), with or without this site's /@ prefix.
+                // posts and wikilinks), site-relative or a full URL on this host.
                 const internal = routeOfHref(href);
                 if (internal) {
                   return (

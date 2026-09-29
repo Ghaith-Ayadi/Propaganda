@@ -1,5 +1,5 @@
-// Post addresses: /<collection slug>/<post slug> under the site's base path
-// ("" on its own domain, "/@<site slug>" elsewhere; see lib/siteUrl.ts).
+// Post addresses: /<collection slug>/<post slug> at the root of the site's own
+// host, its subdomain or custom domain (see lib/siteUrl.ts).
 //
 // Same slugify and reserved words as the server (pb/pb_hooks/lib/addresses.js),
 // which has the last word: it gives a published post's address a -2, -3, … when

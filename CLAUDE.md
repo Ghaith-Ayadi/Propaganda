@@ -36,6 +36,8 @@ before touching anything that talks to the server.
 
 - One origin: `verbatim.ayadighaith.com` serves the app from Vercel and PocketBase under
   `/api/*` and `/_/` (dashboard). `VITE_PB_URL` is that host. Editor at `/admin`.
+  The editor and API are moving to `app.propaganda.pub`; blogs each get their own host
+  (`app/src/lib/siteUrl.ts`), and the editor never runs on a blog's subdomain.
 - **Multi-tenant.** Content belongs to a **site** (`sites`, `site_members` with owner/editor
   roles). Every content collection has a required `site` relation; every query, pull and
   realtime subscription must filter by it (published posts of *all* sites are public).
@@ -56,7 +58,7 @@ before touching anything that talks to the server.
 - **Post numbers and addresses** (`pb/pb_hooks/addresses.pb.js`, `app/src/lib/slug.ts`).
   `posts.number` is a per-site counter the server hands out on create: never reused, never
   edited, never sent by clients. A post's public address is `/<collection slug>/<post slug>`
-  under the site's base path. The slug follows the title until the first publish, then
+  at the root of the site's host. The slug follows the title until the first publish, then
   changes only when edited; every move of a published post (new slug or collection) leaves a
   `post_redirects` row, and old `/p/<slug>` links forward. Collection slugs come from names.
 - Toasts: `app/src/components/base/toast/toast.tsx` (shadcn's Base UI toast, ported). Use it
@@ -65,7 +67,9 @@ before touching anything that talks to the server.
   `app/src/lib/realtime.ts`. One Dexie database per (account, site),
   `propaganda-<user>-<site>`; the single-tenant `verbatim-pb` is adopted, never deleted.
 - Images: Vercel Blob through `api/upload.ts` (site members only). Never call Blob from
-  the browser. Public blogs: Verbatim at `/` on its domain, every site at `/@<slug>/`.
+  the browser. Public blogs: every site at the root of its own host, `<slug>.propaganda.pub`
+  or its custom domain (Verbatim: `verbatim.ayadighaith.com`), with certificates issued on
+  demand once `pb_hooks/hosts.pb.js` says the host is a site. Old `/@<slug>/` links forward.
 - `scripts/src/*` are Supabase-era tools and stop working when the Supabase project is
   deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 

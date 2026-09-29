@@ -15,8 +15,12 @@
    collection slugs (clashes, reserved words, renames, old-app renames); post
    slugs deduped per collection; redirects written, readable, deletable only
    by members, and cleaned up.
+6. runs `hosts.mjs`: blogs on their own subdomains. Caddy's on-demand TLS
+   check (`/api/propaganda/tls-check`) says yes only to an existing site's
+   subdomain, and site slugs refuse the platform's own hosts and IDN-style
+   labels.
 
-Both suites exit non-zero on a failed check, and `snapshot.mjs` ignores only
+Every suite exits non-zero on a failed check, and `snapshot.mjs` ignores only
 the fields a migration adds on purpose (`posts.number`, `collections.slug`).
 
 ```

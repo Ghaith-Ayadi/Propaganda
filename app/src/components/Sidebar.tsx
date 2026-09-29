@@ -21,7 +21,7 @@ import { postHref, go } from "@/lib/route";
 import { collectionDisplay } from "@/lib/collections";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { search, subscribeSearch } from "@/lib/search";
-import { siteBasePath, sitePublicUrl } from "@/lib/siteUrl";
+import { sitePublicUrl } from "@/lib/siteUrl";
 import { useSyncExternalStore } from "react";
 import type { Collection, Post } from "@/types";
 
@@ -86,7 +86,7 @@ export function Sidebar({ currentId }: Props) {
             <Settings01 className="size-4" />
           </button>
           <a
-            href={siteBasePath(site) ? sitePublicUrl(site) : `${siteBasePath(site)}/`}
+            href={sitePublicUrl(site)}
             onClick={() => {
               try { localStorage.setItem(ADMIN_KNOWN, "1"); } catch {}
             }}
