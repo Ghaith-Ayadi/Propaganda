@@ -8,7 +8,17 @@ import { AdminStrip } from "./components/AdminStrip";
 import { SiteNotFound } from "./components/SiteNotFound";
 import { customDomainTarget, legacyAddressTarget, resolveBlogSite, type BlogSite } from "./site";
 import { bindPublicSettings, installSettings, useSetting } from "@/lib/settings";
+
+/** Settings decide which renderer a site gets, so the page waits for them. */
+function useSettingsReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    void installSettings().finally(() => setReady(true));
+  }, []);
+  return ready;
+}
 import { publicPb } from "@/lib/pocketbase";
+import { Themed, useActiveDesign } from "./theme/Themed";
 
 function Loading() {
   return (
@@ -61,6 +71,9 @@ export function BlogApp() {
 function BlogAppInner({ site }: { site: BlogSite }) {
   const [route] = useBlogRoute();
   const { loading, collections, posts, error } = useBlogData(site.id);
+  // A published design switches the site to the themed templates.
+  const { design, previewTheme } = useActiveDesign();
+  const settingsReady = useSettingsReady();
   const faviconUrl = useSetting<string | null>("favicon.url", null);
   const siteTitle = useSetting<string>("site.title", site.name);
 
@@ -80,9 +93,9 @@ function BlogAppInner({ site }: { site: BlogSite }) {
   }, [faviconUrl]);
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
+    if (typeof document === "undefined" || design) return;
     if (siteTitle && route.view === "home") document.title = siteTitle;
-  }, [siteTitle, route.view]);
+  }, [siteTitle, route.view, design]);
 
   if (error) {
     return (
@@ -96,12 +109,22 @@ function BlogAppInner({ site }: { site: BlogSite }) {
     );
   }
 
-  if (loading) return <Loading />;
+  if (loading || !settingsReady) return <Loading />;
 
+  if (design) {
+    return (
+      <>
+        <AdminStrip />
+        <Themed site={site} design={design} route={route} collections={collections} posts={posts} previewTheme={previewTheme} />
+      </>
+    );
+  }
+
+  // The original blog has no collection or author pages: those addresses show its home.
   return (
     <>
       <AdminStrip />
-      {route.view !== "home" ? (
+      {route.view === "post" || route.view === "legacy" ? (
         <Reader route={route} site={site} />
       ) : (
         <Home collections={collections} posts={posts} site={site} />

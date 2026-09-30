@@ -45,6 +45,8 @@ export interface BlogPost {
   updatedAt: number;
   wordCount: number | null;
   collectionSeq: number | null;
+  /** The site's post number (pb_hooks/addresses.pb.js). */
+  number: number | null;
   status: "draft" | "done" | "published" | "";
 }
 
@@ -60,6 +62,7 @@ interface BlogPostRecord {
   updated: string;
   word_count: number;
   collection_seq: number;
+  number: number;
   status: "draft" | "done" | "published" | "";
 }
 
@@ -76,12 +79,13 @@ function fromBlogRecord(r: BlogPostRecord): BlogPost {
     updatedAt: pbDateToMs(r.updated) ?? Date.now(),
     wordCount: r.word_count || null,
     collectionSeq: r.collection_seq || null,
+    number: r.number || null,
     status: r.status,
   };
 }
 
 const PUBLIC_FIELDS =
-  "id,slug,title,type,subtitle,excerpt,content_md,published_at,updated,word_count,collection_seq,status";
+  "id,slug,title,type,subtitle,excerpt,content_md,published_at,updated,word_count,collection_seq,number,status";
 
 const posts = () => publicPb.collection<BlogPostRecord>("posts");
 const collections = () => publicPb.collection<CollectionRecord>("collections");

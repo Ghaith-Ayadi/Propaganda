@@ -7,7 +7,7 @@
 // collection's slug.
 
 /** First path segments the app or the edge already own; no collection gets one. */
-export const RESERVED_SEGMENTS = ["admin", "api", "assets", "cards", "p"];
+export const RESERVED_SEGMENTS = ["admin", "api", "assets", "author", "cards", "feed", "p", "rss", "search", "tags"];
 
 /** "Café au lait!" -> "cafe-au-lait". Empty when nothing usable is left. */
 export function slugify(text: string | null | undefined): string {

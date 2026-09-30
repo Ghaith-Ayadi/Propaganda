@@ -122,6 +122,7 @@ check("deleting a post drops its redirects", (await redirects(su).getFullList({ 
 const sCol = await stranger.collection("collections").create({ site: sSite, name: "Test" });
 check("collection slugs are per site", sCol.slug === "test", sCol.slug);
 check("a reserved word gets -2", (await stranger.collection("collections").create({ site: sSite, name: "API" })).slug === "api-2");
+check("the author page's segment is reserved", (await stranger.collection("collections").create({ site: sSite, name: "Author" })).slug === "author-2");
 const essays = cols.find((x) => x.name === "Essays");
 check("a rename that slugifies the same keeps the slug", (await owner.collection("collections").update(essays.id, { name: "ESSAYS" })).slug === "essays");
 await owner.collection("collections").update(essays.id, { name: "Essays" });

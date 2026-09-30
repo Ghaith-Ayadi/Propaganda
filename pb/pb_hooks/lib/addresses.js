@@ -5,7 +5,7 @@
 // handler require()s this file.
 
 /** First path segments the app or the edge already own. */
-const RESERVED = ["admin", "api", "assets", "cards", "p"];
+const RESERVED = ["admin", "api", "assets", "author", "cards", "feed", "p", "rss", "search", "tags"];
 
 /** "Café au lait!" -> "cafe-au-lait". Empty when nothing usable is left. */
 function slugify(text) {
