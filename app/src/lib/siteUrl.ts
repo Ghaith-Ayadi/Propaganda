@@ -82,6 +82,20 @@ export function postPublicUrl(site: SiteAddress, collectionSlug: string, slug: s
   return sitePublicUrl(site) + postPath(collectionSlug, slug).slice(1);
 }
 
+/**
+ * A URL as people read it, for display only: no scheme, and escapes decoded, so
+ * a legacy slug shows as "journal/JRN·47", not "journal/JRN%C2%B747". Links
+ * keep the encoded form. decodeURI leaves reserved characters (/, ?, #) escaped.
+ */
+export function readableUrl(url: string): string {
+  const bare = url.replace(/^https?:\/\//, "");
+  try {
+    return decodeURI(bare);
+  } catch {
+    return bare;
+  }
+}
+
 /** "/@slug/rest", an address from before blogs had their own hosts, to { slug, rest }. Null otherwise. */
 export function parseLegacySitePath(pathname: string): { slug: string; rest: string } | null {
   const m = /^\/@([a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?)(\/.*)?$/.exec(pathname);

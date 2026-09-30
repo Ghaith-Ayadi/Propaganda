@@ -6,7 +6,7 @@
 import { toast } from "@/components/base/toast/toast";
 import type { VerbatimDB } from "@/lib/db";
 import { currentScope } from "@/lib/scope";
-import { postPublicUrl } from "@/lib/siteUrl";
+import { postPublicUrl, readableUrl } from "@/lib/siteUrl";
 import { collectionSlugOf } from "@/lib/slug";
 import { flushSync } from "@/lib/sync";
 
@@ -26,7 +26,7 @@ export function announcePublished(db: VerbatimDB, id: string): void {
       loading: { title: "Publishing…" },
       success: (url) => ({
         title: "Published",
-        description: url.replace(/^https?:\/\//, ""),
+        description: readableUrl(url),
         type: "success",
         actionProps: { children: "View", onClick: () => window.open(url, "_blank", "noopener") },
       }),
