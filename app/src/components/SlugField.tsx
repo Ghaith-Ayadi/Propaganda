@@ -11,7 +11,7 @@ import { useWorkspace } from "@/components/Workspace";
 import { db } from "@/lib/db";
 import { pb } from "@/lib/pocketbase";
 import { updatePost } from "@/lib/posts";
-import { postPublicUrl } from "@/lib/siteUrl";
+import { postPublicUrl, readableUrl } from "@/lib/siteUrl";
 import { collectionSlugOf, hasAddress, postPath, slugify } from "@/lib/slug";
 import { flushSync } from "@/lib/sync";
 import type { Collection, Post } from "@/types";
@@ -122,7 +122,7 @@ export function SlugField({ post, collections }: { post: Post; collections: Coll
         }}
       />
       {error && <p className="mt-1.5 text-[11px] text-error-primary">{error}</p>}
-      <p className="mt-1.5 select-all truncate text-[11px] text-quaternary">{url.replace(/^https?:\/\//, "")}</p>
+      <p className="mt-1.5 select-all truncate text-[11px] text-quaternary">{readableUrl(url)}</p>
       {!fixed && <p className="mt-1 text-[11px] text-quaternary">Follows the title until you publish.</p>}
       {redirects.length > 0 && (
         <div className="mt-3">

@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { blogAddress, fetchLegacyPost, fetchPostAt, useBlogData, type BlogPost } from "@/blog/data";
 import { legacyPostHref, navigateTo, postHref, routeHref, routeOfHref, useBlogRoute, type BlogRoute } from "@/blog/route";
-import { postPublicUrl } from "@/lib/siteUrl";
+import { postPublicUrl, readableUrl } from "@/lib/siteUrl";
 import { postPath } from "@/lib/slug";
 import type { Collection } from "@/types";
 import { setActiveTab } from "@/blog/activeTab";
@@ -187,7 +187,7 @@ export function Reader({ route, site }: Props) {
 
   const rtMin = readTime(post.wordCount);
   const dek = post.subtitle?.trim() || post.excerpt?.trim() || firstParagraph(post.content);
-  const prettyPermalink = postPublicUrl(site, blogAddress(post, collections).collection, post.slug).replace(/^https?:\/\//, "");
+  const prettyPermalink = readableUrl(postPublicUrl(site, blogAddress(post, collections).collection, post.slug));
   const postsBySlug = new Map(posts.map((p) => [p.slug, p]));
   const resolvedContent = resolveWikilinks(post.content, postsBySlug, collections);
 
