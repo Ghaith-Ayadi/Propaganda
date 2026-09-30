@@ -108,8 +108,8 @@ function SiteHeader({ ctx, route }: { ctx: Ctx; route: PgRoute }) {
       <div className="pg-header__inner pg-container">
         <div className="pg-brand-block">
           <a className="pg-brand" data-part="brand" href={vm.links.home()} dir="auto">
-            {vm.site.logo && <img src={ctx.imageSrc(vm.site.logo)} alt="" />}
-            <span>{vm.site.name}</span>
+            {vm.site.logo && <img src={ctx.imageSrc(vm.site.logo)} alt={vm.site.wordmark ? vm.site.name : ""} />}
+            {!vm.site.wordmark && <span>{vm.site.name}</span>}
           </a>
           {o.tagline && vm.site.tagline && (
             <p className="pg-tagline" data-part="tagline" dir="auto">

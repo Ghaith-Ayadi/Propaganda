@@ -1,0 +1,57 @@
+# Blog themes: the compiler's guarantees and the templates' layout invariants.
+#   1. typecheck the app;
+#   2. compile 2,000 random themes (app/scripts/pg-fuzz.cjs): every one must keep
+#      text readable and produce no broken token;
+#   3. build the app with its harness page (VITE_PG_HARNESS=1; the PocketBase URL
+#      is a dummy, nothing here talks to a server) and run app/scripts/pg-harness.cjs:
+#      the six themes x four templates x six fixtures x six widths, crossed with a
+#      pairwise set of page options, then twelve random themes at two widths.
+# Results (every failure, grouped) are uploaded as an artifact.
+name: blog-themes
+on:
+  pull_request:
+    paths: ["app/src/blog/**", "app/scripts/pg-*.cjs", "app/public/fonts/pg/**", "app/package-lock.json", ".github/workflows/blog-themes.yml"]
+  push:
+    branches: [main]
+    paths: ["app/src/blog/**", "app/scripts/pg-*.cjs", "app/public/fonts/pg/**", "app/package-lock.json", ".github/workflows/blog-themes.yml"]
+permissions:
+  contents: read
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc -b --noEmit
+      - name: Compiler guarantees (random themes)
+        run: node scripts/pg-fuzz.cjs compiler 2000
+      - name: Build with the harness page
+        run: npx vite build --outDir dist-harness
+        env:
+          VITE_PB_URL: http://127.0.0.1:9
+          VITE_PG_HARNESS: "1"
+      - name: Playwright
+        run: npm i --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
+      - name: Layout invariants
+        run: |
+          npx vite preview --outDir dist-harness --port 4173 --strictPort &
+          npx --yes wait-on@8 -t 60000 http://localhost:4173/_pg/harness
+          node scripts/pg-harness.cjs http://localhost:4173/_pg/harness results/built-in
+          node scripts/pg-fuzz.cjs themes 12 results/fuzz-themes.json
+          node scripts/pg-harness.cjs http://localhost:4173/_pg/harness results/fuzz --quick --themes=results/fuzz-themes.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blog-themes-harness
+          path: app/results
+          if-no-files-found: ignore

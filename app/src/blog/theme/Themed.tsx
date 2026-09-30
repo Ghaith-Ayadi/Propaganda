@@ -22,9 +22,12 @@ import type { Collection } from "@/types";
 const VERBATIM_MANIFESTO =
   "It's called Verbatim because none of it is edited. I don't edit what I write. If I don't like what I said, I don't publish. No AI writing, no nonsense.";
 
+// Read once, at load: navigating inside the frame drops the query string.
+const DRAFT_PREVIEW = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pg-preview") === "draft";
+
 /** ?pg-preview=draft: the Design panel's preview frame. */
 export function isDraftPreview(): boolean {
-  return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pg-preview") === "draft";
+  return DRAFT_PREVIEW;
 }
 
 /**
@@ -43,7 +46,12 @@ export function useActiveDesign(): { design: SiteDesign | null; previewTheme: Th
     if (!preview) return;
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== appOrigin() && e.origin !== window.location.origin) return;
-      const data = e.data as { type?: string; design?: unknown; theme?: ThemeSource } | null;
+      const data = e.data as { type?: string; design?: unknown; theme?: ThemeSource; path?: string } | null;
+      if (data?.type === "pg-preview-go" && typeof data.path === "string") {
+        const r = themedRouteOfHref(data.path);
+        if (r) navigateTo(r);
+        return;
+      }
       if (data?.type !== "pg-preview") return;
       const d = asDesign(data.design);
       if (d) setPushed({ design: d, theme: data.theme });
@@ -170,9 +178,14 @@ export function Themed({ site, design, route, collections, posts, previewTheme }
     else document.title = title;
   });
 
+  // The Design panel follows the preview frame to the template it shows.
+  useEffect(() => {
+    if (isDraftPreview()) window.parent?.postMessage({ type: "pg-preview-route", tpl: pgRoute.tpl }, "*");
+  }, [pgRoute.tpl]);
+
   // Page-view beacon, one reading session per post.
   useEffect(() => {
-    if (!post) return;
+    if (!post || isDraftPreview()) return;
     return installPageTracker({ postId: post.slug, collection: post.col.name, path: postPath(post.col.slug, post.slug) });
   }, [post?.id, post?.slug, post?.col.slug]);
 

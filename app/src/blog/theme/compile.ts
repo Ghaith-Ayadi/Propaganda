@@ -41,7 +41,8 @@ export interface ThemeSource {
   prose?: Record<string, any>;
   images?: Record<string, any>;
   format?: { date?: "long" | "medium" | "iso"; readTime?: "long" | "short" | "min"; number?: string };
-  brand?: { logo?: string };
+  /** A logo shown before the site's name; with `wordmark`, the logo is the name. */
+  brand?: { logo?: string; wordmark?: boolean };
   presets?: Record<string, Record<string, Record<string, unknown>>>;
 }
 
@@ -65,6 +66,7 @@ export interface CompiledTheme {
   presets: NonNullable<ThemeSource["presets"]>;
   format: NonNullable<ThemeSource["format"]>;
   logo: string | null;
+  wordmark: boolean;
 }
 
 /* ---------------------------------------------------------------- colour maths */
@@ -119,7 +121,7 @@ function seek(a: string, b: string, ok: (c: string) => boolean): string | null {
 
 /* ---------------------------------------------------------------- font library */
 
-/** The built-in fonts: SIL OFL, subset to Latin, self-hosted (public/fonts/pg/fonts.css). */
+/** The built-in fonts: SIL OFL, subset to Latin, self-hosted (public/fonts/pg, @font-face rules in pg.css). */
 export const FONT_LIBRARY: Record<string, { stack: string; avgChar: number }> = {
   "Crimson Pro": { stack: '"Crimson Pro", "Iowan Old Style", "Palatino Linotype", Georgia, serif', avgChar: 0.387 },
   "Epilogue": { stack: 'Epilogue, "Helvetica Neue", Arial, system-ui, sans-serif', avgChar: 0.484 },
@@ -147,6 +149,7 @@ type RangeKey = keyof typeof RANGES;
 
 /** Theme data reaches CSS: keep strings inside their declaration. */
 const cssSafe = (s: unknown) => String(s ?? "").replace(/[{}<>;\\]/g, "").slice(0, 300);
+const quoteless = (s: unknown) => cssSafe(s).replace(/["'()]/g, "");
 const idSafe = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40) || "theme";
 
 /* ---------------------------------------------------------------- compiler */
@@ -209,14 +212,14 @@ export function compileTheme(src: ThemeSource): CompiledTheme {
   const known = (name: string | undefined) => !!name && (name in FONT_LIBRARY || name in custom);
   const stackOf = (name: string | undefined): string => {
     if (name && FONT_LIBRARY[name]) return FONT_LIBRARY[name].stack;
-    if (name && custom[name]) return cssSafe(custom[name].stack) || `"${cssSafe(name)}", system-ui, sans-serif`;
+    if (name && custom[name]) return cssSafe(custom[name].stack) || `"${quoteless(name)}", system-ui, sans-serif`;
     note("error", `font "${name}" is not in the font library or the theme's own fonts; used the system stack`);
     return FONT_LIBRARY.system.stack;
   };
   for (const [family, f] of Object.entries(custom)) {
     if (!f?.src) continue;
-    const fmt = f.format ? ` format("${cssSafe(f.format)}")` : "";
-    faces.push(`@font-face{font-family:"${cssSafe(family)}";src:url("${cssSafe(f.src)}")${fmt};font-weight:${cssSafe(f.weight || "100 900")};font-style:${f.style === "italic" ? "italic" : "normal"};font-display:swap}`);
+    const fmt = f.format ? ` format("${quoteless(f.format)}")` : "";
+    faces.push(`@font-face{font-family:"${quoteless(family)}";src:url("${quoteless(f.src).replace(/\s/g, "%20")}")${fmt};font-weight:${cssSafe(f.weight || "100 900")};font-style:${f.style === "italic" ? "italic" : "normal"};font-display:swap}`);
   }
   V("font-display", stackOf(fonts.display)); V("font-text", stackOf(fonts.text || fonts.display));
   V("font-ui", stackOf(fonts.ui || fonts.text || fonts.display)); V("font-mono", stackOf(fonts.mono || "system"));
@@ -342,6 +345,6 @@ export function compileTheme(src: ThemeSource): CompiledTheme {
     "data-margin": margin > 0 ? "true" : "false",
   };
   const css = `${faces.join("\n")}\n.pg-site[data-theme="${id}"]{\n${Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`).join("\n")}\n}`;
-  const logo = typeof src.brand?.logo === "string" && src.brand.logo ? cssSafe(src.brand.logo) : null;
-  return { id, css, vars, attrs, palette, report, presets: src.presets ?? {}, format: src.format ?? {}, logo };
+  const logo = typeof src.brand?.logo === "string" && src.brand.logo ? quoteless(src.brand.logo) : null;
+  return { id, css, vars, attrs, palette, report, presets: src.presets ?? {}, format: src.format ?? {}, logo, wordmark: !!logo && src.brand?.wordmark === true };
 }

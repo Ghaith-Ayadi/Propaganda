@@ -1,6 +1,10 @@
 # Blog templates and themes, Part 1
 
-Status: **proposal**, for decision. Nothing here is built into the app yet.
+Status: **approved and built** (the six themes and the Design editor as prototyped). How
+it works in the app now: [docs/blog-themes.md](../../blog-themes.md). Decisions taken: all
+six themes as they are; `/author` (with `feed`, `rss`, `search` and `tags` reserved too);
+Verbatim keeps its look as a custom theme (site data), not a public one, because of its
+fonts. This document is kept as the design record.
 Tracking: Notion task "Blog templates and themes, Part 1" (Propaganda → Tasks).
 Prototype: `prototype/dist/prototype.html` in this folder (open it in a browser; it is
 self-contained), also published as a private artifact linked from the Notion task.

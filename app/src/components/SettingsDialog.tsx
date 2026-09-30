@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { File02, Globe01, PenTool01, Plus, Trash01, Upload01, User01, XClose } from "@untitledui/icons";
+import { Brush01, File02, Globe01, PenTool01, Plus, Trash01, Upload01, User01, XClose } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { useWorkspace } from "@/components/Workspace";
@@ -24,26 +24,40 @@ import {
   setCaptionAlign, setCaptionSize,
 } from "@/lib/editorStyles";
 import { toast } from "@/components/base/toast/toast";
+import { asDesign, DESIGN_KEY, DRAFT_KEY, THEMES_KEY, asCustomThemes, themeOf } from "@/blog/theme/design";
+
+// The Design editor carries the blog's stylesheet and fonts: loaded when opened.
+const DesignStudio = lazy(() => import("@/components/design/DesignStudio").then((m) => ({ default: m.DesignStudio })));
 
 interface Props {
   onClose: () => void;
 }
 
-type Tab = "author" | "site" | "editor" | "templates";
+type Tab = "author" | "site" | "design" | "editor" | "templates";
 
 const DEFAULT_MANIFESTO =
   "It's called Verbatim because none of it is edited. I don't edit what I write. If I don't like what I said, I don't publish. No AI writing, no nonsense.";
 
 export function SettingsDialog({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>("author");
+  const [studio, setStudio] = useState(false);
 
   useEffect(() => {
+    if (studio) return; // the Design editor handles its own Escape
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, studio]);
+
+  if (studio) {
+    return (
+      <Suspense fallback={null}>
+        <DesignStudio onClose={() => setStudio(false)} />
+      </Suspense>
+    );
+  }
 
   return (
     <div
@@ -62,6 +76,9 @@ export function SettingsDialog({ onClose }: Props) {
           </TabButton>
           <TabButton active={tab === "site"} onClick={() => setTab("site")} icon={<Globe01 className="size-4" />}>
             Site
+          </TabButton>
+          <TabButton active={tab === "design"} onClick={() => setTab("design")} icon={<Brush01 className="size-4" />}>
+            Design
           </TabButton>
           <TabButton active={tab === "editor"} onClick={() => setTab("editor")} icon={<PenTool01 className="size-4" />}>
             Editor
@@ -87,6 +104,7 @@ export function SettingsDialog({ onClose }: Props) {
           <div className="flex-1 overflow-y-auto px-6 py-6">
             {tab === "author" && <AuthorTab />}
             {tab === "site" && <SiteTab />}
+            {tab === "design" && <DesignTab onOpen={() => setStudio(true)} />}
             {tab === "editor" && <EditorTab />}
             {tab === "templates" && <TemplatesTab />}
           </div>
@@ -129,9 +147,18 @@ function AuthorTab() {
   const bio = useSetting<string>("author.bio", "");
   const location = useSetting<string>("author.location", "");
   const faviconUrl = useSetting<string | null>("favicon.url", null);
+  const avatar = useSetting<string | null>("author.avatar", null);
 
   return (
     <div className="space-y-5">
+      <ImageField
+        label="Photo"
+        current={avatar ?? null}
+        hint="Square works best. Shown by themed blogs, on the author page and next to posts."
+        onPicked={(url) => setSetting("author.avatar", url)}
+        onRemove={() => setSetting("author.avatar", null)}
+        round
+      />
       <Field label="Name">
         <Input
           size="sm"
@@ -161,6 +188,7 @@ function AuthorTab() {
           className="w-full resize-none rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs outline-none ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus:ring-2 focus:ring-inset focus:ring-brand"
         />
       </Field>
+      <AuthorLinks />
       <FaviconField current={faviconUrl ?? null} />
     </div>
   );
@@ -170,9 +198,15 @@ function SiteTab() {
   // The built-in manifesto is Verbatim's; other sites start blank.
   const { site } = useWorkspace();
   const manifesto = useSetting<string>("site.manifesto", site.slug === "verbatim" ? DEFAULT_MANIFESTO : "");
+  const siteTagline = useSetting<string>("site.tagline", "");
   return (
     <div className="space-y-5">
       <SiteIdentityFields />
+      <div className="border-t border-secondary pt-5">
+        <Field label="Tagline" hint="One line under the site's name, in themes that show one. Empty: the author's tagline.">
+          <Input size="sm" value={siteTagline ?? ""} onChange={(v) => void setSetting("site.tagline", v)} />
+        </Field>
+      </div>
       <div className="border-t border-secondary pt-5">
         <Field
           label="Manifesto"
@@ -351,6 +385,155 @@ function Field({
       {children}
       {hint && <p className="mt-1.5 text-xs text-tertiary">{hint}</p>}
     </label>
+  );
+}
+
+/** Settings → Design: what the blog uses now, and the way into the Design editor. */
+function DesignTab({ onOpen }: { onOpen: () => void }) {
+  const published = asDesign(useSetting<unknown>(DESIGN_KEY, null));
+  const draft = asDesign(useSetting<unknown>(DRAFT_KEY, null));
+  const custom = asCustomThemes(useSetting<unknown>(THEMES_KEY, null));
+  const pending = !!draft && JSON.stringify(draft) !== JSON.stringify(published);
+  return (
+    <div className="space-y-5">
+      <div className="rounded-lg border border-secondary bg-primary p-4">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-quaternary">The blog uses</div>
+        <div className="mt-1 font-title text-xl text-primary">
+          {published ? themeOf(published.theme, custom).name : "The original design"}
+        </div>
+        <p className="mt-1 text-xs text-tertiary">
+          {published
+            ? "A theme with your page options. Collections and your author page have pages of their own."
+            : "Pick a theme to give the blog collection and author pages, and options for every page. Nothing changes until you publish."}
+          {pending && " You have unpublished changes."}
+        </p>
+      </div>
+      <div className="flex justify-end">
+        <Button size="sm" color="primary" iconLeading={Brush01} onClick={onOpen}>
+          Open the Design editor
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface AuthorLink {
+  label: string;
+  url: string;
+}
+
+/** Complete rows only, each with a scheme. */
+function cleanLinks(rows: AuthorLink[]): AuthorLink[] {
+  return rows
+    .map((l) => ({ label: l.label.trim(), url: l.url.trim() }))
+    .filter((l) => l.label && l.url)
+    .map((l) => ({ ...l, url: /^(https?:|mailto:)/i.test(l.url) ? l.url : `https://${l.url}` }));
+}
+
+/** The author page's links (a site, a newsletter, social profiles). */
+function AuthorLinks() {
+  const stored = useSetting<AuthorLink[]>("author.links", []) ?? [];
+  const [rows, setRows] = useState<AuthorLink[]>(stored);
+  // Rows being typed stay put; a change from elsewhere (another tab, realtime) replaces them.
+  const storedKey = JSON.stringify(stored);
+  useEffect(() => {
+    setRows((cur) => (JSON.stringify(cleanLinks(cur)) === storedKey ? cur : (JSON.parse(storedKey) as AuthorLink[])));
+  }, [storedKey]);
+  const save = (next: AuthorLink[]) => {
+    setRows(next);
+    void setSetting("author.links", cleanLinks(next));
+  };
+  return (
+    <div>
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">Links</div>
+      <div className="space-y-2">
+        {rows.map((l, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="w-36 shrink-0">
+              <Input size="sm" placeholder="Label" aria-label="Link label" value={l.label} onChange={(v) => save(rows.map((r, j) => (j === i ? { ...r, label: v } : r)))} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <Input size="sm" placeholder="https://…" aria-label="Link address" value={l.url} onChange={(v) => save(rows.map((r, j) => (j === i ? { ...r, url: v } : r)))} />
+            </div>
+            <button
+              type="button"
+              aria-label="Remove link"
+              onClick={() => save(rows.filter((_, j) => j !== i))}
+              className="rounded-md p-1.5 text-quaternary transition hover:bg-tertiary hover:text-primary"
+            >
+              <Trash01 className="size-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2">
+        <Button size="sm" color="tertiary" iconLeading={Plus} onClick={() => setRows([...rows, { label: "", url: "" }])}>
+          Add a link
+        </Button>
+      </div>
+      <p className="mt-1.5 text-xs text-tertiary">Shown on the author page of a themed blog.</p>
+    </div>
+  );
+}
+
+/** An uploaded image setting (through api/upload.ts), with a preview. */
+function ImageField({
+  label,
+  current,
+  hint,
+  onPicked,
+  onRemove,
+  round,
+}: {
+  label: string;
+  current: string | null;
+  hint: string;
+  onPicked: (url: string) => Promise<void> | void;
+  onRemove: () => Promise<void> | void;
+  round?: boolean;
+}) {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  async function onPick(file: File) {
+    setUploading(true);
+    try {
+      await onPicked(await uploadFile(file));
+    } catch (e) {
+      console.error(e);
+      toast.add({ type: "error", title: "Upload failed", description: (e as Error).message });
+    } finally {
+      setUploading(false);
+    }
+  }
+  return (
+    <div>
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">{label}</div>
+      <div className="flex items-center gap-3 rounded-lg border border-secondary bg-primary p-3">
+        <div className={["flex size-14 shrink-0 items-center justify-center overflow-hidden border border-secondary bg-secondary", round ? "rounded-full" : "rounded-md"].join(" ")}>
+          {current ? <img src={current} alt="" className="size-full object-cover" /> : <User01 className="size-6 text-quaternary" />}
+        </div>
+        <p className="flex-1 text-xs text-tertiary">{hint}</p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/avif"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onPick(f);
+            e.target.value = "";
+          }}
+        />
+        {current && (
+          <Button size="sm" color="tertiary" isDisabled={uploading} onClick={() => void onRemove()}>
+            Remove
+          </Button>
+        )}
+        <Button size="sm" color="tertiary" iconLeading={Upload01} onClick={() => fileRef.current?.click()} isDisabled={uploading}>
+          {uploading ? "Uploading…" : current ? "Replace" : "Upload"}
+        </Button>
+      </div>
+    </div>
   );
 }
 

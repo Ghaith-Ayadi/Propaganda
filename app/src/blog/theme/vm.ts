@@ -101,7 +101,7 @@ export interface VmAuthor {
 }
 
 export interface Vm {
-  site: { name: string; host: string; lang: string; tagline: string | null; manifesto: string | null; nameLen: Len; logo: string | null };
+  site: { name: string; host: string; lang: string; tagline: string | null; manifesto: string | null; nameLen: Len; logo: string | null; wordmark: boolean };
   author: VmAuthor;
   collections: VmCollection[];
   posts: VmPost[];
@@ -237,7 +237,7 @@ export function buildVM(input: PgInput, compiled: CompiledTheme, links: PgLinks,
     location: a.location?.trim() || null,
     bio: a.bio?.trim() || null,
     avatar: a.avatar || null,
-    links: (a.links || []).filter((l) => l && l.url && l.label),
+    links: (Array.isArray(a.links) ? a.links : []).filter((l) => l && typeof l.label === "string" && l.label && typeof l.url === "string" && /^(https?:|mailto:)/i.test(l.url)),
   };
   const lastUpdate = posts.find((p) => p.date)?.date ?? null;
   return {
@@ -249,6 +249,7 @@ export function buildVM(input: PgInput, compiled: CompiledTheme, links: PgLinks,
       manifesto: input.site.manifesto?.trim() || null,
       nameLen: lenOf(input.site.name, [30, 70]),
       logo: compiled.logo,
+      wordmark: compiled.wordmark,
     },
     author,
     collections: collections.filter((c) => !c.hidden),

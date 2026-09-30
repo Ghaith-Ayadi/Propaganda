@@ -70,6 +70,9 @@ before touching anything that talks to the server.
   the browser. Public blogs: every site at the root of its own host, `<slug>.propaganda.pub`
   or its custom domain (Verbatim: `verbatim.ayadighaith.com`), with certificates issued on
   demand once `pb_hooks/hosts.pb.js` says the host is a site. Old `/@<slug>/` links forward.
+- Blog themes: [docs/blog-themes.md](docs/blog-themes.md). A site's `blog.design` setting
+  switches its public blog from the original renderer to the themed templates; writing it
+  (or `blog.themes`) on a real site is the owner's call, like any other live data.
 - `scripts/src/*` are Supabase-era tools and stop working when the Supabase project is
   deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 

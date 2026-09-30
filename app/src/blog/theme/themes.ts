@@ -43,7 +43,7 @@ export const THEMES: Record<string, ThemeSource> = {
     fonts: { display: "Epilogue", text: "Epilogue", ui: "Epilogue", mono: "system" },
     color: { paper: "#FFFFFF", ink: "#0E0E13", accent: "#3525E6" },
     type: {
-      text: { size: [16.5, 19], leading: 1.62, weight: 400, strong: 700 }, scale: [1.2, 1.333], figures: "lining",
+      text: { size: [15.5, 19], leading: 1.62, weight: 400, strong: 700 }, scale: [1.2, 1.333], figures: "lining",
       display: { weight: 800, leading: 0.98, tracking: -0.035 }, title: { weight: 700, font: "display", tracking: -0.018 },
       dek: { font: "text", style: "normal" },
       brand: { font: "display", weight: 800, tracking: -0.04 },
@@ -164,7 +164,7 @@ export const THEMES: Record<string, ThemeSource> = {
     fonts: { display: "Lora", text: "Plus Jakarta Sans", ui: "Plus Jakarta Sans", mono: "system" },
     color: { paper: "#F4F6EF", ink: "#1E2A22", accent: "#276B40" },
     type: {
-      text: { size: [17, 18], leading: 1.7, weight: 400, strong: 700 }, scale: [1.2, 1.25], figures: "lining",
+      text: { size: [16.75, 18], leading: 1.7, weight: 400, strong: 700 }, scale: [1.2, 1.25], figures: "lining",
       display: { weight: 600, leading: 1.12, tracking: -0.01 }, title: { weight: 600, font: "display", tracking: -0.005 },
       dek: { font: "text", style: "normal" },
       brand: { font: "display", weight: 700, tracking: -0.01 },

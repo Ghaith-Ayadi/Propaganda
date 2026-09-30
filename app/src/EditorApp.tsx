@@ -21,6 +21,7 @@ import { startRealtime, stopRealtime } from "@/lib/realtime";
 import { installSearchIndex } from "@/lib/search";
 import { snapshotVersion } from "@/lib/versions";
 import { toggleTheme } from "@/lib/theme";
+import { exposeThemeConsole } from "@/lib/customThemes";
 
 // The service worker is the editor's offline shell, so only the editor
 // registers it: blog readers never download the whole app. The same call
@@ -28,6 +29,9 @@ import { toggleTheme } from "@/lib/theme";
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
 }
+
+// Custom blog themes are installed from the console for now (lib/customThemes.ts).
+exposeThemeConsole();
 
 export function EditorApp() {
   return (
