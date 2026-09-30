@@ -29,6 +29,14 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
   void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
 }
 
+// The install manifest is left off blog pages (vite.config.ts): the editor links it.
+if (typeof document !== "undefined" && !document.querySelector('link[rel="manifest"]')) {
+  const link = document.createElement("link");
+  link.rel = "manifest";
+  link.href = "/manifest.webmanifest";
+  document.head.appendChild(link);
+}
+
 export function EditorApp() {
   return (
     <>
