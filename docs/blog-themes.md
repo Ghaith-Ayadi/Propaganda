@@ -98,6 +98,9 @@ origin or its own; the frame reports `pg-preview-ready` and the template it show
   invariants: no sideways scroll, nothing clipped or overlapping, contrast, tap targets,
   minimum text size, heading order, landmarks, image alt text, line length. `--themes=`
   runs random themes from `pg-fuzz.cjs themes`.
+- Body text is never under 15px. A text face too wide to fit a comfortable phone line at
+  that size (a monospace, say) gets short lines on phones instead; the compiler reports it,
+  and only then does the harness accept phone lines down to 22 characters.
 - CI: `.github/workflows/blog-themes.yml` runs all three on changes to the blog.
 
 Fixture bodies are markdown (`app/src/blog/harness/fixtures.json`), converted once from the

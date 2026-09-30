@@ -230,7 +230,11 @@ export function compileTheme(src: ThemeSource): CompiledTheme {
   const avgChar = FONT_LIBRARY[textName]?.avgChar ?? num(custom[textName]?.avgChar ?? 0.5, "avgChar", 0.5);
   let tMin = num(t.text?.size?.[0] ?? 17, "textMin", 17);
   // real line breaking wastes 10-20% of a line, so the arithmetic aims above the targets
-  const phoneCap = Math.floor((288 / (38 * avgChar)) * 4) / 4;
+  // Never below the smallest body size the format allows: a very wide text face gets
+  // shorter lines on a phone rather than text too small to read.
+  const idealCap = Math.floor((288 / (38 * avgChar)) * 4) / 4;
+  const phoneCap = Math.max(RANGES.textMin[0], idealCap);
+  if (idealCap < RANGES.textMin[0]) note("warn", `${textName} is too wide for a comfortable line on a 320px phone at ${phoneCap}px; lines there will be short`);
   if (tMin > phoneCap) { note("fix", `text size ${round(tMin, 2)}px leaves too few characters a line on a 320px phone in ${textName}; used ${phoneCap}px`); tMin = phoneCap; }
   const tMax = num(t.text?.size?.[1] ?? 19, "textMax", 19);
   const rMin = num(t.scale?.[0] ?? 1.2, "ratioMin", 1.2);

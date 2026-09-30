@@ -75,6 +75,10 @@ if (mode === "compiler") {
     if (worst(p.ink2) < 4.5) bad.push("ink-2");
     if (worst(p.accentText) < 4.5) bad.push("accent text");
     if (E.contrast(p.ink, p.highlight) < 7) bad.push("highlight");
+    // body text never below 15px, no step below 12px (the smallest size a rem value can take)
+    const minPx = (v) => Math.min(...[...String(v).matchAll(/([\d.]+)rem(?!\s*\+)/g)].map((m) => +m[1] * 16));
+    if (minPx(c.vars["--pg-step-0"]) < 15 - 0.01) bad.push(`body text ${minPx(c.vars["--pg-step-0"])}px`);
+    for (let n = -2; n <= 6; n++) if (minPx(c.vars[`--pg-step-${n}`]) < 12 - 0.01) bad.push(`step ${n} ${minPx(c.vars[`--pg-step-${n}`])}px`);
     for (const [k, v] of Object.entries(c.vars)) if (v == null || String(v).includes("NaN") || String(v).includes("undefined")) bad.push(k);
     if (bad.length) { failures++; console.log(`theme ${i}: ${bad.join(", ")}`); }
     for (const x of c.report) { if (x.level === "fix") fixes++; else if (x.level === "error") errors++; else warns++; }

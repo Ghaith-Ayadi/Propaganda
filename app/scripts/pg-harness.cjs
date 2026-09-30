@@ -265,6 +265,14 @@ async function settle() {
       const v = await page.evaluate(inPageChecks);
       renders++;
       if (info.dropped.length) v.push({ check: "invalid-option", where: "", detail: info.dropped.join(", ") });
+      // A text face too wide for a phone line at a legible size: the compiler keeps the size
+      // (never under 15px) and says so. Short phone lines are then the declared trade-off,
+      // down to a hard floor of 22 characters.
+      const tooWide = width < 768 && info.report.some((r) => /too wide for a comfortable line/.test(r.msg));
+      if (tooWide) for (let i = v.length - 1; i >= 0; i--) {
+        const m = v[i].check === "measure" && /^(\d+) characters per line/.exec(v[i].detail);
+        if (m && +m[1] >= 22) v.splice(i, 1);
+      }
       for (const x of v) results.push({ ...x, theme, fixture, tpl, width, combo: ci });
     }
   }));
