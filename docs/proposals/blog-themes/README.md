@@ -5,7 +5,7 @@ Tracking: Notion task "Blog templates and themes, Part 1" (Propaganda → Tasks)
 Prototype: `prototype/dist/prototype.html` in this folder (open it in a browser; it is
 self-contained), also published as a private artifact linked from the Notion task.
 
-Part 1 covers the templates and three built-in themes. Custom themes (the Part 2 skill,
+Part 1 covers the templates and six built-in themes. Custom themes (the Part 2 skill,
 the uploaded theme file and the cloud check) are out of scope, but Part 1 has to leave
 behind exactly what Part 2 needs: a theme format, a compiler, and a test harness.
 
@@ -24,25 +24,26 @@ behind exactly what Part 2 needs: a theme format, a compiler, and a test harness
   testable. `PostsBunch` is rows or grid, and the choice decides which `PostCard`
   configurations are offered (Index, Summary, Feature for rows; Tile, Card, Cover for
   grid).
-- **Three themes**: Rubric (book typography), Edition (modern magazine), Ledger
-  (notebook). They differ in type, colour and layout, and all three are pure data: zero
-  theme-specific CSS. That is the evidence that the format goes deep enough.
+- **Six themes, each for an audience**: Rubric (essayists), Edition (publications),
+  Ledger (public notebooks), Manual (engineers), Plate (photographers and designers),
+  Almanac (cooks, gardeners, makers). They differ in type, colour and layout, and all six
+  are pure data: zero theme-specific CSS. That is the evidence that the format goes deep
+  enough.
 - **Built to survive content**: container queries, intrinsic grids, titles that size
   down with length, fixed-ratio media with designed placeholders, truncation only in
   named places.
 - **A conformance harness** renders every theme × template × content fixture × width ×
   a pairwise-covering set of option combinations, and checks invariants: no sideways
   scroll, nothing clipped or overlapping, WCAG contrast, tap targets, heading order and
-  more. On the prototype, the three themes pass 5,508 renders and 24 randomly generated
-  themes pass 44,064, with no failures. Getting there, the harness and the fuzzer caught nine
+  more. On the prototype, the six themes pass 22,032 renders across six content sets,
+  and 24 randomly generated themes pass 88,128 renders, with no failures. Getting there, the harness and the fuzzer caught nine
   bugs that looking at screenshots had missed. Part 2's skill and cloud check run the
   same harness.
 - **Fonts: open source only, and that is a legal requirement, not just a preference.**
   Fontshare's own licence for its signature fonts (ITF FFL v2.0, August 2026) forbids
   offering them as selectable fonts on a SaaS or template editor. Fontshare also hosts 36
-  SIL OFL fonts. The three themes use four of them: Crimson Pro, Epilogue, Public Sans
-  and JetBrains Mono. They are self-hosted and subset to Latin, at 105–120 KB of fonts
-  per theme.
+  SIL OFL fonts. The six themes use nine of them. They are self-hosted and subset to
+  Latin, at 93–167 KB of fonts per theme; italics load only when a page uses them.
 - **No PocketBase schema change.** Design choices live in `app_settings`. One server
   hook change (reserving the `author` URL segment) needs your go-ahead.
 
@@ -73,7 +74,7 @@ What gets in the way of themes:
 
 ## 2. Goals and non-goals
 
-Part 1 goals: the four templates; page options with an editor panel; three themes; the
+Part 1 goals: the four templates; page options with an editor panel; six themes; the
 theme format and compiler; the harness; moving Verbatim over with no visual regression.
 
 Not in Part 1: custom themes, custom CSS, the skill, uploading or checking a theme file,
@@ -128,7 +129,7 @@ has to pass the same harness.
 **What "going deep" means.** Every axis a theme can move is a token or an enumerated
 variant with a range. More depth means adding tokens and variants to the contract, and
 cases to the harness. It never means letting a theme write layout CSS. The component CSS
-reads 124 tokens and 42 named parts; the three themes set tokens and nothing else.
+reads 128 tokens and 42 named parts; the six themes set tokens and nothing else.
 
 ## 5. The four templates
 
@@ -292,7 +293,7 @@ A theme is JSON. Rubric, abridged (the full files are in `prototype/engine.js`):
    steps to roles (post title = step 5) instead of setting pixel sizes, so the hierarchy
    can't invert.
 4. **Checks glyph coverage**: ornaments and interface characters must exist in the theme's
-   fonts. The prototype found that ⁂ and ❦ exist in none of the four fonts, and arrows
+   fonts. The prototype found that ⁂ and ❦ exist in none of the first four fonts, and arrows
    are missing from Crimson Pro and Public Sans. So ornaments come from a checked list,
    and arrows in the templates are SVG icons.
 5. **Outputs** about 120 custom properties on `.pg-site[data-theme=…]`, plus four frame
@@ -343,10 +344,28 @@ theme would otherwise break the page; several came out of the harness.
     the section they sit in.
 15. **`prefers-reduced-motion`** turns off transitions.
 
-## 10. The three themes
+## 10. The six themes
 
 Screenshots are in `screens/`. The prototype shows all four templates in each theme, at
-three widths, with the sample, edge-case and empty blogs.
+three widths, with each theme's own kind of blog plus the edge-case and empty blogs.
+
+### Who each theme is for
+
+The themes are split by subject, not by taste. A writer should recognise their own kind
+of blog in the list before they look at a single colour.
+
+| Theme | For | What their posts are like | What the theme optimises |
+|---|---|---|---|
+| Rubric | Essayists, memoirists, critics, fiction writers | Long, finished prose; few images | Reading comfort, book conventions |
+| Edition | Small magazines, newsletters, multi-writer publications | Many posts, images, several sections | A front page, hierarchy, images |
+| Ledger | Working notes, reading logs, research journals, digital gardens | Frequent short entries; the list is the product | Scanning a long archive |
+| Manual | Engineers, technical writers | Code blocks, tables, inline identifiers, headings; few images | Code legibility, wide blocks, scannable structure |
+| Plate | Photographers, illustrators, architects, designers | The image is the post; text is a caption | Getting out of the images' way |
+| Almanac | Cooks, gardeners, makers, travel guides | Practical how-tos: photos, ingredient lists, numbered steps | Warmth, lists, browsing by subject |
+
+Each theme is shown with its own sample blog in the prototype (Essays, Engineering,
+Photography, Kitchen & garden). Picking a theme switches to its sample, and the edge-case
+and empty blogs apply to every theme.
 
 ### Rubric: book typography
 
@@ -399,6 +418,72 @@ three widths, with the sample, edge-case and empty blogs.
 - **Defaults**: Index rows everywhere, with numbers. Posts have a left header, the details
   table and previous/next links.
 
+### Manual: technical writing
+
+![Manual](screens/manual.jpg)
+
+- **For**: engineers writing postmortems, deep dives and "today I learned" notes.
+- **Type**: Red Hat Display for text and headings (crisp, open, made for screens). Azeret
+  Mono for code, labels and dates; it is wide enough that `rn` never reads as `m`. Text
+  is 16–18 px.
+- **Colour**: cool paper `#F7F8FA`, ink `#13161B` (17:1), violet `#6D28D9` (6.7:1) for
+  links, labels and the current nav item.
+- **Layout**: an inline, sticky header, so navigation stays reachable in long posts.
+  There's a columns footer, and a 72-character text column.
+- **Code**: code blocks sit on a framed panel and use the wide track, because code lines
+  run longer than prose lines. Ligatures are always off, so `fi` in an identifier stays
+  two letters (the specimen caught Azeret rendering `NewWithConfig` as `NewWithConfıg`).
+- **Defaults**:
+  - Home is Summary rows with reading time.
+  - Collections have tabs to their siblings and rows grouped by year.
+  - Posts end with a details table, previous/next cards and three more from the
+    collection.
+
+### Plate: a portfolio
+
+![Plate](screens/plate.jpg)
+
+- **For**: photographers, illustrators, architects and designers.
+- **Type**: Sora throughout. Headlines are weight 300, the site name is set in tracked
+  capitals, and the type is small (15–17 px) so it steps back.
+- **Colour**: near-white `#F8F8F6`, ink `#111111`, a warm grey-brown `#6B5C47` that
+  never competes with a photograph.
+- **Layout**: a centred, stacked header and a 1320 px container. Images are 4:5 portrait
+  tiles, images go wide in posts, and tall images are capped at the screen height.
+- **Defaults**:
+  - Home and collections are Cover grids, with no subtitles or reading times.
+  - Posts have a centred title and the post number, and captions carry the camera
+    details.
+
+### Almanac: practical and warm
+
+![Almanac](screens/almanac.jpg)
+
+- **For**: cooks, gardeners, makers and travel writers.
+- **Type**: Lora headings (a friendly calligraphic serif) over Plus Jakarta Sans text,
+  which stays legible in ingredient lists and numbered steps. Text is 17–18 px with
+  generous leading.
+- **Colour**: pale sage paper `#F4F6EF`, ink `#1E2A22`, leaf green `#276B40`.
+- **Layout**: rounded surface cards (14 px), rounded images and a columns footer.
+- **Defaults**:
+  - Home opens with the author, then one shelf per collection (Recipes, Garden, Pantry).
+  - Collections are Card grids with a lead.
+  - Posts have wide images, an author card and three more from the collection.
+
+### What the new audiences added to the contract
+
+- **A code token group** (`prose.code`: panel, rule or plain, plus code size), and code
+  that never uses ligatures.
+- **"Images and code: wide"** as one post option, since both outgrow the text column.
+- **Letter-spacing ranges that depend on case.** Tracked capitals need up to 0.25em;
+  lowercase text never does.
+- **An `audience` field on themes**, shown on the theme cards in the editor.
+
+Two components these audiences will want are not in Part 1: a table of contents with
+heading anchors (Manual), and a structured recipe block with servings and times
+(Almanac, which would also give search engines recipe data). Both fit the contract as new
+sections with their own options.
+
 ## 11. Fonts and licences
 
 **The finding.** The ITF Free Font License, version 2.0 (17 August 2026), covers
@@ -417,7 +502,7 @@ shouldn't be accepted in Part 2 uploads either, without a separate licence from 
 
 **What is allowed.** Fontshare's catalogue lists 64 FFL and 36 SIL OFL fonts. OFL allows
 use, modification (subsetting), bundling and redistribution, as long as the font isn't
-sold on its own and the licence travels with it. None of the four chosen fonts declares
+sold on its own and the licence travels with it. None of the nine chosen fonts declares
 a Reserved Font Name, so subsets don't need renaming.
 
 | Font | Role | Latin subset (variable, woff2) |
@@ -426,9 +511,15 @@ a Reserved Font Name, so subsets don't need renaming.
 | Epilogue | Edition: everything | roman 52 KB, italic 55 KB |
 | Public Sans | Ledger: text and titles | roman 29 KB, italic 32 KB |
 | JetBrains Mono | Ledger: interface and code | roman 43 KB |
+| Red Hat Display | Manual: text and headings | roman 42 KB, italic 44 KB |
+| Azeret Mono | Manual: code, labels, dates | roman 38 KB |
+| Sora | Plate: everything | roman 48 KB, italic 45 KB |
+| Lora | Almanac: headings | roman 41 KB, italic 46 KB |
+| Plus Jakarta Sans | Almanac: text and interface | roman 38 KB, italic 42 KB |
 
-Per theme, that is 119 KB for Rubric, 107 KB for Edition and 104 KB for Ledger. An italic
-downloads only when a page uses it.
+Per theme, that is 119 KB for Rubric, 107 KB for Edition, 104 KB for Ledger, 124 KB for
+Manual, 93 KB for Plate and 167 KB for Almanac (all four of its files). An italic
+downloads only when a page uses it, so a typical page loads less.
 
 **How they ship.**
 
@@ -449,8 +540,12 @@ skill runs locally and the cloud check runs on upload.
 
 **Fixtures** (`prototype/fixtures.js`):
 
-- **Sample**: a believable blog with four collections, fourteen posts, images, footnotes,
-  and a quote.
+- **Four audience samples**:
+  - **Essays**: four collections, fourteen posts, images, footnotes and a quote.
+  - **Engineering**: postmortems and deep dives with Go and SQL code, a results table,
+    inline identifiers and few images.
+  - **Photography**: every post is a picture with a caption.
+  - **Kitchen & garden**: recipes with ingredient lists and numbered steps.
 - **Edge**: built to break layouts.
   - Content: a 100-character site name, a 600-character manifesto and 12 collections
     (one empty, one with a single post, emoji, Arabic and Japanese names).
@@ -463,12 +558,12 @@ skill runs locally and the cloud check runs on upload.
     body, and 64 posts in total.
 - **Empty**: a new blog with nothing published.
 
-**Matrix**: 3 themes × 4 templates × 3 fixtures × 6 widths (320, 390, 768, 1023, 1024,
+**Matrix**: 6 themes × 4 templates × 6 fixtures × 6 widths (320, 390, 768, 1023, 1024,
 1440; 1023 and 1024 straddle the rail breakpoint). Each is crossed with the theme's own
 defaults plus a pairwise-covering set of option combinations, so every pair of option
 values appears together at least once: 31 option sets for Home, 30 for Collection, 12
-for Post and 29 for Author. In total that is 5,508 renders, in about 50 seconds on four
-browser pages.
+for Post and 29 for Author. In total that is 22,032 renders, in about three minutes on
+four browser pages.
 
 **Checks**, on every render:
 
@@ -485,7 +580,7 @@ browser pages.
 | `landmarks` | header, nav, main and footer are present |
 | `img-alt`, `img-broken` | every image has alt text; a broken image has been replaced |
 | `empty-part` | no empty boxes |
-| `measure` | prose lines hold 45–80 characters from 768 px, 30–80 on phones |
+| `measure` | prose lines hold 45–80 characters from 768 px, 30–80 on phones (paragraphs with inline code are skipped: monospace identifiers wrap early by nature) |
 | `invalid-option` | no stored option was silently dropped |
 
 **What it caught** while the prototype was being built (all fixed):
@@ -525,7 +620,7 @@ images below the fold.
 
 ### Fuzzing: themes nobody designed
 
-The three built-in themes were designed alongside the templates, so their passing proves
+The built-in themes were designed alongside the templates, so their passing proves
 less than it seems. `prototype/fuzz.js` generates random themes across the whole Theme
 API: any font in any role, random colours (including unreadable ones), sizes, weights,
 tracking, frames, radii, rule styles, prose styles and formats, with about one value in
@@ -534,7 +629,8 @@ eight deliberately out of range.
 - **Compiler**: 2,000 random themes. None broke a colour guarantee, none produced an
   invalid value, and the compiler never threw. It repaired about 2,900 values, clamped
   about 6,300 and rejected 143 (dark paper, unknown ornaments).
-- **Rendering**: 24 random themes through the full matrix, 44,064 renders, no failures.
+- **Rendering**: 24 random themes through the full matrix and all six content sets,
+  88,128 renders, no failures.
   Many of these themes are ugly, but none of them breaks a page.
 
 This is the check Part 2 needs. The cloud validator runs the same compiler and harness on
@@ -574,11 +670,11 @@ publishes a design.
      tokens and variants, the contract is wrong.
 2. **Routes.** Collection and author pages, and the reserved segment (needs your
    go-ahead, see §15). Fix the shared-code Verbatim leftovers (footer email, "Est.").
-3. **The three themes**, with the font pipeline (subsetting, `unicode-range`, fallback
+3. **The six themes**, with the font pipeline (subsetting, `unicode-range`, fallback
    metrics).
 4. **The Design panel**, with draft and publish and the live preview. Add the author photo
    and links.
-5. **Verbatim's choice.** Keep the private theme or move to one of the three (§16).
+5. **Verbatim's choice.** Keep the private theme or move to one of the six (§16).
 
 ## 15. Server and data changes
 
@@ -606,7 +702,8 @@ someone has named by then.
 5. **Your message was cut off** after "and then a component called". I assumed you meant
    the collection header, with its tabs to the other collections. Say if you meant
    something else (pagination? a subscribe block?).
-6. **Theme names**: Rubric, Edition, Ledger. They are easy to change now and harder once
+6. **Theme names and line-up**: Rubric, Edition, Ledger, Manual, Plate, Almanac. Launch
+   with all six, or with three and add the rest later. Names are easy to change now and harder once
    sites use them.
 
 ---
@@ -644,8 +741,8 @@ someone has named by then.
 | Path | What |
 |---|---|
 | `prototype/site.css` | The component CSS: the stylesheet the React templates would use |
-| `prototype/engine.js` | The theme compiler, the three themes, the options schema, view models, components and templates |
-| `prototype/fixtures.js` | Sample, edge and empty blogs; images are painted on a canvas |
+| `prototype/engine.js` | The theme compiler, the six themes, the options schema, view models, components and templates |
+| `prototype/fixtures.js` | Essays, engineering, photography and kitchen blogs, plus edge and empty blogs; images are painted on a canvas |
 | `prototype/shell.html` | The prototype's control panel |
 | `prototype/harness.js` | The conformance harness |
 | `prototype/fuzz.js` | Random themes for the compiler and the harness |

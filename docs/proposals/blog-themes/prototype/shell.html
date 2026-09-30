@@ -28,6 +28,7 @@ body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--ui); margi
 .theme-card[aria-checked="true"] { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg) inset; }
 .theme-card .name { font-size: 22px; line-height: 1.1; }
 .theme-card .sum { grid-column: 1 / -1; color: var(--fg-2); font-size: 12.5px; }
+.theme-card .aud { grid-column: 1 / -1; color: var(--fg); font-size: 12px; margin-top: 2px; }
 .theme-card .dots { display: flex; gap: 4px; align-self: center; }
 .theme-card .dots i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line-2); }
 .seg { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -81,7 +82,7 @@ pre.json { font: 11px/1.45 var(--mono); background: var(--chip); padding: 10px 1
   <aside class="panel" aria-label="Prototype controls">
     <div>
       <h1>Blog themes</h1>
-      <p class="sub">Propaganda, Part 1 prototype: four templates, page options, three themes.</p>
+      <p class="sub">Propaganda, Part 1 prototype: four templates, page options, six themes.</p>
     </div>
     <div class="group"><h2 id="h-theme">Theme</h2><div class="themes" role="radiogroup" aria-labelledby="h-theme" id="themes"></div></div>
     <div class="group"><h2 id="h-page">Page</h2><div class="seg" role="group" aria-labelledby="h-page" id="pages"></div></div>
@@ -91,7 +92,7 @@ pre.json { font: 11px/1.45 var(--mono); background: var(--chip); padding: 10px 1
     <div class="group"><div class="row-bool"><span class="lbl" id="l-outline">Outline the template parts</span><button class="switch" role="switch" aria-checked="false" aria-labelledby="l-outline" id="outline"></button></div></div>
     <details class="src" id="src"><summary>Theme source and compiled colours</summary><div id="src-body"></div></details>
     <div class="credits">
-      <p>Fonts: Crimson Pro, Epilogue, Public Sans, JetBrains Mono, from Fontshare under the SIL Open Font License 1.1, subset to Latin. Copyright their project authors; licence text in each font file.</p>
+      <p>Fonts: Crimson Pro, Epilogue, Public Sans, JetBrains Mono, Red Hat Display, Azeret Mono, Sora, Lora and Plus Jakarta Sans, from Fontshare under the SIL Open Font License 1.1, subset to Latin. Copyright their project authors; licence text in each font file.</p>
       <p>Sample writing and images are made up for this prototype.</p>
       <p>The proposal: <a href="https://github.com/Ghaith-Ayadi/Propaganda/blob/claude/wonderful-dirac-maz405/docs/proposals/blog-themes/README.md" target="_blank" rel="noopener">docs/proposals/blog-themes</a> in the Propaganda repo.</p>
     </div>
@@ -111,9 +112,13 @@ pre.json { font: 11px/1.45 var(--mono); background: var(--chip); padding: 10px 1
   const SITE_CSS = document.getElementById("pg-site-css").textContent;
   const FONT_CSS = (document.getElementById("pg-fonts") || {}).textContent || "";
   const PAGES = [["home", "Home"], ["collection", "Collection"], ["post", "Post"], ["author", "Author"]];
-  const CONTENTS = [["sample", "Sample blog"], ["edge", "Edge cases"], ["empty", "Empty blog"]];
+  const CONTENTS = [["sample", "Essays"], ["engineering", "Engineering"], ["photo", "Photography"], ["kitchen", "Kitchen & garden"], ["edge", "Edge cases"], ["empty", "Empty blog"]];
+  const NATURAL = { rubric: "sample", edition: "sample", ledger: "sample", manual: "engineering", plate: "photo", almanac: "kitchen" };
   const CONTENT_HINT = {
-    sample: "A made-up blog with four collections and fourteen posts.",
+    sample: "A made-up essay blog: four collections, fourteen posts.",
+    engineering: "A made-up engineering blog: postmortems and deep dives with Go, SQL, tables and few images.",
+    photo: "A made-up photography portfolio: every post is a picture with a caption.",
+    kitchen: "A made-up cooking and allotment blog: recipes with ingredient lists and numbered steps.",
     edge: "Very long names and titles, unbroken strings, emoji, Arabic and Japanese, missing fields, broken and extreme images, 12 collections, 64 posts.",
     empty: "A new blog: one collection, nothing published.",
   };
@@ -214,9 +219,15 @@ pre.json { font: 11px/1.45 var(--mono); background: var(--chip); padding: 10px 1
       return `<button type="button" class="theme-card" role="radio" aria-checked="${t.id === st.theme}" data-id="${t.id}">
         <span class="name" style="font-family:${E.esc(E.compileTheme(t).vars["--pg-font-display"])};font-weight:${t.type.display.weight}">${t.name}</span>
         <span class="dots" aria-hidden="true"><i style="background:${c.paper}"></i><i style="background:${c.ink}"></i><i style="background:${c.accent}"></i></span>
-        <span class="sum">${E.esc(t.summary)}</span></button>`;
+        <span class="sum">${E.esc(t.summary)}</span>${t.audience ? `<span class="aud">For ${E.esc(t.audience.charAt(0).toLowerCase() + t.audience.slice(1))}</span>` : ""}</button>`;
     }).join("");
-    el.onclick = (e) => { const b = e.target.closest(".theme-card"); if (!b) return; st.theme = b.dataset.id; save(); themesUI(); panel(); render(false); };
+    el.onclick = (e) => {
+      const b = e.target.closest(".theme-card"); if (!b) return;
+      st.theme = b.dataset.id;
+      // show each theme with the kind of blog it was made for; stress content stays selected
+      if (st.fixture !== "edge" && st.fixture !== "empty") { st.fixture = NATURAL[st.theme] || "sample"; st.route = { tpl: currentRoute().tpl }; st.homeTab = null; }
+      st.more = {}; save(); themesUI(); panel(); render(true);
+    };
   }
   function optionsUI() {
     const tpl = currentRoute().tpl;

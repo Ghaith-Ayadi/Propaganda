@@ -5,6 +5,11 @@ fonts = [
   ("Epilogue", "Epilogue-Variable", "normal", "100 900"), ("Epilogue", "Epilogue-VariableItalic", "italic", "100 900"),
   ("Public Sans", "PublicSans-Variable", "normal", "100 900"), ("Public Sans", "PublicSans-VariableItalic", "italic", "100 900"),
   ("JetBrains Mono", "JetBrainsMono-Variable", "normal", "100 800"),
+  ("Red Hat Display", "RedHatDisplay-Variable", "normal", "300 900"), ("Red Hat Display", "RedHatDisplay-VariableItalic", "italic", "300 900"),
+  ("Azeret Mono", "AzeretMono-Variable", "normal", "100 900"),
+  ("Sora", "Sora-Variable", "normal", "100 800"), ("Sora", "Sora-VariableItalic", "italic", "100 800"),
+  ("Lora", "Lora-Variable", "normal", "400 700"), ("Lora", "Lora-VariableItalic", "italic", "400 700"),
+  ("Plus Jakarta Sans", "PlusJakartaSans-Variable", "normal", "200 800"), ("Plus Jakarta Sans", "PlusJakartaSans-VariableItalic", "italic", "200 800"),
 ]
 faces = []
 for fam, f, style, wght in fonts:

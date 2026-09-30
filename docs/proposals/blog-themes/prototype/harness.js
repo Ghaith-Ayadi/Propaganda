@@ -15,8 +15,8 @@ const [, , embedPath, outDir, flag] = process.argv;
 const QUICK = process.argv.includes("--quick");
 const THEME_FILE = (process.argv.find((a) => a.startsWith("--themes=")) || "").slice(9);
 const EXTRA_THEMES = THEME_FILE ? JSON.parse(fs.readFileSync(THEME_FILE, "utf8")) : [];
-const THEMES = EXTRA_THEMES.length ? EXTRA_THEMES.map((t) => t.id) : ["rubric", "edition", "ledger"];
-const FIXTURES = ["sample", "edge", "empty"];
+const THEMES = EXTRA_THEMES.length ? EXTRA_THEMES.map((t) => t.id) : ["rubric", "edition", "ledger", "manual", "plate", "almanac"];
+const FIXTURES = ["sample", "engineering", "photo", "kitchen", "edge", "empty"];
 const TEMPLATES = ["home", "collection", "post", "author"];
 const WIDTHS = QUICK ? [390, 1280] : [320, 390, 768, 1023, 1024, 1440];
 
@@ -199,7 +199,8 @@ function inPageChecks() {
   }
 
   // 11. prose line length (characters per line) on post pages
-  const paras = [...site.querySelectorAll(".pg-prose > p")].filter((p) => p.textContent.length > 200 && !/https?:\/\/\S{40,}/.test(p.textContent) && !/\S{40,}/.test(p.textContent));
+  // paragraphs with inline code are left out: monospace identifiers are content, and they wrap early by nature
+  const paras = [...site.querySelectorAll(".pg-prose > p")].filter((p) => p.textContent.length > 200 && !/\S{40,}/.test(p.textContent) && !p.querySelector("code"));
   if (paras.length) {
     const cpl = paras.map((p) => { const lh = parseFloat(getComputedStyle(p).lineHeight); const lines = Math.round(p.getBoundingClientRect().height / lh); return p.textContent.length / Math.max(1, lines); }).sort((a, b) => a - b);
     const med = cpl[Math.floor(cpl.length / 2)];

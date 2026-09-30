@@ -58,11 +58,16 @@
     "Epilogue": 'Epilogue, "Helvetica Neue", Arial, system-ui, sans-serif',
     "Public Sans": '"Public Sans", "Helvetica Neue", Arial, system-ui, sans-serif',
     "JetBrains Mono": '"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace',
+    "Red Hat Display": '"Red Hat Display", "Helvetica Neue", Arial, system-ui, sans-serif',
+    "Azeret Mono": '"Azeret Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace',
+    "Sora": 'Sora, "Helvetica Neue", Arial, system-ui, sans-serif',
+    "Lora": 'Lora, Georgia, "Times New Roman", serif',
+    "Plus Jakarta Sans": '"Plus Jakarta Sans", "Helvetica Neue", Arial, system-ui, sans-serif',
     system: 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace',
   };
   /* Average advance of running English text, in em, measured from the font files. CSS `ch` (the
      width of "0") is not font-independent: Crimson Pro's average character is 0.68 of its "0". */
-  const FONT_METRICS = { "Crimson Pro": 0.387, "Epilogue": 0.484, "Public Sans": 0.442, "JetBrains Mono": 0.6, system: 0.6 };
+  const FONT_METRICS = { "Crimson Pro": 0.387, "Epilogue": 0.484, "Public Sans": 0.442, "JetBrains Mono": 0.6, "Red Hat Display": 0.427, "Azeret Mono": 0.65, "Sora": 0.489, "Lora": 0.455, "Plus Jakarta Sans": 0.452, system: 0.6 };
 
   /* Characters the shipped font files contain (U+0000-017F plus punctuation).
      An ornament outside this set would fall back to a system font. */
@@ -71,7 +76,7 @@
   const RANGES = {
     textMin: [15, 19], textMax: [16, 22], ratioMin: [1.1, 1.25], ratioMax: [1.125, 1.414], leading: [1.4, 1.8],
     displayLeading: [0.95, 1.3], displayWeight: [200, 900], titleWeight: [300, 900], tracking: [-0.05, 0.02],
-    labelTracking: [0, 0.2], weight: [100, 900], unit: [3, 8], container: [880, 1400], measure: [52, 78], margin: [0, 220], rail: [180, 300],
+    labelTracking: [0, 0.2], capsTracking: [0, 0.25], weight: [100, 900], unit: [3, 8], container: [880, 1400], measure: [52, 78], margin: [0, 220], rail: [180, 300],
     gridMin: [200, 360], radius: [0, 16], ruleWidth: [1, 3], density: [0.8, 1.3], step: [-1, 6],
   };
 
@@ -139,7 +144,7 @@
     let tMin = num(t.text?.size?.[0] ?? 17, "textMin", 17);
     // real line breaking wastes 10-20% of a line, so the arithmetic aims above the targets
     const phoneCap = Math.floor((288 / (36 * avgChar)) * 4) / 4;
-    if (tMin > phoneCap) { note("fix", `text size ${round(tMin, 2)}px holds under 30 characters a line on a 320px phone in ${textFont}; used ${phoneCap}px`); tMin = phoneCap; }
+    if (tMin > phoneCap) { note("fix", `text size ${round(tMin, 2)}px leaves too few characters a line on a 320px phone in ${textFont}; used ${phoneCap}px`); tMin = phoneCap; }
     const tMax = num(t.text?.size?.[1] ?? 19, "textMax", 19);
     const rMin = num(t.scale?.[0] ?? 1.2, "ratioMin", 1.2);
     const rMax = num(t.scale?.[1] ?? 1.25, "ratioMax", 1.25);
@@ -174,7 +179,7 @@
     const caseOf = (x) => (x === "upper" ? "uppercase" : "none");
     const b = t.brand || {};
     V("brand-font", fontRef(b.font || "display")); V("brand-weight", num(b.weight ?? 600, "weight", 600)); V("brand-style", b.style === "italic" ? "italic" : "normal");
-    V("brand-case", caseOf(b.case)); V("brand-tracking", `${num(b.tracking ?? -0.01, "tracking", -0.01)}em`);
+    V("brand-case", caseOf(b.case)); V("brand-tracking", `${num(b.tracking ?? -0.01, b.case === "upper" ? "capsTracking" : "tracking", -0.01)}em`);
     const lab = t.label || {};
     V("label-font", fontRef(lab.font || "ui")); V("label-size", stepRef(lab.step ?? -1, -1, 0)); V("label-weight", num(lab.weight ?? 500, "weight", 500));
     V("label-case", lab.case === "upper" ? "uppercase" : "none"); V("label-caps", lab.case === "smallcaps" ? "all-small-caps" : "normal");
@@ -239,6 +244,11 @@
       V("link-color", "var(--pg-ink)"); V("link-decoration", "var(--pg-accent-text)"); V("link-thickness", "1px"); V("link-bg", "none");
     }
     V("caption-align", p.caption === "center" ? "center" : "start");
+    const code = ["panel", "rule", "plain"].includes(p.code) ? p.code : "panel";
+    V("code-bg", code === "plain" ? "transparent" : "var(--pg-surface)");
+    V("code-border", code === "rule" ? "3px solid var(--pg-accent-text)" : "0 none transparent");
+    V("code-frame", code === "panel" ? "1px solid var(--pg-rule)" : "0 none transparent");
+    V("code-size", p.codeSize === "text" ? "0.9em" : "var(--pg-step--1)");
 
     const attrs = {
       "data-theme": src.id,
@@ -255,6 +265,7 @@
     rubric: {
       api: 1, id: "rubric", name: "Rubric", version: "1.0.0",
       summary: "Book typography: one serif, red rubrication, dates in the margin.",
+      audience: "Essayists, memoirists, critics and fiction writers: long, finished prose.",
       fonts: { display: "Crimson Pro", text: "Crimson Pro", ui: "Crimson Pro", mono: "system" },
       color: { paper: "#FCFBF8", ink: "#1D1814", accent: "#A8261B" },
       type: {
@@ -284,10 +295,11 @@
     edition: {
       api: 1, id: "edition", name: "Edition", version: "1.0.0",
       summary: "A modern magazine: big grotesque headlines, image-led grids, one ultramarine.",
+      audience: "Small magazines, newsletters and multi-writer publications: many posts, images, sections.",
       fonts: { display: "Epilogue", text: "Epilogue", ui: "Epilogue", mono: "system" },
       color: { paper: "#FFFFFF", ink: "#0E0E13", accent: "#3525E6" },
       type: {
-        text: { size: [17, 19], leading: 1.62, weight: 400, strong: 700 }, scale: [1.2, 1.333], figures: "lining",
+        text: { size: [16.5, 19], leading: 1.62, weight: 400, strong: 700 }, scale: [1.2, 1.333], figures: "lining",
         display: { weight: 800, leading: 0.98, tracking: -0.035 }, title: { weight: 700, font: "display", tracking: -0.018 },
         dek: { font: "text", style: "normal" },
         brand: { font: "display", weight: 800, tracking: -0.04 },
@@ -314,6 +326,7 @@
     ledger: {
       api: 1, id: "ledger", name: "Ledger", version: "1.0.0",
       summary: "A notebook: numbered entries, ISO dates, a highlighter.",
+      audience: "Working notes, reading logs and research journals: frequent short entries.",
       fonts: { display: "Public Sans", text: "Public Sans", ui: "JetBrains Mono", mono: "JetBrains Mono" },
       color: { paper: "#F4F4F0", ink: "#1C1D1F", accent: "#E9CF2B", highlight: "#F3E27A" },
       type: {
@@ -341,6 +354,100 @@
       },
     },
   };
+
+  Object.assign(THEMES, {
+    manual: {
+      api: 1, id: "manual", name: "Manual", version: "1.0.0",
+      summary: "Technical writing: code first, clear headings, a violet accent.",
+      audience: "Engineers and technical writers: postmortems, deep dives, code-heavy posts, few images.",
+      fonts: { display: "Red Hat Display", text: "Red Hat Display", ui: "Azeret Mono", mono: "Azeret Mono" },
+      color: { paper: "#F7F8FA", ink: "#13161B", accent: "#6D28D9" },
+      type: {
+        text: { size: [16, 18], leading: 1.65, weight: 400, strong: 700 }, scale: [1.18, 1.25], figures: "lining",
+        display: { weight: 750, leading: 1.1, tracking: -0.022 }, title: { weight: 700, font: "display", tracking: -0.012 },
+        dek: { font: "text", style: "normal" },
+        brand: { font: "display", weight: 800, tracking: -0.02 },
+        label: { font: "ui", case: "none", tracking: 0, weight: 500, color: "accent", step: -1 },
+        meta: { font: "ui", step: -1 },
+        nav: { font: "display", step: -1, weight: 600 },
+        roles: { brand: 1, manifesto: 3, postTitle: 5, collTitle: 4, cardTitle: 1, indexTitle: 0, leadTitle: 3, dek: 1, section: -1 },
+      },
+      space: { unit: 4, density: 1 },
+      shape: { radius: 6, imageRadius: 6, avatar: "square", rule: "solid", headerRule: "thin", footerRule: "thin", leader: "none", card: "outline" },
+      layout: { container: 1180, measure: 72, margin: 0, wide: 120, header: "inline", footer: "columns", gridMin: 260, imageRatio: "16 / 9" },
+      prose: { paragraph: "space", ornament: "rule", quote: "accent", quoteItalic: false, link: "accent", caption: "start", code: "panel", codeSize: "text" },
+      images: { filter: "none" },
+      format: { date: "medium", readTime: "short", number: "#{n}" },
+      presets: {
+        frame: { header: { tagline: true, sticky: true }, footer: { poweredBy: true } },
+        home: { intro: { variant: "compact", stats: false }, feed: { mode: "latest", layout: "rows", card: "summary", lead: false, group: "none", number: false, dek: true, readTime: true, collection: "auto", limit: "12" } },
+        collection: { header: { variant: "plain", description: true, count: true, siblings: true }, posts: { layout: "rows", card: "summary", lead: false, group: "year", number: false, dek: true, readTime: true, collection: "auto", limit: "24" } },
+        post: { header: { align: "start", width: "content", dek: true, byline: true, readTime: true, number: false }, body: { dropCap: false, images: "wide" }, after: { authorCard: false, details: true, nav: "cards", more: "3" } },
+        author: { header: { variant: "split", avatar: true, links: true }, posts: { layout: "rows", card: "index", lead: false, group: "year", number: false, dek: false, readTime: false, collection: "show", limit: "24" } },
+      },
+    },
+    plate: {
+      api: 1, id: "plate", name: "Plate", version: "1.0.0",
+      summary: "A portfolio: big pictures, quiet type, captions that carry the detail.",
+      audience: "Photographers, illustrators, architects and designers: the image is the post.",
+      fonts: { display: "Sora", text: "Sora", ui: "Sora", mono: "system" },
+      color: { paper: "#F8F8F6", ink: "#111111", accent: "#6B5C47" },
+      type: {
+        text: { size: [15, 17], leading: 1.65, weight: 400, strong: 600 }, scale: [1.2, 1.3], figures: "lining",
+        display: { weight: 300, leading: 1.08, tracking: -0.02 }, title: { weight: 400, font: "display", tracking: -0.01 },
+        dek: { font: "text", style: "normal" },
+        brand: { font: "display", weight: 500, case: "upper", tracking: 0.2 },
+        label: { font: "ui", case: "upper", tracking: 0.14, weight: 500, color: "muted", step: -1 },
+        meta: { font: "ui", step: -1 },
+        nav: { font: "ui", case: "upper", step: -1, weight: 500, tracking: 0.12 },
+        roles: { brand: 0, manifesto: 3, postTitle: 5, collTitle: 4, cardTitle: 0, indexTitle: 0, leadTitle: 3, dek: 1, section: -1 },
+      },
+      space: { unit: 4, density: 1.15 },
+      shape: { radius: 0, imageRadius: 0, avatar: "circle", rule: "solid", headerRule: "none", footerRule: "thin", leader: "none", card: "plain" },
+      layout: { container: 1320, measure: 60, margin: 0, wide: 260, header: "stacked", headerAlign: "center", footer: "minimal", gridMin: 280, imageRatio: "4 / 5", coverRatio: "4 / 5", leadRatio: "3 / 2" },
+      prose: { paragraph: "space", ornament: "· · ·", quote: "none", quoteItalic: false, link: "underline", caption: "center", code: "plain" },
+      images: { filter: "none" },
+      format: { date: "long", readTime: "short", number: "No. {n}" },
+      presets: {
+        frame: { header: { tagline: false, sticky: false }, footer: { poweredBy: true } },
+        home: { intro: { variant: "none", stats: false }, feed: { mode: "latest", layout: "grid", card: "cover", columns: "3", lead: true, group: "none", number: false, dek: false, readTime: false, collection: "hide", limit: "12" } },
+        collection: { header: { variant: "plain", description: true, count: false, siblings: true }, posts: { layout: "grid", card: "cover", columns: "3", lead: false, group: "none", number: false, dek: false, readTime: false, collection: "hide", limit: "24" } },
+        post: { header: { align: "center", width: "content", dek: true, byline: false, readTime: false, number: true }, body: { dropCap: false, images: "wide" }, after: { authorCard: false, details: false, nav: "cards", more: "3" } },
+        author: { header: { variant: "center", avatar: true, links: true }, posts: { layout: "grid", card: "cover", columns: "3", lead: false, group: "none", number: false, dek: false, readTime: false, collection: "hide", limit: "24" } },
+      },
+    },
+    almanac: {
+      api: 1, id: "almanac", name: "Almanac", version: "1.0.0",
+      summary: "Practical and warm: rounded cards, a friendly serif, sections by season or subject.",
+      audience: "Cooks, gardeners, makers and travel writers: how-tos with photos, recipes, lists.",
+      fonts: { display: "Lora", text: "Plus Jakarta Sans", ui: "Plus Jakarta Sans", mono: "system" },
+      color: { paper: "#F4F6EF", ink: "#1E2A22", accent: "#276B40" },
+      type: {
+        text: { size: [17, 18], leading: 1.7, weight: 400, strong: 700 }, scale: [1.2, 1.25], figures: "lining",
+        display: { weight: 600, leading: 1.12, tracking: -0.01 }, title: { weight: 600, font: "display", tracking: -0.005 },
+        dek: { font: "text", style: "normal" },
+        brand: { font: "display", weight: 700, tracking: -0.01 },
+        label: { font: "ui", case: "none", tracking: 0, weight: 650, color: "accent", step: -1 },
+        meta: { font: "ui", step: -1 },
+        nav: { font: "ui", step: -1, weight: 600 },
+        section: { font: "display" },
+        roles: { brand: 2, manifesto: 3, postTitle: 5, collTitle: 4, cardTitle: 1, indexTitle: 0, leadTitle: 3, dek: 1, section: 2 },
+      },
+      space: { unit: 4, density: 1 },
+      shape: { radius: 14, imageRadius: 12, avatar: "circle", rule: "solid", headerRule: "none", footerRule: "thin", leader: "none", card: "surface" },
+      layout: { container: 1200, measure: 64, margin: 0, wide: 140, header: "inline", footer: "columns", gridMin: 250, imageRatio: "4 / 3", leadRatio: "16 / 10" },
+      prose: { paragraph: "space", ornament: "* * *", quote: "accent", quoteItalic: false, link: "accent", caption: "start", code: "panel" },
+      images: { filter: "none" },
+      format: { date: "medium", readTime: "short", number: "#{n}" },
+      presets: {
+        frame: { header: { tagline: false, sticky: false }, footer: { poweredBy: true } },
+        home: { intro: { variant: "author", stats: false }, feed: { mode: "shelves", layout: "grid", card: "card", columns: "3", lead: false, group: "none", number: false, dek: true, readTime: true, collection: "auto", limit: "12" } },
+        collection: { header: { variant: "plain", description: true, count: true, siblings: true }, posts: { layout: "grid", card: "card", columns: "3", lead: true, group: "none", number: false, dek: true, readTime: true, collection: "auto", limit: "12" } },
+        post: { header: { align: "start", width: "content", dek: true, byline: true, readTime: true, number: false }, body: { dropCap: false, images: "wide" }, after: { authorCard: true, details: false, nav: "cards", more: "3" } },
+        author: { header: { variant: "split", avatar: true, links: true }, posts: { layout: "grid", card: "card", columns: "3", lead: false, group: "none", number: false, dek: true, readTime: true, collection: "show", limit: "12" } },
+      },
+    },
+  });
 
   /* ------------------------------------------------------------ options schema
      Per template: sections, each with typed options. Enums only (no free
@@ -390,7 +497,7 @@
         readTime: { type: "bool", label: "Reading time" }, number: { type: "bool", label: "Post number" } } },
       body: { label: "Body", options: {
         dropCap: { type: "bool", label: "Drop cap" },
-        images: { type: "enum", label: "Images", values: ["column", "wide"], labels: { column: "Text width", wide: "Wide" } } } },
+        images: { type: "enum", label: "Images and code", values: ["column", "wide"], labels: { column: "Text width", wide: "Wide" } } } },
       after: { label: "After the post", options: {
         authorCard: { type: "bool", label: "Author card" }, details: { type: "bool", label: "Details (words, dates, link)" },
         nav: { type: "enum", label: "Previous / next", values: ["cards", "inline", "none"], labels: { cards: "Cards", inline: "Links", none: "None" } },
@@ -689,7 +796,8 @@
       : meta;
     const head = `<header class="pg-post-head" data-part="post-header" data-align="${h.align}" data-width="${h.width}">${eyebrow}<h1 class="pg-post-head__title" data-part="title"${at("data-len", post.titleLen)} dir="auto">${esc(post.title)}</h1>${dek}${byline}</header>`;
     let body = prose(post.body || `<p>${esc(post.dek || "")}</p>`);
-    if (o.body.images === "wide") body = body.replace(/<figure>/g, '<figure data-width="wide">');
+    // "wide" lets figures and code blocks use the wide track: code lines are often longer than prose lines
+    if (o.body.images === "wide") body = body.replace(/<figure>/g, '<figure data-width="wide">').replace(/<pre>/g, '<pre data-width="wide">');
     const flowBody = `<div class="pg-prose" data-part="prose"${at("data-dropcap", o.body.dropCap ? "true" : null)}>${body}</div>`;
     const a = o.after;
     const peers = vm.posts.filter((p) => p.col.slug === post.col.slug);

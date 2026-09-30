@@ -37,5 +37,6 @@ width.
 
 The font subsets were made with `pyftsubset`, keeping all name records (copyright and
 licence fields). They cover U+0000–017F plus common punctuation. Sources: the Fontshare
-downloads of Crimson Pro, Epilogue, Public Sans and JetBrains Mono, all SIL OFL 1.1. See
+downloads of Crimson Pro, Epilogue, Public Sans, JetBrains Mono, Red Hat Display,
+Azeret Mono, Sora, Lora and Plus Jakarta Sans, all SIL OFL 1.1. See
 the `*-OFL.txt` files.

@@ -68,6 +68,28 @@
       g.fillStyle = "#3b2f28"; g.beginPath(); g.ellipse(w * 0.5, h * 0.4, w * 0.19, h * 0.22, 0, 0, 7); g.fill();
       g.fillStyle = "#d9b99a"; g.beginPath(); g.ellipse(w * 0.5, h * 0.44, w * 0.15, h * 0.19, 0, 0, 7); g.fill();
       g.fillStyle = "#2f3d44"; g.beginPath(); g.ellipse(w * 0.5, h * 1.02, w * 0.38, h * 0.36, 0, 0, 7); g.fill();
+    } else if (kind === "mountain") {
+      g.fillStyle = grad(0, h, [[0, seed % 2 ? "#e9c9a8" : "#c9d6de"], [0.6, seed % 2 ? "#f3e2cc" : "#eef1ee"], [1, "#d8d2c4"]]); g.fillRect(0, 0, w, h);
+      const ridge = (base, amp, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(0, h); let y = base; for (let x = 0; x <= w; x += w / 24) { y = base - amp * (0.3 + r() * 0.7) * Math.sin((x / w) * Math.PI * (1 + r())); g.lineTo(x, y); } g.lineTo(w, h); g.fill(); };
+      ridge(h * 0.55, h * 0.28, "#8f97a0"); ridge(h * 0.68, h * 0.2, "#5f6a72"); ridge(h * 0.82, h * 0.12, "#3a4449");
+    } else if (kind === "dune") {
+      g.fillStyle = grad(0, h * 0.5, [[0, "#f2d9b7"], [1, "#f7eadb"]]); g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 5; i++) { g.fillStyle = ["#d9a36b", "#c98c55", "#e5b985", "#b87a47", "#d49a60"][i]; g.beginPath(); const y = h * (0.45 + i * 0.12); g.moveTo(0, y + 40); g.bezierCurveTo(w * 0.3, y - 60 * r(), w * 0.65, y + 50 * r(), w, y - 20); g.lineTo(w, h); g.lineTo(0, h); g.fill(); }
+    } else if (kind === "street") {
+      g.fillStyle = grad(0, h, [[0, "#b8c4cc"], [1, "#6f7479"]]); g.fillRect(0, 0, w, h);
+      for (let x = 0; x < w; ) { const bw = 80 + r() * 160, bh = h * (0.35 + r() * 0.5); g.fillStyle = ["#4b5359", "#5d666c", "#3c4247", "#6c747a"][Math.floor(r() * 4)]; g.fillRect(x, h - bh, bw, bh); g.fillStyle = "rgba(255,226,160,.55)"; for (let k = 0; k < 8; k++) g.fillRect(x + 10 + r() * (bw - 20), h - bh + 12 + r() * (bh - 40), 8, 12); x += bw + 4; }
+      g.fillStyle = "#2c3034"; g.fillRect(0, h * 0.9, w, h * 0.1);
+    } else if (kind === "bowl") {
+      g.fillStyle = seed % 2 ? "#e8e1d6" : "#dfe5dc"; g.fillRect(0, 0, w, h);
+      g.fillStyle = "rgba(60,40,20,.18)"; g.beginPath(); g.ellipse(w * 0.53, h * 0.56, w * 0.3, h * 0.36, 0, 0, 7); g.fill();
+      g.fillStyle = "#f7f4ee"; g.beginPath(); g.arc(w * 0.5, h * 0.5, h * 0.36, 0, 7); g.fill();
+      const cols = seed % 2 ? ["#c4452c", "#e6a33a", "#6d8f3a", "#d9683a"] : ["#7b9a3e", "#b9c96a", "#e3d7a8", "#9a3b2a"];
+      for (let i = 0; i < 40; i++) { const a = r() * 7, d = r() * h * 0.26; g.fillStyle = cols[i % 4]; g.beginPath(); g.arc(w * 0.5 + Math.cos(a) * d, h * 0.5 + Math.sin(a) * d, h * (0.03 + r() * 0.05), 0, 7); g.fill(); }
+    } else if (kind === "herbs") {
+      g.fillStyle = grad(0, h, [[0, "#dfe6d6"], [1, "#b9c6a8"]]); g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 26; i++) { const x = w * (0.08 + r() * 0.84), y = h * (0.35 + r() * 0.5); g.strokeStyle = "#4f6b34"; g.lineWidth = 3; g.beginPath(); g.moveTo(x, h); g.quadraticCurveTo(x + 20 * (r() - 0.5), y + 40, x + 30 * (r() - 0.5), y); g.stroke();
+        for (let k = 0; k < 5; k++) { g.fillStyle = ["#5f8a3c", "#7aa04c", "#3f6a2e"][k % 3]; g.beginPath(); g.ellipse(x + 30 * (r() - 0.5), y + k * 18, 16, 7, r() * 3, 0, 7); g.fill(); } }
+      g.fillStyle = "#a45a3a"; g.fillRect(0, h * 0.88, w, h * 0.12);
     } else if (kind === "flat") {
       g.fillStyle = seed % 2 ? "#7f6a9b" : "#5c8a6e"; g.fillRect(0, 0, w, h);
     }
@@ -220,6 +242,111 @@
     posts: [],
   };
 
+  /* ------------------------------------------------------------ engineering */
+  const POOL = `
+<p>In March we replaced one connection pool per worker with a single shared pool of 64 connections in front of PgBouncer. Throughput went up by about a fifth. Two weeks later our p99 on the checkout path had doubled, and nothing in the dashboards said why.</p>
+<p>This is the write-up: what changed, how we found it, and the one-line fix that turned out to be the least interesting part.</p>
+<h2>The change</h2>
+<p>Each worker used to open its own <code>pgxpool</code> with eight connections. With 40 workers that meant 320 server connections at peak, most of them idle. The new setup shares one pool per host:</p>
+<pre><code>pool, err := pgxpool.NewWithConfig(ctx, &amp;pgxpool.Config{
+    ConnConfig:        connCfg,
+    MaxConns:          64,
+    MinConns:          8,
+    MaxConnIdleTime:   30 * time.Second,
+    HealthCheckPeriod: 15 * time.Second,
+})
+if err != nil {
+    return fmt.Errorf("configure pool: %w", err)
+}</code></pre>
+<p>On paper this is strictly better: fewer connections, better reuse, less memory on the database.</p>
+<h2>What the traces showed</h2>
+<p>Every slow request spent 40–180 ms inside <code>pool.Acquire()</code> before running a query that took 3 ms. The pool was not too small on average. It was too small for about 400 ms at a time, whenever the batch export woke up and took 50 connections for long-running reads.</p>
+<table><thead><tr><th>Configuration</th><th>p50</th><th>p99</th><th>Acquire wait (p99)</th><th>Server connections</th></tr></thead><tbody><tr><td>Per-worker pools</td><td>18 ms</td><td>94 ms</td><td>0.2 ms</td><td>320</td></tr><tr><td>Shared pool, 64</td><td>15 ms</td><td>211 ms</td><td>162 ms</td><td>64</td></tr><tr><td>Shared pool + export pool</td><td>15 ms</td><td>81 ms</td><td>0.4 ms</td><td>80</td></tr></tbody></table>
+<h2>The fix</h2>
+<p>Give the batch export its own small pool, so it can never starve interactive requests:</p>
+<pre><code>-- Also cap it on the server side, in case someone reuses the wrong pool.
+ALTER ROLE export_worker CONNECTION LIMIT 16;</code></pre>
+<blockquote><p>A shared resource needs a shared understanding of who is allowed to hold it, and for how long.</p></blockquote>
+<h2>What we changed in how we work</h2>
+<ol><li>Every pool exports its acquire-wait histogram, not just its size.</li><li>Batch jobs get their own pool and their own database role.</li><li>Load tests include one noisy neighbour, on purpose.</li></ol>
+<p>The fix was one line of SQL and twelve lines of Go. Finding it took nine days, most of which went into dashboards that measured the wrong thing.</p>`;
+  const TIL_BODY = (a, b, c) => `<p>${a}</p><pre><code>${c}</code></pre><p>${b}</p>`;
+  const engineering = {
+    site: { name: "Tail Latency", host: "tail-latency.propaganda.pub", lang: "en", tagline: "Notes on databases, queues and the bugs between them.", manifesto: "Postmortems, deep dives and small things I learned the hard way. Mostly Postgres, Go and the network in between." },
+    author: { name: "Priya Raman", tagline: "Staff engineer. Writes the postmortem so you don't have to.", location: "Bristol", bio: "I work on storage and reliability for a payments company. Before that I spent six years on-call for a search engine, which is where I learned to love histograms.\nThis blog is where the notes go after the incident review is over.", avatar: "{{img:portrait:9:480:480}}", links: [{ label: "GitHub", url: "#/" }, { label: "Mastodon", url: "#/" }, { label: "RSS", url: "#/" }] },
+    collections: [
+      { name: "Postmortems", slug: "postmortems", description: "What broke, why, and what we changed afterwards." },
+      { name: "Deep dives", slug: "deep-dives", description: "Long explanations of short behaviours." },
+      { name: "TIL", slug: "til", description: "Small things learned today, written down before they are forgotten." },
+      { name: "Talks", slug: "talks", description: "Slides and notes from conference talks." },
+    ],
+    posts: [
+      { id: "g1", number: 61, slug: "p99-doubled-after-pool-change", collection: "postmortems", title: "Why our p99 doubled after the connection-pool change", subtitle: "A shared pool, a batch job, and nine days of looking at the wrong dashboard.", date: D(2026, 9, 14), words: 2380, body: POOL },
+      { id: "g2", number: 60, slug: "til-psql-watch", collection: "til", title: "TIL: \\watch in psql re-runs the last query", subtitle: "A poor engineer's dashboard, in one backslash command.", date: D(2026, 9, 8), words: 210, body: TIL_BODY("If you end a query with <code>\\watch 2</code> instead of a semicolon, psql runs it every two seconds.", "It is my favourite way to watch a migration or a queue drain.", "SELECT state, count(*) FROM pg_stat_activity GROUP BY state \\watch 2") },
+      { id: "g3", number: 59, slug: "how-vacuum-actually-works", collection: "deep-dives", title: "How VACUUM actually decides what to clean", subtitle: "Visibility maps, the xmin horizon, and why one idle transaction can bloat a table.", date: D(2026, 8, 21), words: 4120, body: TIL_BODY("VACUUM can only remove a dead row once no running transaction could still see it.", "One forgotten <code>BEGIN</code> in a psql session holds back the horizon for the whole cluster.", "SELECT pid, now() - xact_start AS age, state\nFROM pg_stat_activity\nWHERE xact_start IS NOT NULL\nORDER BY age DESC\nLIMIT 5;") },
+      { id: "g4", number: 58, slug: "til-go-context-afterfunc", collection: "til", title: "TIL: context.AfterFunc", subtitle: "Run cleanup when a context is cancelled, without a goroutine per request.", date: D(2026, 8, 2), words: 180, body: TIL_BODY("Go 1.21 added <code>context.AfterFunc</code>, which registers a function to run once the context is done.", "It replaced a surprising number of hand-rolled goroutines in our codebase.", "stop := context.AfterFunc(ctx, func() {\n    conn.Close()\n})\ndefer stop()") },
+      { id: "g5", number: 57, slug: "queue-that-lost-messages", collection: "postmortems", title: "The queue that lost 0.01% of messages", subtitle: "An at-least-once system, an at-most-once consumer, and a retry that wasn't.", date: D(2026, 7, 10), words: 1980, body: TIL_BODY("The broker delivered every message. Our consumer acknowledged before processing, so a crash in between dropped the work.", "Moving the acknowledgement after the side effect fixed it, and exposed three handlers that were not idempotent.", "msg := <-deliveries\nif err := handle(msg); err != nil {\n    msg.Nack(false, true) // requeue\n    continue\n}\nmsg.Ack(false)") },
+      { id: "g6", number: 56, slug: "histograms-not-averages", collection: "talks", title: "Histograms, not averages", subtitle: "Slides and notes from my talk at a regional SRE meetup.", date: D(2026, 6, 18), words: 1450, body: TIL_BODY("The mean latency of a service is a number that describes no request that ever happened.", "The talk walks through three incidents where the average looked fine and the histogram did not.", "histogram_quantile(0.99,\n  sum by (le) (rate(http_request_duration_seconds_bucket[5m])))") },
+      { id: "g7", number: 55, slug: "til-git-bisect-run", collection: "til", title: "TIL: git bisect run", subtitle: "Let a script find the commit that broke the build.", date: D(2026, 5, 29), words: 160, body: TIL_BODY("<code>git bisect run</code> takes a command and uses its exit code to decide good or bad.", "It found a regression across 340 commits in eleven minutes.", "git bisect start HEAD v2.4.0\ngit bisect run go test ./payments/...") },
+      { id: "g8", number: 54, slug: "timeouts-all-the-way-down", collection: "deep-dives", title: "Timeouts, all the way down", subtitle: "Why a 30-second client timeout and a 60-second server timeout are a bug.", date: D(2026, 4, 12), words: 3050, body: TIL_BODY("Each layer should time out slightly before the layer that called it, or work keeps running after nobody is waiting for it.", "We now set budgets from the edge inward and pass the remaining budget along with every call.", "deadline, _ := ctx.Deadline()\nbudget := time.Until(deadline) - 50*time.Millisecond") },
+      { id: "g9", number: 53, slug: "dns-ttl-outage", collection: "postmortems", title: "A DNS TTL of 86400 seconds", subtitle: "The failover worked. The clients didn't notice for a day.", date: D(2025, 12, 3), words: 1720, body: TIL_BODY("Our database failover moved the primary in 40 seconds. Half the clients kept talking to the old address until the next morning.", "The record had been created years ago with a one-day TTL and never revisited.", "dig +noall +answer db-primary.internal") },
+      { id: "g10", number: 52, slug: "til-explain-buffers", collection: "til", title: "TIL: EXPLAIN (ANALYZE, BUFFERS)", subtitle: null, date: D(2025, 10, 20), words: 140, body: TIL_BODY("Adding <code>BUFFERS</code> shows how many pages a query read from cache and from disk.", "It is the fastest way to tell a slow plan from a cold cache.", "EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM orders WHERE customer_id = 42;") },
+    ],
+  };
+
+  /* ------------------------------------------------------------ photography */
+  const shot = (kind, seed, alt, cap, text) => `<figure><img src="{{img:${kind}:${seed}:1200:1500}}" alt="${alt}"><figcaption>${cap}</figcaption></figure><p>${text}</p>`;
+  const photo = {
+    site: { name: "Low Light", host: "lowlight.propaganda.pub", lang: "en", tagline: "Photographs made early, late, or in bad weather.", manifesto: "Photographs made early, late, or in bad weather." },
+    author: { name: "Tomás Ferreira", tagline: "Photographer. Mostly landscapes, sometimes streets.", location: "Lisbon", bio: "I photograph places at the edges of the day, on a small camera and the occasional roll of film.\nPrints are available on request; the email address is on the about page of every good photographer and now this one.", avatar: "{{img:portrait:13:480:480}}", links: [{ label: "Prints", url: "#/" }, { label: "Instagram", url: "#/" }] },
+    collections: [
+      { name: "Landscapes", slug: "landscapes", description: "Deserts, coasts and mountains, mostly before breakfast." },
+      { name: "Cities", slug: "cities", description: "Streets after dark." },
+      { name: "Film", slug: "film", description: "Rolls of Portra and HP5, scanned at home." },
+    ],
+    posts: [
+      { id: "f1", number: 23, slug: "salt-flats-first-light", collection: "landscapes", title: "Salt flats, first light", subtitle: "Forty minutes before sunrise the flats turn the colour of the inside of a shell.", date: D(2026, 9, 18), words: 260, image: { src: "{{img:dune:3:1200:1500}}", alt: "Pale dunes in early light" }, body: shot("dune", 3, "Pale dunes in early light", "Salt flats, 6:12 am · X100V, 23mm, f/8, 1/250", "We walked out in the dark and waited. The light arrived all at once, the way it does when there is nothing for it to climb over.") + shot("dune", 7, "Dunes with long shadows", "Twenty minutes later · f/11, 1/500", "By seven it was just a bright place.") },
+      { id: "f2", number: 22, slug: "ridge-line-in-november", collection: "landscapes", title: "Ridge line in November", subtitle: "Three layers of mountain and a sky that could not decide.", date: D(2026, 8, 30), words: 180, image: { src: "{{img:mountain:4:1200:1500}}", alt: "Layered mountain ridges" }, body: shot("mountain", 4, "Layered mountain ridges", "Serra da Estrela · 90mm, f/5.6", "The haze does the work: each ridge a little lighter than the one in front.") },
+      { id: "f3", number: 21, slug: "harbour-at-blue-hour", collection: "cities", title: "Harbour at blue hour", subtitle: null, date: D(2026, 8, 11), words: 120, image: { src: "{{img:street:5:1200:1500}}", alt: "Buildings with lit windows at dusk" }, body: shot("street", 5, "Buildings with lit windows at dusk", "Porto · f/2, 1/60, ISO 3200", "Every window a different colour temperature.") },
+      { id: "f4", number: 20, slug: "fog-crossing", collection: "film", title: "Fog crossing", subtitle: "One frame from a roll of HP5 pushed to 1600.", date: D(2026, 7, 26), words: 140, image: { src: "{{img:fog:9:1200:1500}}", alt: "A ferry crossing in fog" }, body: shot("fog", 9, "A ferry crossing in fog", "HP5 at 1600 · developed in Ilfosol 3", "The grain is the point.") },
+      { id: "f5", number: 19, slug: "long-walk-north-coast", collection: "landscapes", title: "A long walk on the north coast", subtitle: "Eleven kilometres, one lens, no people.", date: D(2026, 7, 2), words: 420, image: { src: "{{img:sea:22:1200:1500}}", alt: "Low sun over a wide sea" }, body: shot("sea", 22, "Low sun over a wide sea", "North coast · 35mm, f/9", "I took the same photograph eleven times and kept this one.") },
+      { id: "f6", number: 18, slug: "rooftops-at-noon", collection: "cities", title: "Rooftops at noon", subtitle: null, date: D(2026, 6, 14), words: 90, image: { src: "{{img:city:8:1200:1500}}", alt: "Terracotta rooftops" }, body: shot("city", 8, "Terracotta rooftops", "Alfama · 50mm, f/8", "Hard light, for once on purpose.") },
+      { id: "f7", number: 17, slug: "fields-after-rain", collection: "film", title: "Fields after rain", subtitle: "Portra 400, overexposed by a stop, as it likes.", date: D(2026, 5, 20), words: 110, image: { src: "{{img:field:11:1200:1500}}", alt: "Green fields under a pale sky" }, body: shot("field", 11, "Green fields under a pale sky", "Portra 400 · Olympus XA", "The colours only look like this on film.") },
+      { id: "f8", number: 16, slug: "second-ridge", collection: "landscapes", title: "Second ridge", subtitle: null, date: D(2026, 4, 3), words: 60, image: { src: "{{img:mountain:7:1200:1500}}", alt: "Mountains at dusk" }, body: shot("mountain", 7, "Mountains at dusk", "f/8, 1/30", "Same trip, the evening after.") },
+      { id: "f9", number: 15, slug: "night-tram", collection: "cities", title: "Night tram", subtitle: "The last one, 00:40, nearly empty.", date: D(2025, 12, 12), words: 80, image: { src: "{{img:street:12:1200:1500}}", alt: "A street at night" }, body: shot("street", 12, "A street at night", "f/1.8, 1/30, ISO 6400", "Handheld, braced against a lamp post.") },
+    ],
+  };
+
+  /* ------------------------------------------------------------ kitchen and garden */
+  const GALETTE = `
+<p>This is the galette I make every week from late July until the tomatoes stop. It asks for very little: good tomatoes, bought pastry, and an hour's patience while the salt does its work.</p>
+<figure><img src="{{img:bowl:3}}" alt="Sliced tomatoes in a white bowl"><figcaption>Salting the slices draws out the water that would otherwise soak the pastry.</figcaption></figure>
+<h2>Ingredients</h2>
+<ul><li>500 g ripe tomatoes, a mix of sizes, sliced 5 mm thick</li><li>1 tsp flaky salt</li><li>1 sheet all-butter puff pastry (about 320 g)</li><li>60 g butter</li><li>2 tbsp Dijon mustard</li><li>A handful of basil and thyme</li><li>1 egg, beaten, for the edges</li></ul>
+<h2>Method</h2>
+<ol><li>Lay the tomato slices on a rack, salt them, and leave for an hour.</li><li>Brown the butter in a small pan until it smells of hazelnuts. Let it cool a little.</li><li>Heat the oven to 200°C. Roll the pastry onto a lined tray and spread the mustard, leaving a 3 cm border.</li><li>Pat the tomatoes dry, overlap them on the mustard, and spoon over half the brown butter.</li><li>Fold the border over, brush with egg, and bake for 35–40 minutes until deep golden.</li><li>Finish with the rest of the butter and the herbs.</li></ol>
+<blockquote><p>If the pastry is pale underneath, give it five minutes on the oven floor.</p></blockquote>
+<p>It keeps for a day, but it has never had to.</p>`;
+  const kitchen = {
+    site: { name: "Second Helping", host: "secondhelping.propaganda.pub", lang: "en", tagline: "Recipes and a small vegetable garden, through the year.", manifesto: "Recipes, a small vegetable garden, and notes on what to do with too many courgettes." },
+    author: { name: "Maren Holt", tagline: "Cooks, grows, writes it down.", location: "Kent", bio: "I cook for a family of four and grow what I can on an allotment the size of a tennis court. Everything here has been made at least three times in a normal kitchen.\nIf a recipe doesn't work for you, tell me; I would rather fix it than be right.", avatar: "{{img:portrait:17:480:480}}", links: [{ label: "Newsletter", url: "#/" }, { label: "Instagram", url: "#/" }] },
+    collections: [
+      { name: "Recipes", slug: "recipes", description: "Tested at least three times, in a normal kitchen." },
+      { name: "Garden", slug: "garden", description: "What is growing, what failed, and what to plant next." },
+      { name: "Pantry", slug: "pantry", description: "Jams, pickles and things that keep." },
+    ],
+    posts: [
+      { id: "k1", number: 88, slug: "brown-butter-tomato-galette", collection: "recipes", title: "Brown butter tomato galette", subtitle: "Serves 4 · 1 hr 10 min. The trick is salting the tomatoes an hour ahead.", date: D(2026, 9, 10), words: 640, image: { src: "{{img:bowl:3}}", alt: "Sliced tomatoes in a bowl" }, body: GALETTE },
+      { id: "k2", number: 87, slug: "september-in-the-garden", collection: "garden", title: "September on the allotment", subtitle: "Squash curing, the last beans, and sowing broad beans for spring.", date: D(2026, 9, 3), words: 780, image: { src: "{{img:herbs:4}}", alt: "Herbs growing in a bed" }, body: short("The squash are curing on the shed roof and the beans have given up for the year.", "Next weekend: broad beans in the long bed, garlic by the fence.") },
+      { id: "k3", number: 86, slug: "quick-pickled-courgettes", collection: "pantry", title: "Quick-pickled courgettes", subtitle: "For when the plants will not stop.", date: D(2026, 8, 19), words: 420, image: { src: "{{img:bowl:6}}", alt: "Pickled vegetables" }, body: short("Slice them thin, salt them for twenty minutes, then cover in a warm brine of vinegar, sugar and dill.", "They are ready tomorrow and keep for a fortnight in the fridge.") },
+      { id: "k4", number: 85, slug: "one-pan-lemon-chicken", collection: "recipes", title: "One-pan lemon and thyme chicken", subtitle: "Serves 4 · 50 min. Thighs, potatoes and a whole lemon, all in one tin.", date: D(2026, 8, 2), words: 560, image: { src: "{{img:table:31}}", alt: "A dinner table" }, body: short("Everything goes into one tin: halved potatoes, thighs skin side up, lemon wedges and a lot of thyme.", "Forty-five minutes at 200°C and the potatoes have soaked up everything.") },
+      { id: "k5", number: 84, slug: "what-failed-this-year", collection: "garden", title: "What failed this year, and why", subtitle: "Carrots, again. And a lesson about netting.", date: D(2026, 7, 21), words: 910, image: { src: "{{img:field:15}}", alt: "Garden rows" }, body: short("The carrot fly found them in June, as it does every year I forget the fleece.", "The brassicas survived only because the pigeons preferred the neighbour's.") },
+      { id: "k6", number: 83, slug: "strawberry-jam-low-sugar", collection: "pantry", title: "Low-sugar strawberry jam", subtitle: null, date: D(2026, 6, 28), words: 480, body: short("Less sugar means a softer set and a shorter shelf life, and a jam that tastes of strawberries.", "Keep it in the fridge once opened and eat it within a month.") },
+      { id: "k7", number: 82, slug: "summer-herb-salad", collection: "recipes", title: "A salad that is mostly herbs", subtitle: "Serves 2 · 10 min.", date: D(2026, 6, 9), words: 300, image: { src: "{{img:herbs:9}}", alt: "Fresh herbs" }, body: short("Parsley, mint, dill and chives by the handful, with a little lettuce to hold it together.", "Dress it at the table, not before.") },
+      { id: "k8", number: 81, slug: "seed-order-for-spring", collection: "garden", title: "The seed order for next spring", subtitle: "Twelve varieties, three of them new.", date: D(2026, 1, 12), words: 650, image: { src: "{{img:books:19}}", alt: "Seed packets on a shelf" }, body: short("Two new tomatoes, a climbing French bean, and another attempt at celeriac.", "The order goes in before the good ones sell out, which is now.") },
+    ],
+  };
+
   /** Replace {{img:kind:seed[:w:h]}} tokens with painted data URLs (deep). */
   function hydrate(obj) {
     const rep = (s) => s.replace(/\{\{img:(\w+):(\d+)(?::(\d+):(\d+))?\}\}/g, (_, k, seed, w, h) => paint(k, +seed, w ? +w : 960, h ? +h : 640));
@@ -230,7 +357,7 @@
   }
   let built = null;
   function fixtures() {
-    if (!built) built = { sample: hydrate(sample), edge: hydrate(edgeFixture()), empty: hydrate(empty) };
+    if (!built) built = { sample: hydrate(sample), engineering: hydrate(engineering), photo: hydrate(photo), kitchen: hydrate(kitchen), edge: hydrate(edgeFixture()), empty: hydrate(empty) };
     return built;
   }
   global.PPGD_FIXTURES = { fixtures };
