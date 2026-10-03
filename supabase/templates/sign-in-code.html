@@ -1,0 +1,9 @@
+<!-- The sign-in code email. The auth server (GoTrue) fetches it by URL from the
+     stack's `templates` service (GOTRUE_MAILER_TEMPLATES_MAGIC_LINK and
+     _CONFIRMATION) and fills in the code. If it can't fetch it, GoTrue sends its
+     default email, which has a link but no code: keep that service up. -->
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #101828; max-width: 480px;">
+  <p style="font-size: 16px; margin: 0 0 16px;">Your sign-in code:</p>
+  <p style="font-size: 32px; font-weight: 600; letter-spacing: 6px; margin: 0 0 16px;">{{ .Token }}</p>
+  <p style="font-size: 14px; color: #475467; margin: 0;">It works for 10 minutes. If you didn't ask for it, you can ignore this email.</p>
+</div>

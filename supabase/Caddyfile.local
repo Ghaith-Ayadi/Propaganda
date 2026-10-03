@@ -1,0 +1,49 @@
+# The laptop gateway: the same routes as the box's Caddy (Bedrock
+# compose/sites/app.propaganda.pub.caddy, the Supabase part), on :8000.
+{
+	admin off
+	auto_https off
+}
+
+:8000 {
+	# `route` keeps these in the order written (Caddy would otherwise sort
+	# handle_path ahead of respond).
+	route {
+		# PostgREST's schema description is for operators, not the public.
+		respond /rest/v1 404
+		respond /rest/v1/ 404
+		respond /realtime/v1/api/openapi* 404
+
+		# CORS, as Supabase's own gateway does it: blogs on other hosts read
+		# the API. Any origin, no cookies (sessions travel in headers).
+		@preflight method OPTIONS
+		header @preflight Access-Control-Allow-Origin "*"
+		header @preflight Access-Control-Allow-Methods "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
+		header @preflight Access-Control-Allow-Headers "{http.request.header.Access-Control-Request-Headers}"
+		header @preflight Access-Control-Max-Age "86400"
+		respond @preflight 204
+
+		handle_path /auth/v1/* {
+			reverse_proxy auth:9999 {
+				header_up X-Real-IP {remote_host}
+				header_down Access-Control-Allow-Origin "*"
+				header_down Access-Control-Expose-Headers "X-Supabase-Api-Version"
+			}
+		}
+		handle_path /rest/v1/* {
+			reverse_proxy rest:3000 {
+				header_down Access-Control-Allow-Origin "*"
+				header_down Access-Control-Expose-Headers "Content-Range, Content-Location, Location, Preference-Applied, Range-Unit"
+			}
+		}
+		# Realtime picks its tenant from the first label of the host.
+		handle_path /realtime/v1/* {
+			rewrite * /socket{uri}
+			reverse_proxy realtime:4000 {
+				header_up Host realtime-dev.supabase-realtime
+				header_down Access-Control-Allow-Origin "*"
+			}
+		}
+		respond 404
+	}
+}
