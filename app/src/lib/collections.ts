@@ -2,18 +2,18 @@
 // Display rule: prefer the stored emoji; fall back to a leading emoji grapheme
 // inside the name itself so legacy data (no collection record) still renders.
 //
-// The app addresses collections by name everywhere; PocketBase's record id is
-// looked up once per name and cached here.
+// The app addresses collections by name everywhere; the row's id is looked up
+// once per name and cached here.
 
 import { db } from "@/lib/db";
-import { httpStatus, pb, pbDateToMs } from "@/lib/pocketbase";
+import { dateToMs, must, sb } from "@/lib/supabase";
 import { onScopeReset, siteId } from "@/lib/scope";
 import type { Collection } from "@/types";
 
 export interface CollectionRecord {
   id: string;
   name: string;
-  /** Set by the server from the name (pb_hooks/addresses.pb.js); clients never send it. */
+  /** Set by the server from the name (the address triggers); clients never send it. */
   slug: string;
   emoji: string;
   description: string;
@@ -36,20 +36,20 @@ export function fromCollectionRecord(r: CollectionRecord): Collection {
     description: r.description || null,
     position: r.position,
     isHidden: !!r.is_hidden,
-    createdAt: pbDateToMs(r.created) ?? Date.now(),
-    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
+    createdAt: dateToMs(r.created) ?? Date.now(),
+    updatedAt: dateToMs(r.updated) ?? Date.now(),
   };
 }
 
-const collections = () => pb.collection<CollectionRecord>("collections");
+const collections = () => sb.from("collections");
 
 async function recordIdFor(name: string): Promise<string | null> {
   const cached = recordIds.get(name);
   if (cached) return cached;
   // Collections are publicly listable across sites: always scope the lookup.
-  const found = await collections()
-    .getFirstListItem(pb.filter("site = {:site} && name = {:n}", { site: siteId(), n: name }))
-    .catch(() => null);
+  const found = await must(collections().select("id").eq("site", siteId()).eq("name", name).maybeSingle()).catch(
+    () => null,
+  );
   if (found) recordIds.set(name, found.id);
   return found?.id ?? null;
 }
@@ -135,7 +135,9 @@ export async function upsertCollection(
   };
   try {
     const id = await recordIdFor(name);
-    const saved = id ? await collections().update(id, body) : await collections().create(body);
+    const saved = (await must(
+      id ? collections().update(body).eq("id", id).select().single() : collections().insert(body).select().single(),
+    )) as CollectionRecord;
     recordIds.set(name, saved.id);
     if (saved.slug !== next.slug) await db.collections.update(name, { slug: saved.slug });
   } catch (err) {
@@ -173,10 +175,9 @@ export async function renameCollection(oldName: string, newName: string): Promis
   try {
     const id = await recordIdFor(oldName);
     const affected = await db.posts.where("type").equals(oldName).toArray();
-    const posts = pb.collection("posts");
     for (const p of affected) {
       try {
-        await posts.update(p.id, { type: newName });
+        await must(sb.from("posts").update({ type: newName }).eq("id", p.id));
       } catch (err) {
         console.error(`renameCollection: post ${p.id} not updated:`, err);
       }
@@ -184,7 +185,7 @@ export async function renameCollection(oldName: string, newName: string): Promis
     let saved: CollectionRecord | null = null;
     if (id) {
       try {
-        saved = await collections().update(id, { name: newName });
+        saved = (await must(collections().update({ name: newName }).eq("id", id).select().single())) as CollectionRecord;
       } catch (err) {
         console.error("renameCollection: collection not renamed:", err);
       }
@@ -217,10 +218,10 @@ async function deleteRemote(name: string): Promise<void> {
   const id = await recordIdFor(name);
   if (!id) return;
   try {
-    await collections().delete(id);
+    await must(collections().delete().eq("id", id));
     recordIds.delete(name);
   } catch (err) {
-    if (httpStatus(err) !== 404) console.error("deleteCollection failed:", err);
+    console.error("deleteCollection failed:", err);
   }
 }
 

@@ -1,33 +1,47 @@
 // Accounts signed in on this browser, and the sites each belongs to.
 //
 // Like Notion or Slack, one browser can hold several accounts at once. Each has
-// its own PocketBase client whose session lives under its own localStorage key,
+// its own Supabase client whose session lives under its own localStorage key,
 // so switching is just picking another client: nothing is re-authenticated.
-// Sessions last 90 days (pb_hooks/auth.pb.js) and every saved account is
-// refreshed in the background on load, so an account only needs signing in
-// again after three months without opening the app.
+// Sessions renew themselves (an hourly access token, a long-lived refresh
+// token), and every saved account is checked in the background on load.
 //
 // Storage (localStorage):
 //   propaganda:accounts      Account[]
 //   propaganda:sites:<user>  SiteRef[]   cached memberships, for offline start
-//   <storeKey>               the account's PocketBase session
+//   <storeKey>               the account's Supabase session
 //
-// The single-tenant build kept its one session under "pocketbase_auth"; that
-// account is adopted as-is (same key) the first time this build runs.
+// Identity. `userId` names the account on this device: its local databases
+// (propaganda-<userId>-<site>), cached sites and the active pointer key on it.
+// For an account from the PocketBase days it is the PocketBase user id (kept
+// on the server as app_metadata.pb_id), so after the move the account opens
+// the same local databases, unsynced drafts included. `authId` is the server's
+// user id, used for every request.
+//
+// The move from PocketBase: accounts saved by the PocketBase build hold a
+// session the server no longer accepts. They stay listed, with their userId,
+// and get a fresh, empty session key: the app asks to sign in again, and
+// signing in finds the same account through pb_id. Their PocketBase sessions
+// are left in storage untouched.
 
-import type PocketBase from "pocketbase";
-import { createClient, newId, publicPb, type PbUser } from "@/lib/pocketbase";
+import type { User } from "@supabase/supabase-js";
+import { OAUTH_CALLBACK_PATH, OAUTH_MESSAGE, type OAuthMessage } from "@/lib/oauthCallback";
+import { SUPABASE_ANON_KEY, SUPABASE_URL, createClient, must, newId, type Client } from "@/lib/supabase";
 
-export const LEGACY_STORE_KEY = "pocketbase_auth";
 const ACCOUNTS_KEY = "propaganda:accounts";
 const sitesKey = (userId: string) => `propaganda:sites:${userId}`;
+/** Where the single-tenant PocketBase build kept its one session. */
+const POCKETBASE_SESSION_KEY = "pocketbase_auth";
 
 export interface Account {
+  /** The account's name on this device (see the header). */
   userId: string;
+  /** The server's user id; "" until the account signs in on this backend. */
+  authId: string;
   email: string;
   name: string;
   avatar: string;
-  /** localStorage key of this account's PocketBase session. */
+  /** localStorage key of this account's Supabase session. */
   storeKey: string;
 }
 
@@ -58,6 +72,16 @@ function writeJson(key: string, value: unknown): void {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
     // Quota or private mode: the in-memory copy still works for this tab.
+  }
+}
+
+function forget(...keys: string[]): void {
+  for (const key of keys) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -93,71 +117,113 @@ export function getAccount(userId: string): Account | null {
   return listAccounts().find((a) => a.userId === userId) ?? null;
 }
 
-const clients = new Map<string, PocketBase>();
+const clients = new Map<string, Client>();
 
-/** The PocketBase client for an account (one per account, reused). */
-export function clientFor(account: Account): PocketBase {
+function watch(client: Client): Client {
+  // A session that ends (refresh refused, signed out in another tab) shows as
+  // "sign in again" at once.
+  client.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT" || event === "SIGNED_IN") emit();
+  });
+  return client;
+}
+
+/** The Supabase client for an account (one per account, reused). */
+export function clientFor(account: Account): Client {
   let c = clients.get(account.userId);
   if (!c) {
-    c = createClient(account.storeKey);
+    c = watch(createClient(account.storeKey));
     clients.set(account.userId, c);
   }
   return c;
 }
 
-function accountFromUser(user: PbUser, storeKey: string): Account {
-  return {
-    userId: user.id,
-    email: user.email ?? "",
-    name: user.name ?? "",
-    avatar: user.avatar ?? "",
-    storeKey,
-  };
+function freshKey(): string {
+  return `propaganda:sb:${newId()}`;
+}
+
+function freshClient(): { client: Client; key: string } {
+  const key = freshKey();
+  return { client: createClient(key), key };
+}
+
+/** Drop a client nobody will use again, and what it stored. */
+function discard(client: Client, key: string): void {
+  void client.auth.stopAutoRefresh();
+  forget(key, `${key}-code-verifier`, `${key}-user`);
 }
 
 /**
- * First run of the multi-account build: adopt the single session the old build
- * kept under "pocketbase_auth". The session stays under that key, untouched,
- * even if it has expired (the author signs in again and it is refreshed in place).
+ * First run after the move from PocketBase (see the header): keep every saved
+ * account, with a fresh session key. A browser that only ever ran the
+ * single-tenant build has its one account under "pocketbase_auth" instead.
  */
-export function adoptLegacySession(): void {
-  if (listAccounts().length) return;
-  const probe = createClient(LEGACY_STORE_KEY);
-  const user = probe.authStore.record as PbUser | null;
-  if (!probe.authStore.token || !user?.id) return;
-  clients.set(user.id, probe);
-  saveAccounts([accountFromUser(user, LEGACY_STORE_KEY)]);
+export function adoptPocketBaseAccounts(): void {
+  const saved = readJson<Array<Partial<Account>>>(ACCOUNTS_KEY, []);
+  if (saved.length) {
+    if (saved.every((a) => typeof a.authId === "string")) return;
+    saveAccounts(
+      saved.map((a) =>
+        typeof a.authId === "string"
+          ? (a as Account)
+          : {
+              userId: a.userId ?? "",
+              authId: "",
+              email: a.email ?? "",
+              name: a.name ?? "",
+              avatar: "",
+              storeKey: freshKey(),
+            },
+      ),
+    );
+    return;
+  }
+  const legacy = readJson<{ record?: { id?: string; email?: string; name?: string }; model?: { id?: string; email?: string; name?: string } } | null>(
+    POCKETBASE_SESSION_KEY,
+    null,
+  );
+  const record = legacy?.record ?? legacy?.model;
+  if (!record?.id) return;
+  saveAccounts([{ userId: record.id, authId: "", email: record.email ?? "", name: record.name ?? "", avatar: "", storeKey: freshKey() }]);
+}
+
+function nameOf(user: User): string {
+  const m = user.user_metadata ?? {};
+  return String(m.full_name || m.name || "");
+}
+
+function avatarOf(user: User): string {
+  const m = user.user_metadata ?? {};
+  return String(m.avatar_url || m.picture || "");
 }
 
 /**
  * Record a freshly signed-in client. Signing in to an account that is already
- * saved refreshes that account's session in place (same key) and drops the
- * temporary one.
+ * saved (by its server id, or by its PocketBase id) gives that account this
+ * session, keeping its userId and so its local databases.
  */
-function register(temp: PocketBase, tempKey: string): Account {
-  const user = temp.authStore.record as PbUser;
+async function register(temp: Client, tempKey: string): Promise<Account> {
+  const { data } = await temp.auth.getSession();
+  const user = data.session?.user;
+  if (!user) throw new Error("Sign-in didn't complete. Try again.");
+  const pbId = typeof user.app_metadata?.pb_id === "string" ? user.app_metadata.pb_id : "";
+  const fields = { authId: user.id, email: user.email ?? "", name: nameOf(user), avatar: avatarOf(user) };
+
   const accounts = listAccounts();
-  const existing = accounts.find((a) => a.userId === user.id);
+  const existing = accounts.find((a) => a.authId === user.id || (pbId && a.userId === pbId));
   if (existing) {
-    clientFor(existing).authStore.save(temp.authStore.token, temp.authStore.record);
-    try {
-      localStorage.removeItem(tempKey);
-    } catch {
-      // ignore
-    }
-    const updated = { ...accountFromUser(user, existing.storeKey) };
-    saveAccounts(accounts.map((a) => (a.userId === user.id ? updated : a)));
+    const old = clients.get(existing.userId);
+    if (old) discard(old, existing.storeKey);
+    else forget(existing.storeKey);
+    clients.set(existing.userId, watch(temp));
+    const updated: Account = { ...existing, ...fields, storeKey: tempKey };
+    saveAccounts(accounts.map((a) => (a.userId === existing.userId ? updated : a)));
     return updated;
   }
-  const account = accountFromUser(user, tempKey);
-  clients.set(account.userId, temp);
+  const account: Account = { userId: pbId || user.id, ...fields, storeKey: tempKey };
+  clients.set(account.userId, watch(temp));
   saveAccounts([...accounts, account]);
   return account;
-}
-
-function freshClient(): { client: PocketBase; key: string } {
-  const key = `propaganda:auth:${newId()}`;
-  return { client: createClient(key), key };
 }
 
 /** Thrown when the Google window was closed before signing in. Not an error to show. */
@@ -179,12 +245,46 @@ function openGooglePopup(): Window | null {
 }
 
 /**
+ * The code Google's round trip ends with. The popup lands on
+ * OAUTH_CALLBACK_PATH, which hands it over (lib/oauthCallback.ts) on a
+ * BroadcastChannel, and to window.opener where that link survived. A popup
+ * closed without one is a cancel.
+ */
+function waitForCode(popup: Window): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel(OAUTH_MESSAGE) : null;
+    let closedAt = 0;
+    const finish = () => {
+      channel?.close();
+      window.removeEventListener("message", onMessage);
+      window.clearInterval(watcher);
+    };
+    const take = (msg: OAuthMessage | undefined) => {
+      if (!msg || msg.type !== OAUTH_MESSAGE) return;
+      finish();
+      if (msg.code) resolve(msg.code);
+      else reject(new Error(msg.error || "Google sign-in failed. Try again."));
+    };
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin === window.location.origin) take(e.data as OAuthMessage);
+    };
+    if (channel) channel.onmessage = (e) => take(e.data as OAuthMessage);
+    window.addEventListener("message", onMessage);
+    const watcher = window.setInterval(() => {
+      if (!popup.closed) return;
+      if (!closedAt) closedAt = Date.now();
+      else if (Date.now() - closedAt > POPUP_CLOSE_GRACE_MS) {
+        finish();
+        reject(new SignInCancelled());
+      }
+    }, 400);
+  });
+}
+
+/**
  * Google sign-in in a popup. Must be called straight from a click: the popup is
  * opened before anything is awaited, which is the only way browsers allow it.
- *
- * The SDK waits for Google's answer over realtime and never notices a popup
- * that was closed or blocked, so the caller would wait forever. Both end here:
- * a blocked popup throws at once, a closed one throws SignInCancelled.
+ * A blocked popup throws at once, a closed one throws SignInCancelled.
  */
 export async function addAccountWithGoogle(): Promise<Account> {
   const popup = openGooglePopup();
@@ -192,94 +292,62 @@ export async function addAccountWithGoogle(): Promise<Account> {
     throw new Error("Your browser blocked the Google window. Allow pop-ups for this site and try again.");
   }
   const { client, key } = freshClient();
-  // Cancelling goes through the SDK's request key, which only exists with
-  // auto-cancellation on. This client keeps it off everywhere else.
-  client.autoCancellation(true);
-  const requestKey = `google-sign-in:${key}`;
-  let settled = false;
-  const watch = window.setInterval(() => {
-    if (!popup.closed) return;
-    window.clearInterval(watch);
-    window.setTimeout(() => {
-      // The SDK drops its abort handler once the code has arrived: then it is
-      // exchanging the code and must be left to finish.
-      const pending = (client as unknown as { cancelControllers?: Record<string, AbortController> })
-        .cancelControllers?.[requestKey]?.signal.onabort;
-      if (!settled && pending !== null) client.cancelRequest(requestKey);
-    }, POPUP_CLOSE_GRACE_MS);
-  }, 400);
   try {
-    await client.collection("users").authWithOAuth2({
+    const { data, error } = await client.auth.signInWithOAuth({
       provider: "google",
-      requestKey,
-      // Already closed: the watcher above cancels it.
-      urlCallback: (url) => {
-        if (!popup.closed) popup.location.href = url;
-      },
+      options: { redirectTo: `${window.location.origin}${OAUTH_CALLBACK_PATH}`, skipBrowserRedirect: true },
     });
+    if (error || !data.url) throw error ?? new Error("Google sign-in isn't available right now.");
+    if (popup.closed) throw new SignInCancelled();
+    popup.location.href = data.url;
+    const code = await waitForCode(popup);
+    const exchanged = await client.auth.exchangeCodeForSession(code, data.flowId ? { flowId: data.flowId } : undefined);
+    if (exchanged.error) throw exchanged.error;
   } catch (err) {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      // ignore
-    }
-    if ((err as { isAbort?: boolean }).isAbort) throw new SignInCancelled();
+    discard(client, key);
     throw err;
   } finally {
-    settled = true;
-    window.clearInterval(watch);
-    client.autoCancellation(false);
     if (!popup.closed) popup.close();
   }
   return register(client, key);
 }
 
 /**
- * Whether the server can email sign-in codes: pb_hooks/auth.pb.js turns them on
- * only once SMTP is configured. Without it, asking for a code fails after
- * creating an account for the address, so the sign-in screen doesn't offer it.
+ * Whether the server can email sign-in codes: email sign-in is on only once
+ * SMTP is configured (Bedrock compose/propaganda-supabase). Without it, asking
+ * for a code would fail, so the sign-in screen doesn't offer it.
  */
 export async function emailCodesEnabled(): Promise<boolean> {
   try {
-    const methods = await publicPb.collection("users").listAuthMethods();
-    return Boolean(methods.otp?.enabled);
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: SUPABASE_ANON_KEY } });
+    const settings = (await res.json()) as { external?: { email?: boolean } };
+    return Boolean(settings.external?.email);
   } catch {
     return false;
   }
 }
 
 export interface PendingCode {
-  otpId: string;
   email: string;
-  client: PocketBase;
+  client: Client;
   key: string;
 }
 
-function randomPassword(): string {
-  // Never used to sign in (password auth is off); PocketBase requires one.
-  return `${newId()}${newId()}`;
-}
-
-/**
- * Email a one-time sign-in code. A first-time address gets an account created
- * on the spot: PocketBase only emails codes to existing users.
- */
+/** Email a one-time sign-in code. A first-time address gets an account on the spot. */
 export async function requestEmailCode(email: string): Promise<PendingCode> {
   const { client, key } = freshClient();
-  const users = client.collection("users");
   const normalized = email.trim().toLowerCase();
-  try {
-    const password = randomPassword();
-    await users.create({ email: normalized, password, passwordConfirm: password, emailVisibility: false });
-  } catch {
-    // Already registered (or the create is refused): the code request decides.
+  const { error } = await client.auth.signInWithOtp({ email: normalized, options: { shouldCreateUser: true } });
+  if (error) {
+    discard(client, key);
+    throw new Error(error.message);
   }
-  const { otpId } = await users.requestOTP(normalized);
-  return { otpId, email: normalized, client, key };
+  return { email: normalized, client, key };
 }
 
 export async function verifyEmailCode(pending: PendingCode, code: string): Promise<Account> {
-  await pending.client.collection("users").authWithOTP(pending.otpId, code.trim());
+  const { error } = await pending.client.auth.verifyOtp({ email: pending.email, token: code.trim(), type: "email" });
+  if (error) throw new Error(error.message);
   return register(pending.client, pending.key);
 }
 
@@ -290,42 +358,54 @@ export async function verifyEmailCode(pending: PendingCode, code: string): Promi
 export function signOutAccount(userId: string): void {
   const account = getAccount(userId);
   if (!account) return;
-  clientFor(account).authStore.clear();
+  const client = clientFor(account);
   clients.delete(userId);
   saveAccounts(listAccounts().filter((a) => a.userId !== userId));
+  // Ends the session on the server when online; the local copy goes either way.
+  void client.auth
+    .signOut({ scope: "local" })
+    .catch(() => undefined)
+    .finally(() => discard(client, account.storeKey));
 }
 
-/** True when the account has a session that hasn't expired. */
-export function hasValidSession(account: Account): boolean {
-  return clientFor(account).authStore.isValid;
-}
-
-/** True when a session is stored at all, expired or not (offline grace). */
-export function hasStoredSession(account: Account): boolean {
-  return Boolean(clientFor(account).authStore.token);
+function storedSession(account: Account): { refresh_token?: string } | null {
+  return readJson<{ refresh_token?: string } | null>(account.storeKey, null);
 }
 
 /**
- * Refresh one account's session. A 401 means the server no longer accepts it;
- * the session is cleared but the account stays listed so it can be signed in
- * again. Anything else (offline, server down) leaves it alone.
+ * True when the account has a session it can use: one that renews itself. A
+ * session the server refuses is removed by the client, and this turns false.
+ */
+export function hasValidSession(account: Account): boolean {
+  return Boolean(account.authId && storedSession(account)?.refresh_token);
+}
+
+/** True when a session is stored at all (offline, it can't be checked). */
+export function hasStoredSession(account: Account): boolean {
+  return hasValidSession(account);
+}
+
+/**
+ * Check one account's session and refresh its name and picture. A session the
+ * server refuses is cleared, the account stays listed so it can sign in again.
+ * Anything else (offline, server down) leaves it alone.
  */
 export async function refreshAccount(account: Account): Promise<void> {
+  if (!hasValidSession(account) || !navigator.onLine) return;
   const client = clientFor(account);
-  if (!client.authStore.token || !navigator.onLine) return;
-  try {
-    const res = await client.collection("users").authRefresh();
-    const user = res.record as PbUser;
-    const next = accountFromUser(user, account.storeKey);
-    const accounts = listAccounts();
-    if (accounts.some((a) => a.userId === account.userId)) {
-      saveAccounts(accounts.map((a) => (a.userId === account.userId ? next : a)));
-    }
-  } catch (err) {
-    if ((err as { status?: number }).status === 401) {
-      client.authStore.clear();
+  const { data, error } = await client.auth.getUser();
+  if (error) {
+    if (error.status === 401 || error.status === 403) {
+      await client.auth.signOut({ scope: "local" }).catch(() => undefined);
+      forget(account.storeKey);
       emit();
     }
+    return;
+  }
+  const next: Account = { ...account, email: data.user.email ?? account.email, name: nameOf(data.user), avatar: avatarOf(data.user) };
+  const accounts = listAccounts();
+  if (accounts.some((a) => a.userId === account.userId)) {
+    saveAccounts(accounts.map((a) => (a.userId === account.userId ? next : a)));
   }
 }
 
@@ -344,36 +424,35 @@ function cacheSites(userId: string, sites: SiteRef[]): void {
   emit();
 }
 
-interface MembershipRecord {
+interface SiteRow {
   id: string;
-  role: SiteRole;
-  site: string;
-  expand?: {
-    site?: { id: string; name: string; slug: string; domain: string; analytics_tenant: string };
+  name: string;
+  slug: string;
+  domain: string;
+  analytics_tenant: string;
+}
+
+function siteRefOf(s: SiteRow, role: SiteRole): SiteRef {
+  return {
+    id: s.id,
+    name: s.name,
+    slug: s.slug,
+    domain: s.domain ?? "",
+    analyticsTenant: s.analytics_tenant || s.slug,
+    role,
   };
 }
 
 /** The account's sites from the server (and cache them). Throws when offline. */
 export async function fetchSites(account: Account): Promise<SiteRef[]> {
-  const client = clientFor(account);
-  const rows = await client.collection("site_members").getFullList<MembershipRecord>({
-    filter: client.filter("user = {:u}", { u: account.userId }),
-    expand: "site",
-    sort: "created",
-  });
-  const sites = rows
-    .filter((r) => r.expand?.site)
-    .map((r) => {
-      const s = r.expand!.site!;
-      return {
-        id: s.id,
-        name: s.name,
-        slug: s.slug,
-        domain: s.domain ?? "",
-        analyticsTenant: s.analytics_tenant || s.slug,
-        role: r.role,
-      };
-    });
+  const rows = (await must(
+    clientFor(account)
+      .from("site_members")
+      .select("role, created, site:sites(id, name, slug, domain, analytics_tenant)")
+      .eq("user_id", account.authId)
+      .order("created"),
+  )) as unknown as Array<{ role: SiteRole; site: SiteRow | null }>;
+  const sites = rows.filter((r) => r.site).map((r) => siteRefOf(r.site!, r.role));
   cacheSites(account.userId, sites);
   return sites;
 }
@@ -386,24 +465,10 @@ export function patchCachedSite(userId: string, site: Partial<SiteRef> & { id: s
   );
 }
 
-interface SiteResponse {
-  site: { id: string; name: string; slug: string; domain: string; analytics_tenant: string };
-}
-
 /** Create a site owned by this account. */
 export async function createSite(account: Account, name: string, slug: string): Promise<SiteRef> {
-  const res = await clientFor(account).send<SiteResponse>("/api/propaganda/sites", {
-    method: "POST",
-    body: { name, slug },
-  });
-  const site: SiteRef = {
-    id: res.site.id,
-    name: res.site.name,
-    slug: res.site.slug,
-    domain: res.site.domain ?? "",
-    analyticsTenant: res.site.analytics_tenant || res.site.slug,
-    role: "owner",
-  };
+  const res = (await must(clientFor(account).rpc("create_site", { site_name: name, site_slug: slug }))) as { site: SiteRow };
+  const site = siteRefOf(res.site, "owner");
   cacheSites(account.userId, [...cachedSites(account.userId).filter((s) => s.id !== site.id), site]);
   return site;
 }
@@ -414,10 +479,9 @@ export async function updateSite(
   siteId: string,
   patch: { name?: string; slug?: string },
 ): Promise<SiteRef> {
-  const res = await clientFor(account).send<SiteResponse>(`/api/propaganda/sites/${siteId}`, {
-    method: "PATCH",
-    body: patch,
-  });
+  const res = (await must(
+    clientFor(account).rpc("update_site", { site_id: siteId, site_name: patch.name ?? null, site_slug: patch.slug ?? null }),
+  )) as { site: SiteRow };
   patchCachedSite(account.userId, { id: siteId, name: res.site.name, slug: res.site.slug });
   return cachedSites(account.userId).find((s) => s.id === siteId)!;
 }
@@ -427,7 +491,7 @@ export async function updateSite(
  * it from the cache. Its local database stays, like every local database.
  */
 export async function deleteSite(account: Account, siteId: string): Promise<void> {
-  await clientFor(account).send(`/api/propaganda/sites/${siteId}`, { method: "DELETE" });
+  await must(clientFor(account).rpc("delete_site", { site_id: siteId }));
   cacheSites(
     account.userId,
     cachedSites(account.userId).filter((s) => s.id !== siteId),
@@ -435,13 +499,7 @@ export async function deleteSite(account: Account, siteId: string): Promise<void
 }
 
 /** Whether an address is free, for the onboarding form. */
-export async function isSlugAvailable(client: PocketBase, slug: string): Promise<boolean> {
-  try {
-    await client.collection("sites").getFirstListItem(client.filter("slug = {:s}", { s: slug }), {
-      fields: "id",
-    });
-    return false;
-  } catch (err) {
-    return (err as { status?: number }).status === 404;
-  }
+export async function isSlugAvailable(client: Client, slug: string): Promise<boolean> {
+  const { data, error } = await client.from("sites").select("id").eq("slug", slug).maybeSingle();
+  return !error && !data;
 }

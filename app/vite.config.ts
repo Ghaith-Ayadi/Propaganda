@@ -198,13 +198,15 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
-          // Cache the shell. PocketBase requests pass through; Dexie holds the data.
+          // Cache the shell. API requests pass through; Dexie holds the data.
           navigateFallback: "/index.html",
-          // PocketBase shares this origin (Caddy sends /api/* and /_/ to it), so
-          // page loads there must reach the network. Otherwise the worker answers
-          // Google's OAuth2 callback (/api/oauth2-redirect) with the app shell,
-          // the code never reaches PocketBase and sign-in hangs.
-          navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
+          // The backend shares this origin (Caddy sends /auth/v1, /rest/v1 and
+          // /realtime/v1 to Supabase, /api/* to the app's functions and, until
+          // it retires, PocketBase), so page loads there must reach the
+          // network. Otherwise the worker answers Google's callback
+          // (/auth/v1/callback) with the app shell, the code never reaches the
+          // auth server and sign-in hangs.
+          navigateFallbackDenylist: [/^\/auth\/v1\//, /^\/rest\/v1\//, /^\/realtime\/v1\//, /^\/api\//, /^\/_\//],
           globPatterns: ["**/*.{js,css,html,svg,ico,woff2}"],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },

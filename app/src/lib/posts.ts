@@ -1,8 +1,8 @@
 // Record<->domain mappers and the local post repository (writes go to Dexie,
-// scheduleSync() pushes to PocketBase on idle).
+// scheduleSync() pushes to the server on idle).
 
 import { beginWrite, db as activeDb } from "@/lib/db";
-import { httpStatus, msToPbDate, newId, pb as activePb, pbDateToMs } from "@/lib/pocketbase";
+import { dateToMs, msToDate, must, newId, sb as activeSb } from "@/lib/supabase";
 import { scheduleSync } from "@/lib/sync";
 import { dedupe, hasAddress, titleSlug } from "@/lib/slug";
 import { announcePublished } from "@/lib/publish";
@@ -10,11 +10,11 @@ import { snapshotVersion } from "@/lib/versions";
 import { emitPostContentSaved } from "@/lib/postEvents";
 import type { Post, PostStatus } from "@/types";
 
-/** A `posts` record as PocketBase returns it. Empty text is "", empty number 0, empty date "". */
+/** A `posts` row. Empty text is "", empty number 0 (as in PocketBase days), empty date null. */
 export interface PostRecord {
   id: string;
   legacy_id: number;
-  /** Assigned by the server (pb_hooks/addresses.pb.js); never sent back. */
+  /** Assigned by the server (supabase/migrations, the address triggers); never sent back. */
   number: number;
   title: string;
   slug: string;
@@ -22,8 +22,8 @@ export interface PostRecord {
   type: string;
   status: PostStatus | "";
   subtitle: string;
-  done_at: string;
-  published_at: string;
+  done_at: string | null;
+  published_at: string | null;
   excerpt: string;
   category: string;
   tags: string[] | null;
@@ -47,8 +47,8 @@ export function fromRecord(r: PostRecord): Post {
     type: r.type,
     status: r.status || null,
     subtitle: r.subtitle || null,
-    doneAt: pbDateToMs(r.done_at),
-    publishedAt: pbDateToMs(r.published_at),
+    doneAt: dateToMs(r.done_at),
+    publishedAt: dateToMs(r.published_at),
     excerpt: r.excerpt || null,
     category: r.category || null,
     // Fall back to the legacy single category when tags were never set, so old
@@ -60,8 +60,8 @@ export function fromRecord(r: PostRecord): Post {
     collectionSeq: r.collection_seq || null,
     wordCount: r.word_count || null,
     shareableQuotes: r.shareable_quotes ?? null,
-    createdAt: pbDateToMs(r.created) ?? Date.now(),
-    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
+    createdAt: dateToMs(r.created) ?? Date.now(),
+    updatedAt: dateToMs(r.updated) ?? Date.now(),
   };
 }
 
@@ -77,8 +77,8 @@ export function toRecord(p: Post) {
     type: p.type,
     status: p.status ?? "",
     subtitle: p.subtitle ?? "",
-    done_at: msToPbDate(p.doneAt),
-    published_at: msToPbDate(p.publishedAt),
+    done_at: msToDate(p.doneAt),
+    published_at: msToDate(p.publishedAt),
     excerpt: p.excerpt ?? "",
     category: p.category ?? "",
     tags: p.tags ?? [],
@@ -151,7 +151,7 @@ export async function toggleFavorite(id: string): Promise<void> {
 
 /**
  * Assemble a brand-new local draft and stage it in Dexie. Offline-first: no
- * network. The post gets its final PocketBase id right here (ids are minted on
+ * network. The post gets its final id right here (ids are minted on
  * the client) and `dirty: true`, so it renders immediately and `pushPending`
  * creates it server-side on the next sync. Shared by createPost /
  * duplicatePost / the command-palette new-post.
@@ -234,20 +234,18 @@ export async function duplicatePost(source: Post): Promise<Post | null> {
 }
 
 /**
- * Hard delete. Versions cascade server-side through the relation.
+ * Hard delete. Versions and redirects cascade server-side through their foreign keys.
  */
 export async function deletePost(id: string): Promise<void> {
   // Captured once: a scope switch mid-call must not move the write.
   const db = activeDb;
-  const pb = activePb;
+  const sb = activeSb;
   try {
-    await pb.collection("posts").delete(id);
+    // A post that was never pushed matches nothing: there is nothing to delete.
+    await must(sb.from("posts").delete().eq("id", id));
   } catch (err) {
-    // 404: the post was never pushed, so there is nothing on the server to delete.
-    if (httpStatus(err) !== 404) {
-      console.error("deletePost failed:", err);
-      return;
-    }
+    console.error("deletePost failed:", err);
+    return;
   }
   await db.posts.delete(id);
   await db.versions.where("postId").equals(id).delete();

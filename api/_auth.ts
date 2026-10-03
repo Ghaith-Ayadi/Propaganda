@@ -1,72 +1,79 @@
 // Shared auth helpers for Vercel functions. Underscore-prefixed so Vercel
 // does not route this as an endpoint — it's imported by the handlers.
 //
-// PocketBase holds the session; we don't mint our own tokens. A request is
-// authenticated by making a read with its own Authorization header that only
-// succeeds for that user: PocketBase verifies the token (signature, expiry)
-// and treats a bad one as a guest. No auth-refresh call: those share PB's auth
-// rate limit, and every request from this function comes from one IP.
+// Supabase holds the session; we don't mint our own tokens. A request is
+// authenticated by making a read with its own access token: the server
+// verifies it (signature, expiry) and refuses a bad one with a 401.
 
-const PB_URL = process.env.PB_URL || process.env.VITE_PB_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
-const ID_RE = /^[a-z0-9]{15}$/;
+const SITE_RE = /^[a-z0-9]{15}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export interface AuthedUser {
   userId: string;
+  /** The access token, without "Bearer ". */
   token: string;
 }
 
-/** The record id a PocketBase token claims (unverified: PocketBase checks it on use). */
+/** The user id a token claims (unverified: the server checks it on use). */
 function claimedUserId(token: string): string | null {
   try {
     const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
-    return typeof payload.id === "string" && ID_RE.test(payload.id) ? payload.id : null;
+    return typeof payload.sub === "string" && UUID_RE.test(payload.sub) ? payload.sub : null;
   } catch {
     return null;
   }
 }
 
-function tokenOf(request: Request): { token: string; userId: string } {
-  if (!PB_URL) throw new Response("Backend not configured", { status: 503 });
-  const token = request.headers.get("Authorization") ?? "";
+function tokenOf(request: Request): AuthedUser {
+  if (!SUPABASE_URL || !ANON_KEY) throw new Response("Backend not configured", { status: 503 });
+  const token = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   const userId = token ? claimedUserId(token) : null;
   if (!userId) throw new Response("Unauthorized", { status: 401 });
   return { token, userId };
 }
 
-async function pbGet(path: string, token: string): Promise<Response> {
+/** A GET against the backend as the request's user. */
+export async function backendGet(path: string, token: string): Promise<Response> {
   try {
-    return await fetch(`${PB_URL}${path}`, { headers: { Authorization: token } });
+    return await fetch(`${SUPABASE_URL}${path}`, {
+      headers: { apikey: ANON_KEY!, Authorization: `Bearer ${token}` },
+    });
   } catch {
     throw new Response("Auth check failed", { status: 502 });
   }
 }
 
-/** Require a signed-in PocketBase user. Throws a Response on failure. */
+/** Require a signed-in user. Throws a Response on failure. */
 export async function requireUser(request: Request): Promise<AuthedUser> {
-  const { token, userId } = tokenOf(request);
-  // users.viewRule is `id = @request.auth.id`: 200 only with a valid token for this id.
-  const res = await pbGet(`/api/collections/users/records/${userId}?fields=id`, token);
+  const user = tokenOf(request);
+  const res = await backendGet("/auth/v1/user", user.token);
   if (!res.ok) throw new Response("Unauthorized", { status: 401 });
-  return { userId, token };
+  const body = (await res.json()) as { id?: string };
+  if (body.id !== user.userId) throw new Response("Unauthorized", { status: 401 });
+  return user;
 }
 
 /** Require a signed-in user who is a member of `siteId`. Throws a Response on failure. */
 export async function requireMember(request: Request, siteId: string): Promise<AuthedUser> {
-  if (!ID_RE.test(siteId)) {
+  if (!SITE_RE.test(siteId)) {
     throw new Response("Invalid site", { status: 400 });
   }
-  const { token, userId } = tokenOf(request);
-  // With an invalid token PocketBase answers as a guest, and site_members is
-  // invisible to guests: zero rows. A valid token only sees its own rows (and
-  // co-members'), so a match proves both the session and the membership.
-  const filter = encodeURIComponent(`site="${siteId}" && user="${userId}"`);
-  const res = await pbGet(`/api/collections/site_members/records?filter=${filter}&perPage=1&fields=id`, token);
+  const user = tokenOf(request);
+  // A bad token is a 401 from the server. A good one sees only its own
+  // memberships (and co-members'), so a match proves both the session and
+  // the membership.
+  const res = await backendGet(
+    `/rest/v1/site_members?select=id&site=eq.${siteId}&user_id=eq.${user.userId}&limit=1`,
+    user.token,
+  );
   if (res.status === 401) throw new Response("Unauthorized", { status: 401 });
   if (!res.ok) throw new Response("Membership check failed", { status: 502 });
-  const data = (await res.json()) as { items?: unknown[] };
-  if ((data.items?.length ?? 0) !== 1) {
+  const rows = (await res.json()) as unknown[];
+  if (rows.length !== 1) {
     throw new Response("Forbidden", { status: 403 });
   }
-  return { userId, token };
+  return user;
 }
