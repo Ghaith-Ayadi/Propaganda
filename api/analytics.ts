@@ -1,19 +1,17 @@
 // Vercel serverless function — proxies dashboard analytics reads to the
 // Cloudflare Worker (analytics-worker/) so the query gate key never ships in
-// the client bundle. The browser only needs a valid PocketBase session and
+// the client bundle. The browser only needs a valid session and
 // membership in the target site; this resolves that site's analytics tenant
 // server-side and forwards the request with the real key.
 //
 // GET /api/analytics?site=<siteId>&path=/query&metric=...&range=...
 //
 // Env:
-//   PB_URL / VITE_PB_URL   — PocketBase (to look up the site's tenant)
+//   SUPABASE_URL / VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  — the backend (to look up the site's tenant)
 //   ANALYTICS_URL          — the Worker's base URL
 //   ANALYTICS_QUERY_KEY    — the Worker's shared secret (x-analytics-key)
 
-import { requireMember } from "./_auth";
-
-const PB_URL = process.env.PB_URL || process.env.VITE_PB_URL;
+import { backendGet, requireMember } from "./_auth";
 
 // Only forward requests to worker paths/metrics we know about — this is a
 // proxy with an upstream secret attached, not an open relay.
@@ -50,12 +48,10 @@ export async function GET(request: Request): Promise<Response> {
   // Look up the site's analytics tenant — never trust a tenant from the client.
   let tenant: string;
   try {
-    const res = await fetch(`${PB_URL}/api/collections/sites/records/${site}`, {
-      headers: { Authorization: auth.token },
-    });
-    if (!res.ok) return json({ error: "Site not found" }, 404);
-    const record = (await res.json()) as { analytics_tenant?: string };
-    tenant = record.analytics_tenant || "";
+    const res = await backendGet(`/rest/v1/sites?select=analytics_tenant&id=eq.${site}`, auth.token);
+    const rows = res.ok ? ((await res.json()) as Array<{ analytics_tenant?: string }>) : [];
+    if (!rows.length) return json({ error: "Site not found" }, 404);
+    tenant = rows[0].analytics_tenant || "";
   } catch {
     return json({ error: "Site lookup failed" }, 502);
   }

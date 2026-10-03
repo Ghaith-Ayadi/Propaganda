@@ -4,7 +4,7 @@
 export type PostStatus = "draft" | "done" | "published";
 
 export interface Post {
-  /** PocketBase record id, minted on the client (lib/pocketbase.ts newId). */
+  /** Record id, minted on the client (lib/supabase.ts newId). */
   id: string;
   /** The post's number in its site: 1, 2, 3… Set by the server on create, never reused or edited; null until then. */
   number: number | null;
@@ -30,6 +30,8 @@ export interface Post {
   // sync metadata, local-only
   syncedAt?: number | null;
   dirty?: boolean;
+  /** Server `updated` (ms) of a push answered while this row was edited again: that copy is ours, never newer (lib/sync.ts). */
+  pushedUpdatedAt?: number;
 }
 
 export interface Collection {
@@ -44,6 +46,8 @@ export interface Collection {
   updatedAt: number;
   syncedAt?: number | null;
   dirty?: boolean;
+  /** Server `updated` (ms) of a push answered while this row was edited again: that copy is ours, never newer (lib/sync.ts). */
+  pushedUpdatedAt?: number;
 }
 
 export interface PostVersion {

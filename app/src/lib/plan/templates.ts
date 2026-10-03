@@ -1,8 +1,8 @@
 // Record<->domain mappers and the local brief-template repository. Writes go to
-// Dexie and scheduleSync() pushes to PocketBase on idle. Mirrors lib/plan/briefs.ts.
+// Dexie and scheduleSync() pushes to the server on idle. Mirrors lib/plan/briefs.ts.
 
 import { db } from "@/lib/db";
-import { httpStatus, newId, pb, pbDateToMs } from "@/lib/pocketbase";
+import { dateToMs, must, newId, sb } from "@/lib/supabase";
 import { scheduleSync } from "@/lib/sync";
 import { onScopeReset } from "@/lib/scope";
 import type { BriefChecks, BriefTemplate } from "@/lib/plan/types";
@@ -24,8 +24,8 @@ export function fromTemplateRecord(r: BriefTemplateRecord): BriefTemplate {
     name: r.name ?? "",
     body: r.body ?? "",
     checks: r.checks ?? {},
-    createdAt: pbDateToMs(r.created) ?? Date.now(),
-    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
+    createdAt: dateToMs(r.created) ?? Date.now(),
+    updatedAt: dateToMs(r.updated) ?? Date.now(),
   };
 }
 
@@ -72,9 +72,9 @@ export async function updateTemplate(
 
 export async function deleteTemplate(id: string): Promise<void> {
   try {
-    await pb.collection("brief_templates").delete(id);
+    await must(sb.from("brief_templates").delete().eq("id", id));
   } catch (err) {
-    if (httpStatus(err) !== 404) console.error("deleteTemplate failed:", err);
+    console.error("deleteTemplate failed:", err);
   }
   await db.briefTemplates.delete(id);
 }

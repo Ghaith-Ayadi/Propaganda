@@ -1,9 +1,9 @@
-// Public-blog reads against PocketBase. No Dexie, no sync engine: this view is
-// read-only and visited by anonymous readers. The collection rules let anyone
-// list published posts and collections, nothing else.
+// Public-blog reads. No Dexie, no sync engine: this view is read-only and
+// visited by anonymous readers. Row-level security lets anyone read published
+// posts, collections and redirects, nothing else.
 
 import { useEffect, useState } from "react";
-import { publicPb, pbDateToMs } from "@/lib/pocketbase";
+import { dateToMs, fetchAll, must, publicSb } from "@/lib/supabase";
 import { collectionSlugOf, slugify } from "@/lib/slug";
 import type { Collection } from "@/types";
 
@@ -28,8 +28,8 @@ function fromCollectionRecord(r: CollectionRecord): Collection {
     description: r.description || null,
     position: r.position,
     isHidden: !!r.is_hidden,
-    createdAt: pbDateToMs(r.created) ?? Date.now(),
-    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
+    createdAt: dateToMs(r.created) ?? Date.now(),
+    updatedAt: dateToMs(r.updated) ?? Date.now(),
   };
 }
 
@@ -56,7 +56,7 @@ interface BlogPostRecord {
   subtitle: string;
   excerpt: string;
   content_md: string;
-  published_at: string;
+  published_at: string | null;
   updated: string;
   word_count: number;
   collection_seq: number;
@@ -72,8 +72,8 @@ function fromBlogRecord(r: BlogPostRecord): BlogPost {
     subtitle: r.subtitle || null,
     excerpt: r.excerpt || null,
     content: r.content_md ?? "",
-    publishedAt: pbDateToMs(r.published_at),
-    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
+    publishedAt: dateToMs(r.published_at),
+    updatedAt: dateToMs(r.updated) ?? Date.now(),
     wordCount: r.word_count || null,
     collectionSeq: r.collection_seq || null,
     status: r.status,
@@ -83,8 +83,14 @@ function fromBlogRecord(r: BlogPostRecord): BlogPost {
 const PUBLIC_FIELDS =
   "id,slug,title,type,subtitle,excerpt,content_md,published_at,updated,word_count,collection_seq,status";
 
-const posts = () => publicPb.collection<BlogPostRecord>("posts");
-const collections = () => publicPb.collection<CollectionRecord>("collections");
+// A site's published posts. Undated ones sort as PocketBase sorted its "":
+// last when newest first, first when oldest first.
+const publishedPosts = (siteId: string) =>
+  publicSb.from("posts").select(PUBLIC_FIELDS).eq("site", siteId).eq("status", "published");
+const one = async <T,>(query: PromiseLike<{ data: unknown; error: { message: string } | null; status: number }>): Promise<T | null> =>
+  ((await must(query).catch(() => null)) as T | null) ?? null;
+const firstOf = async <T,>(query: PromiseLike<{ data: unknown; error: { message: string } | null; status: number }>): Promise<T | null> =>
+  (((await must(query).catch(() => null)) as T[] | null) ?? [])[0] ?? null;
 
 export function useBlogData(siteId: string): {
   loading: boolean;
@@ -101,14 +107,16 @@ export function useBlogData(siteId: string): {
     let cancelled = false;
     void (async () => {
       try {
-        const siteFilter = publicPb.filter("site = {:site}", { site: siteId });
         const [colRecords, postRecords] = await Promise.all([
-          collections().getFullList({ filter: siteFilter, sort: "position" }),
-          posts().getFullList({
-            filter: publicPb.filter('site = {:site} && status = "published"', { site: siteId }),
-            sort: "-published_at",
-            fields: PUBLIC_FIELDS,
-          }),
+          fetchAll<CollectionRecord>((from, to) =>
+            publicSb.from("collections").select("*").eq("site", siteId).order("position").order("id").range(from, to),
+          ),
+          fetchAll<BlogPostRecord>((from, to) =>
+            publishedPosts(siteId)
+              .order("published_at", { ascending: false, nullsFirst: false })
+              .order("id")
+              .range(from, to),
+          ),
         ]);
         if (cancelled) return;
         setCols(colRecords.map(fromCollectionRecord));
@@ -143,14 +151,10 @@ interface RedirectRecord {
   post: string;
 }
 
-const redirects = () => publicPb.collection<RedirectRecord>("post_redirects");
-const published = (siteId: string, extra: string, params: Record<string, string>) =>
-  publicPb.filter(`site = {:site} && status = "published" && ${extra}`, { site: siteId, ...params });
+const redirectAt = (siteId: string) => publicSb.from("post_redirects").select("post").eq("site", siteId);
 
 async function collectionNamed(siteId: string, name: string): Promise<CollectionRecord | null> {
-  return collections()
-    .getFirstListItem(publicPb.filter("site = {:site} && name = {:n}", { site: siteId, n: name }))
-    .catch(() => null);
+  return one<CollectionRecord>(publicSb.from("collections").select("*").eq("site", siteId).eq("name", name).maybeSingle());
 }
 
 /** Where a post lives: its collection's slug (or its type slugified, for legacy posts without one) and its slug. */
@@ -160,26 +164,20 @@ async function addressOf(siteId: string, record: BlogPostRecord): Promise<Reader
 }
 
 async function publishedById(siteId: string, id: string): Promise<BlogPostRecord | null> {
-  return posts()
-    .getFirstListItem(published(siteId, "id = {:id}", { id }), { fields: PUBLIC_FIELDS })
-    .catch(() => null);
+  return one<BlogPostRecord>(publishedPosts(siteId).eq("id", id).maybeSingle());
 }
 
 /** A post by its address, /<collection slug>/<post slug>, or where that address now points. */
 export async function fetchPostAt(siteId: string, collection: string, slug: string): Promise<ReaderFetch> {
-  const col = await collections()
-    .getFirstListItem(publicPb.filter("site = {:site} && slug = {:c}", { site: siteId, c: collection }))
-    .catch(() => null);
+  const col = await one<CollectionRecord>(
+    publicSb.from("collections").select("*").eq("site", siteId).eq("slug", collection).maybeSingle(),
+  );
   let record: BlogPostRecord | null = null;
   if (col) {
-    record = await posts()
-      .getFirstListItem(published(siteId, "type = {:t} && slug = {:s}", { t: col.name, s: slug }), { fields: PUBLIC_FIELDS })
-      .catch(() => null);
+    record = await firstOf<BlogPostRecord>(publishedPosts(siteId).eq("type", col.name).eq("slug", slug).order("id").limit(1));
   } else {
     // Posts whose collection has no record live under their type, slugified.
-    const bySlug = await posts()
-      .getFullList({ filter: published(siteId, "slug = {:s}", { s: slug }), fields: PUBLIC_FIELDS })
-      .catch(() => [] as BlogPostRecord[]);
+    const bySlug = (await must(publishedPosts(siteId).eq("slug", slug).order("id")).catch(() => [])) as BlogPostRecord[];
     record = bySlug.find((r) => slugify(r.type) === collection) ?? null;
   }
   if (record) {
@@ -187,9 +185,7 @@ export async function fetchPostAt(siteId: string, collection: string, slug: stri
     return { kind: "post", post: fromBlogRecord(record) };
   }
   // An old address: the post moved (new slug or collection) after it was published.
-  const r = await redirects()
-    .getFirstListItem(publicPb.filter("site = {:site} && collection = {:c} && slug = {:s}", { site: siteId, c: collection, s: slug }))
-    .catch(() => null);
+  const r = await firstOf<RedirectRecord>(redirectAt(siteId).eq("collection", collection).eq("slug", slug).limit(1));
   const moved = r ? await publishedById(siteId, r.post) : null;
   return moved ? addressOf(siteId, moved) : { kind: "missing" };
 }
@@ -200,17 +196,13 @@ export async function fetchPostAt(siteId: string, collection: string, slug: stri
  * and a slug the post has since left behind.
  */
 export async function fetchLegacyPost(siteId: string, slug: string): Promise<ReaderFetch> {
-  const bySlug = await posts()
-    .getFullList({ filter: published(siteId, "slug = {:s}", { s: slug }), sort: "published_at", fields: PUBLIC_FIELDS })
-    .catch(() => [] as BlogPostRecord[]);
-  if (bySlug[0]) return addressOf(siteId, bySlug[0]);
-  const byCode = await posts()
-    .getFirstListItem(published(siteId, "post_id = {:s}", { s: slug }), { fields: PUBLIC_FIELDS })
-    .catch(() => null);
+  const bySlug = await firstOf<BlogPostRecord>(
+    publishedPosts(siteId).eq("slug", slug).order("published_at", { ascending: true, nullsFirst: true }).order("id").limit(1),
+  );
+  if (bySlug) return addressOf(siteId, bySlug);
+  const byCode = await firstOf<BlogPostRecord>(publishedPosts(siteId).eq("post_id", slug).order("id").limit(1));
   if (byCode) return addressOf(siteId, byCode);
-  const r = await redirects()
-    .getFirstListItem(publicPb.filter("site = {:site} && slug = {:s}", { site: siteId, s: slug }))
-    .catch(() => null);
+  const r = await firstOf<RedirectRecord>(redirectAt(siteId).eq("slug", slug).limit(1));
   const moved = r ? await publishedById(siteId, r.post) : null;
   return moved ? addressOf(siteId, moved) : { kind: "missing" };
 }

@@ -1,9 +1,10 @@
 // Local-first writing-activity store. Dexie (`vdb`) is the instant cache the
-// heatmap reads from; PocketBase (`writing_activity`) is the source of truth,
-// updated through an atomic server-side increment (pb/pb_hooks) so concurrent
-// edits accumulate rather than clobber. Site-scoped throughout.
+// heatmap reads from; the server (`writing_activity`) is the source of truth,
+// updated through an atomic increment (the increment_writing_activity
+// function) so concurrent edits accumulate rather than clobber. Site-scoped
+// throughout.
 
-import { pb } from "@/lib/pocketbase";
+import { fetchAll, must, sb } from "@/lib/supabase";
 import { siteId } from "@/lib/scope";
 import { vdb } from "./db";
 
@@ -39,10 +40,7 @@ export function notifyChanged() {
 
 /** Add `delta` words to `day` on the server, atomically. Requires a session. */
 export async function incrementRemote(day: string, delta: number): Promise<void> {
-  await pb.send("/api/verbose/increment", {
-    method: "POST",
-    body: { site: siteId(), day, delta },
-  });
+  await must(sb.rpc("increment_writing_activity", { p_site: siteId(), p_day: day, p_delta: delta }));
 }
 
 /** Record `delta` words written on `day` (gross; non-positive is ignored). */
@@ -60,15 +58,15 @@ export async function addWords(delta: number, day: string = dayKey()): Promise<v
   }
 }
 
-/** Pull the full history from PocketBase into the local cache (reconcile by max). */
+/** Pull the full history from the server into the local cache (reconcile by max). */
 export async function pullAll(): Promise<void> {
   try {
     const cache = vdb();
-    const client = pb;
-    const records = await client.collection<ActivityRecord>("writing_activity").getFullList({
-      filter: client.filter("site = {:s}", { s: siteId() }),
-      fields: "id,day,words",
-    });
+    const client = sb;
+    const site = siteId();
+    const records = await fetchAll<Pick<ActivityRecord, "id" | "day" | "words">>((from, to) =>
+      client.from("writing_activity").select("id,day,words").eq("site", site).order("day").order("id").range(from, to),
+    );
     if (cache !== vdb()) return; // switched site meanwhile
     await cache.transaction("rw", cache.activity, async () => {
       for (const r of records) {
@@ -91,27 +89,24 @@ export async function getActivityMap(): Promise<Map<string, number>> {
 /** Live cross-tab/device updates. Returns an unsubscribe. */
 export function installRealtime(): () => void {
   let cancelled = false;
-  let unsubscribe: (() => Promise<void>) | null = null;
+  const client = sb;
   const site = siteId();
   const cache = vdb();
-  void pb
-    .collection<ActivityRecord>("writing_activity")
-    .subscribe(
-      "*",
-      (e) => {
-        if (cancelled || e.action === "delete" || e.record.site !== site) return;
-        const day = String(e.record.day).slice(0, 10);
-        void cache.activity.put({ day, words: e.record.words ?? 0 }).then(emit);
-      },
-      { filter: pb.filter("site = {:s}", { s: site }) },
-    )
-    .then((fn) => {
-      if (cancelled) void fn();
-      else unsubscribe = fn;
+  // An activity row is a few small columns, so the event carries all of it.
+  const channel = client
+    .channel(`activity:${site}:${Math.random().toString(36).slice(2)}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "writing_activity", filter: `site=eq.${site}` }, (e) => {
+      if (cancelled || e.eventType === "DELETE") return;
+      const row = e.new as ActivityRecord;
+      if (row.site !== site) return;
+      const day = String(row.day).slice(0, 10);
+      void cache.activity.put({ day, words: row.words ?? 0 }).then(emit);
     })
-    .catch((err) => console.warn("[verbose] realtime failed:", err));
+    .subscribe((status, err) => {
+      if (status === "CHANNEL_ERROR") console.warn("[verbose] realtime failed:", err);
+    });
   return () => {
     cancelled = true;
-    void unsubscribe?.();
+    void client.removeChannel(channel);
   };
 }

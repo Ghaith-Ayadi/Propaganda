@@ -13,7 +13,7 @@
 // Resolved once and cached at module scope: every blog component reads the
 // same site through currentBlogSite() without re-fetching or prop-drilling.
 
-import { publicPb } from "@/lib/pocketbase";
+import { must, publicSb } from "@/lib/supabase";
 import { parseLegacySitePath, platformSlugOf, sitePublicUrl } from "@/lib/siteUrl";
 
 export interface BlogSite {
@@ -42,7 +42,7 @@ function fromRecord(r: SiteRecord): BlogSite {
   };
 }
 
-const sites = () => publicPb.collection<SiteRecord>("sites");
+const SITE_FIELDS = "id,name,slug,domain,analytics_tenant";
 
 let resolved: BlogSite | null = null;
 let inflight: Promise<BlogSite | null> | null = null;
@@ -63,16 +63,16 @@ export function resolveBlogSite(): Promise<BlogSite | null> {
 }
 
 async function bySlug(slug: string): Promise<BlogSite | null> {
-  const record = await sites()
-    .getFirstListItem(publicPb.filter("slug = {:slug}", { slug }))
-    .catch(() => null);
+  const record = (await must(publicSb.from("sites").select(SITE_FIELDS).eq("slug", slug).maybeSingle()).catch(
+    () => null,
+  )) as SiteRecord | null;
   return record ? fromRecord(record) : null;
 }
 
 async function byDomain(domain: string): Promise<BlogSite | null> {
-  const record = await sites()
-    .getFirstListItem(publicPb.filter("domain = {:domain}", { domain }))
-    .catch(() => null);
+  const record = (await must(publicSb.from("sites").select(SITE_FIELDS).eq("domain", domain).maybeSingle()).catch(
+    () => null,
+  )) as SiteRecord | null;
   return record ? fromRecord(record) : null;
 }
 

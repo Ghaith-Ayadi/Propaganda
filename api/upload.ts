@@ -2,7 +2,7 @@
 // The client cannot call the Blob write API directly (the token is a server secret),
 // so all uploads are proxied through here.
 //
-// Requires a signed-in PocketBase member of the target site (`site` form field);
+// Requires a signed-in member of the target site (`site` form field);
 // files are namespaced under sites/<siteId>/... so tenants can't see or overwrite
 // each other's uploads.
 //

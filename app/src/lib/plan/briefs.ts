@@ -1,14 +1,14 @@
 // Record<->domain mappers and the local brief repository. Writes go to Dexie and
-// scheduleSync() pushes to PocketBase on idle. Mirrors lib/posts.ts.
+// scheduleSync() pushes to the server on idle. Mirrors lib/posts.ts.
 
 import { db } from "@/lib/db";
-import { httpStatus, newId, pb, pbDateToMs } from "@/lib/pocketbase";
+import { dateToMs, must, newId, sb } from "@/lib/supabase";
 import { scheduleSync } from "@/lib/sync";
 import { onScopeReset } from "@/lib/scope";
 import type { Brief, BriefChecks, BriefStatus } from "@/lib/plan/types";
 import { mockBriefs } from "@/lib/plan/mock";
 
-/** A `briefs` record as PocketBase returns it. Relations are ids or "". */
+/** A `briefs` row. Relations are ids or null. */
 export interface BriefRecord {
   id: string;
   title: string;
@@ -16,11 +16,11 @@ export interface BriefRecord {
   assignee_ids: string[] | null;
   planned_date: string; // YYYY-MM-DD or ""
   tags: string[] | null;
-  template: string;
+  template: string | null;
   collection_name: string;
   body: string;
   checks: BriefChecks | null;
-  post: string;
+  post: string | null;
   tenant: string;
   created: string;
   updated: string;
@@ -39,8 +39,8 @@ export function fromBriefRecord(r: BriefRecord): Brief {
     body: r.body ?? "",
     checks: r.checks ?? {},
     postId: r.post || null,
-    createdAt: pbDateToMs(r.created) ?? Date.now(),
-    updatedAt: pbDateToMs(r.updated) ?? Date.now(),
+    createdAt: dateToMs(r.created) ?? Date.now(),
+    updatedAt: dateToMs(r.updated) ?? Date.now(),
   };
 }
 
@@ -51,11 +51,11 @@ export function toBriefRecord(b: Brief) {
     assignee_ids: b.assigneeIds,
     planned_date: b.plannedDate ?? "",
     tags: b.tags,
-    template: b.templateId ?? "",
+    template: b.templateId ?? null,
     collection_name: b.collectionName ?? "",
     body: b.body,
     checks: b.checks,
-    post: b.postId ?? "",
+    post: b.postId ?? null,
     tenant: "verbatim",
   };
 }
@@ -113,9 +113,9 @@ export async function linkBriefToPost(briefId: string, postId: string | null): P
 
 export async function deleteBrief(id: string): Promise<void> {
   try {
-    await pb.collection("briefs").delete(id);
+    await must(sb.from("briefs").delete().eq("id", id));
   } catch (err) {
-    if (httpStatus(err) !== 404) console.error("deleteBrief failed:", err);
+    console.error("deleteBrief failed:", err);
   }
   await db.briefs.delete(id);
 }

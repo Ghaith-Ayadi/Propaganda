@@ -1,7 +1,7 @@
 // The active scope: which account is talking to the server, and which site the
 // editor is showing. Everything site-specific keys off this.
 //
-// A scope owns one PocketBase client (the account's) and one Dexie database
+// A scope owns one Supabase client (the account's) and one Dexie database
 // (the account + site pair). Activating a scope swaps the live `pb` and `db`
 // bindings; the editor tree is remounted by components/Workspace.tsx.
 //
@@ -19,10 +19,10 @@
 
 import Dexie from "dexie";
 import { LEGACY_DB_NAME, VerbatimDB, setActiveDb } from "@/lib/db";
-import { setActiveClient } from "@/lib/pocketbase";
+import { setActiveClient } from "@/lib/supabase";
 import { clientFor, type Account, type SiteRef } from "@/lib/accounts";
 
-/** The site every pre-multi-tenant record was backfilled into (pb_migrations/1758000006). */
+/** The site every pre-multi-tenant record was backfilled into (PocketBase migration 1758000006). */
 export const VERBATIM_SITE_ID = "verbatimsite000";
 
 const ACTIVE_KEY = "propaganda:active";

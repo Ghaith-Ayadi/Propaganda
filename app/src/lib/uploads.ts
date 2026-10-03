@@ -3,7 +3,7 @@
 // Non-image files are sent as-is (no compression).
 
 import imageCompression from "browser-image-compression";
-import { pb } from "@/lib/pocketbase";
+import { authHeader } from "@/lib/supabase";
 import { siteId } from "@/lib/scope";
 
 const ACCEPTED_IMAGE_TYPES = new Set([
@@ -55,7 +55,7 @@ export async function uploadFile(file: File): Promise<string> {
 
   const res = await fetch("/api/upload", {
     method: "POST",
-    headers: { Authorization: pb.authStore.token },
+    headers: { Authorization: await authHeader() },
     body: form,
   });
   if (!res.ok) {

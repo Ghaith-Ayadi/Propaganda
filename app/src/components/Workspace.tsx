@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
-  LEGACY_STORE_KEY,
   accountsVersion,
-  adoptLegacySession,
+  adoptPocketBaseAccounts,
   cachedSites,
   fetchSites,
   getAccount,
@@ -19,7 +18,6 @@ import { waitForWrites } from "@/lib/db";
 import { captureCtx, pushInBackground, setSyncEnabled } from "@/lib/sync";
 import { stopRealtime } from "@/lib/realtime";
 import {
-  VERBATIM_SITE_ID,
   activateScope,
   currentScope,
   deactivateScope,
@@ -82,32 +80,18 @@ export function useWorkspace(): WorkspaceApi {
   return ctx;
 }
 
-/** Provisional site for the offline first run after the upgrade (see pickSites). */
-const PROVISIONAL_VERBATIM: SiteRef = {
-  id: VERBATIM_SITE_ID,
-  name: "Verbatim",
-  slug: "verbatim",
-  domain: "verbatim.ayadighaith.com",
-  analyticsTenant: "verbatim",
-  role: "owner",
-};
-
 /**
  * The sites to offer for an account: the cache, refreshed from the server when
- * online. Offline with an empty cache, the account the single-tenant build was
- * signed in with gets Verbatim provisionally, so its drafts stay reachable; if
- * it turns out not to be a member, its pushes are refused and stay local.
+ * online.
  */
 async function pickSites(account: Account): Promise<SiteRef[] | null> {
   const cached = cachedSites(account.userId);
   if (navigator.onLine && hasValidSession(account)) {
     const fresh = fetchSites(account).catch(() => null);
-    if (!cached.length) return (await fresh) ?? (account.storeKey === LEGACY_STORE_KEY ? [PROVISIONAL_VERBATIM] : null);
+    if (!cached.length) return await fresh;
     void fresh; // refresh in the background, start from the cache
   }
-  if (cached.length) return cached;
-  if (account.storeKey === LEGACY_STORE_KEY) return [PROVISIONAL_VERBATIM];
-  return null;
+  return cached.length ? cached : null;
 }
 
 function usable(account: Account): boolean {
@@ -160,7 +144,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
-    adoptLegacySession();
+    adoptPocketBaseAccounts();
     void boot();
     void refreshAllAccounts();
   }, [boot]);

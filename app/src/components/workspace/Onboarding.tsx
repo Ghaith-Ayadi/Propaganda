@@ -3,6 +3,7 @@ import { Plus, Trash01 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { clientFor, createSite, isSlugAvailable, type Account, type SiteRef } from "@/lib/accounts";
+import { must } from "@/lib/supabase";
 import { siteHost } from "@/lib/siteUrl";
 import { cx } from "@/utils/cx";
 
@@ -117,19 +118,19 @@ export function Onboarding({
       await Promise.all(
         settings
           .filter(([, value]) => value)
-          .map(([key, value]) => c.collection("app_settings").create({ site: site.id, key, value })),
+          .map(([key, value]) => must(c.from("app_settings").insert({ site: site.id, key, value }))),
       );
       const rows = collections.filter((row) => row.name.trim());
       await Promise.all(
         rows.map((row, i) =>
-          c.collection("collections").create({
+          must(c.from("collections").insert({
             site: site.id,
             name: row.name.trim(),
             emoji: row.emoji.trim(),
             description: "",
             position: i,
             is_hidden: false,
-          }),
+          })),
         ),
       );
     } catch (err) {
