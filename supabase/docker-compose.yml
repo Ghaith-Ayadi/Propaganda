@@ -1,0 +1,255 @@
+# Propaganda's Supabase on the laptop: the same services, images and routing as
+# the box (Bedrock compose/propaganda-supabase), with throwaway data.
+#
+#   node supabase/keys.mjs > supabase/.env
+#   docker compose -f supabase/docker-compose.yml up -d
+#   -> API at http://localhost:54321, Mailpit (email codes) at http://localhost:54324
+#   docker compose -f supabase/docker-compose.yml --profile studio up -d
+#   -> Studio at http://localhost:54323
+#
+# Trimmed to what the app uses: Postgres, Auth (GoTrue), PostgREST and
+# Realtime. No Kong or Envoy: a Caddy gateway does the path routing, as Caddy
+# does on the box, and every service verifies the JWT itself. No Storage
+# (images are on Vercel Blob), no edge functions, imgproxy, analytics or
+# pooler.
+name: propaganda-supabase
+
+x-db-env: &db-env
+  PGHOST: db
+  PGPORT: "5432"
+  PGUSER: postgres
+  PGPASSWORD: ${POSTGRES_PASSWORD}
+  PGDATABASE: postgres
+
+services:
+  db:
+    image: supabase/postgres:17.6.1.136
+    restart: unless-stopped
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "log_min_messages=fatal"]
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: "5432"
+      POSTGRES_PORT: "5432"
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_EXP: "3600"
+    volumes:
+      - ./init/99-realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
+      - ./init/99-roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./init/99-jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+      - pg-data:/var/lib/postgresql/data
+      - pg-config:/etc/postgresql-custom
+    # The laptop only: lets tests and the import reach Postgres directly.
+    ports: ["127.0.0.1:54322:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  auth:
+    image: supabase/gotrue:v2.196.0
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      templates: { condition: service_started }
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL}
+      # Behind the gateway: rate limits key on the client it saw.
+      GOTRUE_RATE_LIMIT_HEADER: X-Real-IP
+      # Email: one-time codes only (no passwords, no links to click). On only
+      # when SMTP is configured, like PocketBase's.
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL:-false}
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_MAILER_OTP_EXP: "600"
+      GOTRUE_MAILER_OTP_LENGTH: "6"
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://templates:8080/sign-in-code.html
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://templates:8080/sign-in-code.html
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: Your sign-in code
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: Your sign-in code
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-}
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-465}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-Propaganda}
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_ENABLED:-false}
+      GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOOGLE_SECRET:-}
+      GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/callback
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Serves supabase/templates to the auth service, inside the stack only.
+  templates:
+    image: busybox:1.37
+    restart: unless-stopped
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+    volumes:
+      - ./templates:/www:ro
+
+  rest:
+    image: postgrest/postgrest:v14.17
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      # Supabase Cloud's cap; the app pages through anything longer.
+      PGRST_DB_MAX_ROWS: "1000"
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: "3600"
+      PGRST_ADMIN_SERVER_PORT: "3001"
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  realtime:
+    image: supabase/realtime:v2.134.10
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PORT: "4000"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: SET search_path TO _realtime
+      DB_ENC_KEY: ${REALTIME_DB_ENC_KEY}
+      API_JWT_SECRET: ${JWT_SECRET}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      METRICS_JWT_SECRET: ${JWT_SECRET}
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: realtime
+      # One tenant, "realtime-dev": the gateway sends that name as the host.
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+      DISABLE_HEALTHCHECK_LOGGING: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sSfL --head -o /dev/null -H \"Authorization: Bearer ${ANON_KEY}\" http://localhost:4000/api/tenants/realtime-dev/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Applies supabase/migrations, then exits. Rerun after adding one:
+  #   docker compose -f supabase/docker-compose.yml run --rm migrate
+  migrate:
+    image: supabase/postgres:17.6.1.136
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+      auth: { condition: service_healthy }
+    entrypoint: ["sh", "/migrate.sh"]
+    environment: *db-env
+    volumes:
+      - ./migrate.sh:/migrate.sh:ro
+      - ./migrations:/migrations:ro
+
+  # The box runs this as `backup.sh nightly` with R2 credentials. Here it's for
+  # dumps and restore rehearsals:
+  #   docker compose -f supabase/docker-compose.yml run --rm -T backup /backup.sh dump > x.dump
+  backup:
+    profiles: [backup]
+    image: supabase/postgres:17.6.1.136
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+    entrypoint: ["sh"]
+    command: ["/backup.sh", "dump"]
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: supabase_admin
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: postgres
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+
+  # What Caddy does on the box (Bedrock compose/sites/app.propaganda.pub.caddy).
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["127.0.0.1:54321:8000"]
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+    depends_on: [auth, rest, realtime]
+
+  # Catches the laptop's email (sign-in codes). Not on the box.
+  mail:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports: ["127.0.0.1:54324:8025"]
+
+  meta:
+    profiles: [studio]
+    image: supabase/postgres-meta:v0.99.0
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PG_META_PORT: "8080"
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      CRYPTO_KEY: ${PG_META_CRYPTO_KEY}
+
+  studio:
+    profiles: [studio]
+    image: supabase/studio:2026.09.07-sha-7996410
+    restart: unless-stopped
+    depends_on: [meta]
+    ports: ["127.0.0.1:54323:3000"]
+    environment:
+      HOSTNAME: "0.0.0.0"
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER_READ_WRITE: postgres
+      PG_META_CRYPTO_KEY: ${PG_META_CRYPTO_KEY}
+      PGRST_DB_SCHEMAS: public
+      DEFAULT_ORGANIZATION_NAME: Propaganda
+      DEFAULT_PROJECT_NAME: Propaganda (laptop)
+      SUPABASE_URL: http://gateway:8000
+      SUPABASE_PUBLIC_URL: http://localhost:54321
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+
+volumes:
+  pg-data:
+  pg-config:
