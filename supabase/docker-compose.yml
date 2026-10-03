@@ -123,6 +123,8 @@ services:
       PGRST_JWT_SECRET: ${JWT_SECRET}
       PGRST_DB_USE_LEGACY_GUCS: "false"
       PGRST_APP_SETTINGS_JWT_EXP: "3600"
+      # The health check (postgrest --ready) asks the admin server on localhost.
+      PGRST_ADMIN_SERVER_HOST: localhost
       PGRST_ADMIN_SERVER_PORT: "3001"
     healthcheck:
       test: ["CMD", "postgrest", "--ready"]
