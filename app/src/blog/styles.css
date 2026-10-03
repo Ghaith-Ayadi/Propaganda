@@ -391,6 +391,16 @@
 .blog-colophon a:hover {
   color: var(--ink);
 }
+.blog-colophon .published-with {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.blog-colophon .published-with img {
+  display: block;
+  height: 16px;
+  width: auto;
+}
 
 /* ===========================================================
    READER VIEW
