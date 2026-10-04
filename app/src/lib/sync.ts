@@ -29,6 +29,7 @@ import { fromBriefRecord, toBriefRecord, type BriefRecord } from "@/lib/plan/bri
 import { fromTemplateRecord, toTemplateRecord, type BriefTemplateRecord } from "@/lib/plan/templates";
 import { pullAllVersions, pushPendingVersions } from "@/lib/versions";
 import { fromCollectionRecord, type CollectionRecord } from "@/lib/collections";
+import { reportError } from "@/lib/telemetry";
 import type { Table } from "dexie";
 
 const DEBOUNCE_MS = 2000;
@@ -143,7 +144,7 @@ function start(ctx: Ctx, mode: "full" | "push"): Promise<void> {
       await pullTable(ctx, ctx.db.briefTemplates, "brief_templates", CURSOR_KEYS[2], fromTemplateRecord);
       if (ctx.db === db) onSyncComplete?.();
     } catch (err) {
-      console.error("Sync failed:", err);
+      reportError("Sync failed", err);
     }
   })();
   const tracked: Promise<void> = run.finally(() => {
@@ -199,7 +200,7 @@ async function pushTable<L extends Synced, R extends Stamped>(
     try {
       saved = await saveRow<R>(ctx.sb, collection, local.id, body, !!local.syncedAt);
     } catch (err) {
-      console.error(`Push failed for ${collection}/${local.id}:`, err);
+      reportError("Push failed", err, { collection, record_id: local.id });
       continue;
     }
     // Edited again while the request was out (a status click, a keystroke):
@@ -241,7 +242,7 @@ async function reconcileEpoch(ctx: Ctx): Promise<void> {
   try {
     epoch = Number(await must(sb.rpc("data_epoch")));
   } catch (err) {
-    console.error("Epoch check failed:", err);
+    reportError("Epoch check failed", err);
     return;
   }
   if ((await db.syncMeta.get(EPOCH_KEY))?.value === epoch) {
@@ -258,7 +259,7 @@ async function reconcileEpoch(ctx: Ctx): Promise<void> {
   try {
     [posts, versions] = await Promise.all([idsOf("posts"), idsOf("post_versions")]);
   } catch (err) {
-    console.error("Epoch reconcile failed:", err);
+    reportError("Epoch reconcile failed", err);
     return;
   }
   await db.transaction("rw", db.posts, db.versions, db.syncMeta, async () => {
@@ -306,7 +307,7 @@ async function pullTable<L extends Synced, R extends Stamped>(
   try {
     records = await fetchSince<R>(() => sb.from(collection).select("*").eq("site", ctx.site), "updated", from);
   } catch (err) {
-    console.error(`Pull ${collection} failed:`, err);
+    reportError("Pull failed", err, { collection });
     return;
   }
   if (!records.length) return;
@@ -344,7 +345,7 @@ async function pullNumbers(ctx: Ctx): Promise<void> {
       sb.from("posts").select("id,number").eq("site", ctx.site).gt("number", 0).order("id").range(from, to),
     );
   } catch (err) {
-    console.error("Pull numbers failed:", err);
+    reportError("Pull failed", err, { collection: "posts.number" });
     return;
   }
   await db.transaction("rw", db.posts, async () => {
@@ -365,7 +366,7 @@ export async function pullCollections(ctx: Ctx): Promise<void> {
       sb.from("collections").select("*").eq("site", ctx.site).order("position").order("id").range(from, to),
     );
   } catch (err) {
-    console.error("Pull collections failed:", err);
+    reportError("Pull failed", err, { collection: "collections" });
     return;
   }
   const now = Date.now();

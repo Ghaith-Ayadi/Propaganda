@@ -20,6 +20,7 @@ import { dateToMs, must } from "@/lib/supabase";
 import { fromRecord, type PostRecord } from "@/lib/posts";
 import { fromVersionRecord, type VersionRecord } from "@/lib/versions";
 import { captureCtx, keepsLocal, pullCollections, runSync, type Ctx } from "@/lib/sync";
+import { reportError } from "@/lib/telemetry";
 
 let current: { ctx: Ctx; channel: RealtimeChannel } | null = null;
 
@@ -29,7 +30,7 @@ async function readRow<R>(ctx: Ctx, table: string, id: string): Promise<R | null
     return row && row.site === ctx.site ? row : null;
   } catch (err) {
     // Offline or refused: the next sync brings it.
-    console.warn(`realtime: reading ${table}/${id} failed:`, err);
+    reportError("Realtime read failed", err, { collection: table, record_id: id });
     return null;
   }
 }
@@ -88,7 +89,7 @@ export async function startRealtime() {
       if (m.extension === "postgres_changes" && m.status === "ok") void runSync();
     })
     .subscribe((status, err) => {
-      if (status === "CHANNEL_ERROR") console.warn("realtime: channel error", err);
+      if (status === "CHANNEL_ERROR") reportError("Realtime channel error", err ?? new Error("channel error"));
     });
 
   current = { ctx, channel };

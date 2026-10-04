@@ -10,11 +10,12 @@
 // Returns: { quotes: string[] }   (0–3 items; only verbatim matches included)
 
 import { requireUser } from "./_auth";
+import { withTelemetry } from "./_telemetry";
 
 const GEMINI_MODEL = "gemini-2.5-flash-lite";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-export async function POST(request: Request): Promise<Response> {
+async function handle(request: Request): Promise<Response> {
   try {
     await requireUser(request);
   } catch (err) {
@@ -101,3 +102,5 @@ function json(data: unknown, status = 200): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export const POST = withTelemetry("extract-quotes", handle);

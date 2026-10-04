@@ -10,10 +10,11 @@
 
 import { put } from "@vercel/blob";
 import { requireMember } from "./_auth";
+import { withTelemetry } from "./_telemetry";
 
 // Node.js runtime required — @vercel/blob uses Node streams (not Edge-compatible).
 
-export async function POST(request: Request): Promise<Response> {
+async function handle(request: Request): Promise<Response> {
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -67,3 +68,5 @@ export async function POST(request: Request): Promise<Response> {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export const POST = withTelemetry("upload", handle);

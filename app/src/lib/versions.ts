@@ -9,6 +9,7 @@ import { dateToMs, fetchAll, fetchSince, isForeignKeyViolation, isUniqueViolatio
 import { db } from "@/lib/db";
 import { updatePost } from "@/lib/posts";
 import { PULL_OVERLAP_MS, captureCtx, type Ctx } from "@/lib/sync";
+import { reportError } from "@/lib/telemetry";
 import type { Post, PostVersion } from "@/types";
 
 export type VersionAuthor = "user" | "mcp:claude-code" | "migration";
@@ -142,13 +143,13 @@ async function pushVersion(ctx: Ctx, v: PostVersion): Promise<boolean> {
         await db.versions.put({ ...renumbered, dirty: false });
         return true;
       } catch (retryErr) {
-        console.error(`Version push failed for post ${v.postId}:`, retryErr);
+        reportError("Version push failed", retryErr, { post: v.postId, renumbered: true });
         return false;
       }
     }
 
     // Network failure or something unrecoverable: keep it dirty and retry later.
-    console.error(`Version push failed for post ${v.postId}:`, err);
+    reportError("Version push failed", err, { post: v.postId });
     return false;
   }
 }
@@ -171,7 +172,7 @@ export async function pullVersionsForPost(postId: string, ctx: Ctx = captureCtx(
       versions(ctx).select("*").eq("site", ctx.site).eq("post", postId).order("version").order("id").range(from, to),
     );
   } catch (err) {
-    console.error(err);
+    reportError("Pull failed", err, { collection: "post_versions", post: postId });
     return;
   }
   await db.transaction("rw", db.versions, async () => {
@@ -191,7 +192,7 @@ export async function pullAllVersions(ctx: Ctx): Promise<void> {
   try {
     records = await fetchSince<VersionRecord>(() => versions(ctx).select("*").eq("site", ctx.site), "created", from);
   } catch (err) {
-    console.error(err);
+    reportError("Pull failed", err, { collection: "post_versions" });
     return;
   }
   if (!records.length) return;

@@ -224,6 +224,21 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_COMMIT_SHA": JSON.stringify(gitSha()),
       "import.meta.env.VITE_DEPLOY_ENV": JSON.stringify(process.env.VERCEL_ENV || mode),
     },
-    server: { port: process.env.PORT ? Number(process.env.PORT) : 5173 },
+    server: {
+      port: process.env.PORT ? Number(process.env.PORT) : 5173,
+      // vercel.json's PostHog rewrites, for `vite dev` (lib/telemetry.ts).
+      proxy: {
+        "/ingest/static": {
+          target: "https://eu-assets.i.posthog.com",
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/ingest/, ""),
+        },
+        "/ingest": {
+          target: "https://eu.i.posthog.com",
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/ingest/, ""),
+        },
+      },
+    },
   };
 });

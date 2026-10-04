@@ -12,13 +12,14 @@
 //   ANALYTICS_QUERY_KEY    — the Worker's shared secret (x-analytics-key)
 
 import { backendGet, requireMember } from "./_auth";
+import { withTelemetry } from "./_telemetry";
 
 // Only forward requests to worker paths/metrics we know about — this is a
 // proxy with an upstream secret attached, not an open relay.
 const ALLOWED_PATHS = new Set(["/query"]);
 const ALLOWED_METRICS = new Set(["site", "top", "referrer", "country", "device", "hits"]);
 
-export async function GET(request: Request): Promise<Response> {
+async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const site = url.searchParams.get("site") || "";
 
@@ -87,3 +88,5 @@ function json(data: unknown, status = 200): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export const GET = withTelemetry("analytics", handle);

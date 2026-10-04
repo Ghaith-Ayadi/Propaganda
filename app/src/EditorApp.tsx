@@ -21,6 +21,10 @@ import { startRealtime, stopRealtime } from "@/lib/realtime";
 import { installSearchIndex } from "@/lib/search";
 import { snapshotVersion } from "@/lib/versions";
 import { toggleTheme } from "@/lib/theme";
+import { initTelemetry } from "@/lib/telemetry";
+
+// Errors and product analytics, editor only (lib/telemetry.ts).
+initTelemetry();
 
 // The service worker is the editor's offline shell, so only the editor
 // registers it: blog readers never download the whole app. The same call
