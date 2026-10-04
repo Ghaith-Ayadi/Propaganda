@@ -25,6 +25,7 @@ import { fromBriefRecord, toBriefRecord, type BriefRecord } from "@/lib/plan/bri
 import { fromTemplateRecord, toTemplateRecord, type BriefTemplateRecord } from "@/lib/plan/templates";
 import { pullAllVersions, pushPendingVersions } from "@/lib/versions";
 import { fromCollectionRecord, type CollectionRecord } from "@/lib/collections";
+import { reportError } from "@/lib/telemetry";
 import type { Table } from "dexie";
 
 const DEBOUNCE_MS = 2000;
@@ -128,7 +129,7 @@ function start(ctx: Ctx, mode: "full" | "push"): Promise<void> {
       await pullTable(ctx, ctx.db.briefTemplates, "brief_templates", "lastPullPb.brief_templates", fromTemplateRecord);
       if (ctx.db === db) onSyncComplete?.();
     } catch (err) {
-      console.error("Sync failed:", err);
+      reportError("Sync failed", err);
     }
   })();
   const tracked: Promise<void> = run.finally(() => {
@@ -188,7 +189,7 @@ async function pushTable<L extends Synced, R extends Stamped>(
         }
       }
     } catch (err) {
-      console.error(`Push failed for ${collection}/${local.id}:`, err);
+      reportError("Push failed", err, { collection, record_id: local.id });
       continue;
     }
     await table.put({ ...(fromRec(saved) as L), syncedAt: Date.now(), dirty: false });
@@ -214,7 +215,7 @@ async function pullTable<L extends Synced, R extends Stamped>(
       sort: "updated",
     });
   } catch (err) {
-    console.error(`Pull ${collection} failed:`, err);
+    reportError("Pull failed", err, { collection });
     return;
   }
   if (!records.length) return;
@@ -253,7 +254,7 @@ async function pullNumbers(ctx: Ctx): Promise<void> {
       batch: 1000,
     });
   } catch (err) {
-    console.error("Pull numbers failed:", err);
+    reportError("Pull failed", err, { collection: "posts.number" });
     return;
   }
   await db.transaction("rw", db.posts, async () => {
@@ -275,7 +276,7 @@ async function pullCollections(ctx: Ctx): Promise<void> {
       sort: "position",
     });
   } catch (err) {
-    console.error("Pull collections failed:", err);
+    reportError("Pull failed", err, { collection: "collections" });
     return;
   }
   const now = Date.now();

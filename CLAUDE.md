@@ -73,6 +73,25 @@ before touching anything that talks to the server.
 - `scripts/src/*` are Supabase-era tools and stop working when the Supabase project is
   deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 
+## Telemetry: PostHog
+
+Errors (browser and Vercel functions) and product analytics go to **PostHog Cloud, EU,
+free plan** (hard caps, no card). The editor only: blog readers are counted by the
+analytics worker, never by PostHog.
+
+- `app/src/lib/telemetry.ts` is the only file that imports `posthog-js`. Use its `track()`
+  for product events and `reportError(where, err)` wherever an error is caught and the app
+  carries on (it replaces `console.error`). Uncaught errors and rejections are captured on
+  their own.
+- `api/_telemetry.ts` wraps each function (`withTelemetry`): throws and returned 5xx are
+  reported before the response goes out.
+- Free-plan budget: 100k exceptions a month. The client caps each distinct error at 3 per
+  10 minutes and 100 per page load; keep that cap if you touch it.
+- The writing stays private: replays mask `.bn-container`, autocapture only records clicks
+  on controls. Never send post content as an event property.
+- Events go through `/ingest` on our own host (`vercel.json` rewrites, Vite proxy in dev).
+  `VITE_POSTHOG_KEY` unset means telemetry is off.
+
 ## Notion is mandatory and is part of "done"
 
 Propaganda is tracked in **Notion**, not Plane. **Every** work session touches Notion.

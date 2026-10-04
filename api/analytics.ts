@@ -12,6 +12,7 @@
 //   ANALYTICS_QUERY_KEY    — the Worker's shared secret (x-analytics-key)
 
 import { requireMember } from "./_auth";
+import { withTelemetry } from "./_telemetry";
 
 const PB_URL = process.env.PB_URL || process.env.VITE_PB_URL;
 
@@ -20,7 +21,7 @@ const PB_URL = process.env.PB_URL || process.env.VITE_PB_URL;
 const ALLOWED_PATHS = new Set(["/query"]);
 const ALLOWED_METRICS = new Set(["site", "top", "referrer", "country", "device", "hits"]);
 
-export async function GET(request: Request): Promise<Response> {
+async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const site = url.searchParams.get("site") || "";
 
@@ -91,3 +92,5 @@ function json(data: unknown, status = 200): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export const GET = withTelemetry("analytics", handle);
