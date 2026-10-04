@@ -203,8 +203,11 @@ export default defineConfig(({ mode }) => {
           // PocketBase shares this origin (Caddy sends /api/* and /_/ to it), so
           // page loads there must reach the network. Otherwise the worker answers
           // Google's OAuth2 callback (/api/oauth2-redirect) with the app shell,
-          // the code never reaches PocketBase and sign-in hangs.
-          navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
+          // the code never reaches PocketBase and sign-in hangs. The same goes
+          // for the self-hosted Supabase on this host (Notion PPG-82): its
+          // Google sign-in starts at /auth/v1/authorize. Shipped ahead of the
+          // move so every installed app lets it through by the cutover.
+          navigateFallbackDenylist: [/^\/api\//, /^\/_\//, /^\/auth\/v1\//, /^\/rest\/v1\//, /^\/realtime\/v1\//],
           globPatterns: ["**/*.{js,css,html,svg,ico,woff2}"],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
