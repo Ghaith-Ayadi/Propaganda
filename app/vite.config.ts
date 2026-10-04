@@ -208,6 +208,14 @@ export default defineConfig(({ mode }) => {
           // Google sign-in starts at /auth/v1/authorize. Shipped ahead of the
           // move so every installed app lets it through by the cutover.
           navigateFallbackDenylist: [/^\/api\//, /^\/_\//, /^\/auth\/v1\//, /^\/rest\/v1\//, /^\/realtime\/v1\//],
+          // A new worker takes over open pages at once; lib/appUpdate.ts then
+          // reloads the page at a safe moment. Set here, not left to
+          // registerType "autoUpdate": the plugin only adds these when it
+          // injects the registration itself, which injectRegister: false turns
+          // off. Without them a new build waited until every editor tab and
+          // the installed app were closed.
+          skipWaiting: true,
+          clientsClaim: true,
           globPatterns: ["**/*.{js,css,html,svg,ico,woff2}"],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
