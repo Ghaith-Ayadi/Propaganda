@@ -28,6 +28,7 @@
     "input-otp": "^1.4.2",
     "minisearch": "^7.1.1",
     "pocketbase": "^0.28.1",
+    "posthog-js": "^1.435.8",
     "react": "^19.0.0",
     "react-aria": "^3.49.0",
     "react-aria-components": "^1.18.0",
