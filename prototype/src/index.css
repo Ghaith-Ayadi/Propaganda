@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@import "./styles/theme.css";
+
+/* Same spirit as app/src/index.css: Untitled UI neutrals, Geist for UI,
+   Roslindale for editorial titles. Copied, not shared: this folder is throwaway. */
+
+@custom-variant dark (&:where(.dark-mode, .dark-mode *));
+
+@font-face {
+  font-family: "Roslindale Display";
+  src: url("./RoslindaleVariableDisplay-VF.ttf") format("truetype-variations");
+  font-weight: 100 1000;
+  font-display: swap;
+}
+
+@theme {
+  --font-inter: "Geist";
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-title: "Roslindale Display", Georgia, "Times New Roman", serif;
+
+  /* The theme ships subtle rings for brand and error only; the prototype
+     also grades things good/warning, so add those two. */
+  --ring-color-success_subtle: var(--color-utility-green-200);
+  --ring-color-warning_subtle: var(--color-utility-amber-200);
+  --border-color-success_subtle: var(--color-utility-green-200);
+  --border-color-warning_subtle: var(--color-utility-amber-200);
+}
+
+html, body, #root { height: 100%; }
+html, body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+body { font-size: 14px; margin: 0; }
+::selection { background: var(--color-text-primary); color: var(--color-bg-primary); }
+button:not(:disabled), [role="tab"], a { cursor: pointer; }
+.font-title { font-family: var(--font-title); letter-spacing: -0.01em; }
+.tnum { font-variant-numeric: tabular-nums; }
+h1, h2, h3 { text-wrap: balance; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--color-border-secondary); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@keyframes fadeUp { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fadeUp .25s ease-out; }

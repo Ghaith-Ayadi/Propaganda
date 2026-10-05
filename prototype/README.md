@@ -1,0 +1,43 @@
+# 0.2 UI prototype (throwaway)
+
+Clickable prototype of the Propaganda 0.2 screens, built to judge the flow
+before the knowledge base, the Guardian and the data model get designed.
+
+- **No backend, no wiring.** Every number and sentence comes from
+  `src/data.ts`; `src/store.tsx` holds the clicks in memory and recomputes the
+  grades. A reload starts over.
+- **Isolated.** This folder has its own `package.json` and its own copy of the
+  app's theme (`src/styles/theme.css`). It imports nothing from `../app` and
+  nothing in the app imports it. Delete the folder and nothing breaks.
+- The company on screen (Ledgerline) is invented.
+
+## Run it
+
+```sh
+cd prototype
+npm install
+npm run dev      # http://localhost:5173
+npm run build    # one self-contained dist/index.html
+```
+
+## Screens
+
+| Route | What it shows |
+| --- | --- |
+| `#onboarding` | Sign in, name the site, connect content, pick topics and the quarter's goal, drop documents, watch the first sweep |
+| `#home` | The two consistency grades with their notes, coverage against goal and per topic, performance as an FYI, vanity counts |
+| `#inbox` | Flags (with the Guardian), pitches, knowledge base debt, drafts waiting on a person |
+| `#posts` | Every post and its flag state |
+| `#kb` | Contested entries, contradictions, canon |
+| `#settings` | Site, people, sources, goals, agent autonomy, plan |
+
+## What to click
+
+- **Inbox → Flags.** Each flag has one of the four exits. "It isn't
+  inconsistent" opens the Guardian, and each flag is rigged to return a
+  different verdict: *Integration count* is admitted, *How fast is the close?*
+  comes back contested, *SOC 2* is rejected, *Are we an ERP?* is escalated.
+  Watch the grades in the left rail move as you close things.
+- **Inbox → Review → Approve and publish** moves coverage and the topic range
+  on Home.
+- The left rail has a dark-mode switch, a link back to onboarding, and a reset.
