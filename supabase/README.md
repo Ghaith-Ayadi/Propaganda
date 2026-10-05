@@ -1,9 +1,10 @@
 # Propaganda on Supabase (self-hosted)
 
 The backend: Postgres, Auth (GoTrue), PostgREST and Realtime, self-hosted on
-Bedrock (`Ghaith-Ayadi/Bedrock`, `compose/propaganda-supabase`). It replaces
-Propaganda's PocketBase (`pb/`), which keeps running until the cutover below is
-confirmed.
+Bedrock (`Ghaith-Ayadi/Bedrock`, `compose/propaganda-supabase`). It replaced
+Propaganda's PocketBase on 2026-10-05 (Notion PPG-82); the PocketBase schema and
+hooks (`pb/`) are in git history, its final data in R2
+`bedrock-dumps/propaganda-pocketbase-final-*.tar.gz`.
 
 | Path | What |
 |---|---|
@@ -68,7 +69,7 @@ Repeatable until `private.import_lock` has a row (the cutover). Each load bumps
 it last synced against changed (unsynced edits are pushed first and never
 dropped). Run loads with the editor closed. On the box, see the cutover below.
 
-## Cutover (needs Ghaith's go-ahead)
+## Cutover (done 2026-10-05, kept as the record)
 
 Before: the stack is up on the box with a verified rehearsal load; the Google
 OAuth client has the redirect URI `https://app.propaganda.pub/auth/v1/callback`;
@@ -102,8 +103,8 @@ rest are listed by
 copied by hand. A second cutover later: delete the lock row and run the
 import again; the epoch bump makes every device reconcile.
 
-After Ghaith confirms (asked separately, it deletes things): retire
-`compose/propaganda` (PocketBase) in Bedrock and `pb/` here.
+Ghaith confirmed on 2026-10-05; `compose/propaganda` (PocketBase) and `pb/`
+were retired the same day, so the rollback above no longer applies.
 
 ## Backups
 

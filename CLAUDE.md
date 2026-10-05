@@ -33,8 +33,8 @@ Data, realtime and sign-in live on **Bedrock**
 self-hosted Supabase (`compose/propaganda-supabase`: Postgres, GoTrue, PostgREST,
 Realtime). Read [supabase/README.md](supabase/README.md) and Bedrock's
 [docs/apps.md](https://github.com/Ghaith-Ayadi/Bedrock/blob/main/docs/apps.md) before
-touching anything that talks to the server. PocketBase (`pb/`) ran it until the move
-(Notion PPG-82) and stays read-only on the box until Ghaith retires it.
+touching anything that talks to the server. PocketBase ran it until 2026-10-05 (Notion
+PPG-82); its schema and hooks (`pb/`) are in git history.
 
 - One origin: `app.propaganda.pub` serves the app from Vercel and the API under
   `/auth/v1`, `/rest/v1`, `/realtime/v1` (Caddy). `VITE_SUPABASE_URL` is that host,

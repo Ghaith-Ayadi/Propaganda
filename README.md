@@ -6,9 +6,9 @@ The multi-tenant work is the medium-term direction. The current PRD is being rew
 
 ## Stack
 
-Vite + React 19 + TanStack Router/Query, BlockNote editor on TipTap, Dexie (IndexedDB) as the source-of-truth UI store, PocketBase on Bedrock ([Ghaith-Ayadi/Bedrock](https://github.com/Ghaith-Ayadi/Bedrock)) for cloud sync and Google sign-in, Vercel Blob for images, Vercel for hosting.
+Vite + React 19 + TanStack Router/Query, BlockNote editor on TipTap, Dexie (IndexedDB) as the source-of-truth UI store, self-hosted Supabase on Bedrock ([Ghaith-Ayadi/Bedrock](https://github.com/Ghaith-Ayadi/Bedrock); Postgres, GoTrue, PostgREST, Realtime) for cloud sync and Google sign-in, PostHog for errors and product analytics, Vercel Blob for images, Vercel for hosting.
 
-**Infra constraint:** minimize providers. Vercel + Bedrock (one self-hosted PocketBase per app) is the entire stack target — adding a third provider needs justification. Be cautious about Next.js: Vite is the default, and "Vercel hosting" doesn't automatically mean "Next.js framework." Reach for Next.js only when there's a real reason that holds up off-Vercel too.
+**Infra constraint:** minimize providers. Vercel + Bedrock (self-hosted backends on one box) is the entire stack target — adding a third provider needs justification. Be cautious about Next.js: Vite is the default, and "Vercel hosting" doesn't automatically mean "Next.js framework." Reach for Next.js only when there's a real reason that holds up off-Vercel too.
 
 ## Layout
 
@@ -16,13 +16,13 @@ Vite + React 19 + TanStack Router/Query, BlockNote editor on TipTap, Dexie (Inde
 |---|---|
 | `app/` | Editor SPA and public blog (`app/src/blog`), one Vite build |
 | `api/` | Vercel functions: `upload.ts` (images to Vercel Blob), `analytics.ts` (dashboard analytics proxy), `extract-quotes.ts` |
-| `pb/` | PocketBase schema (`pb_migrations`), server hooks (`pb_hooks`) and the migration rehearsal |
+| `supabase/` | The backend: SQL migrations, the laptop stack, tests, the PocketBase import, backups ([supabase/README.md](supabase/README.md)) |
 | `blog/` | Design handoff bundle for the blog (HTML prototypes), not code that runs |
 | `scripts/` | Supabase-era one-off admin and Notion import tools; legacy since the move to Bedrock |
 | `docs/screenshots/` | Screenshots |
 | `docs/archive/` | Old planning artifacts, Supabase-era; reference, not authority |
 
-The schema and hooks live here in `pb/`; the instance itself (compose, Caddy,
+The schema lives here in `supabase/`; the stack itself (compose, Caddy,
 backups) is in the Bedrock repo, whose
 [docs/apps.md](https://github.com/Ghaith-Ayadi/Bedrock/blob/main/docs/apps.md)
 is the reference for how this app talks to it.
@@ -44,8 +44,8 @@ collections).
 
 ## Known migration debt
 
-- **`scripts/src/*`** still target Supabase (seed, backfill, Notion import). They stop working when the Supabase project is deleted after 2026-10-16; port the ones worth keeping to the PocketBase API or drop them.
-- **Post ids** changed from Postgres integers to PocketBase record ids (strings) in September 2026. `posts.legacy_id` keeps the old number for the 317 migrated posts; nothing should depend on it.
+- **`scripts/src/*`** still target Supabase (seed, backfill, Notion import). They stop working when the Supabase project is deleted after 2026-10-16; port the ones worth keeping to the current backend or drop them.
+- **Post ids** changed from Postgres integers to 15-char string ids in September 2026 (PocketBase days; kept through the 2026-10-05 move back to Postgres). `posts.legacy_id` keeps the old number for the 317 migrated posts; nothing should depend on it.
 - **Notion import code** in `scripts/` is Verbatim-specific seed import. Long-term it becomes a tenant migration plugin.
 
 ## Work tracking
