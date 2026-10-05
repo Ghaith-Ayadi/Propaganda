@@ -211,6 +211,17 @@ export default defineConfig(({ mode }) => {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
       }),
+      // Blogs aren't the app: only the editor links the install manifest
+      // (EditorApp adds it), so a reader can't install a blog as the editor.
+      {
+        name: "manifest-only-in-editor",
+        // After vite-plugin-pwa, which adds the link in the post phase too.
+        enforce: "post",
+        transformIndexHtml: {
+          order: "post",
+          handler: (html: string) => html.replace(/\s*<link rel="manifest"[^>]*>/, ""),
+        },
+      },
     ],
     resolve: {
       alias: { "@": path.resolve(__dirname, "src") },
