@@ -91,6 +91,11 @@ analytics worker, never by PostHog.
   for product events and `reportError(where, err)` wherever an error is caught and the app
   carries on (it replaces `console.error`). Uncaught errors and rejections are captured on
   their own.
+- **Error codes** (`app/src/lib/errors.ts`): a failure people can see carries a stable code
+  (`AUTH-EXCHANGE`, `SITE-CREATE`, ...; the list is at the top of that file, never reuse one).
+  Throw `new AppError(code, sentence, cause)` or wrap with `coded()` / `withCode()`; show
+  `userMessage(err)` (the sentence plus the code), and `reportError()` logs the code with the
+  cause's HTTP status, PostgREST/Postgres code and message, and sends the same to PostHog.
 - `api/_telemetry.ts` wraps each function (`withTelemetry`): throws and returned 5xx are
   reported before the response goes out.
 - Free-plan budget: 100k exceptions a month. The client caps each distinct error at 3 per

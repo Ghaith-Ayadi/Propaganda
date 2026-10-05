@@ -26,6 +26,8 @@ import {
 } from "@/lib/scope";
 import { SignIn } from "@/components/workspace/SignIn";
 import { Onboarding } from "@/components/workspace/Onboarding";
+import { coded } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
 
 /**
  * The editor's outer shell: which account and site are open.
@@ -87,7 +89,10 @@ export function useWorkspace(): WorkspaceApi {
 async function pickSites(account: Account): Promise<SiteRef[] | null> {
   const cached = cachedSites(account.userId);
   if (navigator.onLine && hasValidSession(account)) {
-    const fresh = fetchSites(account).catch(() => null);
+    const fresh = fetchSites(account).catch((err) => {
+      reportError("Sites not loaded", err);
+      return null;
+    });
     if (!cached.length) return await fresh;
     void fresh; // refresh in the background, start from the cache
   }
@@ -169,7 +174,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
         }
         await open(account, site);
       } catch (err) {
-        console.error("Switch failed:", err);
+        reportError("Switch failed", coded("SITE-SWITCH", err));
         await boot();
       } finally {
         draining.current = false;
@@ -244,7 +249,10 @@ export function Workspace({ children }: { children: React.ReactNode }) {
         onSignedIn={(account) => {
           setPhase({ kind: "loading" });
           void (async () => {
-            const sites = await fetchSites(account).catch(() => cachedSites(account.userId));
+            const sites = await fetchSites(account).catch((err) => {
+              reportError("Sites not loaded", err);
+              return cachedSites(account.userId);
+            });
             if (!sites.length) setPhase({ kind: "onboarding", account, cancellable: false });
             else leaveThen(account, sites[0]);
           })();

@@ -11,6 +11,8 @@ import {
   type Account,
   type PendingCode,
 } from "@/lib/accounts";
+import { userMessage } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
 
 /**
  * Sign-in screen: add an account to this browser. Google (a popup, no
@@ -53,7 +55,9 @@ export function SignIn({
     addAccountWithGoogle()
       .then(onSignedIn)
       .catch((err: Error) => {
-        if (!(err instanceof SignInCancelled)) setError(err.message);
+        if (err instanceof SignInCancelled) return;
+        reportError("Google sign-in failed", err);
+        setError(userMessage(err));
       })
       .finally(() => setGoogleBusy(false));
   };
@@ -66,7 +70,8 @@ export function SignIn({
     try {
       setPending(await requestEmailCode(email));
     } catch (err) {
-      setError((err as Error).message);
+      reportError("Sign-in code not sent", err);
+      setError(userMessage(err));
     } finally {
       setEmailBusy(false);
     }
@@ -79,7 +84,8 @@ export function SignIn({
     try {
       onSignedIn(await verifyEmailCode(pending, value));
     } catch (err) {
-      setError((err as Error).message);
+      reportError("Sign-in code refused", err);
+      setError(userMessage(err));
       setCode("");
     } finally {
       setVerifyBusy(false);

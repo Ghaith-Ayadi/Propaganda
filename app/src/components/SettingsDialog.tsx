@@ -24,6 +24,8 @@ import {
   setCaptionAlign, setCaptionSize,
 } from "@/lib/editorStyles";
 import { toast } from "@/components/base/toast/toast";
+import { coded, userMessage } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
 
 interface Props {
   onClose: () => void;
@@ -219,7 +221,8 @@ function DeleteSiteSection() {
       toast.add({ type: "success", title: `Deleted ${site.name}` });
       siteDeleted();
     } catch (err) {
-      setError((err as Error).message);
+      reportError("Site not deleted", err);
+      setError(userMessage(err));
       setDeleting(false);
     }
   }
@@ -301,7 +304,8 @@ function SiteIdentityFields() {
       const updated = await updateSite(account, site.id, { name: name.trim(), slug: slug.trim() });
       refreshSite(updated);
     } catch (err) {
-      setError((err as Error).message);
+      reportError("Site not updated", err);
+      setError(userMessage(err));
     } finally {
       setSaving(false);
     }
@@ -364,8 +368,9 @@ function FaviconField({ current }: { current: string | null }) {
       const url = await uploadFile(file);
       await setSetting("favicon.url", url);
     } catch (e) {
-      console.error(e);
-      toast.add({ type: "error", title: "Upload failed", description: (e as Error).message });
+      const err = coded("UPLOAD", e);
+      reportError("Favicon upload failed", err);
+      toast.add({ type: "error", title: "Upload failed", description: userMessage(err) });
     } finally {
       setUploading(false);
     }
