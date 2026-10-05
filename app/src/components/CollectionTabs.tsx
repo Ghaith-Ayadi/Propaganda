@@ -59,7 +59,7 @@ export function CollectionTabs() {
 
   if (collections.length === 0) {
     return (
-      <div className="mx-auto max-w-[900px] px-12 py-24 text-center text-tertiary">
+      <div className="mx-auto max-w-[900px] px-6 py-24 text-center text-tertiary md:px-12">
         No collections yet. Press <Kbd>⌘K</Kbd> then <Kbd>↵</Kbd> to create a post in your first collection.
       </div>
     );
@@ -71,7 +71,7 @@ export function CollectionTabs() {
   const collectionPosts = posts.filter((p) => p.type === activeName);
 
   return (
-    <div className="mx-auto h-full max-w-[900px] px-10 pt-10 pb-16">
+    <div className="mx-auto h-full w-full max-w-[900px] px-4 pt-6 pb-16 md:px-10 md:pt-10">
       <CollectionView collection={activeCollection} posts={collectionPosts} />
     </div>
   );
@@ -188,7 +188,7 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
           placeholder="Untitled collection"
-          className="flex-1 bg-transparent font-title text-4xl text-primary outline-none placeholder:text-quaternary"
+          className="min-w-0 flex-1 bg-transparent font-title text-4xl text-primary outline-none placeholder:text-quaternary"
         />
       </div>
 

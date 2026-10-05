@@ -8,7 +8,7 @@ import {
 } from "@blocknote/react";
 import "@blocknote/mantine/style.css";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft, ArrowDown, ArrowUp } from "@untitledui/icons";
+import { ArrowLeft, ArrowDown, ArrowUp, LayoutRight, Menu01 } from "@untitledui/icons";
 import type { Post } from "@/types";
 import { db } from "@/lib/db";
 import { updatePost } from "@/lib/posts";
@@ -21,6 +21,7 @@ import { useTheme } from "@/lib/theme";
 import { countWords, formatWordCount } from "@/lib/format";
 import { consumeTitleFocus } from "@/lib/postFocus";
 import { useEditorStyles } from "@/lib/editorStyles";
+import { toggleDrawer, useIsMobile } from "@/lib/mobile";
 import type { Collection } from "@/types";
 import { WikilinkAutocomplete } from "@/components/WikilinkAutocomplete";
 import {
@@ -197,10 +198,10 @@ export function Editor({ post }: Props) {
   }, [editor, post.id]);
 
   return (
-    <div className="mx-auto w-full max-w-[760px] px-10">
+    <div className="mx-auto w-full max-w-[760px] px-5 md:px-10">
       <style>{editorCss}</style>
       <PostNav post={post} showTitle={!titleVisible} />
-      <div className="pt-12">
+      <div className="pt-8 md:pt-12">
         <input
           ref={titleRef}
           value={titleDraft}
@@ -215,7 +216,7 @@ export function Editor({ post }: Props) {
             }
           }}
           placeholder="Untitled"
-          className="w-full bg-transparent font-title text-4xl leading-tight text-primary outline-none placeholder:text-quaternary"
+          className="w-full bg-transparent font-title text-3xl leading-tight md:text-4xl text-primary outline-none placeholder:text-quaternary"
         />
         <textarea
           ref={subtitleRef}
@@ -243,7 +244,7 @@ export function Editor({ post }: Props) {
             }
           }}
           placeholder="Subtitle"
-          className="mt-2 w-full resize-none overflow-hidden bg-transparent text-xl leading-snug text-secondary outline-none placeholder:text-quaternary"
+          className="mt-2 w-full resize-none overflow-hidden bg-transparent text-lg md:text-xl leading-snug text-secondary outline-none placeholder:text-quaternary"
         />
         <div className="mb-8" />
         <div ref={editorRootRef} className="w-full pb-24">
@@ -289,13 +290,24 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
   const prev = idx > 0 ? sorted[idx - 1] : null;
   const next = idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
   const display = collectionDisplay(post.type, collections);
+  const isMobile = useIsMobile();
 
   return (
     <>
       <div
-        className="sticky top-0 z-30 -mx-10 flex items-center justify-between border-b border-secondary bg-primary/85 px-10 py-3 text-xs text-tertiary backdrop-blur"
+        className="sticky top-0 z-30 -mx-5 flex items-center justify-between border-b border-secondary bg-primary/85 px-2 py-2 text-xs text-tertiary backdrop-blur md:-mx-10 md:px-10 md:py-3"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-2">
+          {isMobile && (
+            <button
+              type="button"
+              aria-label="Menu"
+              onClick={() => toggleDrawer("nav")}
+              className="shrink-0 rounded-md p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+            >
+              <Menu01 className="size-5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => go({ view: "list" })}
@@ -303,7 +315,7 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
           >
             <ArrowLeft className="size-3.5" />
             {display.emoji && <span className="text-sm leading-none">{display.emoji}</span>}
-            <span>{display.label || post.type || "Home"}</span>
+            <span className="max-md:max-w-[9rem] max-md:truncate">{display.label || post.type || "Home"}</span>
           </button>
           {showTitle && (
             <>
@@ -320,7 +332,7 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
               {formatWordCount(post.wordCount)}
             </span>
           )}
-          <span className="date-pill mr-2 text-quaternary">
+          <span className="date-pill mr-2 text-quaternary max-md:hidden">
             #{post.collectionSeq ?? "—"} of {sorted.length}
           </span>
           <button
@@ -341,6 +353,16 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
           >
             <ArrowDown className="size-4" />
           </button>
+          {isMobile && (
+            <button
+              type="button"
+              aria-label="Post details"
+              onClick={() => toggleDrawer("attributes")}
+              className="rounded-md p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+            >
+              <LayoutRight className="size-5" />
+            </button>
+          )}
         </div>
       </div>
     </>

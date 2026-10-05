@@ -73,7 +73,7 @@ export function Sidebar({ currentId }: Props) {
   const searchResults = useMemo(() => (query.trim() ? search(query, 12) : []), [query]);
 
   return (
-    <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-secondary bg-secondary">
+    <aside className="flex h-full w-[260px] max-w-full shrink-0 max-md:w-[300px] flex-col border-r border-secondary bg-secondary">
       <div className="flex items-center justify-between px-3 pt-3 pb-2">
         <SiteSwitcher />
         <div className="flex items-center gap-0.5">

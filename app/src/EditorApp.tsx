@@ -6,7 +6,7 @@ import { Toaster } from "@/components/base/toast/toast";
 import { Sidebar } from "@/components/Sidebar";
 import { Editor } from "@/components/Editor";
 import { AttributePanel } from "@/components/AttributePanel";
-import { CommandPalette } from "@/components/CommandPalette";
+import { CommandPalette, openCommandPalette } from "@/components/CommandPalette";
 import { CollectionTabs } from "@/components/CollectionTabs";
 import { HomePage } from "@/components/HomePage";
 import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
@@ -22,6 +22,8 @@ import { installSearchIndex } from "@/lib/search";
 import { snapshotVersion } from "@/lib/versions";
 import { toggleTheme } from "@/lib/theme";
 import { initTelemetry } from "@/lib/telemetry";
+import { setDrawer, toggleDrawer, useDrawer, useIsMobile, useMobileShell } from "@/lib/mobile";
+import { Menu01, Plus } from "@untitledui/icons";
 
 // Errors and product analytics, editor only (lib/telemetry.ts).
 initTelemetry();
@@ -48,6 +50,9 @@ export function EditorApp() {
 function Shell() {
   const [route] = useRoute();
   const [layout, , toggleAuthorMode] = useLayout();
+  const isMobile = useIsMobile();
+  const drawer = useDrawer();
+  useMobileShell();
 
   // Workspace renders this once per scope (account + site), keyed by it, so
   // this effect runs again on every switch, against the new site.
@@ -115,14 +120,28 @@ function Shell() {
     [currentPost?.id, currentPost?.content],
   );
 
+  const sidebar = <Sidebar currentId={route.view === "post" ? route.id : null} />;
+  const attributes = route.view === "post" && currentPost ? <AttributePanel post={currentPost} /> : null;
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
-      {layout.sidebar && <Sidebar currentId={route.view === "post" ? route.id : null} />}
+    <div className="flex h-dvh w-full overflow-hidden">
+      {isMobile ? (
+        <>
+          <MobileDrawer side="left" open={drawer === "nav"}>{sidebar}</MobileDrawer>
+          {attributes && (
+            <MobileDrawer side="right" open={drawer === "attributes"}>{attributes}</MobileDrawer>
+          )}
+        </>
+      ) : (
+        layout.sidebar && sidebar
+      )}
       {route.view === "brief" ? (
         <BriefPage key={route.id} id={route.id} />
       ) : (
         <>
           <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+            {/* The editor has its own nav bar with the menu button. */}
+            {isMobile && route.view !== "post" && <MobileTopBar />}
             {route.view === "home" && <HomePage />}
             {route.view === "list" && <CollectionTabs />}
             {route.view === "plan" && <PlanPage />}
@@ -134,12 +153,59 @@ function Shell() {
             )}
             {route.view === "post" && currentPost && <Editor post={currentPost} />}
           </main>
-          {layout.attributes && route.view === "post" && currentPost && (
-            <AttributePanel post={currentPost} />
-          )}
+          {!isMobile && layout.attributes && attributes}
         </>
       )}
       <CommandPalette currentPostId={currentPost?.id ?? null} />
+    </div>
+  );
+}
+
+/** A phone's stand-in for a side column: slides over the page, tap outside to close. */
+function MobileDrawer({ side, open, children }: { side: "left" | "right"; open: boolean; children: React.ReactNode }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawer(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/50 animate-in fade-in" onClick={() => setDrawer(null)} />
+      <div
+        className={[
+          "absolute inset-y-0 flex max-w-[88vw] shadow-2xl duration-200 animate-in",
+          side === "left" ? "left-0 slide-in-from-left" : "right-0 slide-in-from-right",
+        ].join(" ")}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function MobileTopBar() {
+  return (
+    <div className="sticky top-0 z-40 flex items-center border-b border-secondary bg-primary/85 px-2 py-2 backdrop-blur">
+      <button
+        type="button"
+        aria-label="Menu"
+        onClick={() => toggleDrawer("nav")}
+        className="rounded-md p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+      >
+        <Menu01 className="size-5" />
+      </button>
+      <button
+        type="button"
+        onClick={openCommandPalette}
+        className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+      >
+        <Plus className="size-4" />
+        New post
+      </button>
     </div>
   );
 }
