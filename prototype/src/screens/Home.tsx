@@ -15,7 +15,7 @@ export function Home() {
         <div>
           <h1 className="font-title text-2xl text-primary">{D.site.name}</h1>
           <p className="mt-0.5 text-sm text-tertiary">
-            {D.QUARTER} · {D.totalContent} posts under watch · last swept today
+            {D.QUARTER} · {D.totalContent} pieces under watch · last swept today
           </p>
         </div>
         <Button kind="primary" onClick={() => go("inbox")}>
@@ -37,7 +37,7 @@ export function Home() {
             <Meter value={d.content.share} tone={d.content.grade === "A" ? "good" : d.content.grade === "B" ? "info" : d.content.grade === "C" ? "warn" : "bad"} />
             <p className="text-xs text-tertiary">
               <span className="tnum">{d.content.denom - d.content.flagged}</span> of{" "}
-              <span className="tnum">{d.content.denom}</span> posts carry no open flag.
+              <span className="tnum">{d.content.denom}</span> pieces carry no open flag.
               {d.content.excluded > 0 && (
                 <>
                   {" "}

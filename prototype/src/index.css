@@ -43,6 +43,7 @@ h1, h2, h3 { text-wrap: balance; }
 ::-webkit-scrollbar-thumb { background: var(--color-border-secondary); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 :focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+[contenteditable]:focus-visible, textarea:focus-visible { outline: none; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 @keyframes fadeUp { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .fade-up { animation: fadeUp .25s ease-out; }

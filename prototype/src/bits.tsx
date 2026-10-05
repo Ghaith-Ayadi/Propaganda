@@ -359,3 +359,111 @@ export function LinkRow({ children, onClick }: { children: React.ReactNode; onCl
     </button>
   );
 }
+
+// ── Objects and excerpts ────────────────────────────────────────────────
+
+import { BookOpen01, FileAttachment04, LinkExternal01, Mail01, Microphone01 } from "@untitledui/icons";
+import type { ObjectType, Excerpt as ExcerptT } from "./data";
+import { objectTypes } from "./data";
+
+function LinkedInMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <rect width="24" height="24" rx="4" fill="#0A66C2" />
+      <path fill="#fff" d="M7.1 9.6h2.4V17H7.1zM8.3 5.9a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8zM11 9.6h2.3v1h.03c.32-.6 1.1-1.24 2.27-1.24 2.43 0 2.88 1.6 2.88 3.68V17h-2.4v-3.5c0-.84-.02-1.92-1.17-1.92-1.17 0-1.35.92-1.35 1.86V17H11z" />
+    </svg>
+  );
+}
+
+function XMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <rect width="24" height="24" rx="4" fill="currentColor" />
+      <path fill="var(--color-bg-primary)" d="M13.35 10.9 18.6 5h-1.25l-4.56 5.12L9.15 5H5l5.5 7.84L5 19h1.25l4.8-5.4L14.9 19H19zm-1.7 1.91-.56-.78-4.43-6.12h1.9l3.58 4.94.56.78 4.65 6.43h-1.9z" />
+    </svg>
+  );
+}
+
+/** Identifying icon per object type: blog, newsletter, and each network's own mark. */
+export function TypeIcon({ type, className = "size-4" }: { type: ObjectType; className?: string }) {
+  if (type === "linkedin") return <LinkedInMark className={cx("shrink-0", className)} />;
+  if (type === "x") return <XMark className={cx("shrink-0 text-primary", className)} />;
+  const Icon = type === "newsletter" ? Mail01 : BookOpen01;
+  return <Icon className={cx("shrink-0 text-tertiary", className)} />;
+}
+
+export function TypeLabel({ type }: { type: ObjectType }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-tertiary">
+      <TypeIcon type={type} className="size-3.5" />
+      {objectTypes[type].label}
+    </span>
+  );
+}
+
+export function SourceIcon({ kind, className = "size-3.5" }: { kind: "call" | "doc"; className?: string }) {
+  const Icon = kind === "call" ? Microphone01 : FileAttachment04;
+  return <Icon className={cx("shrink-0 text-tertiary", className)} />;
+}
+
+/** A link to the original. Prototype: shows where it goes instead of going. */
+export function OriginalLink({ url, label = "Open the original" }: { url: string; label?: string }) {
+  return (
+    <a
+      href={"https://" + url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => e.preventDefault()}
+      title={url}
+      className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-brand-secondary hover:underline"
+    >
+      {label}
+      <LinkExternal01 className="size-3" />
+    </a>
+  );
+}
+
+/**
+ * A quote with what came before and after, the flagged part marked, and a link
+ * to the original. `replace` turns it into a proposed fix.
+ */
+export function Excerpt({
+  excerpt,
+  head,
+  mark = "bad",
+  replace,
+}: {
+  excerpt: ExcerptT;
+  head: React.ReactNode;
+  mark?: "bad" | "neutral";
+  replace?: string;
+}) {
+  return (
+    <figure className="flex min-w-0 flex-col gap-2">
+      <figcaption className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary">{head}</span>
+        <OriginalLink url={excerpt.url} />
+      </figcaption>
+      <blockquote className="rounded-lg bg-secondary px-3 py-2.5 text-sm leading-relaxed text-tertiary">
+        {excerpt.before && <span>…{excerpt.before}</span>}
+        {replace !== undefined ? (
+          <>
+            <del className="rounded bg-error-primary px-0.5 text-error-primary decoration-1">{excerpt.text}</del>{" "}
+            <ins className="rounded bg-success-primary px-0.5 text-success-primary no-underline">{replace}</ins>
+          </>
+        ) : (
+          <mark
+            className={cx(
+              "rounded px-0.5 text-primary",
+              mark === "bad" ? "bg-error-primary ring-1 ring-inset ring-error_subtle" : "bg-primary ring-1 ring-inset ring-secondary",
+            )}
+          >
+            {excerpt.text}
+          </mark>
+        )}
+        {excerpt.after && <span>{excerpt.after}{/[.!?]$/.test(excerpt.after.trim()) ? "" : "…"}</span>}
+      </blockquote>
+      <div className="text-xs text-quaternary">{excerpt.at}</div>
+    </figure>
+  );
+}

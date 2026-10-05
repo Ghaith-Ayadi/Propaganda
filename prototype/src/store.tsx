@@ -5,10 +5,12 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useState } f
 import * as D from "./data";
 import type { Flag, FlagStatus, Pitch, PitchStatus } from "./data";
 
-export type Route = "onboarding" | "home" | "inbox" | "settings" | "posts" | "kb";
-const ROUTES: Route[] = ["onboarding", "home", "inbox", "settings", "posts", "kb"];
+export type Route = "onboarding" | "home" | "inbox" | "settings" | "blog" | "social" | "email" | "sales" | "kb" | `post-${string}`;
+const ROUTES = ["onboarding", "home", "inbox", "settings", "blog", "social", "email", "sales", "kb"];
 
 interface State {
+  objects: D.ContentObject[];
+  bodies: Record<string, string[]>;
   flags: Flag[];
   pitches: Pitch[];
   contested: typeof D.kb.contested;
@@ -22,6 +24,11 @@ interface State {
 
 type Action =
   | { type: "flag"; id: string; status: FlagStatus; rejection?: string }
+  | { type: "applyFix"; id: string; fix: string }
+  | { type: "title"; id: string; title: string }
+  | { type: "body"; id: string; body: string[] }
+  | { type: "object"; id: string; patch: Partial<D.ContentObject> }
+  | { type: "newPost"; obj: D.ContentObject; body: string[] }
   | { type: "kbAdmit" }
   | { type: "kbContest"; claim: string; why: string }
   | { type: "kbResolve"; id: string }
@@ -32,6 +39,8 @@ type Action =
   | { type: "reset" };
 
 const initial = (): State => ({
+  objects: D.objects.map((o) => ({ ...o })),
+  bodies: Object.fromEntries(Object.entries(D.bodies).map(([k, v]) => [k, [...v]])),
   flags: D.flags.map((f) => ({ ...f })),
   pitches: D.pitches.map((p) => ({ ...p })),
   contested: [...D.kb.contested],
@@ -52,6 +61,24 @@ function reducer(s: State, a: Action): State {
         ...s,
         flags: s.flags.map((f) => (f.id === a.id ? { ...f, status: a.status, rejection: a.rejection ?? f.rejection } : f)),
       };
+    case "applyFix": {
+      const f = s.flags.find((x) => x.id === a.id)!;
+      const body = s.bodies[f.objectId] ?? bodyFor(s, f.objectId);
+      return {
+        ...s,
+        flags: s.flags.map((x) => (x.id === a.id ? { ...x, status: "fixed" } : x)),
+        bodies: { ...s.bodies, [f.objectId]: body.map((p) => p.replace(f.excerpt.text, a.fix)) },
+        objects: s.objects.map((o) => (o.id === f.objectId && o.title === f.excerpt.text ? { ...o, title: a.fix } : o)),
+      };
+    }
+    case "title":
+      return { ...s, objects: s.objects.map((o) => (o.id === a.id ? { ...o, title: a.title } : o)) };
+    case "object":
+      return { ...s, objects: s.objects.map((o) => (o.id === a.id ? { ...o, ...a.patch } : o)) };
+    case "body":
+      return { ...s, bodies: { ...s.bodies, [a.id]: a.body } };
+    case "newPost":
+      return { ...s, objects: [a.obj, ...s.objects], bodies: { ...s.bodies, [a.obj.id]: a.body } };
     case "kbAdmit":
       return { ...s, kbEntries: s.kbEntries + 1 };
     case "kbContest":
@@ -73,6 +100,7 @@ function reducer(s: State, a: Action): State {
       return {
         ...s,
         reviews: s.reviews.filter((x) => x.id !== a.id),
+        objects: s.objects.map((o) => (r && o.id === r.objectId ? { ...o, status: "published", date: D.TODAY } : o)),
         internalPublished: s.internalPublished + 1,
         topics: s.topics.map((t) => (r && t.id === r.topic ? { ...t, published: t.published + 1 } : t)),
       };
@@ -98,12 +126,18 @@ export function gradeFor(share: number) {
 }
 
 function derive(s: State) {
-  const counting = s.flags.filter((f) => COUNTS_AGAINST.includes(f.status));
-  const flaggedPosts = new Set(counting.map((f) => f.postId));
+  // "Can't fix" is decided by the object's type: flags on a sent newsletter or
+  // an X post are logged and left out of the content grade.
+  const fixable = (f: Flag) => D.objectTypes[objectOf(f.objectId).type].fixable;
+  const counting = s.flags.filter((f) => COUNTS_AGAINST.includes(f.status) && fixable(f));
+  const flaggedPosts = new Set(counting.map((f) => f.objectId));
   const excluded = new Set(
-    s.flags.filter((f) => f.status === "cant-fix" && !flaggedPosts.has(f.postId)).map((f) => f.postId),
+    s.flags
+      .filter((f) => !fixable(f) && !["admitted", "fixed"].includes(f.status) && !flaggedPosts.has(f.objectId))
+      .map((f) => f.objectId),
   );
-  const denom = D.totalContent - excluded.size;
+  const total = s.objects.filter((o) => o.status === "published").length + D.backCatalogue;
+  const denom = total - excluded.size;
   const contentShare = (denom - flaggedPosts.size) / denom;
 
   const kbIssues = s.contested.length + s.contradictions.length;
@@ -147,12 +181,25 @@ const Ctx = createContext<null | {
 }>(null);
 
 function readHash(): Route {
-  const h = location.hash.replace("#", "") as Route;
-  return ROUTES.includes(h) ? h : "onboarding";
+  const h = location.hash.replace("#", "");
+  return (ROUTES.includes(h) || h.startsWith("post-") ? h : "onboarding") as Route;
 }
+
+/** The editor's paragraphs: written ones, or a stub built from the title and any flagged passages. */
+export function bodyFor(s: { bodies: Record<string, string[]>; flags: Flag[] }, id: string): string[] {
+  if (s.bodies[id]) return s.bodies[id];
+  const o = liveObjects.find((x) => x.id === id);
+  const flagged = s.flags.filter((f) => f.objectId === id).map((f) => [f.excerpt.before, f.excerpt.text, f.excerpt.after].join("").trim());
+  return flagged.length ? flagged : [o ? `${o.title}.` : "", "Start writing here."];
+}
+
+// The prototype's one shortcut: lookups read the live object list without
+// threading state through every component.
+let liveObjects: D.ContentObject[] = D.objects;
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [s, dispatch] = useReducer(reducer, undefined, initial);
+  liveObjects = s.objects;
   const d = useMemo(() => derive(s), [s]);
   const [route, setRoute] = useState<Route>(readHash);
 
@@ -188,6 +235,15 @@ export function useStore() {
 export function topicName(id: string) {
   return D.topics.find((t) => t.id === id)?.name ?? id[0].toUpperCase() + id.slice(1);
 }
+export function objectOf(id: string) {
+  return liveObjects.find((p) => p.id === id)!;
+}
 export function postTitle(id: string) {
-  return D.posts.find((p) => p.id === id)?.title ?? "Untitled";
+  return objectOf(id)?.title ?? "Untitled";
+}
+export function claimOf(id: string) {
+  return D.claims.find((c) => c.id === id)!;
+}
+export function sourceOf(id: string) {
+  return D.sources.find((x) => x.id === id)!;
 }
