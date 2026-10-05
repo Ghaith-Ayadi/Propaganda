@@ -9,7 +9,7 @@ import { Input } from "@/components/base/input/input";
 import { toast } from "@/components/base/toast/toast";
 import { useWorkspace } from "@/components/Workspace";
 import { db } from "@/lib/db";
-import { pb } from "@/lib/pocketbase";
+import { must, sb } from "@/lib/supabase";
 import { updatePost } from "@/lib/posts";
 import { postPublicUrl, readableUrl } from "@/lib/siteUrl";
 import { collectionSlugOf, hasAddress, postPath, slugify } from "@/lib/slug";
@@ -44,15 +44,8 @@ export function SlugField({ post, collections }: { post: Post; collections: Coll
       return;
     }
     let live = true;
-    const client = pb;
-    void client
-      .collection("post_redirects")
-      .getFullList<Redirect>({
-        filter: client.filter("post = {:id}", { id: post.id }),
-        sort: "-created",
-        fields: "id,collection,slug",
-      })
-      .then((rows) => live && setRedirects(rows))
+    void must(sb.from("post_redirects").select("id,collection,slug").eq("post", post.id).order("created", { ascending: false }))
+      .then((rows) => live && setRedirects(rows as Redirect[]))
       .catch(() => undefined);
     return () => {
       live = false;
@@ -94,7 +87,7 @@ export function SlugField({ post, collections }: { post: Post; collections: Coll
 
   async function removeRedirect(r: Redirect) {
     try {
-      await pb.collection("post_redirects").delete(r.id);
+      await must(sb.from("post_redirects").delete().eq("id", r.id));
       setRedirects((xs) => xs.filter((x) => x.id !== r.id));
     } catch {
       toast.add({ type: "error", title: "Couldn't remove the redirect", description: "Check your connection and try again." });

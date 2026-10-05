@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { editorRedirect } from "./lib/siteUrl";
+import { isOAuthCallback, relayOAuthResult } from "./lib/oauthCallback";
 import "./index.css";
 
 // Side-effect: reads localStorage, applies `.dark-mode` class to <html>
@@ -25,8 +26,11 @@ function redirectTarget(): string | null {
   return editorRedirect();
 }
 
-const target = redirectTarget();
-if (target) {
+const target = isOAuthCallback() ? null : redirectTarget();
+if (isOAuthCallback()) {
+  // The Google popup's last stop: hand the code to the window that asked.
+  relayOAuthResult();
+} else if (target) {
   window.location.replace(target);
 } else {
   createRoot(document.getElementById("root")!).render(

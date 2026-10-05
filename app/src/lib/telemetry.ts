@@ -113,11 +113,13 @@ export function track(event: string, properties?: Record<string, unknown>): void
 export function reportError(where: string, err: unknown, extra?: Record<string, unknown>): void {
   console.error(`${where}:`, err);
   if (!enabled || navigator.onLine === false) return;
-  // PocketBase errors carry the request: status 0 means it never got an answer.
-  const request = err as { status?: number; url?: string } | null;
+  // Backend errors (lib/supabase.ts BackendError) carry the HTTP status (0: no
+  // answer at all) and PostgREST's code (a Postgres SQLSTATE such as 23505, or PGRSTxxx).
+  const request = err as { status?: number; code?: string; url?: string } | null;
   posthog.captureException(err, {
     where,
     http_status: request?.status,
+    error_code: request?.code || undefined,
     request_url: request?.url,
     ...extra,
   });

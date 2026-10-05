@@ -17,7 +17,7 @@ treat content as irreplaceable anyway.
 - Adding brand-new posts (in `Test`) is fine. Touching any post outside `Test` is not.
 - Never test destructive editor behaviour (paste, undo, delete, image ops) on a real post.
   Create a throwaway post in `Test` and use that.
-- Applying a schema migration (a `pb/pb_migrations` change deployed to the box) or any
+- Applying a schema migration (a `supabase/migrations` change deployed to the box) or any
   server-side data change that could trigger the live app's sync to overwrite local
   drafts is also off-limits without explicit go-ahead — it can silently clobber
   unsynced writing.
@@ -26,37 +26,42 @@ treat content as irreplaceable anyway.
 This rule exists because a balcony draft and other content were lost to careless edits and
 a sync-unblocking migration. It overrides convenience, "just to verify", and everything else.
 
-## Backend: PocketBase on Bedrock
+## Backend: self-hosted Supabase on Bedrock
 
 Data, realtime and sign-in live on **Bedrock**
 ([Ghaith-Ayadi/Bedrock](https://github.com/Ghaith-Ayadi/Bedrock)), on Propaganda's own
-PocketBase instance. Read
-[docs/apps.md](https://github.com/Ghaith-Ayadi/Bedrock/blob/main/docs/apps.md) there
-before touching anything that talks to the server.
+self-hosted Supabase (`compose/propaganda-supabase`: Postgres, GoTrue, PostgREST,
+Realtime). Read [supabase/README.md](supabase/README.md) and Bedrock's
+[docs/apps.md](https://github.com/Ghaith-Ayadi/Bedrock/blob/main/docs/apps.md) before
+touching anything that talks to the server. PocketBase (`pb/`) ran it until the move
+(Notion PPG-82) and stays read-only on the box until Ghaith retires it.
 
-- One origin: `verbatim.ayadighaith.com` serves the app from Vercel and PocketBase under
-  `/api/*` and `/_/` (dashboard). `VITE_PB_URL` is that host. Editor at `/admin`.
-  The editor and API are moving to `app.propaganda.pub`; blogs each get their own host
-  (`app/src/lib/siteUrl.ts`), and the editor never runs on a blog's subdomain.
+- One origin: `app.propaganda.pub` serves the app from Vercel and the API under
+  `/auth/v1`, `/rest/v1`, `/realtime/v1` (Caddy). `VITE_SUPABASE_URL` is that host,
+  `VITE_SUPABASE_ANON_KEY` the public key. Editor at `/admin`. Blogs each get their own
+  host (`app/src/lib/siteUrl.ts`) and read the API cross-origin; the editor never runs on
+  a blog's subdomain.
 - **Multi-tenant.** Content belongs to a **site** (`sites`, `site_members` with owner/editor
-  roles). Every content collection has a required `site` relation; every query, pull and
-  realtime subscription must filter by it (published posts of *all* sites are public).
-  The pre-multi-tenant data is the Verbatim site, id `verbatimsite000`.
+  roles). Every content table has a required `site`; row-level security is keyed on it,
+  and every query, pull and realtime subscription must filter by it (published posts of
+  *all* sites are public). The pre-multi-tenant data is the Verbatim site, id `verbatimsite000`.
 - **Sign-in: Google or an emailed one-time code** (`app/src/lib/accounts.ts`). No
-  passwords. One browser holds several accounts (one PocketBase client + session key per
+  passwords. One browser holds several accounts (one Supabase client + session key per
   account); `app/src/lib/scope.ts` is the active (account, site); `components/Workspace.tsx`
-  switches, signs in and onboards.
-- **Ids are PocketBase record ids minted on the client** (`app/src/lib/pocketbase.ts`
-  `newId()`). `Post.id`, `PostVersion.postId`, `Brief.postId` are strings. There is no
-  temp-id swap any more; do not reintroduce numeric ids. `posts.legacy_id` is the old
-  Postgres integer, for audit only (it seeded Verbatim's post numbers).
-- **Schema lives here, in `pb/`** (`pb/pb_migrations/*.js`, `pb/pb_hooks/`), never in the
-  dashboard. Bedrock's CI deploy checks it out on the box at the ref in Bedrock's
-  `compose/propaganda/schema.env` (`main`) whenever Bedrock deploys (a merge to its
-  `main`, or its `ci` workflow run by hand), archiving `pb_data` first if `pb/` changed. Rehearse every schema change with
-  `pb/rehearsal/rehearse.sh` before deploying.
-- **Post numbers and addresses** (`pb/pb_hooks/addresses.pb.js`, `app/src/lib/slug.ts`).
-  `posts.number` is a per-site counter the server hands out on create: never reused, never
+  switches, signs in and onboards. Google runs in a popup that lands on `/auth/callback`
+  (`app/src/lib/oauthCallback.ts`). An account's `userId` is its PocketBase id when it has
+  one (`app_metadata.pb_id`), so devices keep their local databases; `authId` is the server's.
+- **Ids are minted on the client** (`app/src/lib/supabase.ts` `newId()`, 15 chars of
+  [a-z0-9], the shape since PocketBase). `Post.id`, `PostVersion.postId`, `Brief.postId`
+  are strings. Do not reintroduce numeric ids. `posts.legacy_id` is the old Postgres
+  integer, for audit only (it seeded Verbatim's post numbers).
+- **Schema lives here, in `supabase/migrations`**, never in Studio. Bedrock's deploy
+  checks it out on the box at the ref in Bedrock's `compose/propaganda-supabase/schema.env`
+  (`main`) whenever Bedrock deploys, dumps the data first if `supabase/` changed, then
+  runs `migrate`. Run `supabase/tests/run.sh` on the laptop stack before deploying any
+  schema change.
+- **Post numbers and addresses** (`supabase/migrations/*_addresses.sql`, `app/src/lib/slug.ts`).
+  `posts.number` is a per-site counter the server hands out on insert: never reused, never
   edited, never sent by clients. A post's public address is `/<collection slug>/<post slug>`
   at the root of the site's host. The slug follows the title until the first publish, then
   changes only when edited; every move of a published post (new slug or collection) leaves a
@@ -64,14 +69,17 @@ before touching anything that talks to the server.
 - Toasts: `app/src/components/base/toast/toast.tsx` (shadcn's Base UI toast, ported). Use it
   for every toast; no `window.alert`.
 - Sync: `app/src/lib/sync.ts` (generic push/pull per table), realtime in
-  `app/src/lib/realtime.ts`. One Dexie database per (account, site),
+  `app/src/lib/realtime.ts` (an event triggers a re-read of the row: update events leave
+  out large unchanged values). One Dexie database per (account, site),
   `propaganda-<user>-<site>`; the single-tenant `verbatim-pb` is adopted, never deleted.
+  A push never overwrites a row edited while it was in flight, and a new
+  `public.data_epoch()` (a re-import) makes devices reconcile.
 - Images: Vercel Blob through `api/upload.ts` (site members only). Never call Blob from
   the browser. Public blogs: every site at the root of its own host, `<slug>.propaganda.pub`
   or its custom domain (Verbatim: `verbatim.ayadighaith.com`), with certificates issued on
-  demand once `pb_hooks/hosts.pb.js` says the host is a site. Old `/@<slug>/` links forward.
-- `scripts/src/*` are Supabase-era tools and stop working when the Supabase project is
-  deleted after 2026-10-16. `docs/archive/` is history, not instructions.
+  demand once `tls_check()` says the host is a site. Old `/@<slug>/` links forward.
+- `scripts/src/*` are tools from the Supabase Cloud days and stop working when that
+  project is deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 
 ## Telemetry: PostHog
 

@@ -7,8 +7,8 @@
 // and client that were active when it started.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type PocketBase from "pocketbase";
-import { pb } from "@/lib/pocketbase";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { must, sb, type Client } from "@/lib/supabase";
 import { onScopeReset, siteId } from "@/lib/scope";
 
 const cache = new Map<string, unknown>();
@@ -30,20 +30,20 @@ interface SettingRecord {
   updated: string;
 }
 
-const settingsOf = (client: PocketBase) => client.collection<SettingRecord>("app_settings");
+const settingsOf = (client: Client) => client.from("app_settings");
 
 // The public blog has no scope: it binds the site it is showing, read through
 // the anonymous client (blog/BlogApp.tsx).
-let publicTarget: { client: PocketBase; site: string } | null = null;
+let publicTarget: { client: Client; site: string } | null = null;
 
-export function bindPublicSettings(client: PocketBase, site: string): void {
+export function bindPublicSettings(client: Client, site: string): void {
   publicTarget = { client, site };
 }
 
-function target(): { client: PocketBase; site: string } {
-  return publicTarget ?? { client: pb, site: siteId() };
+function target(): { client: Client; site: string } {
+  return publicTarget ?? { client: sb, site: siteId() };
 }
-let unsubscribeRealtime: (() => Promise<void>) | null = null;
+let unsubscribeRealtime: (() => Promise<unknown>) | null = null;
 // Bumped on every scope switch: a load or write that started before it must not
 // touch the new site's cache.
 let epoch = 0;
@@ -61,7 +61,7 @@ onScopeReset(() => {
 });
 
 /**
- * Pull every setting from PocketBase + subscribe to realtime updates. Memoized:
+ * Pull every setting from the server + subscribe to realtime updates. Memoized:
  * every caller awaits the SAME load, so the cache is guaranteed populated when
  * the returned promise resolves (callers must not race on a half-filled cache).
  */
@@ -74,10 +74,9 @@ export function installSettings(): Promise<void> {
 async function load(): Promise<void> {
   const mine = epoch;
   const { client, site } = target();
-  const filter = client.filter("site = {:site}", { site });
   let records: SettingRecord[];
   try {
-    records = await settingsOf(client).getFullList({ filter });
+    records = (await must(settingsOf(client).select("*").eq("site", site))) as SettingRecord[];
   } catch (err) {
     console.error("loadSettings failed:", err);
     // Let a later caller retry instead of awaiting this failure forever.
@@ -92,24 +91,35 @@ async function load(): Promise<void> {
   loaded = true;
   emit();
 
-  void settingsOf(client)
-    .subscribe("*", (e) => {
-      if (mine !== epoch || (e.record as { site?: string }).site !== site) return;
-      if (e.action === "delete") {
-        cache.delete(e.record.key);
-        recordIds.delete(e.record.key);
-        emit();
-        return;
-      }
-      cache.set(e.record.key, e.record.value);
-      recordIds.set(e.record.key, e.record.id);
-      emit();
-    }, { filter })
-    .then((unsub) => {
-      if (mine === epoch) unsubscribeRealtime = unsub;
-      else void unsub();
+  // A change event only says which row changed; its value is read again (a
+  // large unchanged value is left out of update events). Deletes carry the id
+  // alone, and a site filter can't match them, so they come unfiltered.
+  const reread = async (id: string) => {
+    const row = (await must(settingsOf(client).select("*").eq("id", id).maybeSingle()).catch(() => null)) as SettingRecord | null;
+    if (mine !== epoch || !row || (row as SettingRecord & { site?: string }).site !== site) return;
+    cache.set(row.key, row.value);
+    recordIds.set(row.key, row.id);
+    emit();
+  };
+  const channel: RealtimeChannel = client
+    .channel(`settings:${site}:${Math.random().toString(36).slice(2)}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "app_settings", filter: `site=eq.${site}` }, (e) => {
+      if (e.eventType !== "DELETE") void reread((e.new as { id: string }).id);
     })
-    .catch((err) => console.error("settings realtime failed:", err));
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "app_settings" }, (e) => {
+      if (mine !== epoch) return;
+      const id = (e.old as { id?: string }).id;
+      const key = [...recordIds].find(([, rid]) => rid === id)?.[0];
+      if (key === undefined) return;
+      cache.delete(key);
+      recordIds.delete(key);
+      emit();
+    })
+    .subscribe((status, err) => {
+      if (status === "CHANNEL_ERROR") console.error("settings realtime failed:", err);
+    });
+  if (mine === epoch) unsubscribeRealtime = () => client.removeChannel(channel);
+  else void client.removeChannel(channel);
 }
 
 export function getSetting<T = unknown>(key: string, fallback?: T): T | undefined {
@@ -123,16 +133,10 @@ export async function setSetting<T>(key: string, value: T): Promise<void> {
   cache.set(key, value);
   emit();
   try {
-    let id = mine === epoch ? recordIds.get(key) : undefined;
-    if (!id) {
-      const found = await settingsOf(client)
-        .getFirstListItem(client.filter("site = {:site} && key = {:k}", { site, k: key }))
-        .catch(() => null);
-      id = found?.id;
-    }
-    const saved = id
-      ? await settingsOf(client).update(id, { value })
-      : await settingsOf(client).create({ site, key, value });
+    // One statement: creates the key for this site, or replaces its value.
+    const saved = (await must(
+      settingsOf(client).upsert({ site, key, value }, { onConflict: "site,key" }).select("id").single(),
+    )) as { id: string };
     if (mine === epoch) recordIds.set(key, saved.id);
   } catch (err) {
     console.error("setSetting failed:", err);

@@ -1,19 +1,20 @@
 // Append-only version history.
 // Offline-first, same contract as posts: a snapshot is written to Dexie first
-// and pushed to PocketBase straight after. If that push can't happen (no
+// and pushed to the server straight after. If that push can't happen (no
 // network, or the post itself hasn't reached the server yet) the row stays
 // `dirty` and the sync engine retries it, so a snapshot is never lost to a
 // failed request.
 
-import { fieldError, msToPbDate, newId, pbDateToMs } from "@/lib/pocketbase";
+import { dateToMs, fetchAll, fetchSince, isForeignKeyViolation, isUniqueViolation, msToDate, must, newId } from "@/lib/supabase";
 import { db } from "@/lib/db";
 import { updatePost } from "@/lib/posts";
-import { captureCtx, type Ctx } from "@/lib/sync";
+import { PULL_OVERLAP_MS, captureCtx, type Ctx } from "@/lib/sync";
+import { reportError } from "@/lib/telemetry";
 import type { Post, PostVersion } from "@/types";
 
 export type VersionAuthor = "user" | "mcp:claude-code" | "migration";
 
-/** A `post_versions` record as PocketBase returns it. */
+/** A `post_versions` row. */
 export interface VersionRecord {
   id: string;
   post: string;
@@ -23,7 +24,7 @@ export interface VersionRecord {
   created_by: VersionAuthor;
   message: string;
   /** When the snapshot was taken on the author's device. `created` is when the server received it. */
-  authored: string;
+  authored: string | null;
   created: string;
 }
 
@@ -34,7 +35,7 @@ export function fromVersionRecord(r: VersionRecord): PostVersion {
     version: r.version,
     content: r.content,
     attributes: r.attributes ?? {},
-    createdAt: pbDateToMs(r.authored) ?? pbDateToMs(r.created) ?? Date.now(),
+    createdAt: dateToMs(r.authored) ?? dateToMs(r.created) ?? Date.now(),
     createdBy: r.created_by,
     message: r.message || null,
   };
@@ -52,11 +53,12 @@ function toVersionRecord(v: PostVersion, site: string) {
     message: v.message ?? "",
     // Send the authored timestamp so history reads in the order it was
     // written, not the order it was uploaded.
-    authored: msToPbDate(v.createdAt),
+    authored: msToDate(v.createdAt),
   };
 }
 
-const versions = (ctx: Ctx) => ctx.pb.collection<VersionRecord>("post_versions");
+const versions = (ctx: Ctx) => ctx.sb.from("post_versions");
+const create = (ctx: Ctx, v: PostVersion) => must(versions(ctx).insert(toVersionRecord(v, ctx.site)));
 
 export async function snapshotVersion(
   post: Post,
@@ -116,19 +118,19 @@ export async function snapshotVersion(
 async function pushVersion(ctx: Ctx, v: PostVersion): Promise<boolean> {
   const { db } = ctx;
   try {
-    await versions(ctx).create(toVersionRecord(v, ctx.site));
+    await create(ctx, v);
     await db.versions.put({ ...v, dirty: false });
     return true;
   } catch (err) {
     // Our own row already made it to the server on an earlier attempt.
-    if (fieldError(err, "id")) {
+    if (isUniqueViolation(err, "post_versions_pkey")) {
       await db.versions.put({ ...v, dirty: false });
       return true;
     }
     // The post is not on the server yet: keep the version dirty, retry next sync.
-    if (fieldError(err, "post")) return false;
+    if (isForeignKeyViolation(err)) return false;
 
-    if (fieldError(err, "version")) {
+    if (isUniqueViolation(err, "post_versions_post_version_key")) {
       await pullVersionsForPost(v.postId, ctx);
       const latest = await db.versions
         .where("[postId+version]")
@@ -137,17 +139,17 @@ async function pushVersion(ctx: Ctx, v: PostVersion): Promise<boolean> {
         .first();
       const renumbered = { ...v, version: Math.max(latest?.version ?? 0, v.version) + 1 };
       try {
-        await versions(ctx).create(toVersionRecord(renumbered, ctx.site));
+        await create(ctx, renumbered);
         await db.versions.put({ ...renumbered, dirty: false });
         return true;
       } catch (retryErr) {
-        console.error(`Version push failed for post ${v.postId}:`, retryErr);
+        reportError("Version push failed", retryErr, { post: v.postId, renumbered: true });
         return false;
       }
     }
 
     // Network failure or something unrecoverable: keep it dirty and retry later.
-    console.error(`Version push failed for post ${v.postId}:`, err);
+    reportError("Version push failed", err, { post: v.postId });
     return false;
   }
 }
@@ -163,15 +165,14 @@ export async function pushPendingVersions(ctx: Ctx): Promise<void> {
 }
 
 export async function pullVersionsForPost(postId: string, ctx: Ctx = captureCtx()): Promise<void> {
-  const { db, pb } = ctx;
+  const { db } = ctx;
   let records: VersionRecord[];
   try {
-    records = await versions(ctx).getFullList({
-      filter: pb.filter("site = {:site} && post = {:p}", { site: ctx.site, p: postId }),
-      sort: "version",
-    });
+    records = await fetchAll<VersionRecord>((from, to) =>
+      versions(ctx).select("*").eq("site", ctx.site).eq("post", postId).order("version").order("id").range(from, to),
+    );
   } catch (err) {
-    console.error(err);
+    reportError("Pull failed", err, { collection: "post_versions", post: postId });
     return;
   }
   await db.transaction("rw", db.versions, async () => {
@@ -179,27 +180,26 @@ export async function pullVersionsForPost(postId: string, ctx: Ctx = captureCtx(
   });
 }
 
-const VERSION_CURSOR_KEY = "lastVersionPullPb";
+// Also in lib/sync.ts CURSOR_KEYS, which forgets it when the content is loaded anew.
+const VERSION_CURSOR_KEY = "lastVersionPullSb";
 
 export async function pullAllVersions(ctx: Ctx): Promise<void> {
-  const { db, pb } = ctx;
+  const { db } = ctx;
   const meta = await db.syncMeta.get(VERSION_CURSOR_KEY);
   const since = typeof meta?.value === "string" ? meta.value : "1970-01-01T00:00:00.000Z";
+  const from = new Date(Math.max(0, Date.parse(since) - PULL_OVERLAP_MS)).toISOString();
   let records: VersionRecord[];
   try {
-    records = await versions(ctx).getFullList({
-      filter: pb.filter("site = {:site} && created > {:since}", { site: ctx.site, since: new Date(since) }),
-      sort: "created",
-    });
+    records = await fetchSince<VersionRecord>(() => versions(ctx).select("*").eq("site", ctx.site), "created", from);
   } catch (err) {
-    console.error(err);
+    reportError("Pull failed", err, { collection: "post_versions" });
     return;
   }
   if (!records.length) return;
   let maxMs = Date.parse(since);
   await db.transaction("rw", db.versions, async () => {
     for (const r of records) {
-      const ms = pbDateToMs(r.created) ?? 0;
+      const ms = dateToMs(r.created) ?? 0;
       if (ms > maxMs) maxMs = ms;
       await db.versions.put(fromVersionRecord(r));
     }

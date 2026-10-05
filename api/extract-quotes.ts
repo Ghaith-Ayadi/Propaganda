@@ -2,7 +2,7 @@
 // via Gemini, validate each as an exact substring, return the survivors.
 //
 // The Gemini API key is server-only; this proxies the call so it never touches
-// the browser bundle. Requires a signed-in PocketBase user — it spends Gemini
+// the browser bundle. Requires a signed-in user — it spends Gemini
 // credits per call.
 //
 // POST /api/extract-quotes

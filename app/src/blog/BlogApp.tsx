@@ -8,7 +8,7 @@ import { AdminStrip } from "./components/AdminStrip";
 import { SiteNotFound } from "./components/SiteNotFound";
 import { customDomainTarget, legacyAddressTarget, resolveBlogSite, type BlogSite } from "./site";
 import { bindPublicSettings, installSettings, useSetting } from "@/lib/settings";
-import { publicPb } from "@/lib/pocketbase";
+import { publicSb } from "@/lib/supabase";
 
 function Loading() {
   return (
@@ -48,7 +48,7 @@ export function BlogApp() {
         return;
       }
       // Must happen before anything reads settings or navigates.
-      if (s) bindPublicSettings(publicPb, s.id);
+      if (s) bindPublicSettings(publicSb, s.id);
       setSite(s);
     })();
   }, []);

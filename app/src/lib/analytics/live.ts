@@ -5,12 +5,12 @@
 //
 // The Worker's query gate key used to ship in the browser bundle
 // (VITE_ANALYTICS_QUERY_KEY) — any visitor could read any tenant's numbers.
-// It's now server-only (api/analytics.ts): the browser sends its PocketBase
+// It's now server-only (api/analytics.ts): the browser sends its
 // session + the active site id, and the function checks membership, looks up
 // that site's tenant, and attaches the real key itself.
 
 import { useEffect, useState } from "react";
-import { pb } from "@/lib/pocketbase";
+import { authHeader } from "@/lib/supabase";
 import { onScopeReset, siteId } from "@/lib/scope";
 import type {
   BucketRow,
@@ -28,8 +28,8 @@ const BASE = !!(import.meta.env.VITE_ANALYTICS_URL as string | undefined);
 /** Whether a live backend is configured. When false, live hooks return null. */
 export const liveConfigured = BASE;
 
-function headers(): HeadersInit {
-  return { Authorization: pb.authStore.token };
+async function headers(): Promise<HeadersInit> {
+  return { Authorization: await authHeader() };
 }
 
 /** Build an /api/analytics URL from a Worker-shaped `path?query` string. */
@@ -57,7 +57,8 @@ function useJson<T>(path: string | null): T | null {
       return;
     }
     let cancelled = false;
-    fetch(url, { headers: headers() })
+    headers()
+      .then((h) => fetch(url, { headers: h }))
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (cancelled) return;
@@ -156,7 +157,8 @@ function loadHits() {
   const url = apiUrl("/query?metric=hits");
   if (!url) return;
   hitsInflight = true;
-  fetch(url, { headers: headers() })
+  headers()
+    .then((h) => fetch(url, { headers: h }))
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => {
       if (j && !(j as { error?: unknown }).error) {

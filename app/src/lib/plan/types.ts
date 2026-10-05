@@ -43,6 +43,8 @@ export interface Brief {
   // sync metadata, local-only
   syncedAt?: number | null;
   dirty?: boolean;
+  /** Server `updated` (ms) of a push answered while this row was edited again: that copy is ours, never newer (lib/sync.ts). */
+  pushedUpdatedAt?: number;
 }
 
 /** A reusable preset for new briefs: its body seeds the brief's writing
@@ -58,6 +60,8 @@ export interface BriefTemplate {
   // sync metadata, local-only
   syncedAt?: number | null;
   dirty?: boolean;
+  /** Server `updated` (ms) of a push answered while this row was edited again: that copy is ours, never newer (lib/sync.ts). */
+  pushedUpdatedAt?: number;
 }
 
 export interface BriefStatusMeta {
