@@ -35,7 +35,7 @@ export function HomePage() {
   );
 
   return (
-    <div className="mx-auto max-w-[1100px] px-10 pt-10 pb-16">
+    <div className="mx-auto w-full max-w-[1100px] px-4 pt-6 pb-16 md:px-10 md:pt-10">
       {/* VERBOSE MODULE (optional, personal) */}
       <Suspense fallback={null}>
         <VerboseActivity />

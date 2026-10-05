@@ -85,7 +85,7 @@ export function AttributePanel({ post }: Props) {
   const status: PostStatus = post.status ?? "draft";
 
   return (
-    <aside className="flex h-full w-[300px] flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm">
+    <aside className="flex h-full w-[300px] max-w-full flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm">
       <div className="flex items-center gap-1">
         <ButtonUtility
           size="sm"

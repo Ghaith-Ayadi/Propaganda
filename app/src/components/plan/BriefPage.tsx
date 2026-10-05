@@ -177,7 +177,7 @@ function BriefView({ brief }: { brief: Brief }) {
           <StatusBadge status={brief.status} />
         </div>
 
-        <div className="mx-auto w-full max-w-[760px] px-10 pt-12 pb-24">
+        <div className="mx-auto w-full max-w-[760px] px-5 pt-8 pb-24 md:px-10 md:pt-12">
           <input
             value={brief.title}
             onChange={(e) => persist({ title: e.target.value })}
@@ -193,7 +193,7 @@ function BriefView({ brief }: { brief: Brief }) {
         </div>
       </main>
 
-      <aside className="flex h-full w-[320px] shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm">
+      <aside className="flex h-full w-[320px] shrink-0 max-md:hidden flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm">
         <FieldStack label="Status">
           <Select
             size="sm"

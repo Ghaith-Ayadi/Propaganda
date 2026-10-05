@@ -29,6 +29,12 @@ interface Props {
 }
 
 const LAST_COLLECTION_KEY = "verbatim:lastCollection";
+const OPEN_EVENT = "propaganda:open-palette";
+
+/** Open the palette without a keyboard (the phone layout's buttons). */
+export function openCommandPalette() {
+  window.dispatchEvent(new Event(OPEN_EVENT));
+}
 
 export function CommandPalette({ currentPostId }: Props) {
   const [open, setOpen] = useState(false);
@@ -76,6 +82,12 @@ export function CommandPalette({ currentPostId }: Props) {
     (cb) => subscribeSearch(cb),
     () => "v",
   );
+
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_EVENT, onOpen);
+  }, []);
 
   useHotkeys(
     "mod+k",
@@ -475,7 +487,7 @@ function Footer({ inPage = false }: { inPage?: boolean }) {
     );
   }
   return (
-    <div className="flex items-center justify-between gap-4 border-t border-secondary bg-primary px-4 py-2.5 text-xs text-tertiary">
+    <div className="flex items-center justify-between gap-4 border-t max-md:hidden border-secondary bg-primary px-4 py-2.5 text-xs text-tertiary">
       <div className="flex items-center gap-3">
         <Kbd>
           <ArrowUp className="size-3" />

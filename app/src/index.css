@@ -111,3 +111,33 @@ a {
 .bn-editor .ProseMirror p.is-empty::before {
   color: var(--color-text-quaternary);
 }
+
+/* Phones (below md). The editor's shell lives in EditorApp + lib/mobile.ts. */
+@media (max-width: 767px) {
+  /* Posts table: keep Title, Status and the row menu; ID, length, hits and
+     dates don't fit. Column order is PostTable's. */
+  .post-table :is(th, td):is(:nth-child(1), :nth-child(4), :nth-child(5), :nth-child(6), :nth-child(7)) {
+    display: none;
+  }
+  .post-table :is(th, td)[colspan] {
+    display: table-cell;
+  }
+  .post-table :is(th, td) {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  /* The formatting toolbar scrolls sideways instead of running off-screen. */
+  .bn-formatting-toolbar {
+    max-width: calc(100vw - 16px);
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+}
+
+/* Touch: BlockNote's drag handle and "+" sit in the left gutter on hover, which
+   a phone doesn't have; they'd cover the text. "/" still opens the block menu. */
+@media (pointer: coarse) {
+  .bn-side-menu {
+    display: none !important;
+  }
+}

@@ -83,8 +83,8 @@ export function PostTable({ posts, onAddPost }: Props) {
         onQueryChange={setQuery}
         counts={counts}
       />
-      <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
-        <thead className="sticky top-[57px] z-20">
+      <table className="post-table w-full table-fixed border-separate border-spacing-0 text-sm">
+        <thead className="z-20 md:sticky md:top-[57px]">
           <tr>
             <Th className="w-16">ID</Th>
             <Th>Title</Th>
@@ -120,7 +120,7 @@ export function PostTable({ posts, onAddPost }: Props) {
                 onAddPost();
               }
             }}
-            className="group sticky top-[93px] z-10 cursor-pointer text-tertiary outline-none transition hover:text-primary"
+            className="group z-10 cursor-pointer md:sticky md:top-[93px] text-tertiary outline-none transition hover:text-primary"
           >
             <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary">
               <Plus className="size-4" />
@@ -172,7 +172,7 @@ export function PostTable({ posts, onAddPost }: Props) {
                 className="text-right"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="inline-flex opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                <div className="inline-flex opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100">
                   <PostRowActions post={p} onDelete={() => setConfirmDelete(p)} />
                 </div>
               </Td>
@@ -326,7 +326,7 @@ function Toolbar({
   counts: { all: number; draft: number; done: number; published: number };
 }) {
   return (
-    <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-secondary bg-primary px-4 py-3">
+    <div className="z-30 flex flex-wrap items-center justify-between gap-3 rounded-t-xl md:sticky md:top-0 border-b border-secondary bg-primary px-4 py-3">
       <div className="flex items-center gap-1 rounded-lg border border-secondary bg-secondary p-0.5">
         <Chip active={filter === "all"} onClick={() => onFilterChange("all")}>
           All <Count n={counts.all} />
@@ -348,7 +348,7 @@ function Toolbar({
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search"
-          className="w-36 bg-transparent text-primary outline-none placeholder:text-quaternary"
+          className="w-full min-w-0 bg-transparent text-primary md:w-36 outline-none placeholder:text-quaternary"
         />
       </label>
     </div>
