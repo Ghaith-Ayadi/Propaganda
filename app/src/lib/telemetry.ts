@@ -13,6 +13,7 @@
 import posthog, { type CaptureResult } from "posthog-js";
 import { currentScope, onScopeReset } from "@/lib/scope";
 import { COMMIT_SHA, DEPLOY_ENV } from "@/lib/version";
+import { causeDetails, codeOf, describe } from "@/lib/errors";
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
 
@@ -111,16 +112,17 @@ export function track(event: string, properties?: Record<string, unknown>): void
  * this app is offline-first, so offline failures are expected, not bugs.
  */
 export function reportError(where: string, err: unknown, extra?: Record<string, unknown>): void {
-  console.error(`${where}:`, err);
+  // One identifiable line first (lib/errors.ts: the app's code, then the
+  // cause's HTTP status, PostgREST/Postgres code and message), then the object.
+  console.error(`${where}: ${describe(err)}`, err);
   if (!enabled || navigator.onLine === false) return;
-  // Backend errors (lib/supabase.ts BackendError) carry the HTTP status (0: no
-  // answer at all) and PostgREST's code (a Postgres SQLSTATE such as 23505, or PGRSTxxx).
-  const request = err as { status?: number; code?: string; url?: string } | null;
   posthog.captureException(err, {
     where,
-    http_status: request?.status,
-    error_code: request?.code || undefined,
-    request_url: request?.url,
+    app_error_code: codeOf(err),
+    // Backend errors (lib/supabase.ts BackendError) carry the HTTP status (0: no
+    // answer at all) and PostgREST's code (a Postgres SQLSTATE such as 23505, or PGRSTxxx).
+    ...causeDetails(err),
+    request_url: (err as { url?: string } | null)?.url,
     ...extra,
   });
 }

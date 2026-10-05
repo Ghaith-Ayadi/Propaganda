@@ -26,6 +26,7 @@
 
 import type { User } from "@supabase/supabase-js";
 import { OAUTH_CALLBACK_PATH, OAUTH_MESSAGE, type OAuthMessage } from "@/lib/oauthCallback";
+import { AppError, withCode } from "@/lib/errors";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, createClient, must, newId, type Client } from "@/lib/supabase";
 
 const ACCOUNTS_KEY = "propaganda:accounts";
@@ -205,7 +206,7 @@ function avatarOf(user: User): string {
 async function register(temp: Client, tempKey: string): Promise<Account> {
   const { data } = await temp.auth.getSession();
   const user = data.session?.user;
-  if (!user) throw new Error("Sign-in didn't complete. Try again.");
+  if (!user) throw new AppError("AUTH-NO-SESSION", "Sign-in didn't complete. Try again.");
   const pbId = typeof user.app_metadata?.pb_id === "string" ? user.app_metadata.pb_id : "";
   const fields = { authId: user.id, email: user.email ?? "", name: nameOf(user), avatar: avatarOf(user) };
 
@@ -263,7 +264,7 @@ function waitForCode(popup: Window): Promise<string> {
       if (!msg || msg.type !== OAUTH_MESSAGE) return;
       finish();
       if (msg.code) resolve(msg.code);
-      else reject(new Error(msg.error || "Google sign-in failed. Try again."));
+      else reject(new AppError("AUTH-GOOGLE", "Google sign-in failed. Try again.", new Error(msg.error || "no code in the callback")));
     };
     const onMessage = (e: MessageEvent) => {
       if (e.origin === window.location.origin) take(e.data as OAuthMessage);
@@ -289,7 +290,7 @@ function waitForCode(popup: Window): Promise<string> {
 export async function addAccountWithGoogle(): Promise<Account> {
   const popup = openGooglePopup();
   if (!popup) {
-    throw new Error("Your browser blocked the Google window. Allow pop-ups for this site and try again.");
+    throw new AppError("AUTH-POPUP-BLOCKED", "Your browser blocked the Google window. Allow pop-ups for this site and try again.");
   }
   const { client, key } = freshClient();
   try {
@@ -297,12 +298,12 @@ export async function addAccountWithGoogle(): Promise<Account> {
       provider: "google",
       options: { redirectTo: `${window.location.origin}${OAUTH_CALLBACK_PATH}`, skipBrowserRedirect: true },
     });
-    if (error || !data.url) throw error ?? new Error("Google sign-in isn't available right now.");
+    if (error || !data.url) throw new AppError("AUTH-OAUTH-START", "Google sign-in isn't available right now.", error);
     if (popup.closed) throw new SignInCancelled();
     popup.location.href = data.url;
     const code = await waitForCode(popup);
     const exchanged = await client.auth.exchangeCodeForSession(code, data.flowId ? { flowId: data.flowId } : undefined);
-    if (exchanged.error) throw exchanged.error;
+    if (exchanged.error) throw new AppError("AUTH-EXCHANGE", "Sign-in with Google didn't finish. Try again.", exchanged.error);
   } catch (err) {
     discard(client, key);
     throw err;
@@ -340,14 +341,14 @@ export async function requestEmailCode(email: string): Promise<PendingCode> {
   const { error } = await client.auth.signInWithOtp({ email: normalized, options: { shouldCreateUser: true } });
   if (error) {
     discard(client, key);
-    throw new Error(error.message);
+    throw new AppError("AUTH-CODE-SEND", "The sign-in email couldn't be sent. Try again.", error);
   }
   return { email: normalized, client, key };
 }
 
 export async function verifyEmailCode(pending: PendingCode, code: string): Promise<Account> {
   const { error } = await pending.client.auth.verifyOtp({ email: pending.email, token: code.trim(), type: "email" });
-  if (error) throw new Error(error.message);
+  if (error) throw new AppError("AUTH-CODE-VERIFY", "That code didn't work. Check it, or ask for a new one.", error);
   return register(pending.client, pending.key);
 }
 
@@ -445,12 +446,15 @@ function siteRefOf(s: SiteRow, role: SiteRole): SiteRef {
 
 /** The account's sites from the server (and cache them). Throws when offline. */
 export async function fetchSites(account: Account): Promise<SiteRef[]> {
-  const rows = (await must(
-    clientFor(account)
-      .from("site_members")
-      .select("role, created, site:sites(id, name, slug, domain, analytics_tenant)")
-      .eq("user_id", account.authId)
-      .order("created"),
+  const rows = (await withCode(
+    "SITES-FETCH",
+    must(
+      clientFor(account)
+        .from("site_members")
+        .select("role, created, site:sites(id, name, slug, domain, analytics_tenant)")
+        .eq("user_id", account.authId)
+        .order("created"),
+    ),
   )) as unknown as Array<{ role: SiteRole; site: SiteRow | null }>;
   const sites = rows.filter((r) => r.site).map((r) => siteRefOf(r.site!, r.role));
   cacheSites(account.userId, sites);
@@ -467,7 +471,9 @@ export function patchCachedSite(userId: string, site: Partial<SiteRef> & { id: s
 
 /** Create a site owned by this account. */
 export async function createSite(account: Account, name: string, slug: string): Promise<SiteRef> {
-  const res = (await must(clientFor(account).rpc("create_site", { site_name: name, site_slug: slug }))) as { site: SiteRow };
+  const res = (await withCode("SITE-CREATE", must(clientFor(account).rpc("create_site", { site_name: name, site_slug: slug })))) as {
+    site: SiteRow;
+  };
   const site = siteRefOf(res.site, "owner");
   cacheSites(account.userId, [...cachedSites(account.userId).filter((s) => s.id !== site.id), site]);
   return site;
@@ -479,8 +485,9 @@ export async function updateSite(
   siteId: string,
   patch: { name?: string; slug?: string },
 ): Promise<SiteRef> {
-  const res = (await must(
-    clientFor(account).rpc("update_site", { site_id: siteId, site_name: patch.name ?? null, site_slug: patch.slug ?? null }),
+  const res = (await withCode(
+    "SITE-UPDATE",
+    must(clientFor(account).rpc("update_site", { site_id: siteId, site_name: patch.name ?? null, site_slug: patch.slug ?? null })),
   )) as { site: SiteRow };
   patchCachedSite(account.userId, { id: siteId, name: res.site.name, slug: res.site.slug });
   return cachedSites(account.userId).find((s) => s.id === siteId)!;
@@ -491,7 +498,7 @@ export async function updateSite(
  * it from the cache. Its local database stays, like every local database.
  */
 export async function deleteSite(account: Account, siteId: string): Promise<void> {
-  await must(clientFor(account).rpc("delete_site", { site_id: siteId }));
+  await withCode("SITE-DELETE", must(clientFor(account).rpc("delete_site", { site_id: siteId })));
   cacheSites(
     account.userId,
     cachedSites(account.userId).filter((s) => s.id !== siteId),

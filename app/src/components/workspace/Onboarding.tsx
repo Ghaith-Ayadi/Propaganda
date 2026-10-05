@@ -6,6 +6,8 @@ import { clientFor, createSite, isSlugAvailable, type Account, type SiteRef } fr
 import { must } from "@/lib/supabase";
 import { siteHost } from "@/lib/siteUrl";
 import { cx } from "@/utils/cx";
+import { coded, userMessage } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
 
 /** A collection row while onboarding — not yet a `collections` record. */
 interface DraftCollection {
@@ -100,7 +102,8 @@ export function Onboarding({
     try {
       site = await createSite(account, name.trim(), slug);
     } catch (err) {
-      setError((err as Error).message);
+      reportError("Site not created", err);
+      setError(userMessage(err));
       setFinishing(false);
       return;
     }
@@ -134,7 +137,7 @@ export function Onboarding({
         ),
       );
     } catch (err) {
-      console.error("Onboarding: seeding settings/collections failed:", err);
+      reportError("Onboarding: seeding settings/collections failed", coded("SITE-SEED", err));
     }
 
     setFinishing(false);
