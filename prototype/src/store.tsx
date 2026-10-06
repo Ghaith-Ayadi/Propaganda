@@ -5,8 +5,10 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useState } f
 import * as D from "./data";
 import type { Flag, FlagStatus, Pitch, PitchStatus } from "./data";
 
-export type Route = "onboarding" | "home" | "inbox" | "settings" | "blog" | "social" | "email" | "sales" | "kb" | `post-${string}`;
-const ROUTES = ["onboarding", "home", "inbox", "settings", "blog", "social", "email", "sales", "kb"];
+export type Route =
+  | "onboarding" | "home" | "inbox" | "pipeline" | "blog" | "social" | "email" | "sales" | "kb" | "goals" | "site" | "chat" | "connections" | "settings"
+  | `post-${string}` | `review-${string}`;
+const ROUTES = ["onboarding", "home", "inbox", "pipeline", "blog", "social", "email", "sales", "kb", "goals", "site", "chat", "connections", "settings"];
 
 interface State {
   objects: D.ContentObject[];
@@ -16,7 +18,6 @@ interface State {
   contested: typeof D.kb.contested;
   contradictions: typeof D.kb.contradictions;
   kbEntries: number;
-  reviews: typeof D.reviews;
   topics: D.Topic[];
   internalPublished: number;
   toasts: Array<{ id: number; text: string }>;
@@ -32,8 +33,9 @@ type Action =
   | { type: "kbAdmit" }
   | { type: "kbContest"; claim: string; why: string }
   | { type: "kbResolve"; id: string }
-  | { type: "pitch"; id: string; status: PitchStatus }
-  | { type: "publishReview"; id: string }
+  | { type: "pitch"; id: string; status: PitchStatus; draft?: D.ContentObject }
+  | { type: "approveReview"; id: string }
+  | { type: "sendBack"; id: string }
   | { type: "toast"; text: string }
   | { type: "untoast"; id: number }
   | { type: "reset" };
@@ -46,7 +48,6 @@ const initial = (): State => ({
   contested: [...D.kb.contested],
   contradictions: [...D.kb.contradictions],
   kbEntries: D.kb.entries,
-  reviews: [...D.reviews],
   topics: D.topics.map((t) => ({ ...t })),
   internalPublished: D.coverage.internal.published,
   toasts: [],
@@ -94,17 +95,23 @@ function reducer(s: State, a: Action): State {
         contradictions: s.contradictions.filter((k) => k.id !== a.id),
       };
     case "pitch":
-      return { ...s, pitches: s.pitches.map((p) => (p.id === a.id ? { ...p, status: a.status } : p)) };
-    case "publishReview": {
-      const r = s.reviews.find((x) => x.id === a.id);
       return {
         ...s,
-        reviews: s.reviews.filter((x) => x.id !== a.id),
-        objects: s.objects.map((o) => (r && o.id === r.objectId ? { ...o, status: "published", date: D.TODAY } : o)),
+        pitches: s.pitches.map((p) => (p.id === a.id ? { ...p, status: a.status } : p)),
+        objects: a.draft ? [a.draft, ...s.objects] : s.objects,
+        bodies: a.draft ? { ...s.bodies, [a.draft.id]: [""] } : s.bodies,
+      };
+    case "approveReview": {
+      const o = s.objects.find((x) => x.id === a.id);
+      return {
+        ...s,
+        objects: s.objects.map((x) => (x.id === a.id ? { ...x, status: "scheduled", step: undefined } : x)),
         internalPublished: s.internalPublished + 1,
-        topics: s.topics.map((t) => (r && t.id === r.topic ? { ...t, published: t.published + 1 } : t)),
+        topics: s.topics.map((t) => (o && t.id === o.topic ? { ...t, published: t.published + 1 } : t)),
       };
     }
+    case "sendBack":
+      return { ...s, objects: s.objects.map((x) => (x.id === a.id ? { ...x, step: "writing" } : x)) };
     case "toast":
       return { ...s, toasts: [...s.toasts, { id: ++toastSeq, text: a.text }] };
     case "untoast":
@@ -151,7 +158,7 @@ function derive(s: State) {
     flags: s.flags.filter((f) => NEEDS_ACTION.includes(f.status)).length,
     pitches: s.pitches.filter((p) => p.status === "new").length,
     knowledge: kbIssues,
-    reviews: s.reviews.length,
+    reviews: s.objects.filter((o) => o.step === "review" && o.reviewer === D.me.name).length,
   };
   const inboxTotal = inbox.flags + inbox.pitches + inbox.knowledge + inbox.reviews;
 
@@ -182,7 +189,7 @@ const Ctx = createContext<null | {
 
 function readHash(): Route {
   const h = location.hash.replace("#", "");
-  return (ROUTES.includes(h) || h.startsWith("post-") ? h : "onboarding") as Route;
+  return (ROUTES.includes(h) || h.startsWith("post-") || h.startsWith("review-") ? h : "onboarding") as Route;
 }
 
 /** The editor's paragraphs: written ones, or a stub built from the title and any flagged passages. */

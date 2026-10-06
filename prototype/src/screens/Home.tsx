@@ -8,6 +8,7 @@ import * as D from "../data";
 
 export function Home() {
   const { s, d, go } = useStore();
+  const planned = s.objects.filter((o) => o.type === "blog" && (o.status !== "draft" || o.step === "review") && o.date >= "2026-10-05" && o.date <= "2026-10-11").length;
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-4 py-8 sm:px-6">
@@ -23,6 +24,22 @@ export function Home() {
           <ArrowRight className="size-4" />
         </Button>
       </header>
+
+      {/* The pipeline, in one line */}
+      <Card className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-1">
+          <Eyebrow>This week</Eyebrow>
+          <p className="mt-1 text-sm text-primary">
+            <span className="tnum">{d.inbox.pitches}</span> pitches and <span className="tnum">{d.inbox.reviews}</span>{" "}
+            {d.inbox.reviews === 1 ? "review wait" : "reviews wait"} on you.{" "}
+            <span className="tnum">{planned}</span> posts planned against a goal of <span className="tnum">{D.cadence}</span>.
+          </p>
+        </div>
+        <Button onClick={() => go("pipeline")}>
+          Open the pipeline
+          <ArrowRight className="size-4" />
+        </Button>
+      </Card>
 
       {/* Consistency */}
       <Card className="flex flex-col gap-5">

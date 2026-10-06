@@ -35,15 +35,11 @@ import { topicName, useStore } from "../store";
 import * as D from "../data";
 import type { ObjectType } from "../data";
 
-type Section = "site" | "content" | "people" | "sources" | "knowledge" | "goals" | "agents" | "voice" | "notifications" | "plan";
+type Section = "people" | "knowledge" | "agents" | "voice" | "notifications" | "plan";
 
 const SECTIONS: Array<{ id: Section; label: string; icon: React.ReactNode; group: string }> = [
-  { id: "site", label: "Site", icon: <Building02 className="size-4" />, group: "Workspace" },
   { id: "people", label: "People and owners", icon: <Users01 className="size-4" />, group: "Workspace" },
-  { id: "content", label: "Content we watch", icon: <DotsGrid className="size-4" />, group: "Inputs" },
-  { id: "sources", label: "Documents and calls", icon: <Database01 className="size-4" />, group: "Inputs" },
   { id: "knowledge", label: "Knowledge base", icon: <Scales02 className="size-4" />, group: "Rules" },
-  { id: "goals", label: "Goals", icon: <Target04 className="size-4" />, group: "Rules" },
   { id: "agents", label: "Agents", icon: <CpuChip01 className="size-4" />, group: "Rules" },
   { id: "voice", label: "Voice", icon: <PenTool02 className="size-4" />, group: "Rules" },
   { id: "notifications", label: "Notifications", icon: <Bell01 className="size-4" />, group: "You" },
@@ -51,14 +47,14 @@ const SECTIONS: Array<{ id: Section; label: string; icon: React.ReactNode; group
 ];
 
 export function Settings() {
-  const [section, setSection] = useState<Section>("site");
+  const [section, setSection] = useState<Section>("people");
   const groups = [...new Set(SECTIONS.map((x) => x.group))];
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-4 py-8 sm:px-6">
       <header>
         <h1 className="font-title text-2xl text-primary">Settings</h1>
-        <p className="mt-0.5 text-sm text-tertiary">Everyone invited to {D.site.name} can change all of this. Roles come later.</p>
+        <p className="mt-0.5 text-sm text-tertiary">People, rules and billing. Goals, the site and connections have their own pages. Everyone invited to {D.site.name} can change all of this; roles come later.</p>
       </header>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,210px)_minmax(0,1fr)]">
@@ -86,12 +82,8 @@ export function Settings() {
         </nav>
 
         <div className="flex min-w-0 flex-col gap-4">
-          {section === "site" && <SiteSection />}
           {section === "people" && <PeopleSection />}
-          {section === "content" && <ContentSection />}
-          {section === "sources" && <SourcesSection />}
           {section === "knowledge" && <KnowledgeSection />}
-          {section === "goals" && <GoalsSection />}
           {section === "agents" && <AgentsSection />}
           {section === "voice" && <VoiceSection />}
           {section === "notifications" && <NotificationsSection />}
@@ -104,7 +96,7 @@ export function Settings() {
 
 // ── Sections ──────────────────────────────────────────────────────────────
 
-function SiteSection() {
+export function SiteSection() {
   const { toast } = useStore();
   return (
     <>
@@ -205,7 +197,7 @@ const WATCHED: Array<{ type: ObjectType; account: string; status: "connected" | 
   { type: "x", account: "@ledgerline", status: "later", count: 0, mode: "Read only" },
 ];
 
-function ContentSection() {
+export function ContentSection() {
   const { toast } = useStore();
   const [publish, setPublish] = useState<"draft" | "live">("draft");
   return (
@@ -252,7 +244,7 @@ function ContentSection() {
   );
 }
 
-function SourcesSection() {
+export function SourcesSection() {
   const { toast } = useStore();
   const [emailDrop, setEmailDrop] = useState(true);
   const [which, setWhich] = useState<"all" | "tagged">("all");
@@ -381,7 +373,7 @@ function KnowledgeSection() {
   );
 }
 
-function GoalsSection() {
+export function GoalsSection() {
   const { s } = useStore();
   const [perfMode, setPerfMode] = useState<"growth" | "numbers">(D.performance.mode);
   const [internal, setInternal] = useState(D.coverage.internal.goal);
@@ -500,11 +492,11 @@ function AgentsSection() {
       </Card>
 
       <Card className="flex flex-col gap-4">
-        <CardHead title="Pitches" hint="An idea needs a reason to become a pitch. Everything else is dropped or backlogged." />
+        <CardHead title="Pitches" hint="An idea needs a reason to become a pitch. The rest are set aside with that reason, and you never see them." />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="An objection becomes a pitch after" hint="Times heard in calls this quarter."><input id="set-obj" className={cx(inputClass, "tnum")} defaultValue="3 calls" /></Field>
           <Field label="A keyword becomes a pitch at" hint="Monthly searches."><input id="set-vol" className={cx(inputClass, "tnum")} defaultValue="500 or more" /></Field>
-          <Field label="Most pitches a week" hint="Beyond this they go to the backlog, ranked by your goals."><input id="set-max" className={cx(inputClass, "tnum")} defaultValue="5" /></Field>
+          <Field label="Most pitches a week" hint="Beyond this they wait, ranked by fit with your goals."><input id="set-max" className={cx(inputClass, "tnum")} defaultValue="5" /></Field>
           <Field label="Outside the focus topics"><select id="set-outside" className={inputClass}><option>Backlog them</option><option>Pitch them anyway</option><option>Drop them</option></select></Field>
         </div>
       </Card>

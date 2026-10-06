@@ -105,7 +105,9 @@ export const threads = [
   { id: "onboarding", name: "Onboarding sequence", desc: "Five emails over a customer's first two weeks", audience: "New customers" },
 ];
 
-export type PostStatus = "draft" | "published";
+export type PostStatus = "draft" | "scheduled" | "published";
+/** Where a draft is in the pipeline. Scheduled and published pieces have left it. */
+export type Step = "writing" | "review";
 
 export interface ContentObject {
   id: string;
@@ -119,6 +121,11 @@ export interface ContentObject {
   status: PostStatus;
   /** The pitch this was written from, if any. */
   briefId?: string;
+  step?: Step;
+  writer?: string;
+  reviewer?: string;
+  /** Notes the reviewer left on the pitch. */
+  notes?: string[];
 }
 
 const O = (id: string, type: ObjectType, group: string, title: string, topic: string, date: string, url: string, status: PostStatus = "published"): ContentObject => ({ id, type, group, title, topic, date, url, status });
@@ -140,8 +147,8 @@ export const objects: ContentObject[] = [
   O("p14", "blog", "opinion", "The hidden cost of manual AP", "ap", "2026-04-03", "ledgerline.io/blog/manual-ap"),
   O("p15", "blog", "guides", "Data residency in the EU", "controls", "2026-03-21", "ledgerline.io/blog/eu-residency"),
   O("p16", "blog", "stories", "From NetSuite to Ledgerline in two weeks", "erp", "2026-03-07", "ledgerline.io/blog/netsuite-migration"),
-  O("p17", "blog", "guides", "Approval chains, revisited for Scale", "controls", "2026-10-08", "", "draft"),
-  O("p18", "blog", "guides", "The vendor onboarding checklist", "ap", "2026-10-10", "", "draft"),
+  { ...O("p17", "blog", "guides", "Approval chains, revisited for Scale", "controls", "2026-10-08", "", "draft"), step: "review", writer: "Agent", reviewer: "Ghaith Ayadi", notes: ["Provide examples here, on “The three chains auditors like”"] },
+  { ...O("p18", "blog", "guides", "The vendor onboarding checklist", "ap", "2026-10-15", "", "draft"), step: "writing", writer: "Maya Okafor", reviewer: "Ghaith Ayadi", notes: ["Don't focus on tax forms, our readers have a template for those.", "Mention the duplicate-vendor check."] },
   O("p19", "linkedin", "li-ga", "What I learned sitting in on 40 month-end closes", "close", "2026-09-30", "linkedin.com/posts/ghaith_40-closes"),
   O("p20", "linkedin", "li-co", "Brightwater: from 11 days to 5", "close", "2026-07-11", "linkedin.com/posts/ledgerline_brightwater"),
   O("p21", "x", "x-co", "Your close slips in the last 48 hours. Here's why.", "close", "2026-10-06", "", "draft"),
@@ -149,7 +156,37 @@ export const objects: ContentObject[] = [
   O("p23", "newsletter", "close", "The Close, issue 13: Q3 wrap", "close", "2026-08-05", "ledgerline.io/newsletter/13"),
   O("p24", "newsletter", "onboarding", "Day 1: connect your ERP", "erp", "2026-05-02", "ledgerline.io/email/onboarding-1"),
   O("p25", "newsletter", "onboarding", "Day 3: your first approval chain", "controls", "2026-05-02", "ledgerline.io/email/onboarding-2"),
+  O("p26", "blog", "guides", "What auditors ask an AP team for in October", "controls", "2026-10-05", "ledgerline.io/blog/october-audit"),
+  { ...O("p27", "blog", "stories", "Haldane cut their close from nine days to six", "close", "2026-10-07", "", "scheduled"), writer: "Lina Haddad", reviewer: "Ghaith Ayadi" },
+  { ...O("p28", "blog", "product", "Stripe payouts now reconcile on arrival", "erp", "2026-10-09", "", "scheduled"), writer: "Tomás Reyes", reviewer: "Maya Okafor" },
+  { ...O("p29", "blog", "opinion", "Stop measuring your close in days", "close", "2026-10-17", "", "draft"), step: "writing", writer: "Agent", reviewer: "Maya Okafor", notes: ["Take a different angle: start from what the CFO actually asks."] },
 ];
+
+// ── Pipeline ─────────────────────────────────────────────────────────────
+
+/** Cadence goal: blog posts a week, published or scheduled. */
+export const cadence = 2;
+/** Mix goal: target share of published blog posts per collection. */
+export const mix: Record<string, number> = { guides: 0.4, stories: 0.2, product: 0.2, opinion: 0.2 };
+
+/** What the source check found in a draft sent for review. */
+export interface Check {
+  text: string;
+  ok: boolean;
+  note: string;
+  source: string;
+}
+
+export const reviewNotes: Record<string, { checks: Check[]; remember: string[] }> = {
+  p17: {
+    checks: [
+      { text: "up to 25 approvers", ok: true, note: "Matches the Scale plan sheet.", source: "Pricing sheet 2026, p. 1" },
+      { text: "cut audit findings on AP by 40%", ok: false, note: "The Haldane call says “about a third”. 40% isn't in any source.", source: "Haldane call, Oct 2, 14:20" },
+      { text: "Most auditors now expect a four-eyes rule above €10,000", ok: false, note: "Link one, or soften the sentence.", source: "" },
+    ],
+    remember: ["Approvers can be added mid-chain without restarting it."],
+  },
+};
 
 /** Paragraphs for the editor. Pieces without one get a stub built from their title. */
 export const bodies: Record<string, string[]> = {
@@ -189,6 +226,13 @@ export const bodies: Record<string, string[]> = {
   p17: [
     "Approval chains got simpler on Scale: up to 25 approvers, any order, any threshold.",
     "This post walks through the three chains auditors like best, and the one they flag every time.",
+    "The first is the plain two-step: whoever raised the bill, then a controller. Haldane moved every vendor under €5,000 onto it and cut audit findings on AP by 40%.",
+    "The second adds a budget owner above a threshold. Approvers can be added mid-chain without restarting it, so a late sign-off doesn't send the bill back to the start.",
+    "Most auditors now expect a four-eyes rule above €10,000. The chain they flag every time is the one where the requester can also approve.",
+  ],
+  p18: [
+    "Every bad payment we've seen started with a vendor that was set up in a hurry.",
+    "",
   ],
 };
 /** The Content screen still says "posts"; objects are the same list. */
@@ -589,7 +633,7 @@ export const flags: Flag[] = [
 
 // ── Pitches: an idea with a reason, written as a full brief ──────────────
 
-export type PitchStatus = "new" | "accepted" | "backlog" | "ditched";
+export type PitchStatus = "new" | "accepted" | "rejected";
 
 export interface Pitch {
   id: string;
@@ -609,6 +653,10 @@ export interface Pitch {
   search?: Array<{ keyword: string; volume: number; difficulty: number; rank: string }>;
   /** What we already have on this, so it isn't a duplicate. */
   related: Array<{ objectId: string; overlap: string }>;
+  /** How well it fits the goals, from the reasons below. */
+  fit: "Strong" | "Fair" | "Weak";
+  reasons: Array<[goal: string, why: string]>;
+  reviewer: string;
   suggestedOwner: string;
   suggestedDate: string;
   status: PitchStatus;
@@ -643,6 +691,14 @@ export const pitches: Pitch[] = [
       { objectId: "p1", overlap: "Same topic, but argues process over tooling in general; doesn't name the last-48-hours problem." },
       { objectId: "p13", overlap: "Explains accruals, doesn't say why they cause slippage." },
     ],
+    fit: "Strong",
+    reasons: [
+      ["Demand", "The same objection came up in 3 of the last 6 calls."],
+      ["Coverage", "Month-end close is our top topic, and it's under its range."],
+      ["Cadence", "Fills the open slot on Tue Oct 20."],
+      ["Gap", "Nothing we've published answers it."],
+    ],
+    reviewer: "Ghaith Ayadi",
     suggestedOwner: "Maya Okafor",
     suggestedDate: "2026-10-20",
     status: "new",
@@ -671,6 +727,13 @@ export const pitches: Pitch[] = [
     ],
     search: [{ keyword: "soc 2 type 1 vs type 2", volume: 2400, difficulty: 34, rank: "not ranking" }],
     related: [{ objectId: "p3", overlap: "Claims Type II today (flagged). This piece would replace it." }],
+    fit: "Strong",
+    reasons: [
+      ["Consistency", "The confusion is behind two open flags. This piece would replace the flagged one."],
+      ["Timeliness", "Audit season: worth less after November."],
+      ["Demand", "2,400 searches a month, and we don't rank."],
+    ],
+    reviewer: "Ghaith Ayadi",
     suggestedOwner: "Lina Haddad",
     suggestedDate: "2026-10-14",
     status: "new",
@@ -699,6 +762,13 @@ export const pitches: Pitch[] = [
       { keyword: "automate month end accruals", volume: 210, difficulty: 9, rank: "not ranking" },
     ],
     related: [{ objectId: "p13", overlap: "Defines accruals; doesn't cover automating them." }],
+    fit: "Fair",
+    reasons: [
+      ["Demand", "880 searches a month at low difficulty."],
+      ["Coverage", "Month-end close is our top topic and it's under its range."],
+      ["Mix", "Guides are already above their 40% target."],
+    ],
+    reviewer: "Maya Okafor",
     suggestedOwner: "Tomás Reyes",
     suggestedDate: "2026-10-27",
     status: "new",
@@ -723,17 +793,17 @@ export const pitches: Pitch[] = [
     evidence: [],
     search: [{ keyword: "netsuite ap automation", volume: 1300, difficulty: 31, rank: "#48" }],
     related: [{ objectId: "p16", overlap: "About migrating off NetSuite, the opposite case." }],
+    fit: "Fair",
+    reasons: [
+      ["Demand", "1,300 searches a month, we rank #48."],
+      ["Mix", "Product is at 14% of a 20% target."],
+      ["Cadence", "No open slot before Nov 3."],
+    ],
+    reviewer: "Maya Okafor",
     suggestedOwner: "Tomás Reyes",
     suggestedDate: "2026-11-03",
     status: "new",
   },
-];
-
-// ── Drafts waiting on a person ───────────────────────────────────────────
-
-export const reviews = [
-  { id: "r1", objectId: "p17", title: "Approval chains, revisited for Scale", topic: "controls", writer: "Agent", words: 1240, suggestions: 6, due: "2026-10-08" },
-  { id: "r2", objectId: "p18", title: "The vendor onboarding checklist", topic: "ap", writer: "Maya Okafor", words: 980, suggestions: 2, due: "2026-10-10" },
 ];
 
 // ── Activity (what the agents did) ───────────────────────────────────────

@@ -36,6 +36,7 @@ import {
 } from "../bits";
 import { NEEDS_ACTION, claimOf, objectOf, sourceOf, topicName, useStore } from "../store";
 import * as D from "../data";
+import { PitchDrawer, short } from "./Pipeline";
 import type { Flag, GuardianVerdict, Pitch } from "../data";
 
 type Lane = "flags" | "pitches" | "knowledge" | "review";
@@ -49,6 +50,7 @@ export function Inbox() {
 
   const openFlags = useMemo(() => s.flags.filter((f) => NEEDS_ACTION.includes(f.status)), [s.flags]);
   const newPitches = s.pitches.filter((p) => p.status === "new");
+  const reviews = s.objects.filter((o) => o.step === "review" && o.reviewer === D.me.name);
   const knowledge = [
     ...s.contested.map((k) => ({ ...k, kind: "contested" as const })),
     ...s.contradictions.map((k) => ({ id: k.id, claim: `${k.a} / ${k.b}`, since: k.since, why: "Two claims in the knowledge base contradict each other.", kind: "contradiction" as const })),
@@ -58,7 +60,7 @@ export function Inbox() {
     { id: "flags", label: "Flags", icon: <AlertTriangle className="size-4" />, count: openFlags.length },
     { id: "pitches", label: "Pitches", icon: <Lightbulb01 className="size-4" />, count: newPitches.length },
     { id: "knowledge", label: "Knowledge", icon: <Scales02 className="size-4" />, count: knowledge.length },
-    { id: "review", label: "Review", icon: <FileCheck02 className="size-4" />, count: s.reviews.length },
+    { id: "review", label: "Review", icon: <FileCheck02 className="size-4" />, count: reviews.length },
   ];
 
   const filtered = openFlags.filter(
@@ -168,8 +170,8 @@ export function Inbox() {
                   <span className="mt-0.5 block text-sm text-tertiary">{p.reason}</span>
                 </span>
                 <span className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  <Pill tone={p.fit === "Strong" ? "good" : p.fit === "Fair" ? "warn" : "bad"}>{p.fit} fit</Pill>
                   <Pill tone="neutral">{topicName(p.topic)}</Pill>
-                  <Pill tone={p.origin === "internal" ? "info" : "neutral"}>{p.origin === "internal" ? `${p.evidence.length} sources` : "Search demand"}</Pill>
                   <ArrowUpRight className="size-4 text-quaternary" />
                 </span>
               </button>
@@ -210,41 +212,32 @@ export function Inbox() {
         ))}
 
       {lane === "review" &&
-        (s.reviews.length === 0 ? (
+        (reviews.length === 0 ? (
           <Card>
-            <Empty title="Nothing waiting on a human" hint="Drafts appear here once the agent has checked them for veracity." />
+            <Empty title="Nothing to review" hint="Drafts land here when their writer sends them to you." />
           </Card>
         ) : (
-          <div className="flex flex-col gap-3">
-            {s.reviews.map((r) => (
-              <Card key={r.id} className="flex flex-wrap items-center gap-4">
-                <TypeIcon type="blog" />
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-title text-base text-primary">{r.title}</h3>
-                  <p className="mt-0.5 text-xs text-tertiary">
-                    {r.writer} · <span className="tnum">{r.words}</span> words · <span className="tnum">{r.suggestions}</span> agent
-                    suggestions to accept or reject · due {r.due}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Pill tone="neutral">{topicName(r.topic)}</Pill>
-                  <Button size="sm" onClick={() => go(`post-${r.objectId}`)}>
-                    Open in editor
-                    <ArrowUpRight className="size-3.5" />
-                  </Button>
-                  <Button size="sm" kind="primary" onClick={() => { dispatch({ type: "publishReview", id: r.id }); toast(`Published to ${D.site.destination}. Coverage is up.`); }}>
-                    Approve and publish
-                  </Button>
-                </div>
-              </Card>
-            ))}
-            <button type="button" onClick={() => go("home")} className="self-start text-xs text-quaternary hover:text-tertiary">
-              See how this moves coverage
-            </button>
-          </div>
+          <Card pad={false} className="divide-y divide-[var(--color-border-secondary)]">
+            {reviews.map((o) => {
+              const wrong = (D.reviewNotes[o.id]?.checks ?? []).filter((c) => !c.ok).length;
+              return (
+                <button key={o.id} type="button" onClick={() => go(`review-${o.id}`)} className="flex w-full flex-wrap items-start gap-x-4 gap-y-2 px-5 py-4 text-left transition hover:bg-secondary">
+                  <TypeIcon type={o.type} className="mt-1 size-4" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-title text-base text-primary">{o.title}</span>
+                    <span className="mt-0.5 block text-sm text-tertiary">
+                      {o.writer === "Agent" ? "The writer agent" : o.writer} asked you to review · due {short(o.date)}
+                      {wrong > 0 && ` · ${wrong} ${wrong === 1 ? "claim doesn't" : "claims don't"} hold up`}
+                    </span>
+                  </span>
+                  <ArrowUpRight className="size-4 shrink-0 text-quaternary" />
+                </button>
+              );
+            })}
+          </Card>
         ))}
 
-      {pitch && <PitchPanel pitch={pitch} onClose={() => setPitchOpen(null)} />}
+      {pitch && <PitchDrawer pitch={pitch} onClose={() => setPitchOpen(null)} />}
     </div>
   );
 }
@@ -579,226 +572,5 @@ function Verdict({
         {verdict === "admit" && <p className="text-xs text-tertiary">The knowledge base holds the distinction now, so the next sweep won't raise it again.</p>}
       </div>
     </div>
-  );
-}
-
-// ── The pitch, as a full brief ─────────────────────────────────────────
-
-function PitchPanel({ pitch: p, onClose }: { pitch: Pitch; onClose: () => void }) {
-  const { s, dispatch, toast, go } = useStore();
-  const topic = s.topics.find((t) => t.id === p.topic);
-  const [owner, setOwner] = useState(p.suggestedOwner);
-  const [date, setDate] = useState(p.suggestedDate);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const decide = (status: "accepted" | "backlog" | "ditched", text: string) => {
-    dispatch({ type: "pitch", id: p.id, status });
-    toast(text);
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-overlay/40 backdrop-blur-[2px]" onClick={onClose}>
-      <aside
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label={p.title}
-        className="fade-up flex h-full w-full max-w-[760px] flex-col border-l border-secondary bg-primary shadow-2xl"
-      >
-        <header className="flex items-start gap-3 border-b border-secondary px-6 py-5">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <Eyebrow>Pitch</Eyebrow>
-              <Pill tone={p.origin === "internal" ? "info" : "neutral"}>{p.origin === "internal" ? "From our knowledge" : "Search demand"}</Pill>
-            </div>
-            <h2 className="mt-2 font-title text-2xl text-primary">{p.title}</h2>
-            <p className="mt-1 text-sm text-secondary">{p.reason}</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1.5 text-quaternary hover:bg-primary_hover hover:text-secondary">
-            <XClose className="size-5" />
-          </button>
-        </header>
-
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="flex flex-col gap-7">
-            {/* The brief's header: the facts a writer needs before starting */}
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
-              <Fact label="Format"><TypeLabel type={p.type} /></Fact>
-              <Fact label="Topic">
-                <span className="text-sm text-primary">{topicName(p.topic)}</span>
-                {topic && (
-                  <span className="tnum block text-xs text-tertiary">
-                    {topic.published} published of {topic.range[0]}–{topic.range[1]}
-                  </span>
-                )}
-              </Fact>
-              <Fact label="Length"><span className="tnum text-sm text-primary">{p.words[0].toLocaleString()}–{p.words[1].toLocaleString()} words</span></Fact>
-              <Fact label="Writer">
-                <select id={`owner-${p.id}`} value={owner} onChange={(e) => setOwner(e.target.value)} className={cx(inputClass, "py-1.5")}>
-                  {D.team.map((t) => <option key={t.email}>{t.name}</option>)}
-                  <option>Agent</option>
-                </select>
-              </Fact>
-              <Fact label="Publish by">
-                <input id={`date-${p.id}`} type="date" value={date} onChange={(e) => setDate(e.target.value)} className={cx(inputClass, "tnum py-1.5")} />
-              </Fact>
-              <Fact label="Keywords">
-                <span className="flex flex-wrap gap-1">{p.keywords.map((k) => <Pill key={k}>{k}</Pill>)}</span>
-              </Fact>
-            </dl>
-
-            <Section title="Angle"><p className="text-sm leading-relaxed text-primary">{p.angle}</p></Section>
-            <Section title="Who it's for"><p className="text-sm leading-relaxed text-primary">{p.audience}</p></Section>
-
-            <Section title="Outline">
-              <ol className="flex flex-col gap-2">
-                {p.outline.map((line, i) => (
-                  <li key={line} className="flex gap-3 text-sm text-primary">
-                    <span className="tnum w-5 shrink-0 text-right text-quaternary">{i + 1}.</span>
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ol>
-            </Section>
-
-            {p.claimIds.length > 0 && (
-              <Section title="Knowledge it relies on" hint="The draft is checked against these. If one changes, the post gets re-checked.">
-                <ul className="flex flex-col gap-2">
-                  {p.claimIds.map((id) => {
-                    const c = claimOf(id);
-                    return (
-                      <li key={id} className="flex items-start gap-3 rounded-lg border border-secondary px-3 py-2.5">
-                        <Scales02 className="mt-0.5 size-4 shrink-0 text-quaternary" />
-                        <span className="min-w-0 flex-1 text-sm text-primary">{c.text}</span>
-                        <Pill tone={c.status === "Settled" ? "good" : "warn"}>{c.status}</Pill>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Section>
-            )}
-
-            {p.evidence.length > 0 && (
-              <Section title={`Sources (${p.evidence.length})`} hint="Quoted here for the writer. Quotes never go into the published piece.">
-                <div className="flex flex-col gap-4">
-                  {p.evidence.map((e) => {
-                    const src = sourceOf(e.sourceId);
-                    return (
-                      <Excerpt
-                        key={e.url}
-                        excerpt={e}
-                        mark="neutral"
-                        head={
-                          <>
-                            <SourceIcon kind={src.kind} />
-                            <span className="text-secondary">{src.title}</span>
-                            <span className="text-quaternary">· {src.date}</span>
-                          </>
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </Section>
-            )}
-
-            {p.search && (
-              <Section title="Search demand">
-                <div className="overflow-x-auto rounded-lg border border-secondary">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-secondary text-left text-xs text-quaternary">
-                        <th className="px-3 py-2 font-medium">Keyword</th>
-                        <th className="px-3 py-2 text-right font-medium">Searches / mo</th>
-                        <th className="px-3 py-2 text-right font-medium">Difficulty</th>
-                        <th className="px-3 py-2 text-right font-medium">We rank</th>
-                      </tr>
-                    </thead>
-                    <tbody className="tnum">
-                      {p.search.map((k) => (
-                        <tr key={k.keyword} className="border-t border-secondary">
-                          <td className="px-3 py-2 text-primary">{k.keyword}</td>
-                          <td className="px-3 py-2 text-right text-secondary">{k.volume.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right text-secondary">{k.difficulty}</td>
-                          <td className="px-3 py-2 text-right text-tertiary">{k.rank}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Section>
-            )}
-
-            <Section title="What we already have" hint="Why this isn't a duplicate.">
-              <ul className="flex flex-col gap-2">
-                {p.related.map((r) => {
-                  const o = objectOf(r.objectId);
-                  return (
-                    <li key={r.objectId} className="flex items-start gap-3 rounded-lg bg-secondary px-3 py-2.5">
-                      <TypeIcon type={o.type} className="mt-0.5 size-4" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm text-primary">{o.title}</span>
-                        <span className="block text-xs text-tertiary">{r.overlap}</span>
-                      </span>
-                      <OriginalLink url={o.url} label="Open" />
-                    </li>
-                  );
-                })}
-              </ul>
-            </Section>
-          </div>
-        </div>
-
-        <footer className="flex flex-wrap items-center gap-2 border-t border-secondary px-6 py-4">
-          <Button kind="ghost" onClick={() => decide("ditched", "Ditched")}>Ditch</Button>
-          <Button onClick={() => decide("backlog", "Backlogged, ranked by your goals")}>Backlog</Button>
-          <span className="flex-1" />
-          <span className="text-xs text-tertiary">
-            {owner} · by {date}
-          </span>
-          <Button
-            kind="primary"
-            onClick={() => {
-              const id = "n" + p.id;
-              dispatch({
-                type: "newPost",
-                obj: { id, type: p.type, group: p.topic === "close" || p.topic === "controls" ? "guides" : "product", title: p.title, topic: p.topic, date, url: "", status: "draft", briefId: p.id },
-                body: [""],
-              });
-              decide("accepted", `Draft created for ${owner}, due ${date}`);
-              go(`post-${id}`);
-            }}
-          >
-            Accept and start a draft
-          </Button>
-        </footer>
-      </aside>
-    </div>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <dt className="text-[11px] font-semibold uppercase tracking-wider text-quaternary">{label}</dt>
-      <dd className="min-w-0">{children}</dd>
-    </div>
-  );
-}
-
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2.5">
-      <div>
-        <h3 className="text-sm font-semibold text-primary">{title}</h3>
-        {hint && <p className="mt-0.5 text-xs text-tertiary">{hint}</p>}
-      </div>
-      {children}
-    </section>
   );
 }

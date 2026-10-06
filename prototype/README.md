@@ -27,6 +27,9 @@ npm run build    # one self-contained dist/index.html
 | `#onboarding` | Sign in, name the site, connect content, pick topics and the quarter's goal, drop documents, watch the first sweep |
 | `#home` | The two consistency grades with their notes, coverage against goal and per topic, performance as an FYI, vanity counts |
 | `#inbox` | Flags on typed objects (quote in context, contrasted with the knowledge base or other content, the fix shown), pitches as full briefs in a panel, knowledge base debt, drafts waiting on a person |
+| `#pipeline` | Board (pitched, writing, in review, scheduled) beside a one-week calendar; pitches open as a full brief to approve, annotate or reject with a reason |
+| `#review-<id>` | A draft in review: source check, the pitch notes, Remember for sentences about us |
+| `#goals`, `#site`, `#chat`, `#connections` | Cadence, mix and the grades; the hosting pitch; a stub chat; sources, AI over MCP and outside publishing |
 | `#blog` | Blog collections and their posts; the one content type that works |
 | `#post-<id>` | The editor: title, body with flagged sentences, side panel for flags, brief and linked claims |
 | `#social`, `#email`, `#sales` | Top-level pages only: channels, threads, and a placeholder |

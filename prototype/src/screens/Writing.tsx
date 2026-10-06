@@ -32,6 +32,15 @@ function useFlagsByObject() {
   }, [s.flags]);
 }
 
+/** One label for where a piece is: draft steps, scheduled, published. */
+export function statusOf(o: ContentObject): { label: string; tone: "good" | "info" | "warn" | "neutral" } {
+  if (o.status === "published") return { label: o.type === "newsletter" ? "Sent" : "Published", tone: "good" };
+  if (o.status === "scheduled") return { label: "Scheduled", tone: "info" };
+  if (o.step === "review") return { label: "In review", tone: "warn" };
+  if (o.step === "writing") return { label: "Writing", tone: "neutral" };
+  return { label: "Draft", tone: "neutral" };
+}
+
 function newId() {
   return "n" + Math.random().toString(36).slice(2, 9);
 }
@@ -67,6 +76,20 @@ export function BlogPage({ initialCollection = "all" }: { initialCollection?: st
         </div>
         <Button kind="primary" iconLeading={<Plus className="size-4" />} onClick={create}>New post</Button>
       </header>
+
+      <div className="flex flex-wrap gap-1.5">
+        {(["blog", "social", "email", "sales"] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => go(k)}
+            aria-pressed={k === "blog"}
+            className={cx("rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset transition", k === "blog" ? "bg-brand-solid text-white ring-transparent" : "text-tertiary ring-primary hover:text-secondary")}
+          >
+            {k === "blog" ? "Blog" : k === "social" ? "Social" : k === "email" ? "Email" : "Sales enablement"}
+          </button>
+        ))}
+      </div>
 
       <nav className="flex gap-1 overflow-x-auto border-b border-secondary">
         {[{ id: "all", name: "All", emoji: "" }, ...D.collections].map((c) => {
@@ -112,7 +135,7 @@ export function BlogPage({ initialCollection = "all" }: { initialCollection?: st
                 <tr key={o.id} tabIndex={0} onClick={() => go(`post-${o.id}`)} onKeyDown={(e) => e.key === "Enter" && go(`post-${o.id}`)} className="cursor-pointer outline-none transition hover:bg-secondary focus:bg-secondary">
                   <Td className="truncate text-primary">{o.title || <span className="text-quaternary">Untitled</span>}</Td>
                   <Td className="hidden truncate text-xs text-tertiary sm:table-cell">{c?.emoji} {c?.name}</Td>
-                  <Td><Pill tone={o.status === "published" ? "good" : "neutral"}>{o.status === "published" ? "Published" : "Draft"}</Pill></Td>
+                  <Td><Pill tone={statusOf(o).tone}>{statusOf(o).label}</Pill></Td>
                   <Td className="tnum hidden text-xs text-quaternary md:table-cell">{o.date}</Td>
                   <Td className="text-right">
                     {f > 0 ? (
@@ -325,11 +348,21 @@ export function PostEditor({ id }: { id: string }) {
                 {D.collections.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
               </select>
             )}
-            <Pill tone={o.status === "published" ? "good" : "neutral"}>{o.status === "published" ? (o.type === "newsletter" ? "Sent" : "Published") : "Draft"}</Pill>
+            <Pill tone={statusOf(o).tone}>{statusOf(o).label}</Pill>
+            {o.writer && <span className="text-tertiary">{o.writer === "Agent" ? "Writer agent" : o.writer}{o.reviewer && ` → ${o.reviewer === D.me.name ? "you" : o.reviewer}`}</span>}
             <span className="text-tertiary">{topicName(o.topic)}</span>
             <span className="tnum text-quaternary">{liveWords ?? words(body)} words</span>
             <span className="flex-1" />
-            {o.status === "draft" && (
+            {o.status === "draft" && o.step === "writing" && o.reviewer && (
+              <Button size="sm" kind="primary" onClick={() => { commit(); dispatch({ type: "object", id: o.id, patch: { step: "review" } }); toast(`Sent to ${o.reviewer === D.me.name ? "you" : o.reviewer} for review`); go(o.reviewer === D.me.name ? `review-${o.id}` : "pipeline"); }}>
+                Send for review
+              </Button>
+            )}
+            {o.status === "draft" && o.step === "review" && (
+              <Button size="sm" kind="primary" onClick={() => { commit(); go(`review-${o.id}`); }}>Open the review</Button>
+            )}
+            {o.status === "scheduled" && <span className="tnum text-xs text-tertiary">Goes out {o.date}, 9:00</span>}
+            {o.status === "draft" && !o.step && (
               <Button size="sm" kind="primary" onClick={() => { commit(); dispatch({ type: "object", id: o.id, patch: { status: "published", date: D.TODAY } }); toast(kind === "blog" ? `Published to ${D.site.destination}` : "Scheduled"); }}>
                 {kind === "email" ? "Send" : "Publish"}
               </Button>
