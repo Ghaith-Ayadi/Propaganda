@@ -21,6 +21,10 @@
 //   UPLOAD              an image upload failed
 //   COST-USAGE          the tenant's model usage for the month couldn't be loaded
 //   COST-ADMIN          the Admin consumption figures or limits couldn't be loaded or saved
+//   RUNS-LOAD           Admin couldn't load agent runs from the worker
+//   RUN-RETRY           retrying a run failed
+//   RUN-CANCEL          cancelling a run failed
+//   RUN-DEMO            starting a demo run failed
 
 import { BackendError } from "@/lib/supabase";
 

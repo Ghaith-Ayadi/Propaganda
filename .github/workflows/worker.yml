@@ -1,0 +1,27 @@
+# The DBOS worker (worker/): typecheck, then the end-to-end test against a
+# real Postgres (the worker as a process, its Runs API, a usage-limit stall
+# across a restart, retry and cancel).
+name: worker
+on:
+  pull_request:
+    paths: ["worker/**", ".github/workflows/worker.yml"]
+  push:
+    branches: [main]
+    paths: ["worker/**", ".github/workflows/worker.yml"]
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: worker } }
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npm test
+        env: { PGURL: "postgres://postgres:postgres@localhost:5432" }
