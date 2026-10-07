@@ -24,7 +24,13 @@ async function main(): Promise<void> {
   await DBOS.launch();
   await registerQueues();
 
-  const db = new pg.Pool({ connectionString: config.appDatabaseUrl, max: 4 });
+  // The app's database holds people's content: this pool can only read it.
+  // Any write through it fails at the server, whatever code asks for one.
+  const db = new pg.Pool({
+    connectionString: config.appDatabaseUrl,
+    max: 4,
+    options: "-c default_transaction_read_only=on",
+  });
   db.on("error", (err) => console.error("app database:", err.message));
   const server = startServer(db, config.port);
   console.log(`worker ${config.appVersion} up, Runs API on :${config.port}`);
