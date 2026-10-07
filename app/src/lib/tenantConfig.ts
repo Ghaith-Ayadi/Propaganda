@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { must, sb } from "@/lib/supabase";
-import { siteId } from "@/lib/scope";
+import { onScopeReset, siteId } from "@/lib/scope";
 import { setSetting, useSetting } from "@/lib/settings";
 
 /** A setting with a typed default, and a setter that stores the whole value. */
@@ -33,6 +33,8 @@ function useConfig<T>(key: string, fallback: T): [T, (next: T) => void] {
 }
 
 const memory = new Map<string, unknown>();
+// One tenant's unsaved values must not show under the next.
+onScopeReset(() => memory.clear());
 
 /** Like useConfig but kept in this browser tab only: lost on reload. For anything not safe to publish. */
 function useMemoryState<T>(key: string, fallback: T): [T, (next: T) => void] {
