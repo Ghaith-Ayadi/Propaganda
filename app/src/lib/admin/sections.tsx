@@ -22,21 +22,21 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     title: "Runs",
     description: "Every agent workflow: what ran, for which tenant, and how it ended.",
     icon: Activity,
-    component: () => ComingSoon({ title: "Runs" }),
+    component: () => <ComingSoon title="Runs" />,
   },
   {
     id: "consumption",
     title: "Consumption",
     description: "Model spend per tenant against budgets, at API prices.",
     icon: File05,
-    component: () => ComingSoon({ title: "Consumption" }),
+    component: () => <ComingSoon title="Consumption" />,
   },
   {
     id: "logs",
     title: "Logs",
     description: "Errors and server events across tenants.",
     icon: Rows01,
-    component: () => ComingSoon({ title: "Logs" }),
+    component: () => <ComingSoon title="Logs" />,
   },
 ];
 
