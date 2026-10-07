@@ -14,7 +14,7 @@ import { useWorkspace } from "@/components/Workspace";
 import { cx } from "@/utils/cx";
 
 /**
- * Trigger + menu for the active site, replacing the old hardcoded title link.
+ * The tenant switcher: trigger + menu for the active tenant (a site).
  * Lists every account on this browser, each account's sites underneath, and
  * the usual account-level actions. Switching is IndexedDB-only (lib/scope.ts),
  * so nothing here waits on the network.
@@ -25,9 +25,15 @@ export function SiteSwitcher() {
   return (
     <AriaMenuTrigger>
       <AriaButton
-        aria-label="Switch site"
-        className="-mx-1 flex items-center gap-1 rounded-md px-2 py-1 outline-none transition hover:bg-primary_hover data-[pressed]:bg-primary_hover"
+        aria-label="Switch tenant"
+        className="-mx-1 flex max-w-full items-center gap-2 rounded-md px-1 py-1 outline-none transition hover:bg-primary_hover data-[pressed]:bg-primary_hover"
       >
+        <span
+          aria-hidden
+          className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary-solid font-title text-base text-white"
+        >
+          {(site.name || "?").slice(0, 1).toUpperCase()}
+        </span>
         <span className="truncate font-title text-xl tracking-tight text-primary">{site.name}</span>
         <ChevronDown className="size-4 shrink-0 text-quaternary" />
       </AriaButton>
@@ -86,7 +92,7 @@ export function SiteSwitcher() {
             className="mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-secondary outline-none hover:bg-tertiary hover:text-primary focus:bg-tertiary focus:text-primary"
           >
             <Plus className="size-3.5 shrink-0 text-quaternary" />
-            <span>New site</span>
+            <span>New tenant</span>
           </AriaMenuItem>
           <AriaMenuItem
             id="add-account"

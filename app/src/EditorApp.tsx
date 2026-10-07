@@ -1,20 +1,20 @@
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Workspace } from "@/components/Workspace";
 import { Toaster } from "@/components/base/toast/toast";
-import { Sidebar } from "@/components/Sidebar";
+import { NavBar } from "@/components/shell/NavBar";
+import { PhoneTabs } from "@/components/shell/PhoneTabs";
+import { EmptyPage } from "@/components/shell/EmptyPage";
 import { Editor } from "@/components/Editor";
 import { AttributePanel } from "@/components/AttributePanel";
-import { CommandPalette, openCommandPalette } from "@/components/CommandPalette";
-import { CollectionTabs } from "@/components/CollectionTabs";
-import { HomePage } from "@/components/HomePage";
+import { CommandPalette } from "@/components/CommandPalette";
 import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
 import { AdminPage } from "@/components/admin/AdminPage";
-import { PlanPage } from "@/components/plan/PlanPage";
 import { BriefPage } from "@/components/plan/BriefPage";
 import { db } from "@/lib/db";
 import { useRoute } from "@/lib/route";
+import { findPage } from "@/lib/routes";
 import { useLayout } from "@/lib/layout";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { installLifecycleHandlers, runSync } from "@/lib/sync";
@@ -23,8 +23,7 @@ import { installSearchIndex } from "@/lib/search";
 import { snapshotVersion } from "@/lib/versions";
 import { toggleTheme } from "@/lib/theme";
 import { initTelemetry } from "@/lib/telemetry";
-import { setDrawer, toggleDrawer, useDrawer, useIsMobile, useMobileShell } from "@/lib/mobile";
-import { Menu01, Plus } from "@untitledui/icons";
+import { setDrawer, useDrawer, useIsMobile, useMobileShell } from "@/lib/mobile";
 
 // Errors and product analytics, editor only (lib/telemetry.ts).
 initTelemetry();
@@ -121,7 +120,7 @@ function Shell() {
     [currentPost?.id, currentPost?.content],
   );
 
-  const sidebar = <Sidebar currentId={route.view === "post" ? route.id : null} />;
+  const sidebar = <NavBar currentCollection={route.view === "post" ? currentPost?.type : undefined} />;
   const attributes = route.view === "post" && currentPost ? <AttributePanel post={currentPost} /> : null;
 
   return (
@@ -142,10 +141,10 @@ function Shell() {
         <>
           <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
             {/* The editor has its own nav bar with the menu button. */}
-            {isMobile && route.view !== "post" && <MobileTopBar />}
-            {route.view === "home" && <HomePage />}
-            {route.view === "list" && <CollectionTabs />}
-            {route.view === "plan" && <PlanPage />}
+            {isMobile && route.view !== "post" && <PhoneTabs />}
+            {route.view === "page" && <PageOutlet id={route.page} />}
+            {route.view === "list" && <PageOutlet id="content" />}
+            {route.view === "plan" && <PageOutlet id="pipeline" />}
             {route.view === "analytics" && <AnalyticsPage />}
             {route.view === "admin" && <AdminPage section={route.section} />}
             {route.view === "post" && !currentPost && (
@@ -189,25 +188,17 @@ function MobileDrawer({ side, open, children }: { side: "left" | "right"; open: 
   );
 }
 
-function MobileTopBar() {
+/** A registered page (lib/routes.ts), or its empty state until it is built. */
+function PageOutlet({ id }: { id: string }) {
+  const page = findPage(id);
+  if (!page) {
+    return <div className="flex h-full items-center justify-center text-tertiary">Page not found.</div>;
+  }
+  const Page = page.component;
+  if (!Page) return <EmptyPage page={page} />;
   return (
-    <div className="sticky top-0 z-40 flex items-center border-b border-secondary bg-primary/85 px-2 py-2 backdrop-blur">
-      <button
-        type="button"
-        aria-label="Menu"
-        onClick={() => toggleDrawer("nav")}
-        className="rounded-md p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
-      >
-        <Menu01 className="size-5" />
-      </button>
-      <button
-        type="button"
-        onClick={openCommandPalette}
-        className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-tertiary transition hover:bg-primary_hover hover:text-secondary"
-      >
-        <Plus className="size-4" />
-        New post
-      </button>
-    </div>
+    <Suspense fallback={null}>
+      <Page key={page.id} />
+    </Suspense>
   );
 }
