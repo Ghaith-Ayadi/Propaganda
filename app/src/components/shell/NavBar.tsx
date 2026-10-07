@@ -105,7 +105,7 @@ function PageItem({
             <span
               className={cx(
                 "ml-auto rounded-full px-1.5 text-xs tabular-nums",
-                page.id === "inbox" ? "bg-primary-solid font-medium text-white" : "text-quaternary",
+                page.id === "inbox" ? "bg-(--color-fg-primary) font-medium text-(--color-bg-primary)" : "text-quaternary",
               )}
             >
               {badge}
