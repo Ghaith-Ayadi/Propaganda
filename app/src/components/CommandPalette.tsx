@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } fr
 import { Command } from "cmdk";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowDown, ArrowLeft, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, HelpCircle, Moon01, SearchLg, Star01, Sun, Tag01, Zap } from "@untitledui/icons";
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, HelpCircle, Moon01, Shield01, SearchLg, Star01, Sun, Tag01, Zap } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import { search, subscribeSearch } from "@/lib/search";
 import { go } from "@/lib/route";
@@ -17,6 +17,7 @@ import { setActiveCollection } from "@/lib/activeCollection";
 import { requestTitleFocus } from "@/lib/postFocus";
 import { formatExactDate, relativeTime } from "@/lib/format";
 import { buildDate, COMMIT_SHA, DEPLOY_ENV } from "@/lib/version";
+import { useSuperadminAccount } from "@/lib/superadmin";
 import { ShortcutsPanel } from "@/components/KeyboardShortcuts";
 import type { Collection, Post } from "@/types";
 import { toast } from "@/components/base/toast/toast";
@@ -49,6 +50,8 @@ export function CommandPalette({ currentPostId }: Props) {
   const [, , toggleAuthorMode] = useLayout();
   const [theme] = useTheme();
   const simOn = useSimMode();
+  // Admin is offered when any account signed in on this browser is a superadmin.
+  const superadmin = useSuperadminAccount();
 
   const allPosts = useLiveQuery(
     () => db.posts.orderBy("updatedAt").reverse().toArray(),
@@ -281,6 +284,20 @@ export function CommandPalette({ currentPostId }: Props) {
         setOpen(false);
       },
     },
+    ...(superadmin
+      ? [
+          {
+            key: "admin",
+            label: "Admin",
+            icon: <Shield01 className="size-4" />,
+            hint: superadmin.email,
+            onSelect: () => {
+              go({ view: "admin", section: null });
+              setOpen(false);
+            },
+          } satisfies CommandRow,
+        ]
+      : []),
     {
       key: "simulate-traffic",
       label: simOn ? "/clearSimulation" : "/simulateTraffic",

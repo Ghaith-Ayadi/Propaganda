@@ -10,6 +10,7 @@ import { CommandPalette, openCommandPalette } from "@/components/CommandPalette"
 import { CollectionTabs } from "@/components/CollectionTabs";
 import { HomePage } from "@/components/HomePage";
 import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
+import { AdminPage } from "@/components/admin/AdminPage";
 import { PlanPage } from "@/components/plan/PlanPage";
 import { BriefPage } from "@/components/plan/BriefPage";
 import { db } from "@/lib/db";
@@ -146,6 +147,7 @@ function Shell() {
             {route.view === "list" && <CollectionTabs />}
             {route.view === "plan" && <PlanPage />}
             {route.view === "analytics" && <AnalyticsPage />}
+            {route.view === "admin" && <AdminPage section={route.section} />}
             {route.view === "post" && !currentPost && (
               <div className="flex h-full items-center justify-center text-tertiary">
                 Post not found.

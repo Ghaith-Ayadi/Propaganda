@@ -9,7 +9,8 @@ export type Route =
   | { view: "post"; id: string }
   | { view: "plan" }
   | { view: "brief"; id: string }
-  | { view: "analytics" };
+  | { view: "analytics" }
+  | { view: "admin"; section: string | null };
 
 function parse(): Route {
   const h = window.location.hash;
@@ -22,6 +23,8 @@ function parse(): Route {
   if (h === "#/home") return { view: "home" };
   if (h === "#/plan") return { view: "plan" };
   if (h === "#/analytics") return { view: "analytics" };
+  const ma = h.match(/^#\/admin(?:\/([a-z-]+))?$/);
+  if (ma) return { view: "admin", section: ma[1] ?? null };
   return { view: "list" };
 }
 
@@ -31,6 +34,7 @@ function toHash(r: Route): string {
   if (r.view === "plan") return "#/plan";
   if (r.view === "brief") return `#/brief/${encodeURIComponent(r.id)}`;
   if (r.view === "analytics") return "#/analytics";
+  if (r.view === "admin") return r.section ? `#/admin/${r.section}` : "#/admin";
   return `#/post/${r.id}`;
 }
 
