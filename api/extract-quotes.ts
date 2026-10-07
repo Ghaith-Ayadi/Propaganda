@@ -1,46 +1,40 @@
 // Vercel serverless function — extract top-3 verbatim pull-quotes from a post
-// via Gemini, validate each as an exact substring, return the survivors.
+// via a model, validate each as an exact substring, return the survivors.
 //
-// The Gemini API key is server-only; this proxies the call so it never touches
-// the browser bundle. Requires a signed-in user — it spends Gemini
-// credits per call.
+// The model is reached only through the cost-logging gateway (_ai/gateway.ts),
+// so every call is charged to the tenant. Requires a signed-in member of the
+// site — it spends model credits per call.
 //
 // POST /api/extract-quotes
-// Body: { postId: number; content: string }
+// Body: { site: string; postId: string; content: string }
 // Returns: { quotes: string[] }   (0–3 items; only verbatim matches included)
 
-import { requireUser } from "./_auth";
+import { requireMember } from "./_auth";
 import { withTelemetry } from "./_telemetry";
+import { BudgetError, callModel } from "./_ai/gateway";
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const MODEL = "google/gemini-2.5-flash-lite";
 
 async function handle(request: Request): Promise<Response> {
+  let body: { site?: unknown; postId?: unknown; content?: unknown };
   try {
-    await requireUser(request);
+    body = await request.json() as { site?: unknown; postId?: unknown; content?: unknown };
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+
+  const site = typeof body.site === "string" ? body.site : "";
+  try {
+    await requireMember(request, site);
   } catch (err) {
     if (err instanceof Response) return err;
     return json({ error: "Auth failed" }, 500);
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return json({ error: "Gemini not configured" }, 503);
-  }
-
-  let body: { postId?: unknown; content?: unknown };
-  try {
-    body = await request.json() as { postId?: unknown; content?: unknown };
-  } catch {
-    return json({ error: "Invalid JSON" }, 400);
   }
 
   const content = typeof body.content === "string" ? body.content.trim() : "";
   if (!content) {
     return json({ error: "content is required" }, 400);
   }
-
-  // ── Call Gemini ────────────────────────────────────────────────────────────
 
   const prompt = `You are extracting shareable pull-quotes from a piece of writing.
 
@@ -53,27 +47,14 @@ Rules:
 Article:
 ${content}`;
 
-  let geminiResponse: Response;
+  let raw: string;
   try {
-    geminiResponse = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-    });
+    // The editor's own action, not background work: it keeps working at 100% of a tenant's budget.
+    raw = (await callModel({ site, job: "extract-quotes", model: MODEL, background: false, prompt })).text;
   } catch (err) {
-    return json({ error: "Gemini request failed", detail: String(err) }, 502);
+    if (err instanceof BudgetError) return json({ error: "Model budget reached", reason: err.reason }, 429);
+    throw err;
   }
-
-  if (!geminiResponse.ok) {
-    const errText = await geminiResponse.text();
-    return json({ error: "Gemini error", detail: errText }, 502);
-  }
-
-  const geminiData = await geminiResponse.json() as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-
-  const raw = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
   // ── Parse ──────────────────────────────────────────────────────────────────
 

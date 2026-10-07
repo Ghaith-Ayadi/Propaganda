@@ -7,6 +7,7 @@
 import type { ComponentType } from "react";
 import { Activity, File05, Rows01 } from "@untitledui/icons";
 import { ComingSoon } from "@/components/admin/ComingSoon";
+import { ConsumptionPage } from "@/components/admin/ConsumptionPage";
 
 export interface AdminSection {
   id: string;
@@ -29,7 +30,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     title: "Consumption",
     description: "Model spend per tenant against budgets, at API prices.",
     icon: File05,
-    component: () => ComingSoon({ title: "Consumption" }),
+    component: ConsumptionPage,
   },
   {
     id: "logs",
