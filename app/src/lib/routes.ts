@@ -128,6 +128,7 @@ export const PAGES: PageRoute[] = [
     path: "chat",
     description: "Ask the agent anything about your content and knowledge base.",
     section: "main",
+    component: lazy(() => import("@/components/chat/ChatPage").then((m) => ({ default: m.ChatPage }))),
   },
   {
     id: "connections",
