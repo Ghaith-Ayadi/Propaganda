@@ -12,16 +12,36 @@
 //   2. Connection status: Granola, Slack, newsletter and CMS "connect" only
 //      records that the tenant asked; nothing reaches the outside service.
 //   3. The transcript URL and MCP URL are shaped like the real ones but the
-//      endpoints do not exist yet.
-// Secrets never go in here: app_settings is readable by every member.
+//      endpoints do not exist yet (and the transcript token is not minted).
+//
+// EVERY KEY HERE IS PUBLIC. The blog reads app_settings through the anonymous
+// client ("anyone reads settings", 20261002000003_access.sql), so anyone on the
+// internet can read these rows. Never put a secret, an email address or an
+// account id in one. Things that must not be public are held in memory only
+// (useMemoryState, "not saved yet" in the UI) until their server tables exist.
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { must, sb } from "@/lib/supabase";
+import { siteId } from "@/lib/scope";
 import { setSetting, useSetting } from "@/lib/settings";
 
 /** A setting with a typed default, and a setter that stores the whole value. */
 function useConfig<T>(key: string, fallback: T): [T, (next: T) => void] {
   const value = useSetting<T>(key, fallback) ?? fallback;
   const set = useCallback((next: T) => void setSetting(key, next), [key]);
+  return [value, set];
+}
+
+const memory = new Map<string, unknown>();
+
+/** Like useConfig but kept in this browser tab only: lost on reload. For anything not safe to publish. */
+function useMemoryState<T>(key: string, fallback: T): [T, (next: T) => void] {
+  const [, force] = useState(0);
+  const value = (memory.has(key) ? memory.get(key) : fallback) as T;
+  const set = useCallback((next: T) => {
+    memory.set(key, next);
+    force((n) => n + 1);
+  }, [key]);
   return [value, set];
 }
 
@@ -122,23 +142,44 @@ export const useRecheckOnChange = () => useConfig<boolean>("tenant.kb.recheck", 
 export interface Person {
   id: string;
   name: string;
+  /** Empty for members whose email the browser cannot read (auth.users is server-side). */
   email: string;
   avatar: string;
+  role: string;
   status: "active" | "invited";
 }
 
 interface Invite { email: string; at: string }
 
 /**
- * PLACEHOLDER ADAPTER (1/3). Active members: just the signed-in account until
- * the server lets a member read `site_members`. Invites are remembered here but
- * no email is sent. One user type: everyone allowed in does and sees everything.
+ * Members come from `site_members`, which a member can already read (own and
+ * co-members policy). Names and emails of the others live in auth.users, so
+ * they show as a role until a server read exposes them. PLACEHOLDER ADAPTER
+ * (1/3) for the rest: invites are held in memory only (emails are personal data
+ * and app_settings is public) and no invite email is sent.
  */
-export function usePeople(me: { userId: string; email: string; name: string; avatar: string }) {
-  const [invites, setInvites] = useConfig<Invite[]>("tenant.people.invites", []);
+export function usePeople(me: { authId: string; userId: string; email: string; name: string; avatar: string }) {
+  const [invites, setInvites] = useMemoryState<Invite[]>("people.invites", []);
+  const [members, setMembers] = useState<{ user_id: string; role: string }[] | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void must(sb.from("site_members").select("user_id, role").eq("site", siteId()))
+      .then((rows) => live && setMembers(rows as { user_id: string; role: string }[]))
+      .catch(() => live && setMembers([]));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const mine: Person = { id: me.authId || me.userId, name: me.name || me.email, email: me.email, avatar: me.avatar, role: "", status: "active" };
+  const others: Person[] = (members ?? [])
+    .filter((m) => m.user_id !== me.authId)
+    .map((m) => ({ id: m.user_id, name: `Member ${m.user_id.slice(0, 6)}`, email: "", avatar: "", role: m.role, status: "active" as const }));
   const people: Person[] = [
-    { id: me.userId, name: me.name || me.email, email: me.email, avatar: me.avatar, status: "active" },
-    ...invites.map((i) => ({ id: `invite:${i.email}`, name: i.email, email: i.email, avatar: "", status: "invited" as const })),
+    { ...mine, role: members?.find((m) => m.user_id === me.authId)?.role ?? "" },
+    ...others,
+    ...invites.map((i) => ({ id: `invite:${i.email}`, name: i.email, email: i.email, avatar: "", role: "", status: "invited" as const })),
   ];
   return {
     people,
@@ -151,9 +192,9 @@ export function usePeople(me: { userId: string; email: string; name: string; ava
   };
 }
 
-/** Topic owner per topic (a person's id), and the one top authority who has the last word. */
-export const useTopicOwners = () => useConfig<Record<string, string>>("tenant.people.topicOwners", {});
-export const useTopAuthority = () => useConfig<string>("tenant.people.topAuthority", "");
+/** Topic owner per topic and the one top authority. Account ids are not public data: memory only until a server table holds them. */
+export const useTopicOwners = () => useMemoryState<Record<string, string>>("people.topicOwners", {});
+export const useTopAuthority = () => useMemoryState<string>("people.topAuthority", "");
 
 // ---- Content types --------------------------------------------------------
 
@@ -235,24 +276,14 @@ export function useWatchedSites() {
   };
 }
 
-function randomToken(): string {
-  const bytes = new Uint8Array(18);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map((b) => b.toString(36).padStart(2, "0")).join("").slice(0, 28);
-}
-
 /**
- * PLACEHOLDER ADAPTER (3/3). The open URL anyone can POST a transcript to, no
- * integration needed. The token is minted here for now; the real one is minted
- * by the server (see the draft table in the PR) and the endpoint does not exist.
+ * PLACEHOLDER ADAPTER (3/3). The open URL anyone can POST a transcript to.
+ * No token is minted here: app_settings is public, so a token stored there
+ * would be a public secret. The server mints it (see the ingest_tokens draft in
+ * the PR) and this shows only the shape of the address.
  */
-export function useTranscriptUrl() {
-  const [token, setToken] = useConfig<string>("tenant.connections.transcriptToken", "");
-  return {
-    url: token ? `${window.location.origin}/api/ingest/${token}` : "",
-    create: () => setToken(randomToken()),
-    regenerate: () => setToken(randomToken()),
-  };
+export function transcriptUrlShape(): string {
+  return `${window.location.origin}/api/ingest/<token>`;
 }
 
 /** PLACEHOLDER (3/3): the MCP endpoint other AI tools connect to. */

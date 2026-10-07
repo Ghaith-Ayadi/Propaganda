@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Trash01, Plus } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
-import { toast } from "@/components/base/toast/toast";
-import { useTranscriptUrl, useWatchedSites } from "@/lib/tenantConfig";
+import { transcriptUrlShape, useWatchedSites } from "@/lib/tenantConfig";
 import { Card, CopyField, Note } from "@/components/settings/ui";
 import { ConnectCard } from "./ConnectCard";
 
@@ -36,36 +35,17 @@ export function SourcesTab() {
 }
 
 function TranscriptUrlCard() {
-  const { url, create, regenerate } = useTranscriptUrl();
-  const curl = `curl -X POST "${url || "<your URL>"}" \\\n  -H "Content-Type: text/plain" \\\n  --data-binary @transcript.txt`;
+  const url = transcriptUrlShape();
+  const curl = `curl -X POST "${url}" \\\n  -H "Content-Type: text/plain" \\\n  --data-binary @transcript.txt`;
   return (
     <Card
       title="Open transcript URL"
       description="Anyone can POST a transcript to this address: a recorder, a Zap, a script. No integration needed."
     >
       <div className="space-y-3">
-        {url ? (
-          <>
-            <CopyField label="Transcript URL" value={url} />
-            <pre className="overflow-x-auto rounded-lg bg-secondary p-3 font-mono text-xs text-secondary">{curl}</pre>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                color="secondary-destructive"
-                onClick={() => {
-                  regenerate();
-                  toast.add({ type: "success", title: "New URL created", description: "The old one stops working." });
-                }}
-              >
-                Make a new URL
-              </Button>
-              <span className="text-xs text-tertiary">Anyone holding the URL can send transcripts, so treat it like a password.</span>
-            </div>
-          </>
-        ) : (
-          <Button size="sm" onClick={create}>Create the URL</Button>
-        )}
-        <Note>The address is shaped like the real one; the endpoint that accepts transcripts ships with the transcript worker.</Note>
+        <CopyField label="Transcript URL" value={url} />
+        <pre className="overflow-x-auto rounded-lg bg-secondary p-3 font-mono text-xs text-secondary">{curl}</pre>
+        <Note>Your own URL, with its secret token, is created when the endpoint ships. Anyone holding it can send transcripts, so it will be shown once and can be replaced.</Note>
       </div>
     </Card>
   );

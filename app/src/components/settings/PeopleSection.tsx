@@ -21,7 +21,7 @@ export function PeopleSection() {
   function send() {
     if (!email.includes("@")) return;
     invite(email);
-    toast.add({ type: "success", title: "Invite saved", description: "Emails go out once invites are wired to the server." });
+    toast.add({ type: "success", title: "Invite noted", description: "Not saved yet: it is lost on reload, and no email goes out until invites reach the server." });
     setEmail("");
     setInviting(false);
   }
@@ -43,7 +43,7 @@ export function PeopleSection() {
               <Avatar size="md" src={p.avatar || undefined} initials={p.name.slice(0, 2).toUpperCase()} alt={p.name} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-primary">{p.name}</div>
-                {p.name !== p.email && <div className="truncate text-xs text-tertiary">{p.email}</div>}
+                {p.email && p.name !== p.email && <div className="truncate text-xs text-tertiary">{p.email}</div>}
               </div>
               {p.status === "invited" ? (
                 <>
@@ -53,7 +53,7 @@ export function PeopleSection() {
                   </Button>
                 </>
               ) : (
-                <Badge color="gray" size="sm">You</Badge>
+                <Badge color="gray" size="sm">{p.id === (account.authId || account.userId) ? "You" : p.role || "Member"}</Badge>
               )}
             </li>
           ))}
@@ -79,7 +79,7 @@ export function PeopleSection() {
           </div>
         )}
         <div className="mt-3">
-          <Note>The member list and invite emails need the server side; today it shows you and the invites you save. Sign-in is Google or an emailed code.</Note>
+          <Note>Members come from the server. Other members show as a role until their names can be read. Invites are not saved yet and no email is sent; they are lost on reload. Sign-in is Google or an emailed code.</Note>
         </div>
       </Card>
       <OwnersCard people={people.filter((p) => p.status === "active")} />
@@ -128,6 +128,9 @@ function OwnersCard({ people }: { people: { id: string; name: string }[] }) {
             </Select>
           ))
         )}
+      </div>
+      <div className="mt-4">
+        <Note>Not saved yet: owners are held for this session only, until a server table keeps them. They are not published with the site's settings.</Note>
       </div>
     </Card>
   );
