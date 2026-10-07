@@ -3,9 +3,9 @@
 // the superadmin reads everything (components/admin/ConsumptionPage.tsx). The
 // server decides who may read what; nothing here filters by account.
 
-import { must, sb, type Client } from "@/lib/supabase";
+import { BackendError, must, sb, type Client } from "@/lib/supabase";
 import { siteId } from "@/lib/scope";
-import { withCode } from "@/lib/errors";
+import { coded, withCode } from "@/lib/errors";
 
 export interface MonthUsage {
   spentUsd: number;
@@ -25,11 +25,15 @@ export function budgetState(u: MonthUsage): BudgetState {
   return u.spentUsd >= u.monthlyLimit * u.warnRatio ? "warn" : "ok";
 }
 
-export async function loadMonthUsage(): Promise<MonthUsage> {
-  const r = (await withCode(
-    "COST-USAGE",
-    must(sb.rpc("cost_my_month", { p_site: siteId() })),
-  )) as Record<string, unknown>;
+/** Null while the server has no cost log yet (PostgREST: function not found): no meter, no error. */
+export async function loadMonthUsage(): Promise<MonthUsage | null> {
+  let r: Record<string, unknown>;
+  try {
+    r = (await must(sb.rpc("cost_my_month", { p_site: siteId() }))) as Record<string, unknown>;
+  } catch (err) {
+    if (err instanceof BackendError && err.code === "PGRST202") return null;
+    throw coded("COST-USAGE", err);
+  }
   return {
     spentUsd: Number(r.spent_usd),
     calls: Number(r.calls),

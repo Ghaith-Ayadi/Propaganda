@@ -13,7 +13,7 @@ export function CostMeter() {
     let live = true;
     loadMonthUsage().then(
       (u) => live && setUsage(u),
-      // Home works without the meter (and before the cost log exists on the server).
+      // Home works without the meter.
       (err) => reportError("CostMeter", err),
     );
     return () => {

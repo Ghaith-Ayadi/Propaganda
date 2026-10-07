@@ -184,8 +184,9 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
   } catch (err) {
     const limit = usageLimit(err);
     if (limit) throw limit;
-    // A failed call may still have been billed upstream; keep the trace at zero tokens.
-    await writeCall({ ...base, status: "error" }).catch(() => {});
+    // A failed call may still have been billed upstream, for an amount we don't know:
+    // keep the trace at zero tokens and mark it unpriced so Consumption counts the gap.
+    await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
     throw err;
   }
 

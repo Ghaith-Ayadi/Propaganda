@@ -11,7 +11,7 @@
 
 import { requireMember } from "./_auth";
 import { withTelemetry } from "./_telemetry";
-import { BudgetError, callModel } from "./_ai/gateway";
+import { BudgetError, CostLogUnavailableError, callModel } from "./_ai/gateway";
 
 const MODEL = "google/gemini-2.5-flash-lite";
 
@@ -53,6 +53,8 @@ ${content}`;
     raw = (await callModel({ site, job: "extract-quotes", model: MODEL, background: false, prompt })).text;
   } catch (err) {
     if (err instanceof BudgetError) return json({ error: "Model budget reached", reason: err.reason }, 429);
+    // Not a model outage: say so, so it is not mistaken for one.
+    if (err instanceof CostLogUnavailableError) return json({ error: "Model usage logging is not set up" }, 503);
     throw err;
   }
 

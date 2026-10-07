@@ -56,11 +56,10 @@ export function superadminAccount(): Account | null {
 }
 
 async function check(account: Account): Promise<void> {
-  const { data, error } = await clientFor(account).rpc("is_superadmin");
+  const { data, error, status } = await clientFor(account).rpc("is_superadmin");
   if (error) {
     // Offline or server down: keep the remembered answer and ask again later.
     // Anything else (401/403, or a server that predates the function): not a superadmin.
-    const status = (error as { status?: number }).status ?? 0;
     if (status === 0 || status >= 500) {
       asked.delete(account.authId);
       return;
@@ -75,7 +74,7 @@ async function check(account: Account): Promise<void> {
   bump();
 }
 
-/** Ask the server about every saved account not yet asked this page load. */
+/** Ask the server about every saved account not yet asked this page load (Workspace calls this at startup). */
 export function refreshSuperadmin(): void {
   for (const a of listAccounts()) {
     if (!a.authId || !hasValidSession(a) || asked.has(a.authId) || !navigator.onLine) continue;
@@ -92,7 +91,6 @@ subscribeAccounts(() => {
 
 function subscribe(fn: () => void): () => void {
   listeners.add(fn);
-  refreshSuperadmin();
   return () => listeners.delete(fn);
 }
 
