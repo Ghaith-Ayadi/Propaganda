@@ -2,9 +2,8 @@
 // sites it can publish to. A list of connectors on the left, the picked one's
 // body on the right. Sub-path: #/connections/<tab>/<connector>.
 
-import { Tabs } from "react-aria-components";
-import { Tab, TabList } from "@/components/application/tabs/tabs";
-import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { Card } from "@/components/shell/Card";
+import { PageBody, PageHeader, PageTabs } from "@/components/shell/PageHeader";
 import { goPage, usePageRest } from "@/lib/route";
 import { cx } from "@/utils/cx";
 import { CONNECTORS, GROUPS, type Group } from "./connectors";
@@ -18,17 +17,15 @@ export function ConnectionsPage() {
   const picked = list.find((c) => c.id === id) ?? list[0];
 
   return (
-    <PageBody>
-      <PageHeader title="Connections" description="What Propaganda reads, how your AI tools reach it, and the sites it can publish to.">
-        <Tabs selectedKey={group} onSelectionChange={(k) => goPage("connections", String(k))}>
-          <TabList type="underline" size="md" aria-label="Connections">
-            {GROUPS.map((x) => (
-              <Tab key={x.id} id={x.id}>{x.label}</Tab>
-            ))}
-          </TabList>
-        </Tabs>
-      </PageHeader>
-      <div className="flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary shadow-xs md:flex-row">
+    <>
+      <PageHeader
+        title="Connections"
+        description="What Propaganda reads, how your AI tools reach it, and the sites it can publish to."
+        tabs={<PageTabs label="Connections" items={GROUPS.map((x) => ({ id: x.id, label: x.label }))} selected={group} onChange={(k) => goPage("connections", k)} />}
+      />
+      <PageBody>
+      <Card>
+      <div className="flex flex-col md:flex-row">
         <ul className="shrink-0 divide-y divide-secondary border-b border-secondary md:w-72 md:border-r md:border-b-0" aria-label="Connectors">
           {list.map((c) => {
             const on = c.id === picked.id;
@@ -54,6 +51,8 @@ export function ConnectionsPage() {
           <ConnectorBody connector={picked} />
         </div>
       </div>
-    </PageBody>
+      </Card>
+      </PageBody>
+    </>
   );
 }

@@ -3,7 +3,7 @@
 // colour with a simple glyph; services without a mark of their own use a kit icon.
 
 import type { ReactNode } from "react";
-import { Globe02, Link01, Mail01, Server01 } from "@untitledui/icons";
+import { Framer, Globe02, Link01, Mail01 } from "@untitledui/icons";
 import { cx } from "@/utils/cx";
 
 export type LogoId =
@@ -24,7 +24,7 @@ const TILES: Record<LogoId, { bg: string; fg: string; glyph: ReactNode }> = {
   claude: { bg: "#D97757", fg: "#fff", glyph: svg(<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />) },
   chatgpt: { bg: "#10A37F", fg: "#fff", glyph: svg(<path d="M12 3.5 19 7.5v9l-7 4-7-4v-9l7-4Zm0 0v17M5 7.5l14 9M19 7.5l-14 9" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />) },
   cursor: { bg: "#18181B", fg: "#fff", glyph: svg(<path d="M5 3.5 19 11l-6 1.5L10.5 19 5 3.5Z" fill="currentColor" />) },
-  framer: { bg: "#0A0A0A", fg: "#fff", glyph: svg(<path d="M6 3h12v6h-6l6 6H6V3Zm0 12h6v6l-6-6Z" fill="currentColor" />) },
+  framer: { bg: "#0A0A0A", fg: "#fff", glyph: <Framer className="size-[55%]" /> },
   webflow: { bg: "#146EF5", fg: "#fff", glyph: svg(<path d="m3 8 3.5 9 3-6 3 6L16 8l1 5 4-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />) },
   wordpress: { bg: "#21759B", fg: "#fff", glyph: svg(<path d="m4 8 4 10 3-8 3 8 4-10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />) },
   ghost: { bg: "#15171A", fg: "#fff", glyph: svg(<path d="M6 20v-8a6 6 0 0 1 12 0v8l-3-2-3 2-3-2-3 2Z" fill="currentColor" />) },
@@ -46,5 +46,3 @@ export function Logo({ id, size = "md" }: { id: LogoId; size?: "md" | "lg" }) {
     </span>
   );
 }
-
-export { Server01 };

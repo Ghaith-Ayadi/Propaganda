@@ -3,10 +3,12 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Copy01, Check } from "@untitledui/icons";
+import { Card as ShellCard, CardBody, CardHeader } from "@/components/shell/Card";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { cx } from "@/utils/cx";
 
+/** The shell's shared card, with the title / description / action / body shape the sections use. */
 export function Card({
   title,
   description,
@@ -19,16 +21,12 @@ export function Card({
   children?: ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-secondary bg-primary p-5 shadow-xs">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="font-title text-xl text-primary">{title}</h2>
-          {description && <p className="mt-1 text-sm text-tertiary">{description}</p>}
-        </div>
-        {action}
+    <ShellCard>
+      <div className={children ? undefined : "[&>header]:border-b-0"}>
+        <CardHeader title={title} description={description} actions={action} />
       </div>
-      {children && <div className="mt-4">{children}</div>}
-    </section>
+      {children && <CardBody>{children}</CardBody>}
+    </ShellCard>
   );
 }
 
