@@ -30,7 +30,7 @@ export function SiteSwitcher() {
       >
         <span
           aria-hidden
-          className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary-solid font-title text-base text-white"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md bg-(--color-fg-primary) font-title text-base text-(--color-bg-primary)"
         >
           {(site.name || "?").slice(0, 1).toUpperCase()}
         </span>
