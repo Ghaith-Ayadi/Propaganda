@@ -48,9 +48,9 @@ const QUESTIONS: { id: keyof StrategyAnswers; label: string; hint: string; examp
   },
 ];
 
-/** "Your business" stores 4, 8, 12 or 16+. */
+/** "Your business" (#35) offers 4, 8, 12 and 16 or more; its top option is stored as "16". */
 function reviewLine(v: string): string {
-  return v === "16+" ? "16 or more posts a month" : `${v} posts a month`;
+  return v === "16" || v === "16+" ? "16 or more posts a month" : `${v} posts a month`;
 }
 
 export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
