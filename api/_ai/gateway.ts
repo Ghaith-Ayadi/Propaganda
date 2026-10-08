@@ -5,6 +5,10 @@
 // else reaches a provider. Schema and rules: supabase draft cost_log.sql, and
 // cost.ts for the arithmetic.
 //
+// Paid APIs that aren't models (DataForSEO for the Scout) go through
+// callPaidApi(): the same budget rules, one row per request with the cost the
+// provider reported and zero tokens, so they count against the same budgets.
+//
 // Server-side only: it writes with the service role key, which never reaches a
 // browser. Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
 
@@ -213,4 +217,54 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
   });
 
   return { text: result.text, usage, costUsd: cost, budgetWarning: verdict.warn };
+}
+
+// ---- paid APIs that aren't models ----
+
+export interface PaidCallOptions {
+  site: string;
+  job: string;
+  /** Stored in model_calls.model: 'dataforseo/serp-organic', ... */
+  service: string;
+  background: boolean;
+}
+
+/**
+ * Run one request to a paid API under the budget rules, and log what it cost.
+ * `run` returns the value and the cost the provider reported (USD). A failed
+ * request is logged unpriced, like a failed model call.
+ */
+export async function callPaidApi<T>(
+  opts: PaidCallOptions,
+  run: () => Promise<{ value: T; costUsd: number }>,
+): Promise<T> {
+  const verdict = decide(await readGate(opts.site), opts.background);
+  if (!verdict.allow) {
+    if (verdict.engageKill) {
+      await rest("/rpc/cost_engage_kill", {
+        method: "POST",
+        body: JSON.stringify({ p_reason: "Global daily cap reached" }),
+      }).catch(() => {});
+    }
+    throw new BudgetError(verdict.reason);
+  }
+  const ctx = workflowContext();
+  const base = {
+    site: opts.site,
+    job: opts.job,
+    model: opts.service,
+    background: opts.background,
+    workflow_id: ctx.workflowId,
+    step_id: ctx.stepId,
+  };
+  let out;
+  try {
+    out = await run();
+  } catch (err) {
+    await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+    throw err;
+  }
+  const cost = Math.round(Math.max(0, out.costUsd) * 1e6) / 1e6;
+  await writeCall({ ...base, cost_usd: cost, priced: true, status: "ok" });
+  return out.value;
 }

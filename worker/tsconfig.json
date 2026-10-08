@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": false,
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"],
+    "baseUrl": ".",
+    "paths": {
+      "ai": ["./node_modules/ai"],
+      "ai/*": ["./node_modules/ai/*"],
+      "@ai-sdk/google": ["./node_modules/@ai-sdk/google"]
+    }
+  },
+  "include": ["src", "../api/_ai/gateway.ts", "../api/_ai/cost.ts", "../api/_ai/errors.ts"]
+}

@@ -79,4 +79,26 @@ test("subscription 5-hour limit throws UsageLimitError and logs nothing", async 
   assert.equal(calls.length, 0);
 });
 
+test("a paid API call is logged with the provider's cost and refused at the budget", async () => {
+  gate = open; calls.length = 0;
+  setWorkflowContext(() => ({ workflowId: "wf2", stepId: 1 }));
+  const v = await g.callPaidApi({ site: opts.site, job: "scout", service: "dataforseo/serp-organic", background: true },
+    async () => ({ value: 42, costUsd: 0.0021 }));
+  assert.equal(v, 42);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].model, "dataforseo/serp-organic");
+  assert.equal(calls[0].cost_usd, 0.0021);
+  assert.equal(calls[0].input_tokens, undefined);
+  assert.equal(calls[0].workflow_id, "wf2");
+
+  gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 }; calls.length = 0;
+  let ran = false;
+  await assert.rejects(
+    g.callPaidApi({ site: opts.site, job: "scout", service: "x", background: true }, async () => { ran = true; return { value: 1, costUsd: 1 }; }),
+    BudgetError,
+  );
+  assert.equal(ran, false);
+  assert.equal(calls.length, 0);
+});
+
 test.after(() => server.close());

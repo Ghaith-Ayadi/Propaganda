@@ -21,6 +21,10 @@
 //   UPLOAD              an image upload failed
 //   COST-USAGE          the tenant's model usage for the month couldn't be loaded
 //   COST-ADMIN          the Admin consumption figures or limits couldn't be loaded or saved
+//   RUNS-LOAD           Admin couldn't load agent runs from the worker
+//   RUN-RETRY           retrying a run failed
+//   RUN-CANCEL          cancelling a run failed
+//   RUN-DEMO            starting a demo run failed
 //   KB-LOAD             a knowledge base page couldn't load its data
 //   KB-REMEMBER         a Remember couldn't be sent
 //   KB-FLAG-CLOSE       closing or snoozing a flag failed
