@@ -4,6 +4,9 @@
 //
 // Routes:
 //   /                       → Home
+//   /author                 → the author page (themed blogs; "author" is a
+//                             reserved segment, so no collection can take it)
+//   /:collection            → a collection page (themed blogs)
 //   /:collection/:slug      → a post, by its address (lib/slug.ts)
 //   /p/:slug                → the address posts had before collections were in
 //                             it: forwarded to the current one. Links in older
@@ -20,10 +23,12 @@
 // clicks shouldn't push history or scroll.
 
 import { useEffect, useState } from "react";
-import { postPath } from "@/lib/slug";
+import { postPath, RESERVED_SEGMENTS } from "@/lib/slug";
 
 export type BlogRoute =
   | { view: "home" }
+  | { view: "author" }
+  | { view: "collection"; collection: string }
   | { view: "post"; collection: string; slug: string }
   | { view: "legacy"; slug: string };
 
@@ -42,6 +47,9 @@ function routeOf(path: string): BlogRoute {
   if (legacy) return { view: "legacy", slug: decodeURIComponent(legacy[1]) };
   const m = path.match(/^\/([^/]+)\/([^/]+)\/?$/);
   if (m) return { view: "post", collection: decodeURIComponent(m[1]), slug: decodeURIComponent(m[2]) };
+  if (/^\/author\/?$/.test(path)) return { view: "author" };
+  const one = path.match(/^\/([^/@][^/]*)\/?$/);
+  if (one && !RESERVED_SEGMENTS.includes(one[1])) return { view: "collection", collection: decodeURIComponent(one[1]) };
   return { view: "home" };
 }
 
@@ -52,7 +60,15 @@ function parse(): BlogRoute {
 
 function toPath(r: BlogRoute): string {
   const rel =
-    r.view === "post" ? postPath(r.collection, r.slug) : r.view === "legacy" ? `/p/${encodeURIComponent(r.slug)}` : "/";
+    r.view === "post"
+      ? postPath(r.collection, r.slug)
+      : r.view === "legacy"
+        ? `/p/${encodeURIComponent(r.slug)}`
+        : r.view === "collection"
+          ? `/${encodeURIComponent(r.collection)}`
+          : r.view === "author"
+            ? "/author"
+            : "/";
   return basePath + rel;
 }
 
@@ -138,6 +154,31 @@ export function routeOfHref(href: string): BlogRoute | null {
   else if (path.startsWith("/@")) return null;
   const r = routeOf(path);
   return r.view === "home" ? null : r;
+}
+
+/**
+ * Like routeOfHref(), for the themed blog, whose every page is a route: the
+ * home page too, and collection and author pages. Null for anything that
+ * should load normally: another host, an in-page anchor, an old "/@slug/…".
+ */
+export function themedRouteOfHref(href: string): BlogRoute | null {
+  if (typeof window === "undefined") return null;
+  let url: URL;
+  try {
+    url = new URL(href, window.location.href);
+  } catch {
+    return null;
+  }
+  if (url.origin !== window.location.origin) return null;
+  if (url.hash && url.pathname === window.location.pathname) return null;
+  let path = url.pathname;
+  if (basePath) {
+    if (path === basePath) path = "/";
+    else if (path.startsWith(basePath + "/")) path = path.slice(basePath.length);
+    else return null;
+  } else if (path.startsWith("/@")) return null;
+  if (/^\/(admin|api|assets|cards|_)/.test(path)) return null;
+  return routeOf(path);
 }
 
 /** The href of a route on this site (under its base path, where it has one). */

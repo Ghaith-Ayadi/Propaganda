@@ -28,6 +28,7 @@ import { setDrawer, useDrawer, useIsMobile, useMobileShell } from "@/lib/mobile"
 
 // Errors and product analytics, editor only (lib/telemetry.ts).
 initTelemetry();
+import { exposeThemeConsole } from "@/lib/customThemes";
 
 // The app's display face (Rowan) instead of the blogs' (index.css).
 document.documentElement.classList.add("ppgd-app");
@@ -38,6 +39,9 @@ document.documentElement.classList.add("ppgd-app");
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
 }
+
+// Custom blog themes are installed from the console for now (lib/customThemes.ts).
+exposeThemeConsole();
 
 export function EditorApp() {
   return (

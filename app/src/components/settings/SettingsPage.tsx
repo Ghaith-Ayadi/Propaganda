@@ -4,7 +4,7 @@
 import { goPage, usePageRest } from "@/lib/route";
 import { Edit05 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
-import { AuthorTab, EditorTab, SiteTab, TemplatesTab } from "@/components/SettingsDialog";
+import { AuthorTab, DesignSection, EditorTab, SiteTab, TemplatesTab } from "@/components/SettingsDialog";
 import { PageBody, PageHeader, PageTabs } from "@/components/shell/PageHeader";
 import { Card } from "./ui";
 import { AppearanceSection } from "./AppearanceSection";
@@ -22,6 +22,7 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance" },
   { id: "author", label: "Author" },
   { id: "site", label: "Site" },
+  { id: "design", label: "Design" },
   { id: "editor", label: "Editor" },
   { id: "templates", label: "Templates" },
 ] as const;
@@ -45,6 +46,7 @@ export function SettingsPage() {
         {selected === "appearance" && <AppearanceSection />}
         {selected === "author" && <Plain title="Author"><AuthorTab /></Plain>}
         {selected === "site" && <Plain title="Site"><SiteTab /></Plain>}
+        {selected === "design" && <Plain title="Design"><DesignSection /></Plain>}
         {selected === "editor" && <Plain title="Editor"><EditorTab /></Plain>}
         {selected === "templates" && <Plain title="Templates"><TemplatesTab /></Plain>}
       </PageBody>
