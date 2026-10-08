@@ -195,6 +195,8 @@ const ideasOf = (origin) => [...stored.values()].filter((i) => i.site === SITE &
 const kit = await import("../dist/testkit.js");
 const { DBOS } = await import("@dbos-inc/dbos-sdk");
 kit.setModelResolver(() => model);
+// The test tenant runs on our own account (BYOK, api/_ai/modelKeys.ts), so no key is needed.
+kit.setAccounts({ [SITE]: "private" });
 kit.setWorkflowContext(() => ({ workflowId: DBOS.workflowID ?? null, stepId: DBOS.stepID ?? null }));
 DBOS.setConfig({ name: "propaganda-scout-test", systemDatabaseUrl: `${PGURL}/${SYS}`, applicationVersion: "test" });
 await DBOS.launch();
