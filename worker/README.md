@@ -15,6 +15,8 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
 | `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
+| `src/workflows/scout.ts`, `src/scout/` | The Scout: DataForSEO, watched pages, ranking facts, the model's triage, its database role |
+| `sql/scout.draft.sql` | The Scout's tables, a draft kept out of `supabase/migrations` until it's approved |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
 | `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
 
@@ -151,6 +153,39 @@ Gateway), `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` for web search (without
 them the agents work from what they were given), and optionally
 `AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `VOICE_FROM`, `PITCHER_BATCH_CRON`.
 
+## The Scout
+
+Once a day (06:00 UTC, `SCOUT_CRON`) the `scout-daily` schedule starts one run
+per tenant that has something to follow, under the id `scout-<site>-<day>`, so
+a day is never scouted twice. A run:
+
+1. reads the plan: this quarter's `scout_searches` (at most 10), the active
+   `watched_sites`, and the topics they name;
+2. checks each search on Google (DataForSEO, top 20) and writes the
+   `ranking_search` fact; a search we're not on page one for becomes an idea
+   (origin search, with its `target_search`), once a quarter, with the three
+   results to beat;
+3. on Mondays (`SCOUT_AI_WEEKDAY`), asks DataForSEO's LLM Mentions which AI
+   answers mention the tenant (Google AI Overviews, and ChatGPT for US English)
+   and writes `ranking_ai`;
+4. reads Google News (last three days) and Reddit threads (Google's index of
+   them, one ordinary search) per topic, and each watched page's links (the
+   first check is a baseline; after that, new links are the news);
+5. drops every link it has seen before (`scout_seen`), has the base model pick
+   at most 8 ideas from the rest, and keeps only evidence it saw;
+6. hands the ideas to the Pitcher (`handOffIdeas`, one stable id per idea so a
+   replay never adds it twice; they wait for the next batch with the plan), then saves the facts,
+   the page snapshots and the seen links in one transaction.
+
+Each paid request is its own step: a retry or restart never pays twice. It
+writes its own tables as `propaganda_scout`, a role that can write nothing
+else. Watched pages are fetched from public addresses only.
+
+Needs `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` (without them it checks the
+watched sites only). Start one by hand from Admin with
+`POST /runs/scout { site, checkAi? }`; Chat starts one for today (AI answers
+included) through `/agents/scout`.
+
 ## The usage limit
 
 The Claude subscription answers 429 with `anthropic-ratelimit-unified-status:
@@ -174,6 +209,7 @@ Every route but `/health` needs a superadmin's Supabase access token.
 | `POST /runs/:id/retry` | A failed run is **forked** from the failed step: a new run that keeps the steps before it (their model calls aren't paid again). A cancelled run, or one DBOS gave up recovering, **resumes** under its own id |
 | `POST /runs/:id/cancel` | A queued, running or stalled run |
 | `POST /runs/demo` | `{ stallSeconds?, fail?, site? }`: a three-step run that spends nothing |
+| `POST /runs/scout` | `{ site, day?, checkAi? }`: a Scout run now |
 
 ### Dispatch, from Chat
 
@@ -203,6 +239,7 @@ registerAgent("checker", (input) => startCheckOnRequest(input.site, input.post, 
 ```
 cd worker && npm install
 npm test                      # PGURL=postgres://postgres:postgres@localhost:5432 by default
+npm run typecheck && npm run build
 ```
 
 Against the laptop stack (`supabase/docker-compose.yml`): `POSTGRES_PASSWORD`

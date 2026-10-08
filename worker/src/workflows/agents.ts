@@ -106,3 +106,13 @@ export async function dispatchAgent(name: AgentName, input: DispatchInput): Prom
   if (!handler) return undefined;
   return handler(input);
 }
+
+/** Same, under a fixed workflow id: starting it again with the same id is a no-op (a daily run, say). */
+export function startForTenantWithId<Args extends unknown[], R>(
+  site: string,
+  workflowID: string,
+  workflow: (...args: Args) => Promise<R>,
+  ...args: Args
+): Promise<WorkflowHandle<R>> {
+  return DBOS.startWorkflow(workflow, { workflowID, queueName: AGENT_QUEUE, workflowAttributes: { site } })(...args);
+}

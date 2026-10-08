@@ -8,3 +8,4 @@ node test/limits.mjs
 node test/shared.mjs
 node test/agents.mjs
 node test/e2e.mjs
+node test/scout.mjs
