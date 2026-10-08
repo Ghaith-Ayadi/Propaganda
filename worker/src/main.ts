@@ -17,6 +17,7 @@ import { registerQueues } from "./workflows/agents.js";
 import "./workflows/demo.js";
 import "./agents/checker.js";
 import "./agents/guardian.js";
+import { setListenerPool, startListener } from "./listener/index.js";
 
 async function main(): Promise<void> {
   DBOS.setConfig({
@@ -40,6 +41,8 @@ async function main(): Promise<void> {
   });
   db.on("error", (err) => console.error("app database:", err.message));
   setAppDb(db);
+  setListenerPool(db);
+  await startListener();
   const server = startServer(db, config.port);
   const stopDispatcher = startDispatcher();
   console.log(`worker ${config.appVersion} up, Runs API on :${config.port}`);
