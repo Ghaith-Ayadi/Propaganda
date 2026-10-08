@@ -7,6 +7,13 @@
 // sub-path with usePageRest() and moves with goPage(id, rest) (lib/route.ts).
 // It renders its own header (components/shell/PageHeader.tsx) and fills the
 // main column; the shell scrolls it.
+//
+// Frozen for the 0.2 batch (pages are being built on it in parallel): `id`,
+// `path`, `component` with no props, usePageRest() for the sub-path.
+//
+// `useBadge` and `useChildren` are plain imports, so they and what they import
+// ship in the main bundle: keep them small and Dexie-only, and keep page code
+// behind the lazy `component`.
 
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 import {
@@ -21,7 +28,6 @@ import {
   Settings01,
   Target04,
 } from "@untitledui/icons";
-import { useContentTree } from "@/components/pages/contentTree";
 
 export type Icon = ComponentType<{ className?: string }>;
 
@@ -39,6 +45,15 @@ export interface NavNode {
   children?: NavNode[];
 }
 
+/** A nav count. `urgent` turns the chip the error color (Inbox: high-urgency flags). */
+export type BadgeValue = number | { count: number; urgent?: boolean } | null;
+
+export function badgeOf(v: BadgeValue | undefined): { count: number; urgent: boolean } | null {
+  if (v == null) return null;
+  const b = typeof v === "number" ? { count: v, urgent: false } : { count: v.count, urgent: !!v.urgent };
+  return b.count > 0 ? b : null;
+}
+
 export interface PageRoute {
   /** Stable key; also the default path. */
   id: string;
@@ -52,8 +67,8 @@ export interface PageRoute {
   section: "main" | "footer";
   /** The page. Absent: an empty state until a thread builds it. */
   component?: LazyExoticComponent<ComponentType>;
-  /** A count beside the label (Inbox). A hook: it may read Dexie or the server. */
-  useBadge?: () => number | null;
+  /** A count chip beside the label (Inbox). A hook: it may read Dexie or the server. */
+  useBadge?: () => BadgeValue;
   /** A tree under the label (Content). A hook, like useBadge. */
   useChildren?: () => NavNode[];
 }
@@ -95,7 +110,6 @@ export const PAGES: PageRoute[] = [
     description: "Everything you publish, by channel.",
     section: "main",
     component: lazy(() => import("@/components/pages/ContentPage").then((m) => ({ default: m.ContentPage }))),
-    useChildren: useContentTree,
   },
   {
     id: "knowledge",

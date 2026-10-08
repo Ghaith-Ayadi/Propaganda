@@ -5,7 +5,8 @@ import { useEffect, useRef } from "react";
 import { Menu01 } from "@untitledui/icons";
 import { toggleDrawer } from "@/lib/mobile";
 import { pageHref, useRoute } from "@/lib/route";
-import { PAGES, type PageRoute } from "@/lib/routes";
+import { PAGES, badgeOf, type PageRoute } from "@/lib/routes";
+import { Badge } from "@/components/base/badges/badges";
 import { cx } from "@/utils/cx";
 import { activePageOf } from "./nav";
 
@@ -40,18 +41,22 @@ export function PhoneTabs() {
 }
 
 function Tab({ page, active }: { page: PageRoute; active: boolean }) {
-  const badge = page.useBadge?.() ?? null;
+  const badge = badgeOf(page.useBadge?.());
   return (
     <a
       href={pageHref(page.path)}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "shrink-0 rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition",
+        "flex shrink-0 items-center rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition",
         active ? "bg-primary text-primary shadow-xs ring-1 ring-inset ring-secondary" : "text-secondary",
       )}
     >
       {page.label}
-      {badge != null && badge > 0 && <span className="ml-1 text-quaternary tabular-nums">{badge}</span>}
+      {badge && (
+        <Badge size="sm" color={badge.urgent ? "error" : "gray"} className="ml-1.5 inline-flex tabular-nums">
+          {badge.count}
+        </Badge>
+      )}
     </a>
   );
 }
