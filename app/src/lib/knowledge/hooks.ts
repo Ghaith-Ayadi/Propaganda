@@ -93,13 +93,13 @@ export function useFlagPage(q: FlagQuery) {
   return useKb<FlagPage>("kb.flags", () => kb().flags(q), [JSON.stringify(q)]);
 }
 
-/** The nav bar's count beside "Knowledge base": open flags plus open re-checks. */
-export function useKnowledgeBadge(): number | null {
+/** The nav bar's count beside "Knowledge base": open flags plus open re-checks; red when one is urgent. */
+export function useKnowledgeBadge(): { count: number; urgent: boolean } | null {
   // Sample data isn't this tenant's: no number beside the nav entry.
   const sample = kb().sample;
   const flags = useKb("kb.badge", () => kb().flags({ status: "open", kind: "all", offset: 0, limit: 1 }), []);
   const threads = useKb("kb.rechecks", () => kb().rechecks(), []);
   if (sample || !flags.data) return null;
-  const n = flags.data.total + (threads.data ?? []).reduce((s, t) => s + t.open, 0);
-  return n || null;
+  const count = flags.data.total + (threads.data ?? []).reduce((s, t) => s + t.open, 0);
+  return count ? { count, urgent: flags.data.urgent > 0 } : null;
 }

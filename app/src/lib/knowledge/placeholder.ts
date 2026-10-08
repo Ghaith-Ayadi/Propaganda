@@ -35,6 +35,7 @@ import {
   type Source,
   type SuggestedAction,
   type Topic,
+  type Urgency,
 } from "./types";
 
 // ---- the sample tenant ----
@@ -454,6 +455,7 @@ interface F {
   otherClaim?: string;
   headline: string;
   passage: { before: string; quote: string; after: string; section: string };
+  urgency: Urgency;
   explanation: string;
   suggestedAction: SuggestedAction;
   fix: FixPreview | null;
@@ -474,10 +476,11 @@ const flags: F[] = [
     post: post(1).id,
     claim: pid("cl", 2),
     headline: "Time to go live",
-    passage: { before: "Switching is less work than you think. ", quote: "Most clinics are live in three days.", after: " We move your patients, your diary and your templates.", section: "Intro" },
+    urgency: "normal",
+    passage: { before: "Switching practice software has a reputation for eating a month of evenings. Switching to Tidewell is less work than you think. ", quote: "Most clinics are live in three days.", after: " We move your patients, your diary and your templates, and someone from our team stays on the phone with you on the first morning. You don't need to plan a quiet week for it.", section: "Intro" },
     explanation: "The post promises three days; onboarding takes about a week. Three days was the fastest case, a one-practitioner clinic.",
     suggestedAction: "edit_wording",
-    fix: { before: "Switching is less work than you think. ", removed: "Most clinics are live in three days.", added: "Most clinics are live within a week, and small ones in as little as three days.", after: " We move your patients, your diary and your templates.", section: "Intro" },
+    fix: { before: "Switching practice software has a reputation for eating a month of evenings. Switching to Tidewell is less work than you think. ", removed: "Most clinics are live in three days.", added: "Most clinics are live within a week, and small ones in as little as three days.", after: " We move your patients, your diary and your templates, and someone from our team stays on the phone with you on the first morning. You don't need to plan a quiet week for it.", section: "Intro" },
     confidence: 0.94,
     created: "2026-10-05T08:12:00Z",
     batch: null,
@@ -493,10 +496,11 @@ const flags: F[] = [
     post: post(2).id,
     claim: pid("cl", 1),
     headline: "Where patient data is stored",
-    passage: { before: "Your patients trust you with their health records. ", quote: "We store data in Frankfurt and Singapore.", after: " Both regions are certified and encrypted at rest.", section: "Where your data lives" },
+    urgency: "high",
+    passage: { before: "Your patients trust you with their health records, and they deserve to know where those records sit. ", quote: "We store data in Frankfurt and Singapore.", after: " Both regions are certified and encrypted at rest, and only two people at Tidewell can reach the production databases, each with a hardware key.", section: "Where your data lives" },
     explanation: "The post names Singapore; the signed security overview says all patient data stays in the EU, backups included.",
     suggestedAction: "edit_wording",
-    fix: { before: "Your patients trust you with their health records. ", removed: "We store data in Frankfurt and Singapore.", added: "All patient data is stored in the EU, in Frankfurt, backups included.", after: " Both regions are certified and encrypted at rest.", section: "Where your data lives" },
+    fix: { before: "Your patients trust you with their health records, and they deserve to know where those records sit. ", removed: "We store data in Frankfurt and Singapore.", added: "All patient data is stored in the EU, in Frankfurt, backups included.", after: " Both regions are certified and encrypted at rest, and only two people at Tidewell can reach the production databases, each with a hardware key.", section: "Where your data lives" },
     confidence: 0.97,
     created: "2026-10-04T16:40:00Z",
     batch: null,
@@ -512,10 +516,11 @@ const flags: F[] = [
     post: post(4).id,
     claim: pid("cl", 5),
     headline: "Integration count",
-    passage: { before: "One login for the whole clinic. ", quote: "Tidewell integrates with 60+ tools.", after: " Here are the ten we see most.", section: "Opening" },
+    urgency: "normal",
+    passage: { before: "One login for the whole clinic, and everything you already use keeps working. ", quote: "Tidewell integrates with 60+ tools.", after: " Here are the ten we see most, with what each one syncs and how often.", section: "Opening" },
     explanation: "The post says 60+; the integrations catalogue counts about 30 as of September 2026.",
     suggestedAction: "edit_wording",
-    fix: { before: "One login for the whole clinic. ", removed: "Tidewell integrates with 60+ tools.", added: "Tidewell integrates with about 30 tools.", after: " Here are the ten we see most.", section: "Opening" },
+    fix: { before: "One login for the whole clinic, and everything you already use keeps working. ", removed: "Tidewell integrates with 60+ tools.", added: "Tidewell integrates with about 30 tools.", after: " Here are the ten we see most, with what each one syncs and how often.", section: "Opening" },
     confidence: 0.88,
     created: "2026-10-03T10:05:00Z",
     batch: null,
@@ -532,6 +537,7 @@ const flags: F[] = [
     claim: pid("cl", 8),
     otherClaim: pid("cl", 7),
     headline: "Practitioners per clinic",
+    urgency: "normal",
     passage: { before: "", quote: "Tidewell has no limit on practitioners per clinic.", after: "", section: "" },
     explanation: "A Remember says there's no limit; the wiki says up to 40. Both are in the knowledge base until the owner of Product settles it.",
     suggestedAction: "",
@@ -551,7 +557,8 @@ const flags: F[] = [
     post: post(5).id,
     claim: pid("cl", 7),
     headline: "Practitioners per clinic",
-    passage: { before: "Run every site from one account. ", quote: "Each clinic in your group can have up to 40 practitioners.", after: " Need more? Split it into two clinics.", section: "Limits" },
+    urgency: "normal",
+    passage: { before: "Run every site from one account: one bill, one patient list, one set of templates. ", quote: "Each clinic in your group can have up to 40 practitioners.", after: " Need more? Split it into two clinics and keep them under the same group.", section: "Limits" },
     explanation: "Relies on the 40-practitioner limit, which a newer Remember contradicts. Waiting on the owner of Product.",
     suggestedAction: "leave",
     fix: null,
@@ -570,7 +577,8 @@ const flags: F[] = [
     post: post(11).id,
     claim: pid("cl", 5),
     headline: "Nookal support",
-    passage: { before: "", quote: "and if you're on Nookal, that works too", after: "", section: "Practice management" },
+    urgency: "normal",
+    passage: { before: "If you book through Cliniko, Tidewell picks up your diary overnight, ", quote: "and if you're on Nookal, that works too", after: ". Either way, nothing changes for your reception team.", section: "Practice management" },
     explanation: "The knowledge base only listed Cliniko.",
     suggestedAction: "",
     fix: null,
@@ -596,7 +604,8 @@ const flags: F[] = [
     post: post(7).id,
     claim: pid("cl", 13),
     headline: "Clinic size",
-    passage: { before: "", quote: "most clinics we work with are small", after: "", section: "Who it's for" },
+    urgency: "normal",
+    passage: { before: "We built Tidewell after years of running a physio practice ourselves, and ", quote: "most clinics we work with are small", after: ": two to six practitioners, one front desk, and nobody whose job is IT.", section: "Who it's for" },
     explanation: "Rests on a contested claim.",
     suggestedAction: "",
     fix: null,
@@ -610,10 +619,10 @@ const flags: F[] = [
   },
   // The re-check thread after the patient-app reversal (decision de5, major).
   ...[
-    { n: 3, status: "open" as FlagStatus, action: "rewrite" as SuggestedAction, tldr: "The whole post argues against an app. Rewrite it as the story of the reversal, or take it down.", quote: "Tidewell will not build a patient app." },
-    { n: 7, status: "open" as FlagStatus, action: "edit_wording" as SuggestedAction, tldr: "One line says there's no app to download. True today, wrong next year: say the app is coming in 2027.", quote: "That's why there's no Tidewell app for patients to download." },
-    { n: 6, status: "cleared" as FlagStatus, action: "leave" as SuggestedAction, tldr: "Mentions the old decision as history, dated. Still true as written.", quote: "Last year we said no to a patient app." },
-    { n: 10, status: "open" as FlagStatus, action: "dated_note" as SuggestedAction, tldr: "Assumes patients never install anything. Add a dated note that reminders move into the app in 2027.", quote: "Reminders go by SMS, since patients don't install anything." },
+    { n: 3, status: "open" as FlagStatus, action: "rewrite" as SuggestedAction, tldr: "The whole post argues against an app. Rewrite it as the story of the reversal, or take it down.", quote: "Tidewell will not build a patient app.", before: "We get asked this at every conference. ", after: " Patients already have too many apps, and the ones they keep are the ones from their bank and their messages. We would rather put that effort into reminders that just arrive." },
+    { n: 7, status: "open" as FlagStatus, action: "edit_wording" as SuggestedAction, tldr: "One line says there's no app to download. True today, wrong next year: say the app is coming in 2027.", quote: "That's why there's no Tidewell app for patients to download.", before: "Everything a patient needs comes to them as a text or an email: the booking, the reminder, the form to fill in before they arrive. ", after: " They tap a link and they're done." },
+    { n: 6, status: "cleared" as FlagStatus, action: "leave" as SuggestedAction, tldr: "Mentions the old decision as history, dated. Still true as written.", quote: "Last year we said no to a patient app.", before: "Our roadmap has moved a lot since 2024. ", after: " This post is about what we built instead, and why it worked." },
+    { n: 10, status: "open" as FlagStatus, action: "dated_note" as SuggestedAction, tldr: "Assumes patients never install anything. Add a dated note that reminders move into the app in 2027.", quote: "Reminders go by SMS, since patients don't install anything.", before: "No-shows cost a small clinic more than its software does. ", after: " Two reminders, one the day before and one two hours before, halve them." },
   ].map((r, i): F => ({
     id: pid("fr", i + 1),
     kind: "recheck",
@@ -621,12 +630,13 @@ const flags: F[] = [
     post: post(r.n).id,
     claim: pid("cl", 3),
     headline: "Patient app",
-    passage: { before: "", quote: r.quote, after: "", section: "" },
+    urgency: "normal",
+    passage: { before: r.before, quote: r.quote, after: r.after, section: "" },
     explanation: "",
     suggestedAction: r.action,
     fix:
       r.action === "edit_wording"
-        ? { before: "", removed: r.quote, added: "There's no Tidewell app for patients yet; one is coming in 2027.", after: "", section: "" }
+        ? { before: r.before, removed: r.quote, added: "There's no Tidewell app for patients yet; one is coming in 2027.", after: r.after, section: "" }
         : r.action === "dated_note"
           ? { before: "", removed: "", added: "Update, September 2026: reminders move into the Tidewell patient app when it launches in 2027.", after: "", section: "End of post" }
           : null,
@@ -640,8 +650,8 @@ const flags: F[] = [
   })),
   // The support-hours change (decision de10, minor).
   ...[
-    { n: 9, status: "open" as FlagStatus, action: "edit_wording" as SuggestedAction, tldr: "States the old hours. Change 8am to 6pm to 7am to 7pm.", quote: "We answer the phone from 8am to 6pm AEST." },
-    { n: 8, status: "cleared" as FlagStatus, action: "leave" as SuggestedAction, tldr: "Says \"business hours\" without times. Still holds.", quote: "call us during business hours" },
+    { n: 9, status: "open" as FlagStatus, action: "edit_wording" as SuggestedAction, tldr: "States the old hours. Change 8am to 6pm to 7am to 7pm.", quote: "We answer the phone from 8am to 6pm AEST.", before: "Stuck on something? ", after: " Outside those hours, write to us and the first person in the next morning picks it up." },
+    { n: 8, status: "cleared" as FlagStatus, action: "leave" as SuggestedAction, tldr: "Says \"business hours\" without times. Still holds.", quote: "call us during business hours", before: "If an import goes wrong, don't start again: ", after: " and we'll fix it with you on the line." },
   ].map((r, i): F => ({
     id: pid("fs", i + 1),
     kind: "recheck",
@@ -649,10 +659,11 @@ const flags: F[] = [
     post: post(r.n).id,
     claim: pid("cl", 10),
     headline: "Support hours",
-    passage: { before: "", quote: r.quote, after: "", section: "" },
+    urgency: "normal",
+    passage: { before: r.before, quote: r.quote, after: r.after, section: "" },
     explanation: "",
     suggestedAction: r.action,
-    fix: r.action === "edit_wording" ? { before: "", removed: r.quote, added: "We answer the phone from 7am to 7pm AEST.", after: "", section: "Contact" } : null,
+    fix: r.action === "edit_wording" ? { before: r.before, removed: r.quote, added: "We answer the phone from 7am to 7pm AEST.", after: r.after, section: "Contact" } : null,
     confidence: null,
     created: "2026-10-02T06:01:00Z",
     batch: pid("de", 10),
@@ -705,11 +716,14 @@ function summary(c: C): ClaimSummary {
   };
 }
 
-/** The quote with the text around it, as the server cuts it from kb_sources.body. */
+/** The rest of the quote's paragraph, as the server cuts it from kb_sources.body. */
 function withContext(body: string, quote: string): { before: string; after: string } {
   const at = body.indexOf(quote);
   if (at < 0) return { before: "", after: "" };
-  return { before: body.slice(Math.max(0, at - 160), at), after: body.slice(at + quote.length, at + quote.length + 160) };
+  const end = at + quote.length;
+  const start = body.lastIndexOf("\n\n", at);
+  const stop = body.indexOf("\n\n", end);
+  return { before: body.slice(start < 0 ? 0 : start + 2, at), after: body.slice(end, stop < 0 ? undefined : stop) };
 }
 
 function topicLineage(id: string): string[] {
@@ -778,6 +792,7 @@ function flagSummary(f: F): FlagSummary {
     postId: f.post,
     postTitle: f.post ? postOf(f.post).title : "Two claims disagree",
     headline: f.headline,
+    urgency: f.urgency,
     confidence: f.confidence,
     created: f.created,
     batch: f.batch,
@@ -935,6 +950,7 @@ export const placeholderKb: KnowledgeBackend = {
           otherClaim: near.id,
           headline: topicOf(input.topics[0] ?? near.topics[0])?.name ?? "Two claims disagree",
           passage: { before: "", quote: input.text, after: "", section: "" },
+          urgency: "normal",
           explanation: "Your Remember disagrees with a claim already in the knowledge base. Both stay in until the topic owner settles it.",
           suggestedAction: "",
           fix: null,
@@ -959,9 +975,11 @@ export const placeholderKb: KnowledgeBackend = {
     if (q.kind !== "all") rows = rows.filter((f) => f.kind === q.kind);
     // Re-checks live in their threads, not one by one in the flag list.
     else rows = rows.filter((f) => f.kind !== "recheck");
-    rows.sort((a, b) => b.created.localeCompare(a.created));
+    // Urgent first, then newest.
+    rows.sort((a, b) => (a.urgency === b.urgency ? b.created.localeCompare(a.created) : a.urgency === "high" ? -1 : 1));
     const slice = rows.slice(q.offset, q.offset + q.limit).map(flagSummary);
-    return { rows: slice, total: rows.length, next: q.offset + q.limit < rows.length ? q.offset + q.limit : null };
+    const urgent = rows.filter((f) => f.urgency === "high").length;
+    return { rows: slice, total: rows.length, urgent, next: q.offset + q.limit < rows.length ? q.offset + q.limit : null };
   },
 
   async flag(id) {
@@ -972,7 +990,7 @@ export const placeholderKb: KnowledgeBackend = {
     const other = f.otherClaim ? claims.find((c) => c.id === f.otherClaim) : undefined;
     return {
       ...flagSummary(f),
-      passage: { ...f.passage, uri: "" },
+      passage: { ...f.passage, uri: f.post ? `https://tidewell.example/blog/${f.post}` : "" },
       claim: detail(claim),
       otherClaim: other ? detail(other) : null,
       explanation: f.explanation,
@@ -1079,6 +1097,8 @@ export const placeholderKb: KnowledgeBackend = {
         status: f.status,
         tldr: f.tldr,
         quote: f.passage.quote,
+        before: f.passage.before,
+        after: f.passage.after,
         suggestedAction: f.suggestedAction,
         fix: f.fix,
       })),

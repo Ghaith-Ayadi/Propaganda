@@ -2,7 +2,7 @@
 // disagree with each other. Re-checks after a change live in their own
 // threads (RechecksView), not here one by one.
 
-import { ArrowLeft, BookOpen01, Scales02 } from "@untitledui/icons";
+import { ArrowLeft, Flag01, Scales02 } from "@untitledui/icons";
 import { useState } from "react";
 import { Button } from "@/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
@@ -10,7 +10,7 @@ import { goPage, pageHref } from "@/lib/route";
 import { useFlagPage } from "@/lib/knowledge/hooks";
 import type { FlagSummary } from "@/lib/knowledge/types";
 import { cx } from "@/utils/cx";
-import { Empty, FlagStatusBadge, Loading, formatDate } from "./bits";
+import { Empty, FlagStatusBadge, Loading, UrgentBadge, formatDate } from "./bits";
 import { FlagDetailView } from "./FlagDetailView";
 
 const PAGE_SIZE = 30;
@@ -68,7 +68,7 @@ export function FlagsView({ selected }: { selected: string | null }) {
             <FlagDetailView key={selected} id={selected} />
           </>
         ) : (
-          <Empty title="Pick a flag">See what the content says, what the knowledge base says, the evidence, and the fix.</Empty>
+          <Empty title="Pick a flag">The original text beside the knowledge base item, and the suggested update.</Empty>
         )}
       </div>
     </div>
@@ -76,7 +76,7 @@ export function FlagsView({ selected }: { selected: string | null }) {
 }
 
 function FlagRow({ flag, active }: { flag: FlagSummary; active: boolean }) {
-  const Icon = flag.kind === "kb_conflict" ? Scales02 : BookOpen01;
+  const Icon = flag.kind === "kb_conflict" ? Scales02 : Flag01;
   return (
     <li>
       <a
@@ -88,7 +88,7 @@ function FlagRow({ flag, active }: { flag: FlagSummary; active: boolean }) {
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-baseline justify-between gap-3">
             <span className="truncate text-sm font-medium text-primary">{flag.postTitle}</span>
-            {flag.confidence != null && <span className="shrink-0 text-xs text-quaternary">{Math.round(flag.confidence * 100)}%</span>}
+            {flag.urgency === "high" && flag.status === "open" && <UrgentBadge />}
           </span>
           <span className="truncate text-sm text-tertiary">{flag.headline}</span>
           <span className="flex items-center gap-2 text-xs text-quaternary">

@@ -15,6 +15,7 @@ import type { KnowledgeBackend } from "./adapter";
 import { AppError, withCode } from "@/lib/errors";
 import { siteId } from "@/lib/scope";
 import { must, sb } from "@/lib/supabase";
+import { postHref } from "@/lib/route";
 import {
   letterFor,
   type CheckLine,
@@ -38,6 +39,7 @@ import {
 type Row = Record<string, any>;
 
 const OPEN: FlagStatus[] = ["open", "snoozed"];
+const CLOSED: FlagStatus[] = ["fixed", "reconciled", "wont_fix", "retracted", "cant_fix", "duplicate", "cleared"];
 const COUNTS: FlagStatus[] = ["open", "snoozed", "wont_fix"];
 
 let topicCache: { site: string; topics: Topic[] } | null = null;
@@ -216,6 +218,8 @@ function flagSummary(r: Row, claimText: string): FlagSummary {
     postId: r.post ?? null,
     postTitle: r.posts?.title || (r.post ? "Untitled" : "Two claims disagree"),
     headline: claimText.length > 70 ? claimText.slice(0, 69) + "…" : claimText,
+    // kb_flags.urgency is proposed in kb-ui/20261008000001_kb_ui_views.sql; the Guardian sets it.
+    urgency: r.urgency === "high" ? "high" : "normal",
     confidence: null,
     created: r.created,
     batch: r.batch ?? null,
@@ -325,11 +329,22 @@ export const liveKb: KnowledgeBackend = {
       (async () => {
         let query = sb
           .from("kb_flags")
-          .select("id, kind, status, post, claim, batch, created, posts(title)", { count: "exact" })
+          .select("id, kind, status, post, claim, batch, urgency, created, posts(title)", { count: "exact" })
           .eq("site", siteId())
-          .in("status", q.status === "open" ? OPEN : ["fixed", "reconciled", "wont_fix", "retracted", "cant_fix", "duplicate", "cleared"]);
+          .in("status", q.status === "open" ? OPEN : CLOSED);
         query = q.kind === "all" ? query.neq("kind", "recheck") : query.eq("kind", q.kind);
-        const { data, error, count, status } = await query.order("created", { ascending: false }).range(q.offset, q.offset + q.limit - 1);
+        let urgentQuery = sb
+          .from("kb_flags")
+          .select("id", { count: "exact", head: true })
+          .eq("site", siteId())
+          .eq("urgency", "high")
+          .in("status", q.status === "open" ? OPEN : CLOSED);
+        urgentQuery = q.kind === "all" ? urgentQuery.neq("kind", "recheck") : urgentQuery.eq("kind", q.kind);
+        // Urgent first ("high" sorts before "normal"), then newest.
+        const [{ data, error, count, status }, urgent] = await Promise.all([
+          query.order("urgency").order("created", { ascending: false }).range(q.offset, q.offset + q.limit - 1),
+          urgentQuery,
+        ]);
         if (error) await must(Promise.resolve({ data, error, status }));
         const rows = data ?? [];
         const claimIds = [...new Set(rows.map((r: Row) => r.claim))];
@@ -338,6 +353,7 @@ export const liveKb: KnowledgeBackend = {
         return {
           rows: rows.map((r: Row) => flagSummary(r, (texts.find((t: Row) => t.id === r.claim) as Row)?.text ?? "")),
           total,
+          urgent: urgent.count ?? 0,
           next: q.offset + q.limit < total ? q.offset + q.limit : null,
         };
       })(),
@@ -357,7 +373,7 @@ export const liveKb: KnowledgeBackend = {
         if (!claim) return null;
         return {
           ...flagSummary(r, claim.text),
-          passage: { before: "", quote: r.quote, after: "", section: "", uri: "" },
+          passage: { before: "", quote: r.quote, after: "", section: "", uri: r.post ? postHref(r.post) : "" },
           claim,
           otherClaim: other,
           explanation: r.explanation,
@@ -472,6 +488,9 @@ export const liveKb: KnowledgeBackend = {
             status: f.status,
             tldr: f.explanation,
             quote: f.quote,
+            // The paragraph around a post's quote isn't stored yet: the quote alone.
+            before: "",
+            after: "",
             suggestedAction: f.suggested_action,
             fix: fixOf(f),
           })),

@@ -1,11 +1,12 @@
 // Small pieces every knowledge base screen shares: status and tier badges, a
-// quote with the text around it, a fix shown as a diff, a Guardian ruling with
+// quote in its whole paragraph, a fix shown as a diff, a Guardian ruling with
 // its checks, the sample-data notice and a plain text area.
 
 import type { ReactNode } from "react";
 import { TextArea as AriaTextArea, TextField as AriaTextField, Label as AriaLabel } from "react-aria-components";
 import { AlertTriangle, CheckCircle, Database01, LinkExternal01, MinusCircle, ShieldTick, XCircle } from "@untitledui/icons";
 import { Badge, BadgeWithDot } from "@/components/base/badges/badges";
+import { Card, CardBody, CardHeader } from "@/components/shell/Card";
 import { cx } from "@/utils/cx";
 import type {
   CheckLine,
@@ -239,7 +240,7 @@ export function QuoteInContext({
 }) {
   return (
     <blockquote className="rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-tertiary">
-      {before && <>…{before}</>}
+      {before}
       <mark
         className={cx(
           "rounded-sm bg-transparent px-0.5 text-primary ring-1",
@@ -248,7 +249,7 @@ export function QuoteInContext({
       >
         {quote}
       </mark>
-      {after && <>{tail(after)}</>}
+      {after}
     </blockquote>
   );
 }
@@ -256,17 +257,12 @@ export function QuoteInContext({
 export function FixDiff({ fix }: { fix: FixPreview }) {
   return (
     <div className="rounded-lg bg-secondary px-4 py-3 text-sm leading-6 text-tertiary">
-      {fix.before && <>…{fix.before}</>}
+      {fix.before}
       {fix.removed && <del className="text-error-primary decoration-1">{fix.removed}</del>}{" "}
       {fix.added && <ins className="text-success-primary no-underline">{fix.added}</ins>}
-      {fix.after && <>{tail(fix.after)}</>}
+      {fix.after}
     </div>
   );
-}
-
-/** Context after a quote, with an ellipsis unless it already ends a sentence. */
-function tail(after: string): string {
-  return /[.!?]\s*$/.test(after) ? after : `${after}…`;
 }
 
 export function OriginalLink({ href, label = "Open the original" }: { href: string; label?: string }) {
@@ -318,8 +314,37 @@ export function SampleNotice() {
   );
 }
 
-export function Panel({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={cx("rounded-xl bg-primary p-5 shadow-xs ring-1 ring-secondary", className)}>{children}</section>;
+/** The shared card (components/shell/Card) with an optional header. */
+export function Panel({
+  title,
+  description,
+  actions,
+  children,
+  className,
+  bodyClassName,
+}: {
+  title?: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+  bodyClassName?: string;
+}) {
+  return (
+    <Card className={className}>
+      {title && <CardHeader title={title} description={description} actions={actions} />}
+      {children && <CardBody className={bodyClassName}>{children}</CardBody>}
+    </Card>
+  );
+}
+
+/** Only high urgency shows. */
+export function UrgentBadge() {
+  return (
+    <Badge type="pill-color" size="sm" color="error">
+      Urgent
+    </Badge>
+  );
 }
 
 export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
