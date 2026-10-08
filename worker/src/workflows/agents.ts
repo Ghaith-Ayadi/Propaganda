@@ -70,8 +70,14 @@ export function registerAgent(name: AgentName, handler: AgentHandler): void {
   agents.set(name, handler);
 }
 
+/**
+ * Tests only: one more name the route accepts, for the demo agent. Pick one no
+ * real agent will ever use ("__test"), so it can't collide with one. Never set on the box.
+ */
+const TEST_AGENT = process.env.WORKER_TEST_AGENT || null;
+
 export function isAgentName(name: string): name is AgentName {
-  return (AGENT_NAMES as readonly string[]).includes(name);
+  return (AGENT_NAMES as readonly string[]).includes(name) || (TEST_AGENT !== null && name === TEST_AGENT);
 }
 
 /** The attributes a dispatched run carries, so Chat and the Runs page can find every run a conversation started. */

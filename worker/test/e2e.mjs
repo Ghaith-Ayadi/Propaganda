@@ -67,7 +67,7 @@ let worker;
 const DISPATCH = "dispatch-secret-for-the-test";
 const MEMBER = randomUUID();
 
-function startWorker(extra = { WORKER_DISPATCH_SECRET: DISPATCH, WORKER_TEST_AGENT: "checker" }) {
+function startWorker(extra = { WORKER_DISPATCH_SECRET: DISPATCH, WORKER_TEST_AGENT: "__test" }) {
   worker = spawn(process.execPath, ["dist/main.js"], {
     env: {
       ...process.env,
@@ -114,7 +114,7 @@ async function main() {
   console.log("before the Admin migration");
   await startWorker({});
   check((await api("/runs")).status === 403, "no superadmins table: everyone refused (fails closed)");
-  check((await api("/agents/checker", { method: "POST", body: {}, headers: { Authorization: "Bearer x" } })).status === 503, "no dispatch secret configured: 503");
+  check((await api("/agents/__test", { method: "POST", body: {}, headers: { Authorization: "Bearer x" } })).status === 503, "no dispatch secret configured: 503");
   await stopWorker();
 
   await app.query(`
@@ -209,18 +209,19 @@ async function main() {
   console.log("dispatch from Chat");
   const D = { Authorization: `Bearer ${DISPATCH}` };
   const handoff = { site: SITE, task: "Check the post about pricing", requestedBy: MEMBER, conversation: "conv123" };
-  check((await api("/agents/checker", { method: "POST", body: handoff, headers: {} })).status === 401, "no secret: 401");
-  check((await api("/agents/checker", { method: "POST", body: handoff, headers: { Authorization: "Bearer wrong" } })).status === 401, "wrong secret: 401");
-  check((await api("/agents/checker", { method: "POST", body: handoff })).status === 401, "a superadmin token is not the dispatch secret");
-  check((await api("/agents/checker", { method: "GET", headers: D })).status === 405, "GET: 405");
+  check((await api("/agents/__test", { method: "POST", body: handoff, headers: {} })).status === 401, "no secret: 401");
+  check((await api("/agents/__test", { method: "POST", body: handoff, headers: { Authorization: "Bearer wrong" } })).status === 401, "wrong secret: 401");
+  check((await api("/agents/__test", { method: "POST", body: handoff })).status === 401, "a superadmin token is not the dispatch secret");
+  check((await api("/agents/__test", { method: "GET", headers: D })).status === 405, "GET: 405");
   check((await api("/agents/nobody", { method: "POST", body: handoff, headers: D })).status === 404, "unknown agent: 404");
   check((await api("/agents/scout", { method: "POST", body: handoff, headers: D })).status === 404, "an agent nobody registered yet: 404 (Chat says not running yet)");
-  check((await api("/agents/checker", { method: "POST", body: { ...handoff, task: " " }, headers: D })).status === 400, "empty task: 400");
-  check((await api("/agents/checker", { method: "POST", body: { ...handoff, requestedBy: "me" }, headers: D })).status === 400, "bad requestedBy: 400");
-  check((await api("/agents/checker", { method: "POST", body: { ...handoff, site: "nosuchsite0000a" }, headers: D })).status === 422, "unknown tenant: 422");
-  check((await api("/agents/checker", { method: "POST", body: { ...handoff, post: "not a post id" }, headers: D })).status === 400, "bad post: 400");
-  check((await api("/agents/checker", { method: "POST", body: { ...handoff, task: "nothing" }, headers: D })).status === 422, "the agent finds nothing to work on: 422");
-  const started = await api("/agents/checker", { method: "POST", body: handoff, headers: D });
+  check((await api("/agents/checker", { method: "POST", body: handoff, headers: D })).status === 404, "the Checker isn't registered by the test: 404");
+  check((await api("/agents/__test", { method: "POST", body: { ...handoff, task: " " }, headers: D })).status === 400, "empty task: 400");
+  check((await api("/agents/__test", { method: "POST", body: { ...handoff, requestedBy: "me" }, headers: D })).status === 400, "bad requestedBy: 400");
+  check((await api("/agents/__test", { method: "POST", body: { ...handoff, site: "nosuchsite0000a" }, headers: D })).status === 422, "unknown tenant: 422");
+  check((await api("/agents/__test", { method: "POST", body: { ...handoff, post: "not a post id" }, headers: D })).status === 400, "bad post: 400");
+  check((await api("/agents/__test", { method: "POST", body: { ...handoff, task: "nothing" }, headers: D })).status === 422, "the agent finds nothing to work on: 422");
+  const started = await api("/agents/__test", { method: "POST", body: handoff, headers: D });
   check(started.status === 202 && typeof started.json?.runId === "string", "starts the run: 202 { runId }");
   const dispatched = await until("dispatched run done", async () => ((await run(started.json.runId))?.state === "done" ? run(started.json.runId) : null));
   check(dispatched.name === "demo-agent" && dispatched.site === SITE, "the run is the agent's workflow, for that tenant");

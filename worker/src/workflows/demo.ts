@@ -49,7 +49,7 @@ async function demoRun(input: DemoInput): Promise<string> {
 export const demo = DBOS.registerWorkflow(demoRun, { name: "demo" });
 
 // For the end-to-end test only: with WORKER_TEST_AGENT set, Chat's dispatch
-// route can start this under that agent name. Never set on the box.
+// route can start this under that name ("__test" in the e2e). Never set on the box.
 async function demoAgentRun(input: DispatchInput): Promise<string> {
   return DBOS.runStep(async () => `got: ${input.task.slice(0, 40)}`, { name: "acknowledge" });
 }
