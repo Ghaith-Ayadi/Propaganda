@@ -49,7 +49,7 @@ export function DiffModal({ post, initialVersion, onClose }: Props) {
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div>
             <div className="text-sm text-fg-faint">Comparing</div>
-            <div className="font-title text-lg italic">{post.title || "Untitled"}</div>
+            <div className="font-serif text-lg italic">{post.title || "Untitled"}</div>
           </div>
           <div className="flex items-center gap-3">
             <select

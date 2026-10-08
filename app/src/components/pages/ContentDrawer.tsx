@@ -44,7 +44,7 @@ export function ContentDrawer({
 function DrawerEmpty({ title, text }: { title: string; text: string }) {
   return (
     <div className="px-4 py-5">
-      <p className="text-sm font-semibold text-secondary">{title}</p>
+      <p className="text-sm font-medium text-secondary">{title}</p>
       <p className="mt-1 text-sm text-tertiary">{text}</p>
     </div>
   );
@@ -163,7 +163,7 @@ function BlogDrawer({ activeCollection, currentPostId }: { activeCollection: str
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="px-2 pt-1 pb-1 text-xs font-semibold text-quaternary">{children}</p>;
+  return <p className="px-2 pt-1 pb-1 text-xs font-medium text-quaternary">{children}</p>;
 }
 
 function CollectionFolder({
@@ -278,7 +278,7 @@ function PostRow({
           active ? "bg-primary_hover text-primary" : "text-secondary hover:bg-primary_hover hover:text-primary",
         )}
       >
-        {withEmoji && <span className="w-4 shrink-0 text-center text-[13px] leading-none">{emoji ?? ""}</span>}
+        {withEmoji && <span className="w-4 shrink-0 text-center text-sm leading-none">{emoji ?? ""}</span>}
         <StatusDot status={post.status} />
         <span className="truncate">{title}</span>
       </a>

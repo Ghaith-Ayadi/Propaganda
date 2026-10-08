@@ -177,7 +177,7 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
           placeholder="🙂"
-          className="w-14 shrink-0 rounded-lg bg-transparent text-center font-title text-4xl text-primary outline-none placeholder:text-quaternary focus:bg-primary_hover"
+          className="w-9 shrink-0 rounded-lg bg-transparent text-center type-title text-primary outline-none placeholder:text-quaternary focus:bg-primary_hover"
         />
         <input
           aria-label="Collection name"
@@ -188,7 +188,7 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
           placeholder="Untitled collection"
-          className="min-w-0 flex-1 bg-transparent font-title text-4xl text-primary outline-none placeholder:text-quaternary"
+          className="min-w-0 flex-1 bg-transparent type-title text-primary outline-none placeholder:text-quaternary"
         />
       </div>
 

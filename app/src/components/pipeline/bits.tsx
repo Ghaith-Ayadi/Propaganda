@@ -45,7 +45,7 @@ export function Handoff({ writer, reviewer, meId }: { writer?: Person; reviewer?
 
 /** A label above a value, the way the brief's fields read. */
 export function Eyebrow({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cx("text-xs font-semibold tracking-wide text-quaternary uppercase", className)}>{children}</div>;
+  return <div className={cx("type-eyebrow text-quaternary", className)}>{children}</div>;
 }
 
 /** The kit has no textarea; this one matches its input styling. */
@@ -54,7 +54,7 @@ export function TextArea({ className, invalid, ...props }: TextareaHTMLAttribute
     <textarea
       {...props}
       className={cx(
-        "w-full resize-y rounded-lg bg-primary px-3 py-2 text-md text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand",
+        "w-full resize-y rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand",
         invalid && "ring-error_subtle focus:ring-error",
         className,
       )}

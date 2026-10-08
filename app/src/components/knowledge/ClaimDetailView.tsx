@@ -60,7 +60,7 @@ export function ClaimBody({ claim }: { claim: ClaimDetail }) {
           </>
         }
       >
-        <p className="font-title text-2xl leading-snug text-primary">{claim.text}</p>
+        <p className="font-serif text-lg text-primary">{claim.text}</p>
         {Object.keys(claim.scope).length > 0 && (
           <dl className="mt-3 flex flex-wrap gap-2">
             {Object.entries(claim.scope).map(([k, v]) => (

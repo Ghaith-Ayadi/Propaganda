@@ -17,7 +17,7 @@ export function ConnectorBody({ connector: c }: { connector: Connector }) {
       <div className="flex items-start gap-4 border-b border-secondary px-6 py-5">
         <Logo id={c.logo} size="lg" />
         <div className="min-w-0 flex-1">
-          <h2 className="font-title text-xl text-primary">{c.name}</h2>
+          <h2 className="type-title text-primary">{c.name}</h2>
           <p className="mt-0.5 text-sm text-tertiary">{c.summary}</p>
         </div>
         {c.connection && <Status id={c.connection} />}
@@ -173,7 +173,7 @@ function Mcp({ client, steps }: { client: string; steps: string[] }) {
         ))}
       </ol>
       <div>
-        <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-quaternary">What it can do</div>
+        <div className="mb-1.5 type-eyebrow text-quaternary">What it can do</div>
         <ul className="list-disc space-y-1 pl-5 text-sm text-secondary">
           {CAN.map((s) => (
             <li key={s}>{s}</li>

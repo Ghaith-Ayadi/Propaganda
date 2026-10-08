@@ -96,7 +96,7 @@ export function Message({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary-solid px-4 py-2.5 text-md whitespace-pre-wrap text-white">
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary-solid px-4 py-2.5 text-sm whitespace-pre-wrap text-white">
           {textOf(message)}
         </div>
       </div>
@@ -206,9 +206,9 @@ function Prose({ text, citations, caret }: { text: string; citations: Citation[]
   return (
     <div
       className={cx(
-        "chat-prose text-md leading-relaxed text-primary",
+        "chat-prose text-sm text-primary",
         "[&_p]:my-0 [&_p+p]:mt-3 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5",
-        "[&_strong]:font-semibold [&_code]:rounded [&_code]:bg-secondary [&_code]:px-1 [&_code]:text-sm",
+        "[&_strong]:font-medium [&_code]:rounded [&_code]:bg-secondary [&_code]:px-1 [&_code]:text-sm",
         caret && "[&>*:last-child]:after:ml-0.5 [&>*:last-child]:after:inline-block [&>*:last-child]:after:h-4 [&>*:last-child]:after:w-1.5 [&>*:last-child]:after:translate-y-0.5 [&>*:last-child]:after:animate-pulse [&>*:last-child]:after:bg-fg-quaternary [&>*:last-child]:after:content-['']",
       )}
     >
@@ -254,7 +254,7 @@ function CitationChip({ citation }: { citation: Citation }) {
     >
       <TooltipTrigger
         onPress={() => open(citation)}
-        className="mx-0.5 inline-flex h-4.5 min-w-4.5 -translate-y-px cursor-pointer items-center justify-center rounded-md bg-secondary px-1 align-middle text-[11px] font-semibold text-secondary ring-1 ring-secondary ring-inset transition hover:bg-brand-primary hover:text-brand-secondary"
+        className="mx-0.5 inline-flex h-4.5 min-w-4.5 -translate-y-px cursor-pointer items-center justify-center rounded-md bg-secondary px-1 align-middle text-xs font-medium text-secondary ring-1 ring-secondary ring-inset transition hover:bg-brand-primary hover:text-brand-secondary"
         aria-label={`Source ${citation.n}: ${citation.label}`}
       >
         {citation.n}
@@ -266,7 +266,7 @@ function CitationChip({ citation }: { citation: Citation }) {
 function Sources({ citations }: { citations: Citation[] }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-xs font-semibold tracking-wide text-quaternary uppercase">Sources</p>
+      <p className="type-eyebrow text-quaternary">Sources</p>
       <ol className="flex flex-col">
         {citations.map((c) => {
           const Icon = KIND_ICON[c.kind];
@@ -276,7 +276,7 @@ function Sources({ citations }: { citations: Citation[] }) {
                 onClick={() => open(c)}
                 className="flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left text-sm transition hover:bg-primary_hover"
               >
-                <span className="w-4 shrink-0 text-right text-xs font-semibold text-quaternary tabular-nums leading-5">{c.n}</span>
+                <span className="w-4 shrink-0 text-right text-xs font-medium text-quaternary tabular-nums leading-5">{c.n}</span>
                 <Icon className="mt-0.5 size-4 shrink-0 text-fg-quaternary" />
                 <span className="min-w-0 flex-1">
                   <span className="text-secondary">{c.label}</span>
@@ -301,7 +301,7 @@ function HandoffCard({ handoff: h }: { handoff: Handoff }) {
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-semibold text-primary">{AGENT_LABEL[h.agent]}</span>
+          <span className="text-sm font-medium text-primary">{AGENT_LABEL[h.agent]}</span>
           <HandoffStatus status={h.status} />
           {h.runId && (
             <Badge color="gray" type="modern" size="sm">

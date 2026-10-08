@@ -40,7 +40,7 @@ export function SiteSwitcher() {
         className="-mx-1 flex max-w-full items-center gap-2 rounded-md px-1 py-1 outline-none transition hover:bg-primary_hover data-[pressed]:bg-primary_hover"
       >
         <TenantMark siteId={site.id} name={site.name} />
-        <span className="truncate font-title text-xl tracking-tight text-primary">{site.name}</span>
+        <span className="truncate type-heading text-primary">{site.name}</span>
         <ChevronDown className="size-4 shrink-0 text-quaternary" />
       </AriaButton>
 
@@ -156,7 +156,7 @@ function TenantMark({ siteId, name, small = false }: { siteId: string; name: str
       aria-hidden
       className={cx(
         box,
-        "flex shrink-0 items-center justify-center bg-(--color-fg-primary) font-title text-(--color-bg-primary)",
+        "flex shrink-0 items-center justify-center bg-(--color-fg-primary) font-medium text-(--color-bg-primary)",
         small ? "text-xs" : "text-base",
       )}
     >

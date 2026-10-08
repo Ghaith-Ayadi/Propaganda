@@ -205,7 +205,7 @@ function Column({
 
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-secondary/60 p-2">
-      <div className="flex h-8 items-center justify-between pl-2 text-xs font-semibold tracking-wide text-tertiary uppercase">
+      <div className="flex h-8 items-center justify-between pl-2 type-eyebrow text-tertiary">
         <span>
           {STAGE_LABEL[stage]}{" "}
           <span className="ml-1 font-normal text-quaternary">
@@ -248,7 +248,7 @@ function Column({
             onBlur={() => !title.trim() && !busy && setAdding(false)}
             placeholder={ADD_PLACEHOLDER[stage]}
             aria-label={ADD_PLACEHOLDER[stage]}
-            className="w-full bg-transparent px-1 py-1 text-md text-primary outline-hidden placeholder:text-placeholder"
+            className="w-full bg-transparent px-1 py-1 text-sm text-primary outline-hidden placeholder:text-placeholder"
           />
           <p className="px-1 text-xs text-quaternary">
             Enter to add, Esc to cancel
@@ -281,7 +281,7 @@ function Card({
         "hover:ring-primary focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-hidden",
       )}
     >
-      <span className="text-md font-medium text-primary">{title}</span>
+      <span className="type-heading text-primary">{title}</span>
       {children}
     </button>
   );

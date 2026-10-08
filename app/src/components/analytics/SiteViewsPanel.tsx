@@ -28,7 +28,7 @@ export function SiteViewsPanel({ range }: Props) {
       ) : (
         <>
           <div className="flex items-baseline gap-2">
-            <div className="font-title text-4xl text-primary">{fmt(data.total)}</div>
+            <div className="type-figure text-primary">{fmt(data.total)}</div>
             {range !== "all" && data.previousTotal > 0 && (() => {
               const d = delta(data.total, data.previousTotal);
               return (

@@ -139,7 +139,7 @@ function ProposalBanner({ proposal, onOpen }: { proposal: Proposal; onOpen: () =
   return (
     <div className="flex flex-col gap-3 rounded-xl bg-brand-primary_alt p-5 ring-1 ring-brand ring-inset md:flex-row md:items-center md:justify-between">
       <div>
-        <p className="font-semibold text-brand-secondary">
+        <p className="font-medium text-brand-secondary">
           {proposal.status === "changes_requested" ? "The Strategist is revising" : `The Strategist proposed ${quarterLabel(proposal.quarter)}'s goals`}
         </p>
         <p className="mt-0.5 text-sm text-secondary">{proposal.summary}</p>
@@ -221,7 +221,7 @@ function NextQuarterCard({ quarter, onTab }: { quarter: QuarterKey; onTab: (t: T
 function Step({ done, label, day, warn }: { done: boolean; label: string; day: string; warn?: boolean }) {
   return (
     <li className="rounded-xl p-3 ring-1 ring-secondary ring-inset">
-      <p className={done ? "font-semibold text-success-primary" : warn ? "font-semibold text-warning-primary" : "font-semibold text-secondary"}>{done ? "✓ " : ""}{label}</p>
+      <p className={done ? "font-medium text-success-primary" : warn ? "font-medium text-warning-primary" : "font-medium text-secondary"}>{done ? "✓ " : ""}{label}</p>
       <p className="text-tertiary">by {shortDate(day)}</p>
     </li>
   );
@@ -269,7 +269,7 @@ function StrategistTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; t
       <ProposalView key={proposal.id + proposal.status} proposal={proposal} />
       <p className="text-center text-sm text-tertiary">
         Have a plan of your own?{" "}
-        <button type="button" className="font-semibold text-brand-secondary hover:underline" onClick={() => onTab("plan")}>
+        <button type="button" className="font-medium text-brand-secondary hover:underline" onClick={() => onTab("plan")}>
           Give it to the Strategist
         </button>
       </p>

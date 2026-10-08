@@ -83,7 +83,7 @@ function WriterPanel() {
   return (
     <div className="space-y-4 border-t border-secondary bg-secondary/40 px-4 py-4">
       <div>
-        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">Voice guide</div>
+        <div className="mb-1 type-eyebrow text-quaternary">Voice guide</div>
         <TextArea
           label="Voice guide"
           rows={8}
@@ -96,7 +96,7 @@ function WriterPanel() {
         </p>
       </div>
       <div className="rounded-lg border border-secondary bg-primary p-3">
-        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">Suggested change</div>
+        <div className="mb-1 type-eyebrow text-quaternary">Suggested change</div>
         {suggestion ? (
           <>
             <p className="text-sm text-primary">{suggestion.reason}</p>
@@ -118,7 +118,7 @@ function WriterPanel() {
         <div className="mt-2"><Note>Placeholder: suggestions are not read from the server yet, and nothing here is saved.</Note></div>
       </div>
       <div className="rounded-lg border border-secondary bg-primary p-3">
-        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">House rule, always on</div>
+        <div className="mb-1 type-eyebrow text-quaternary">House rule, always on</div>
         <p className="text-sm text-primary">{WRITER_RULE.rule}</p>
         <p className="mt-1 text-xs text-tertiary">{WRITER_RULE.instead}</p>
       </div>
@@ -135,7 +135,7 @@ function TasteCard() {
     >
       <div className="space-y-4">
         <div>
-          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">Summary, written by the Pitcher</div>
+          <div className="mb-1 type-eyebrow text-quaternary">Summary, written by the Pitcher</div>
           {taste.summary ? (
             <p className="whitespace-pre-wrap text-sm text-primary">{taste.summary}</p>
           ) : (
@@ -143,7 +143,7 @@ function TasteCard() {
           )}
         </div>
         <div>
-          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">Your notes</div>
+          <div className="mb-1 type-eyebrow text-quaternary">Your notes</div>
           <TextArea
             label="Your taste notes"
             rows={4}

@@ -36,8 +36,17 @@ const OnboardingFlow = lazy(() =>
 initTelemetry();
 import { exposeThemeConsole } from "@/lib/customThemes";
 
-// The app's display face (Rowan) instead of the blogs' (index.css).
+// The app's fonts (Inter for the UI, Source Serif 4 for post and
+// knowledge-base text; index.css under html.ppgd-app). Loaded here, not in
+// index.css, so blogs never download them.
 document.documentElement.classList.add("ppgd-app");
+{
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href =
+    "https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap";
+  document.head.appendChild(link);
+}
 
 // The service worker is the editor's offline shell, so only the editor
 // registers it: blog readers never download the whole app. The same call

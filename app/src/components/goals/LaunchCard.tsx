@@ -19,8 +19,8 @@ export function LaunchCard({ launch }: { launch: Launch }) {
       subtitle={LAUNCH_WHY}
       footer="Above 20 posts only if you bring something real for each extra one: an expert, your own data, an opinion. Every post carries a named byline."
     >
-      <p className="text-md text-primary">
-        <span className="font-semibold">
+      <p className="text-sm text-primary">
+        <span className="font-medium">
           {launch.live} of {launch.target} live
         </span>
         {launch.clusters.map((c) => (
@@ -43,7 +43,7 @@ export function LaunchCard({ launch }: { launch: Launch }) {
           const arrived = b.arrived;
           return (
             <li key={b.number} className={cx("rounded-xl p-3 ring-1 ring-secondary ring-inset", !arrived && "opacity-70")}>
-              <p className="text-sm font-semibold text-primary">
+              <p className="text-sm font-medium text-primary">
                 Batch {b.number} · day {b.dueDay}
               </p>
               <p className="text-xs text-tertiary">{shortDate(due)}</p>

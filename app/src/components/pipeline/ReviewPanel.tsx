@@ -138,7 +138,7 @@ export function ReviewPanel({ postId }: { postId: string }) {
       {reviewing &&
         (sendingBack ? (
           <div>
-            <label htmlFor="send-back-note" className="text-sm font-semibold text-primary">
+            <label htmlFor="send-back-note" className="text-sm font-medium text-primary">
               What needs to change? Required.
             </label>
             <TextArea
@@ -203,7 +203,7 @@ export function ReviewPanel({ postId }: { postId: string }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 text-xs font-semibold tracking-wide text-tertiary uppercase">{title}</h3>
+      <h3 className="mb-2 type-eyebrow text-tertiary">{title}</h3>
       {children}
     </section>
   );
@@ -222,7 +222,7 @@ function CheckRow({ check }: { check: SourceCheck }) {
   }
   return (
     <li className="border-l-2 border-error pl-3 text-sm text-secondary">
-      <span className="font-semibold text-primary">{check.status === "mismatch" ? "Doesn't match its source." : "No source."}</span>{" "}
+      <span className="font-medium text-primary">{check.status === "mismatch" ? "Doesn't match its source." : "No source."}</span>{" "}
       {check.detail}
       <div className="mt-1 text-tertiary">“{check.quote}”</div>
       {check.where && <div className="text-tertiary">{check.where}</div>}

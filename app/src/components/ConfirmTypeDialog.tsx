@@ -48,7 +48,7 @@ export function ConfirmTypeDialog({
         onClick={(e) => e.stopPropagation()}
         className="w-[440px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary"
       >
-        <h2 className="font-title text-xl text-primary">{title}</h2>
+        <h2 className="type-heading text-primary">{title}</h2>
         <div className="mt-2 text-sm text-secondary">{message}</div>
         <div className="mt-4 text-xs text-tertiary">
           Type <span className="rounded bg-primary_hover px-1.5 py-0.5 font-mono text-primary">{confirmation}</span> to confirm.

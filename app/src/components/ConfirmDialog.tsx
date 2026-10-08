@@ -42,7 +42,7 @@ export function ConfirmDialog({
         onClick={(e) => e.stopPropagation()}
         className="w-[400px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary"
       >
-        <h2 className="font-title text-xl text-primary">{title}</h2>
+        <h2 className="type-heading text-primary">{title}</h2>
         {message && <div className="mt-2 text-sm text-secondary">{message}</div>}
         <div className="mt-5 flex justify-end gap-2">
           <Button size="sm" color="tertiary" onClick={onClose}>
