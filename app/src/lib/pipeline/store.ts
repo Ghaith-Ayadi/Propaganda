@@ -10,8 +10,8 @@ import { createBrief } from "@/lib/plan/briefs";
 import { createCollection } from "@/lib/collections";
 import { onScopeReset } from "@/lib/scope";
 import { placeholderAdapter, type PipelineAdapter } from "./adapter";
-import { shortDate } from "./dates";
-import type { PipelineItem, PipelineSnapshot, PitchNote, Person } from "./types";
+import { addDays, shortDate, ymd } from "./dates";
+import type { Batch, PipelineItem, PipelineSnapshot, PitchNote, Person, Stage } from "./types";
 
 const adapter: PipelineAdapter = placeholderAdapter;
 
@@ -45,10 +45,14 @@ function emit() {
   for (const l of listeners) l();
 }
 
-function setItems(items: PipelineItem[]) {
-  snapshot = { ...current(), items };
-  adapter.saveItems(items);
+function commit(next: Partial<Pick<PipelineSnapshot, "items" | "batches">>) {
+  snapshot = { ...current(), ...next };
+  adapter.save({ items: snapshot.items, batches: snapshot.batches });
   emit();
+}
+
+function setItems(items: PipelineItem[]) {
+  commit({ items });
 }
 
 onScopeReset(() => {
@@ -65,10 +69,47 @@ export function usePipeline(): PipelineSnapshot {
   return useSyncExternalStore(subscribe, current, current);
 }
 
+/** Pitches of a batch that hasn't been released yet stay off the board. */
+export function isReleased(item: PipelineItem, batches: Batch[]): boolean {
+  if (item.batch == null) return true;
+  const b = batches.find((x) => x.number === item.batch);
+  return !b || b.state !== "pending";
+}
+
+/** The batch waiting on review now, else the last one released. */
+export function currentBatch(batches: Batch[]): Batch | null {
+  return (
+    batches.find((b) => b.state === "in_review" || b.state === "topping_up") ??
+    [...batches].reverse().find((b) => b.state === "closed") ??
+    null
+  );
+}
+
+/** The next batch to come, the one "Run now" releases. */
+export function nextBatch(batches: Batch[]): Batch | null {
+  return batches.find((b) => b.state === "pending") ?? null;
+}
+
+/** Release a batch now instead of on its date. Its pitches show on the board. */
+export function runBatch(number: number) {
+  const today = ymd(new Date());
+  const { batches } = current();
+  // Only one batch is in review at a time: the one it replaces closes.
+  commit({
+    batches: batches.map((b) =>
+      b.number === number
+        ? { ...b, state: "in_review", releaseOn: today }
+        : b.state === "in_review" || b.state === "topping_up"
+          ? { ...b, state: "closed" }
+          : b,
+    ),
+  });
+}
+
 /** The nav badge: everything on the board (pitched to scheduled). */
 export function usePipelineCount(): number | null {
-  const { items } = usePipeline();
-  const n = items.filter((i) => i.stage !== "published" && i.stage !== "rejected").length;
+  const { items, batches } = usePipeline();
+  const n = items.filter((i) => i.stage !== "published" && i.stage !== "rejected" && isReleased(i, batches)).length;
   return n || null;
 }
 
@@ -171,29 +212,18 @@ export function setClaimState(id: string, claimId: string, state: "remembered" |
   });
 }
 
-/** "Write something yourself": a draft in the given collection that starts in Writing, with you as the writer. */
-export async function writeYourself(collection: string | null): Promise<string | null> {
+function newItem(fields: Partial<PipelineItem> & Pick<PipelineItem, "id" | "title" | "stage" | "collection">): PipelineItem {
   const { meId } = current().settings;
-  const target = collection || FALLBACK_COLLECTION;
-  await ensureCollection(target);
-  const post = await createPost(target, { title: "" });
-  if (!post) return null;
-  const today = new Date();
-  const due = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14);
-  const publishBy = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
-  const item: PipelineItem = {
-    id: `own-${post.id}`,
-    title: "Untitled",
+  const now = Date.now();
+  return {
     why: "",
-    stage: "writing",
-    collection: post.type,
     topics: [],
     origin: "team",
     reasons: [],
     goals: [],
     writerId: meId,
     reviewerId: meId,
-    publishBy,
+    publishBy: ymd(addDays(new Date(), 14)),
     format: "blog",
     length: "",
     angle: "",
@@ -202,13 +232,60 @@ export async function writeYourself(collection: string | null): Promise<string |
     sources: [],
     notes: [],
     batch: null,
-    postId: post.id,
+    postId: null,
     briefId: null,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
+    ...fields,
   };
+}
+
+/**
+ * The + on a column. A pitch is your own idea (no draft yet); Writing and In
+ * review start a draft in `collection` with you as writer and reviewer.
+ * Returns the item, with its post id when one was created.
+ */
+export async function addToColumn(stage: Stage, title: string, collection: string | null): Promise<PipelineItem | null> {
+  const name = title.trim() || "Untitled";
+  if (stage === "pitched") {
+    const item = newItem({ id: `own-${Date.now().toString(36)}`, title: name, stage, collection: collection || FALLBACK_COLLECTION });
+    setItems([...current().items, item]);
+    return item;
+  }
+  const target = collection || FALLBACK_COLLECTION;
+  await ensureCollection(target);
+  const post = await createPost(target, { title: title.trim() });
+  if (!post) return null;
+  const item = newItem({ id: `own-${post.id}`, title: name, stage, collection: post.type, postId: post.id });
   setItems([...current().items, item]);
+  return item;
+}
+
+/** The draft as markdown, from the paragraphs the review step read (markers dropped). */
+function reviewMarkdown(item: PipelineItem): string {
+  return (item.review?.paragraphs ?? []).map((p) => p.replace(/\[\[[a-z0-9]+\]\]|\[\[\/\]\]/g, "")).join("\n\n");
+}
+
+/**
+ * The post behind an item, created on first open for example items that have
+ * none yet (in Test while the adapter is the placeholder). Returns its id.
+ */
+export async function ensureDraft(id: string): Promise<string | null> {
+  const item = getItem(id);
+  if (!item) return null;
+  if (item.postId && (await db.posts.get(item.postId))) return item.postId;
+  const collection = draftCollection(item);
+  await ensureCollection(collection);
+  const post = await createPost(collection, { title: item.title, content: reviewMarkdown(item) });
+  if (!post) return null;
+  updateItem(id, { postId: post.id });
   return post.id;
+}
+
+/** The pipeline item a post belongs to, if any. */
+export function usePipelineItemForPost(postId: string | null | undefined): PipelineItem | undefined {
+  const { items } = usePipeline();
+  return postId ? items.find((i) => i.postId === postId) : undefined;
 }
 
 /** Start over with the example data. */
