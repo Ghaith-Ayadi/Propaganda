@@ -70,8 +70,8 @@ html.ppgd-app .bn-editor.bn-default-styles {
 
 /* The app's type scale. Every page uses these and the kit's text-xs (12/16,
    captions and meta) and text-sm (14/20, body; font-medium for labels). One
-   weight for emphasis: 500.
-     type-title    page titles, 20/28
+   weight for emphasis: 500 (page titles: 600).
+     type-title    page titles, 20/28, 600
      type-heading  card and section titles, dialog titles, 16/24
      type-figure   the big number on a stat, 24/32, tabular
      type-eyebrow  the small uppercase label above a block, 12/16
@@ -80,7 +80,7 @@ html.ppgd-app .bn-editor.bn-default-styles {
   font-family: var(--font-title);
   font-size: 20px;
   line-height: 28px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.017em;
 }
 @utility type-heading {
