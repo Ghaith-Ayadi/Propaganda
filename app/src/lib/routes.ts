@@ -112,6 +112,7 @@ export const PAGES: PageRoute[] = [
     path: "goals",
     description: "This quarter's five goals and how they are tracking.",
     section: "main",
+    component: lazy(() => import("@/components/goals/GoalsPage").then((m) => ({ default: m.GoalsPage }))),
   },
   {
     id: "site",
