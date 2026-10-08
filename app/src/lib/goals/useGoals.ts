@@ -4,7 +4,7 @@
 
 import { useMemo, useSyncExternalStore } from "react";
 import { goalsAdapter } from "./adapter";
-import type { BatchPlan, Launch, PlanDrop, Proposal, QuarterGoals, QuarterKey, TenantGoalsContext } from "./types";
+import type { BatchPlan, Launch, PlanDrop, Proposal, QuarterGoals, QuarterKey, StrategyAnswers, TenantGoalsContext } from "./types";
 
 function useVersion(): number {
   return useSyncExternalStore(goalsAdapter.subscribe, goalsAdapter.version);
@@ -45,7 +45,13 @@ export function usePlanDrop(): PlanDrop {
   return useMemo(() => goalsAdapter.planDrop(), [v]);
 }
 
+export function useStrategyAnswers(siteId: string): StrategyAnswers {
+  const v = useVersion();
+  return useMemo(() => goalsAdapter.strategyAnswers(siteId), [v, siteId]);
+}
+
 export const goalsActions = {
+  saveStrategyAnswers: goalsAdapter.saveStrategyAnswers,
   approveProposal: goalsAdapter.approveProposal,
   requestChanges: goalsAdapter.requestChanges,
   savePlanDrop: goalsAdapter.savePlanDrop,

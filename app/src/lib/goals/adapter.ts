@@ -17,6 +17,7 @@ import type {
   ProposalEdit,
   QuarterGoals,
   QuarterKey,
+  StrategyAnswers,
   TenantGoalsContext,
 } from "./types";
 import { placeholderAdapter } from "./placeholder";
@@ -55,6 +56,14 @@ export interface GoalsAdapter {
    * Real adapter: a Chat dispatch to "pitcher" with "next batch" in the task (PR #43).
    */
   requestNextBatch(quarter: QuarterKey): Promise<number | null>;
+
+  /**
+   * The onboarding answers the Strategist starts from, per site. Not in
+   * app_settings (public): competitor lists and plans are private.
+   * Real adapter: tenant_profile.answers (draft table in the PR).
+   */
+  strategyAnswers(siteId: string): StrategyAnswers;
+  saveStrategyAnswers(siteId: string, answers: StrategyAnswers): Promise<void>;
 }
 
 export const goalsAdapter: GoalsAdapter = placeholderAdapter;
