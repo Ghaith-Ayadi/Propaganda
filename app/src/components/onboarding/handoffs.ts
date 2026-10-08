@@ -15,7 +15,12 @@
 // A filled step renders inside the onboarding card, full width, with its own
 // buttons; the flow's Back and Skip stay outside it.
 
-import type { ComponentType } from "react";
+import { lazy, type ComponentType } from "react";
+
+// The Strategist's step (Goals #34). Found with a glob, not a static import, so
+// this branch builds before #34 lands; once it's in, the slot fills itself.
+const strategistModules = import.meta.glob<{ StrategistOnboarding: ComponentType<HandoffStepProps> }>("../goals/StrategistOnboarding.tsx");
+const loadStrategist = Object.values(strategistModules)[0];
 
 export interface HandoffStepProps {
   /** The step is finished: onboarding moves on. */
@@ -42,8 +47,7 @@ export const HANDOFFS: Handoff[] = [
     title: "Your strategy",
     lede: "Four questions, then any plan you already have. The Strategist turns it into this quarter's goals and a first batch of briefs.",
     page: "goals",
-    // Goals and Strategist thread: lazy(() => import("@/components/goals/StrategistOnboarding").then(...))
-    component: null,
+    component: loadStrategist ? lazy(() => loadStrategist().then((m) => ({ default: m.StrategistOnboarding }))) : null,
     placeholder: [
       "What you sell, and who buys it.",
       "3 to 5 searches you want to be found by.",

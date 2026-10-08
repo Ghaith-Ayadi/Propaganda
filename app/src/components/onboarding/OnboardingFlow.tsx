@@ -107,7 +107,7 @@ export function OnboardingFlow() {
           </ol>
         </header>
 
-        <section className="flex flex-1 flex-col gap-6 rounded-2xl bg-primary p-6 shadow-xs ring-1 ring-secondary ring-inset sm:p-8">
+        <section className="flex flex-1 flex-col gap-6 rounded-2xl bg-primary p-5 shadow-xs ring-1 ring-secondary ring-inset sm:p-8">
           {current.id === "setup" && (
             <div className="flex flex-col gap-5">
               <StepHead title="Your business" lede="Three things to start. The rest of the setup builds on them." />
@@ -118,11 +118,11 @@ export function OnboardingFlow() {
           {current.id === "blog" && <BlogStep />}
           {current.id === "ready" && <ReadyStep />}
 
-          <footer className="mt-auto flex items-center justify-between gap-3 border-t border-secondary pt-5">
+          <footer className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-secondary pt-5">
             <Button color="tertiary" iconLeading={ArrowLeft} isDisabled={step === 0} onClick={() => setStep(step - 1)}>
               Back
             </Button>
-            <div className="flex items-center gap-3">
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
               {step < LAST && (
                 <Button color="link-gray" size="sm" onClick={finish}>
                   Finish later

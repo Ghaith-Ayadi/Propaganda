@@ -3,7 +3,8 @@
 // then how much the team can review, which sets the Strategist's pace.
 //
 //   tenant.website             the business's site (public anyway)
-//   strategist.reviewPerMonth  posts a month the team can review
+//   strategist.reviewPerMonth  posts a month the team can review: "4", "8",
+//                              "12" or "16+" (StrategistOnboarding reads it)
 //
 // The name is the site's own (lib/accounts.ts updateSite), owners only.
 
@@ -20,7 +21,7 @@ export const REVIEW_OPTIONS = [
   { value: "4", label: "4, about one a week" },
   { value: "8", label: "8, about two a week" },
   { value: "12", label: "12, about three a week" },
-  { value: "16", label: "16 or more" },
+  { value: "16+", label: "16 or more" },
 ];
 
 export function SetupStep() {
