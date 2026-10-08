@@ -21,6 +21,11 @@
 //   UPLOAD              an image upload failed
 //   COST-USAGE          the tenant's model usage for the month couldn't be loaded
 //   COST-ADMIN          the Admin consumption figures or limits couldn't be loaded or saved
+//   DOMAIN-CHECK        the live check of a custom domain couldn't run
+//   DOMAIN-CONNECT      connecting a custom domain failed
+//   DOMAIN-REMOVE       removing a custom domain failed
+//   (the server's own, from api/domains.ts: DOMAIN-INVALID, DOMAIN-OFF,
+//    DOMAIN-TAKEN, DOMAIN-DNS, DOMAIN-SAVE, DOMAIN-OWNER)
 
 import { BackendError } from "@/lib/supabase";
 

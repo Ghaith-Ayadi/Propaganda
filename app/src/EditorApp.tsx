@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Workspace } from "@/components/Workspace";
@@ -24,6 +24,10 @@ import { snapshotVersion } from "@/lib/versions";
 import { toggleTheme } from "@/lib/theme";
 import { initTelemetry } from "@/lib/telemetry";
 import { setDrawer, useDrawer, useIsMobile, useMobileShell } from "@/lib/mobile";
+
+const OnboardingFlow = lazy(() =>
+  import("@/components/onboarding/OnboardingFlow").then((m) => ({ default: m.OnboardingFlow })),
+);
 
 // Errors and product analytics, editor only (lib/telemetry.ts).
 initTelemetry();
@@ -122,6 +126,15 @@ function Shell() {
 
   const sidebar = <NavBar currentCollection={route.view === "post" ? currentPost?.type : undefined} />;
   const attributes = route.view === "post" && currentPost ? <AttributePanel post={currentPost} /> : null;
+
+  // A new tenant's first run (components/onboarding): full screen, no nav.
+  if (route.view === "page" && route.page === "welcome") {
+    return (
+      <Suspense fallback={null}>
+        <OnboardingFlow />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="flex h-dvh w-full overflow-hidden">

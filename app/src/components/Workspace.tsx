@@ -278,7 +278,11 @@ export function Workspace({ children }: { children: React.ReactNode }) {
           // whoever is still signed in.
           if (open?.account.userId !== account.userId) cancel();
         }}
-        onDone={(site) => leaveThen(account, site)}
+        onDone={(site) => {
+          // The new tenant opens on its first run (components/onboarding).
+          window.location.hash = "#/welcome";
+          leaveThen(account, site);
+        }}
       />
     );
   }
