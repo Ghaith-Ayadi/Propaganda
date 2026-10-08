@@ -19,3 +19,6 @@ export { pitchBatch, dailyBatches } from "./pitcher.js";
 export { nextQuota, approvalRate, pitchesFor, unassigned } from "./batches.js";
 export { similarity, nearest } from "./taste.js";
 export { voiceSuggest, diffDraft } from "./edits.js";
+// The knowledge base agents' pure parts (test/agents.mjs).
+export { passages, links, numbersMatch } from "./text.js";
+export { cleanChecks, decide, severityOf } from "./verdict.js";

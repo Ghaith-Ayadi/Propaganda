@@ -95,11 +95,13 @@ cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month 
 
 Agents run as DBOS workflows in `worker/` (one Node process on the box, `propaganda-worker`
 in Bedrock's `compose/propaganda-supabase`, built from the same checkout as the schema).
-DBOS keeps its tables in its own database, `propaganda_dbos`; the worker only reads the
-app's. Start a run with `startForTenant(site, ...)`; a model call is a `modelStep()`, which
+DBOS keeps its tables in its own database, `propaganda_dbos`; the worker reads the app's
+through a read-only pool and writes only through its functions. Start a run with `startForTenant(site, ...)`; a model call is a `modelStep()`, which
 waits out the Claude subscription's usage limit instead of failing. Admin > Runs reads the
 worker's Runs API (`/worker/v1/`, superadmins only). Read `worker/README.md` before adding
-a workflow: changing one that has runs in flight needs `DBOS.patch()`.
+a workflow: changing one that has runs in flight needs `DBOS.patch()`. The knowledge base
+agents (Checker, Guardian) live in `worker/src/agents/`; the KB itself is described in
+`docs/knowledge-base.md`. Only the Guardian changes claims, through `kb_guardian_decide`.
 
 ## Telemetry: PostHog
 
@@ -120,10 +122,12 @@ analytics worker, never by PostHog.
   reported before the response goes out.
 - Free-plan budget: 100k exceptions a month. The client caps each distinct error at 3 per
   10 minutes and 100 per page load; keep that cap if you touch it.
-- The writing stays private: replays mask `.bn-container`, autocapture only records clicks
-  on controls. Never send post content as an event property.
+- Pre-GA, nothing is masked (Ayadi, 2026-10-08): replays record the writing and every input,
+  and autocapture records every click. Revisit before GA. Still don't send post content as
+  an event property: it bloats events and replays already show it.
 - Events go through `/ingest` on our own host (`vercel.json` rewrites, Vite proxy in dev).
   `VITE_POSTHOG_KEY` unset means telemetry is off.
+- Every event and replay carries `tenant_id`, `tenant_slug` and `account_id`; filter recordings by those.
 
 ## Notion is mandatory and is part of "done"
 
