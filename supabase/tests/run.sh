@@ -28,4 +28,7 @@ for suite in access addresses hosts sites realtime; do
   echo "== $suite"
   node "$suite.mjs" || failed=1
 done
+# The knowledge base agents need the worker built (cd worker && npm ci && npm run build).
+echo "== kb_agents"
+if [ -f ../../worker/dist/main.js ]; then node kb_agents.mjs || failed=1; else echo "skipped: worker/dist missing"; fi
 exit "$failed"

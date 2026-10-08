@@ -19,7 +19,10 @@ export interface Cost {
 }
 
 export interface Stall {
-  reason: "usage-limit";
+  /** usage-limit: our Claude subscription. tenant-key: the tenant's own Anthropic key failed. */
+  reason: "usage-limit" | "tenant-key";
+  /** For tenant-key: Anthropic's answer. */
+  message?: string;
   step: string;
   since: number;
   until: number;

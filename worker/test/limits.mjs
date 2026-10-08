@@ -1,6 +1,6 @@
 // usageLimitOf against every shape a usage limit can arrive in.
 import assert from "node:assert/strict";
-import { UsageLimitError, usageLimitOf } from "../dist/limits.js";
+import { UsageLimitError, tenantKeyOf, usageLimitOf } from "../dist/limits.js";
 
 const at = 1_791_410_433_000;
 // The gateway's own error (api/_ai/gateway.ts): a different class, same shape.
@@ -27,4 +27,19 @@ assert.equal(usageLimitOf(apiError({ "anthropic-ratelimit-unified-status": "allo
 assert.equal(usageLimitOf(Object.assign(new Error("boom"), { statusCode: 500 })), null);
 assert.equal(usageLimitOf(null), null);
 assert.equal(usageLimitOf("text"), null);
+// A tenant's own key that failed (BYOK, api/_ai/modelKeys.ts): its own stall, never a usage limit.
+class TenantKeyError extends Error {
+  constructor(message, retryAt = null) {
+    super(`TENANT-KEY ${message}`);
+    this.name = "TenantKeyError";
+    this.retryAt = retryAt;
+  }
+}
+assert.deepEqual(tenantKeyOf(new TenantKeyError("Anthropic refused the key: invalid x-api-key")), { retryAt: null, message: "Anthropic refused the key: invalid x-api-key" });
+assert.equal(tenantKeyOf(new TenantKeyError("rate limited", at)).retryAt, at);
+assert.equal(tenantKeyOf({ name: "Error", message: "TENANT-KEY out of credit" }).message, "out of credit");
+assert.equal(tenantKeyOf({ name: "DBOSMaxStepRetriesError", errors: [new TenantKeyError("x")] }).message, "x");
+assert.equal(usageLimitOf(new TenantKeyError("x")), null);
+assert.equal(tenantKeyOf(new UsageLimitError(at)), null);
+assert.equal(tenantKeyOf(new Error("boom")), null);
 console.log("limits: all passed");

@@ -145,9 +145,9 @@ export function RunsPage() {
 
       {stalled.length > 0 && (
         <div className="rounded-xl border border-secondary bg-warning-primary px-4 py-3 text-sm text-warning-primary">
-          {stalled.length === 1 ? "One run is" : `${stalled.length} runs are`} waiting for the Claude usage limit to reset.{" "}
-          {stalled.length === 1 ? "It carries on by itself" : "They carry on by themselves"} from{" "}
-          {clock(Math.min(...stalled.map((r) => r.stall!.until)))}; nothing to do.
+          {stalled.length === 1 ? "One run is" : `${stalled.length} runs are`} waiting: for the Claude usage limit to reset, or for a
+          tenant's own Anthropic key to work again. {stalled.length === 1 ? "It carries on by itself" : "They carry on by themselves"} from{" "}
+          {clock(Math.min(...stalled.map((r) => r.stall!.until)))}.
         </div>
       )}
 
@@ -338,7 +338,9 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary: RunSum
       )}
       {run.state === "stalled" && run.stall && (
         <p className="text-sm text-warning-primary">
-          Waiting for the Claude usage limit since {clock(run.stall.since)} (at “{run.stall.step}”). Carries on by itself at {clock(run.stall.until)}.
+          {run.stall.reason === "tenant-key"
+            ? `The tenant's own Anthropic key failed at “${run.stall.step}” (${clock(run.stall.since)}): ${run.stall.message ?? ""} Tries again at ${clock(run.stall.until)}; it never falls back to ours.`
+            : `Waiting for the Claude usage limit since ${clock(run.stall.since)} (at “${run.stall.step}”). Carries on by itself at ${clock(run.stall.until)}.`}
         </p>
       )}
 
@@ -359,7 +361,7 @@ function StepRow({ step, runError }: { step: StepView; runError: string | null }
     stalled: "bg-warning-solid",
     running: "bg-brand-solid",
   };
-  const note = step.state === "stalled" ? "hit the usage limit" : step.state === "failed" ? "failed" : step.state === "running" ? "running" : "";
+  const note = step.state === "stalled" ? "waiting (usage limit or the tenant's key)" : step.state === "failed" ? "failed" : step.state === "running" ? "running" : "";
   return (
     <li className="text-sm">
       <div className="flex items-center gap-3">

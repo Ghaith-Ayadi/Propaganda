@@ -14,10 +14,11 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
-| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
+| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`), the knowledge base (`kb.ts`), and the knowledge base agents: `checker.ts`, `guardian.ts` (+ `verdict.ts`, its rule set `guardian-policy-v1.md`), `dispatch.ts`, `text.ts` and `ai.ts` (`ask()`, with canned answers for tests) |
 | `src/workflows/scout.ts`, `src/scout/` | The Scout: DataForSEO, watched pages, ranking facts, the model's triage, its database role |
+| `src/kb/` | `read.ts`: what the knowledge base agents read through the read-only pool |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
-| `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
+| `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres. The knowledge base agents end to end: `supabase/tests/kb_agents.mjs` on the laptop stack |
 
 ## Where things live
 
@@ -26,8 +27,10 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
   writes is in there, so it is not part of `supabase/migrations`, and losing it
   loses run history, not content. The nightly backup covers the `postgres`
   database only.
-- **The app's database** (`postgres`) is read, never written: `private.superadmins`
-  (who may use the Runs API) and `public.model_calls` (the cost log). Both come
+- **The app's database** (`postgres`) is read through a read-only pool:
+  `private.superadmins` (who may use the Runs API), `public.model_calls` (the
+  cost log) and the knowledge base. The agents write only through its functions
+  over PostgREST (below). Both come
   from other PRs; until they are on the box the API refuses everyone (no
   superadmins) and runs show no cost (no cost log). It connects as `postgres`
   with `POSTGRES_PASSWORD` from the stack's `.env`; `JWT_SECRET` checks tokens;
@@ -151,6 +154,68 @@ gateway's resolver doesn't have that path yet and sends Claude ids to the AI
 Gateway), `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` for web search (without
 them the agents work from what they were given), and optionally
 `AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `VOICE_FROM`, `PITCHER_BATCH_CRON`.
+## The knowledge base agents
+
+Design: `docs/knowledge-base.md`. Both only work for tenants with a row in
+`kb_agent_sites` (Lite tenants never spend a token on them):
+
+```sql
+insert into public.kb_agent_sites (site) values ('<site id>');  -- checks posts written from now on
+```
+
+- **The dispatcher** (`agents/dispatch.ts`) polls every `WORKER_DISPATCH_SECONDS`
+  (60) for work: the newest version of a post in `done` or `published`, left
+  alone `WORKER_SETTLE_SECONDS` (600) and not read yet; re-check flags not read
+  yet; contests with no draft; open proposals. Each run's id comes from its work
+  (`checker-<version>`, `guardian-<proposal>-<round>`), so a piece of work runs
+  once however many ticks see it. A failed run stays failed until retried from
+  Admin > Runs.
+- **The Checker** (base model, `AGENT_MODEL_BASE`): links a post version to the
+  claims it relies on, opens a flag per conflict and closes the ones a newer
+  version fixed, checks numbers and quotes against the pages the post links,
+  and offers Remember on tenant facts no claim covers (`kb_checks.report`). It
+  also re-reads posts after a claim they rely on changed (cleared, or open with
+  a suggested fix) and drafts a person's contest into changes and an argument.
+- **The Guardian** (advanced model, `AGENT_MODEL_ADVANCED`): runs policy v1's
+  checks on a proposal (a site's own `kb_policies` text wins over the bundled
+  one) and the code decides the verdict (`verdict.ts`). It only ever writes
+  through `kb_guardian_decide`.
+- **Chat's hand-off** (`POST /agents/checker`, below): the post by id, or the
+  one whose title the task names, checked under the dispatcher's run id
+  `checker-<version>`; `422` when no post matches.
+- Writes go through the database's `kb_` functions with `rpc()` from
+  `backend.ts`; reads through the read-only pool (`src/kb/read.ts`).
+- `WORKER_FAKE_ANSWERS` (tests only) replaces every model call with canned
+  answers by job name and logs nothing.
+
+## The Listener
+
+Design and the one-time app setup: `docs/listener.md`. Code: `listener/` and
+`workflows/listener.ts`. It reads call transcripts and Slack threads, hands
+ideas to the Pitcher and opens one `kb_proposals` row per source for the
+Guardian (left `open`: the dispatcher above picks it up). Like the KB agents it
+only spends for tenants in `kb_agent_sites`.
+
+- **Every source ends in `ingest()`** (`listener/ingest.ts`): one `kb_sources`
+  row, then the `listener-<source>` run on the agents queue. The source id
+  comes from the text, so the same transcript twice is one run. From inside a
+  connector's workflow use `ingestInWorkflow()`: DBOS forbids starting a
+  workflow from inside a step.
+- **Connections** live in `private.listener_connections`, read through the
+  pool and written through `listener_connection_save` / `_revoke`. API keys and
+  tokens are sealed with `LISTENER_SECRET_KEY`; ingest URL tokens are stored as
+  a hash.
+- **Routes** (`listener/routes.ts`, checked before the superadmin gate, each
+  with its own credential): `POST /ingest/<token>`, `POST /hooks/<provider>`
+  (signed by the provider), `GET /oauth/<provider>/callback`, and the
+  Connections routes for a tenant's members (their Supabase token).
+- **Schedules**: the Granola sweep (hourly), the Meet poll (every 15 minutes),
+  the Teams subscription renewal (every 6 hours).
+- **Chat's hand-off** (`POST /agents/listener`): a pasted transcript, read like
+  an ingest URL post; `422` when the task holds no transcript.
+- `LISTENER_MODEL` overrides the model (default `AGENT_MODEL_BASE`).
+- Tests: `test/listener.mjs` (no database) and `test/listener-e2e.mjs`, which
+  needs pgvector and PostgREST (`POSTGREST_BIN`; it skips without).
 
 ## The Scout
 
@@ -242,7 +307,7 @@ a file `main.ts` imports, and never adds a route of its own:
 export const scoutRun = DBOS.registerWorkflow(scout, { name: "scout" });   // scout(input: DispatchInput)
 registerAgent("scout", (input) => startForDispatch("scout", scoutRun, input));
 // Or start the run your own way and return its id (null: nothing to work on):
-registerAgent("checker", (input) => startCheckOnRequest(input.site, input.post, input.task));
+registerAgent("checker", startCheckOnRequest);   // agents/dispatch.ts
 ```
 
 ## Running it

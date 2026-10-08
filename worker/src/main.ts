@@ -11,6 +11,8 @@ import { wireGateway } from "./agents/model.js";
 import { config } from "./config.js";
 import { startServer } from "./http.js";
 import { closeScoutDb } from "./scout/store.js";
+import { setAppDb } from "./kb/read.js";
+import { startDispatcher } from "./agents/dispatch.js";
 import { registerQueues } from "./workflows/agents.js";
 // Every workflow must be registered before launch, so recovery finds it.
 import "./workflows/demo.js";
@@ -19,6 +21,9 @@ import "./agents/writer.js";
 import "./agents/voice.js";
 import { schedulePitcher } from "./agents/pitcher.js";
 import { scheduleScout } from "./workflows/scout.js";
+import "./agents/checker.js";
+import "./agents/guardian.js";
+import { setListenerPool, startListener } from "./listener/index.js";
 
 async function main(): Promise<void> {
   DBOS.setConfig({
@@ -43,11 +48,16 @@ async function main(): Promise<void> {
     options: "-c default_transaction_read_only=on",
   });
   db.on("error", (err) => console.error("app database:", err.message));
+  setAppDb(db);
+  setListenerPool(db);
+  await startListener();
   const server = startServer(db, config.port);
+  const stopDispatcher = startDispatcher();
   console.log(`worker ${config.appVersion} up, Runs API on :${config.port}`);
 
   const stop = async (signal: string) => {
     console.log(`${signal}: shutting down`);
+    stopDispatcher();
     server.close();
     await DBOS.shutdown();
     await db.end();

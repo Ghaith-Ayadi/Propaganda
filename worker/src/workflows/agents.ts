@@ -109,6 +109,12 @@ export async function dispatchAgent(name: AgentName, input: DispatchInput): Prom
 
 /** Same, under a fixed workflow id: starting it again with the same id is a no-op (a daily run, say). */
 export function startForTenantWithId<Args extends unknown[], R>(
+/**
+ * The same, under a run id derived from the work itself ("checker-<version>"):
+ * starting it again returns the run that already exists, so the dispatcher can
+ * ask as often as it likes and a piece of work runs once.
+ */
+export function startOnceForTenant<Args extends unknown[], R>(
   site: string,
   workflowID: string,
   workflow: (...args: Args) => Promise<R>,
