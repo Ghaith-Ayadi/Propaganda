@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { toPng } from "html-to-image";
 import { useSetting } from "@/lib/settings";
 import { updatePost } from "@/lib/posts";
+import { siteId } from "@/lib/scope";
 import { authHeader } from "@/lib/supabase";
 import { formatDate } from "@/lib/format";
 import { StoryCard } from "@/shareable/StoryCard";
@@ -60,7 +61,7 @@ export function SharePanel({ post }: Props) {
           "Content-Type": "application/json",
           Authorization: await authHeader(),
         },
-        body: JSON.stringify({ postId: post.id, content: post.content }),
+        body: JSON.stringify({ site: siteId(), postId: post.id, content: post.content }),
       });
       const data = await res.json() as { quotes?: string[]; error?: string };
       if (!res.ok || !data.quotes) {
