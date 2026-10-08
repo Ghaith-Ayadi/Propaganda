@@ -3,9 +3,12 @@
 // inside: each is a component that calls `onDone` when its part is finished
 // (or skipped). Until a thread fills a slot, the step shows `placeholder`.
 //
-//   strategist   the Strategist's five onboarding questions and the plan drop
-//                (text area plus PDF/doc/JPEG): the "Goals and Strategist
-//                pages" thread. Fill `component` below with theirs.
+//   strategist   the Strategist's questions (Ayadi's order, 2026-10-08: what
+//                you sell and who buys it, 3-5 searches, competitors and
+//                watched sites, the next three months): the "Goals and
+//                Strategist pages" thread. Until they fill `component`, the
+//                flow asks them itself (StrategyQuestions.tsx). The website,
+//                name and review capacity come first, in SetupStep.tsx.
 //   connections  where Propaganda listens (Granola, the transcript URL, Slack,
 //                documents): the Connections page's thread.
 //
@@ -37,16 +40,16 @@ export const HANDOFFS: Handoff[] = [
     id: "strategist",
     label: "Strategy",
     title: "Your strategy",
-    lede: "Five questions, then drop in any plan you already have. The Strategist turns it into this quarter's goals and a first batch of briefs.",
+    lede: "Four questions, then any plan you already have. The Strategist turns it into this quarter's goals and a first batch of briefs.",
     page: "goals",
     // Goals and Strategist thread: lazy(() => import("@/components/goals/StrategistOnboarding").then(...))
     component: null,
     placeholder: [
-      "Who you write for, and what they should come away believing.",
-      "The topics worth owning this quarter.",
-      "How much you can review in a week.",
-      "Searches you want to rank for, and sites worth watching.",
-      "Anything off limits.",
+      "What you sell, and who buys it.",
+      "3 to 5 searches you want to be found by.",
+      "Competitors and sites worth watching.",
+      "Anything happening in the next three months.",
+      "Any plan you already have: paste it or drop a file.",
     ],
   },
   {
