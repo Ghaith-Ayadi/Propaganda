@@ -57,7 +57,7 @@ export interface PostVersion {
   content: string;
   attributes: Record<string, unknown>;
   createdAt: number;
-  createdBy: "user" | "mcp:claude-code" | "migration";
+  createdBy: "user" | "mcp:claude-code" | "migration" | "agent:writer";
   message: string | null;
   // sync metadata, local-only. Set when the snapshot was taken while the server
   // was unreachable (or before its post had a real id); cleared once pushed.
