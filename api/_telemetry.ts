@@ -16,7 +16,7 @@ const client = KEY
 
 type Handler = (request: Request) => Promise<Response>;
 
-async function report(err: unknown, route: string, extra: Record<string, unknown>): Promise<void> {
+export async function report(err: unknown, route: string, extra: Record<string, unknown> = {}): Promise<void> {
   console.error(`${route}:`, err);
   if (!client) return;
   try {

@@ -91,6 +91,34 @@ SDK). It checks the budget rules, runs the call, and writes a row to `public.mod
 cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month on Home
 (`CostMeter`), the superadmin sees all of it in Admin > Consumption.
 
+**Own keys (BYOK).** A tenant may save its own Anthropic key (Settings, "Your Anthropic
+key", through `api/model-key.ts`; owners set or remove it). It is stored only as AES-GCM ciphertext under
+`MODEL_KEY_SECRET` in `model_keys` (service role only; `api/_ai/modelKeys.ts`) and never goes
+back to a browser, a log or a message. With a key saved, every `anthropic/` call for that
+tenant runs on it, logged `paid_by = 'tenant'` and outside our budgets; there is never a
+fallback to our account. A failed key stalls the tenant's runs (`tenantKeyOf` in
+`worker/src/limits.ts`) until it works again. Which account a tenant runs on is hardcoded,
+by site id, in `api/_ai/modelKeys.ts` (`accountOf`): only the tenants on Ayadi's own accounts are listed
+(`private` on `ANTHROPIC_KEY_PRIVATE`, else the AI Gateway; `axoniq` on `ANTHROPIC_KEY_AXONIQ`).
+Every other tenant runs on the key its owner saves, and with none its Claude calls wait.
+`routeModel()` is the one place this is decided. Claude subscription
+(Pro/Max) logins are never used for agents: Anthropic's terms allow API keys only for products.
+
+## Agents: the DBOS worker
+
+Agents run as DBOS workflows in `worker/` (one Node process on the box, `propaganda-worker`
+in Bedrock's `compose/propaganda-supabase`, built from the same checkout as the schema).
+DBOS keeps its tables in its own database, `propaganda_dbos`; the worker reads the app's
+through a read-only pool and writes only through its functions. Start a run with `startForTenant(site, ...)`; a model call is a `modelStep()`, which
+waits out the Claude subscription's usage limit instead of failing. Admin > Runs reads the
+worker's Runs API (`/worker/v1/`, superadmins only). Read `worker/README.md` before adding
+a workflow: changing one that has runs in flight needs `DBOS.patch()`. The knowledge base
+agents (Checker, Guardian) live in `worker/src/agents/`; the KB itself is described in
+`docs/knowledge-base.md`. Only the Guardian changes claims, through `kb_guardian_decide`.
+The Listener (`worker/src/listener/`, `docs/listener.md`) turns call transcripts and Slack
+threads into ideas and Guardian proposals; transcripts are `kb_sources` rows, private to
+their tenant, and connectors never read calls from before they were connected.
+
 ## Telemetry: PostHog
 
 Errors (browser and Vercel functions) and product analytics go to **PostHog Cloud, EU,
