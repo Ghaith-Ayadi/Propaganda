@@ -1,15 +1,22 @@
 // The 0.2 nav bar: tenant switcher, the registered pages in order (Content
 // with its channel > sub-channel tree), and the footer. Every row comes from
 // lib/routes.ts; nothing here knows about a specific page except the tree.
+//
+// On PPGD Lite (lib/tenantPlan.ts) the same bar puts content first, like the
+// 0.1 sidebar: the plan's few pages and Analytics on top, then every
+// collection with its posts filling the bar (components/lite).
 
-import { ChevronDown, Eye, Moon01, SearchLg, Sun } from "@untitledui/icons";
+import { BarChart01, ChevronDown, Eye, Moon01, SearchLg, Sun, SwitchHorizontal01 } from "@untitledui/icons";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { useWorkspace } from "@/components/Workspace";
 import { SiteSwitcher } from "@/components/workspace/SiteSwitcher";
+import { LiteCollections } from "@/components/lite/LiteCollections";
+import { usePages } from "@/components/lite/pages";
 import { useActiveCollection } from "@/lib/activeCollection";
-import { pageHref, useRoute, type Route } from "@/lib/route";
-import { PAGES, type NavNode, type PageRoute } from "@/lib/routes";
+import { analyticsHref, pageHref, useRoute, type Route } from "@/lib/route";
+import type { NavNode, PageRoute } from "@/lib/routes";
 import { sitePublicUrl } from "@/lib/siteUrl";
+import { planOf, setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
 import { toggleTheme, useTheme } from "@/lib/theme";
 import { cx } from "@/utils/cx";
 import { activePageOf, toggleFolded, useFolded } from "./nav";
@@ -19,6 +26,11 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
   const { site } = useWorkspace();
   const [theme] = useTheme();
   const active = activePageOf(route);
+  const pages = usePages();
+  const plan = usePlan();
+  const lite = plan === "lite";
+  const canSwitch = useCanSwitchPlan();
+  const ownPlan = planOf(site.id);
 
   return (
     <aside className="flex h-full w-[260px] max-w-full shrink-0 flex-col border-r border-secondary bg-secondary max-md:w-[300px]">
@@ -40,15 +52,34 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
 
       <nav aria-label="Main" className="flex-1 overflow-y-auto px-2 pb-2">
         <ul className="flex flex-col gap-0.5">
-          {PAGES.filter((p) => p.section === "main").map((p) => (
-            <PageItem key={p.id} page={p} active={active === p.id} route={route} currentCollection={currentCollection} />
-          ))}
+          {pages
+            .filter((p) => p.section === "main" && !(lite && p.id === "content"))
+            .map((p) => (
+              <PageItem key={p.id} page={p} active={active === p.id} route={route} currentCollection={currentCollection} />
+            ))}
+          {lite && (
+            <li>
+              <a
+                href={analyticsHref()}
+                aria-current={route.view === "analytics" ? "page" : undefined}
+                className={rowClass(route.view === "analytics")}
+              >
+                <BarChart01 className="size-4 shrink-0 text-quaternary" />
+                <span>Analytics</span>
+              </a>
+            </li>
+          )}
         </ul>
+        {lite && (
+          <div className="mt-2 border-t border-secondary pt-1">
+            <LiteCollections currentPostId={route.view === "post" ? route.id : null} rowClass={rowClass} />
+          </div>
+        )}
       </nav>
 
       <div className="border-t border-secondary px-2 py-2">
         <ul className="flex flex-col gap-0.5">
-          {PAGES.filter((p) => p.section === "footer").map((p) => (
+          {pages.filter((p) => p.section === "footer").map((p) => (
             <PageItem key={p.id} page={p} active={active === p.id} route={route} />
           ))}
           <li>
@@ -63,6 +94,19 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
               <span>Preview site</span>
             </a>
           </li>
+          {canSwitch && (
+            <li>
+              {/* Localhost, the UI preview and superadmins: see the other plan. */}
+              <button
+                type="button"
+                onClick={() => setPlanView(lite ? (ownPlan === "full" ? null : "full") : ownPlan === "lite" ? null : "lite")}
+                className={rowClass(false)}
+              >
+                <SwitchHorizontal01 className="size-4 text-quaternary" />
+                <span>{lite ? "View as full plan" : "View as Lite"}</span>
+              </button>
+            </li>
+          )}
         </ul>
       </div>
     </aside>

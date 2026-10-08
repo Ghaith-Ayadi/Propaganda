@@ -14,7 +14,9 @@ import { AdminPage } from "@/components/admin/AdminPage";
 import { BriefPage } from "@/components/plan/BriefPage";
 import { db } from "@/lib/db";
 import { useRoute } from "@/lib/route";
-import { findPage } from "@/lib/routes";
+import { findPlanPage } from "@/components/lite/pages";
+import { LockedPage } from "@/components/lite/LockedPage";
+import { usePlan } from "@/lib/tenantPlan";
 import { useLayout } from "@/lib/layout";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { installLifecycleHandlers, runSync } from "@/lib/sync";
@@ -190,10 +192,12 @@ function MobileDrawer({ side, open, children }: { side: "left" | "right"; open: 
 
 /** A registered page (lib/routes.ts), or its empty state until it is built. */
 function PageOutlet({ id }: { id: string }) {
-  const page = findPage(id);
-  if (!page) {
+  const found = findPlanPage(usePlan(), id);
+  if (!found) {
     return <div className="flex h-full items-center justify-center text-tertiary">Page not found.</div>;
   }
+  const { page, locked } = found;
+  if (locked) return <LockedPage page={page} />;
   const Page = page.component;
   if (!Page) return <EmptyPage page={page} />;
   return (
