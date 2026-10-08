@@ -256,3 +256,37 @@ export async function fillEmptyPost(site: string, post: string, values: { title:
   const rows = await patch("posts", `site=eq.${enc(site)}&id=eq.${enc(post)}&content_md=eq.&status=eq.draft`, values);
   return rows.length === 1;
 }
+
+// ---- batches ----
+
+export type BatchCadence = "weekly" | "flood";
+
+/** The tenant's batch cadence; weekly when it never chose (or the table isn't on the server yet). */
+export async function batchCadence(site: string): Promise<BatchCadence> {
+  try {
+    const [row] = await select<{ batch_cadence: string }>("agent_settings", `site=eq.${enc(site)}&select=batch_cadence`);
+    return row?.batch_cadence === "flood" ? "flood" : "weekly";
+  } catch (err) {
+    if (isMissing(err)) return "weekly";
+    throw err;
+  }
+}
+
+/** The plan's ideas still waiting for a batch, oldest first. */
+export async function planIdeas(site: string, limit: number): Promise<{ id: string }[]> {
+  return select<{ id: string }>("agent_ideas", `site=eq.${enc(site)}&status=eq.new&origin=eq.plan&select=id&order=created&limit=${limit}`);
+}
+
+/** Pitches that went out in a batch since `since` (this quarter): the batch number and when. */
+export async function batchedBriefs(site: string, since: string): Promise<{ batch: number; created: string }[]> {
+  return select<{ batch: number; created: string }>(
+    "briefs",
+    `site=eq.${enc(site)}&batch=not.is.null&created=gte.${enc(since)}&select=batch,created&limit=5000`,
+  );
+}
+
+/** Tenants with planned ideas waiting for a batch. */
+export async function sitesWithPlanIdeas(): Promise<string[]> {
+  const rows = await select<{ site: string }>("agent_ideas", `status=eq.new&origin=eq.plan&select=site&limit=10000`);
+  return [...new Set(rows.map((r) => r.site))];
+}

@@ -5,7 +5,7 @@
 
 import { insertIdea, type IdeaRow } from "./store.js";
 import { startForTenant } from "../workflows/agents.js";
-import { pitcher } from "./pitcher.js";
+import { pitchBatch, pitcher } from "./pitcher.js";
 
 /** Same values as the pipeline UI's Origin (app/src/lib/pipeline/types.ts). */
 export type Origin = "calls" | "search" | "news" | "watched" | "team" | "plan";
@@ -43,6 +43,12 @@ export async function handOffIdeas(site: string, ideas: NewIdea[], opts: { pitch
     }, i.key);
     ids.push(row.id);
   }
-  if (opts.pitchNow !== false && ids.length) await startForTenant(site, pitcher, { site, ideaIds: ids });
+  if (opts.pitchNow !== false && ids.length) {
+    // The plan goes out in batches at the tenant's cadence; anything else is a bonus pitch.
+    const planned = ids.filter((_, n) => ideas[n].origin === "plan");
+    const bonus = ids.filter((_, n) => ideas[n].origin !== "plan");
+    if (planned.length) await startForTenant(site, pitchBatch, { site, trigger: "handoff" });
+    if (bonus.length) await startForTenant(site, pitcher, { site, ideaIds: bonus });
+  }
   return ids;
 }

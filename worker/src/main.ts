@@ -16,6 +16,7 @@ import "./workflows/demo.js";
 import "./agents/pitcher.js";
 import "./agents/writer.js";
 import "./agents/voice.js";
+import { schedulePitcher } from "./agents/pitcher.js";
 
 async function main(): Promise<void> {
   DBOS.setConfig({
@@ -29,6 +30,7 @@ async function main(): Promise<void> {
   wireGateway();
   await DBOS.launch();
   await registerQueues();
+  await schedulePitcher();
 
   // The app's database holds people's content: this pool can only read it.
   // Any write through it fails at the server, whatever code asks for one.

@@ -14,7 +14,7 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
-| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
+| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
 | `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
 
@@ -79,19 +79,28 @@ adds the same idea twice;
 the Pitcher settles each one as pitched (with its brief) or rejected (with a
 reason), and keeps both.
 
-**The Pitcher** (`pitcher`) judges every idea in one call (topics, timeliness,
+**The Pitcher** (`pitcher`) judges ideas (25 per call: topics, timeliness,
 gaps, overlaps), then code turns that into reasons from the goals (`fit.ts`,
 the same rule as the pipeline UI's Strong / Fair / Weak). No reason: rejected,
-"No reason yet". Otherwise the strongest go out as one content batch (`max`,
-3 to 5; up to 8 on launch day): each a full brief in `briefs` with status
-`pitched`, angle, audience, outline, sources from a web search, fit and goal
-effects. Searches are charged and logged like model calls. The rest wait for the next batch. Each batch reads what reviewers said
-about the last (rejections and notes). `draftTop: 3` has the Writer draft the
-three strongest before anyone approves them (launch day one). A run with no
-batch (the Scout's and the Listener's bonus ideas) keeps at most three bonus
-pitches undecided in the inbox; the rest stay ideas for a later run. A
-person's ask from Chat isn't capped. Goals come from
-the run's input until the Goals tables exist (`goals.ts`, `readGoals()`).
+"No reason yet". Otherwise the strongest go out, up to the run's `max`: each a
+full brief in `briefs` with status `pitched`, angle, audience, outline, sources
+from a web search, fit and goal effects. Searches are charged and logged like
+model calls. Each batch reads what reviewers said about the last (rejections
+and notes). `draftTop: 3` has the Writer draft the three strongest before
+anyone approves them (launch day one). Goals come from the run's input until
+the Goals tables exist (`goals.ts`, `readGoals()`).
+
+**Batches** (`pitcher:batch`, `batches.ts`). The plan's ideas (origin `plan`)
+always go out in batches, at the tenant's cadence (`agent_settings.batch_cadence`):
+`weekly` by default (equal weekly batches through the quarter's first two
+months, a double batch at the start; sizes come from what's left and the weeks
+left) or `flood` (everything at once). Plan ideas arriving start a batch run:
+flood sends them, weekly sends only the quarter's first batch. A schedule
+(`PITCHER_BATCH_CRON`, Mondays 07:00 UTC) sends each tenant's weekly batch,
+once a week at most. "Send me the next batch" in Chat sends it now. Other
+ideas (the Scout's and the Listener's) are bonus pitches: at most three
+undecided in the inbox at once, the rest stay ideas. A person's ask from Chat
+isn't capped.
 
 **The Writer** (`writer`) drafts an approved brief (`todo` or `in_progress`):
 - First job on a tenant with no voice guide: writes one (`writer:voice-guide`)
@@ -120,7 +129,7 @@ needs to reach Claude (the plan is Ayadi's Claude Max subscription; the
 gateway's resolver doesn't have that path yet and sends Claude ids to the AI
 Gateway), `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` for web search (without
 them the agents work from what they were given), and optionally
-`AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `VOICE_FROM`.
+`AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `VOICE_FROM`, `PITCHER_BATCH_CRON`.
 
 ## The usage limit
 

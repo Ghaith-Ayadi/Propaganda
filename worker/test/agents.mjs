@@ -23,6 +23,8 @@ function check(cond, what) {
 
 // ---- a stand-in PostgREST ----
 
+const CLOCK = "2026-10-08T12:00:00.000Z";
+
 const db = {
   sites: [
     { id: SITE, name: "Kontra", slug: "kontra", domain: "" },
@@ -34,6 +36,7 @@ const db = {
   briefs: [],
   agent_ideas: [],
   voice_guides: [],
+  agent_settings: [],
   model_calls: [],
 };
 const ESSAY = (n) =>
@@ -57,6 +60,8 @@ function matches(row, key, cond) {
   if (op === "is") return arg === "null" ? v === null || v === undefined : String(v) === arg;
   if (op === "like") return new RegExp(`^${arg.replace(/\*/g, ".*")}$`).test(String(v ?? ""));
   if (op === "lte") return String(v) <= arg;
+  if (op === "gte") return String(v) >= arg;
+  if (op === "not" && rest[0] === "is") return rest[1] === "null" ? v !== null && v !== undefined : String(v) !== rest[1];
   if (op === "in") return arg.slice(1, -1).split(",").includes(String(v));
   if (op === "not" && rest[0] === "in") return !rest.slice(1).join(".").slice(1, -1).split(",").includes(String(v));
   throw new Error(`stand-in PostgREST: no operator ${cond}`);
@@ -100,7 +105,8 @@ const rest = createServer((req, res) => {
     if (!table) return out(404, { code: "PGRST205", message: `no table ${path}` });
     if (req.method === "GET") return out(200, filterRows(path, url.searchParams));
     if (req.method === "POST") {
-      const row = { created: new Date().toISOString(), updated: new Date().toISOString(), ...JSON.parse(body) };
+      // Rows are stamped on the tests' "today", so week and quarter checks don't depend on the real date.
+      const row = { created: CLOCK, updated: CLOCK, ...JSON.parse(body) };
       if (path === "briefs" && !row.status) return out(400, { code: "23514", message: "status" });
       table.push(row);
       return out(201, [row]);
@@ -339,6 +345,34 @@ try {
   const judgeCalls = prompts.filter((x) => x.includes("Judge each idea")).length;
   const b2 = await (await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: sIds, goals, today: "2026-10-08" })).getResult();
   check(b2.pitched.length === 0 && b2.waiting.length === b1.waiting.length && prompts.filter((x) => x.includes("Judge each idea")).length === judgeCalls, "a full inbox leaves the rest as ideas, without a model call");
+
+  console.log("planned batches");
+  const weekly = (o) => t.batchSize({ cadence: "weekly", quarterStart: new Date("2026-10-01T00:00:00Z"), ...o });
+  check(weekly({ remaining: 20, released: 0, now: new Date("2026-10-01T07:00:00Z") }) === 4, "weekly: the first batch is double (20 planned, 9 weeks: 4)");
+  check(weekly({ remaining: 16, released: 1, now: new Date("2026-10-05T07:00:00Z") }) === 2, "weekly: then equal batches (16 left, 8 weeks: 2)");
+  check(weekly({ remaining: 7, released: 5, now: new Date("2026-12-07T07:00:00Z") }) === 7, "weekly: past the first two months, the rest at once");
+  check(t.batchSize({ cadence: "flood", remaining: 400, released: 0, quarterStart: new Date("2026-10-01T00:00:00Z"), now: new Date("2026-10-01T07:00:00Z") }) === 400, "flood: everything at once");
+  check(weekly({ remaining: 0, released: 2, now: new Date("2026-10-12T07:00:00Z") }) === 0, "nothing planned, nothing sent");
+
+  const planIds = await t.handOffIdeas(
+    SITE,
+    [1, 2, 3, 4, 5, 6].map((n) => ({ title: `Planned post ${n}`, summary: "From the quarter's plan.", origin: "plan", evidence: [{ label: "Plan", quote: `post ${n}` }], sourceAgent: "strategist" })),
+    { pitchNow: false },
+  );
+  const batchOf = async (trigger) => (await t.DBOS.startWorkflow(t.pitchBatch)({ site: SITE, trigger, goals, today: "2026-10-08" })).getResult();
+  const h1 = await batchOf("handoff");
+  check(h1.batch === null && h1.pitched.length === 0, "weekly: the plan arriving after the first batch waits for the weekly run");
+  const chatRun = await t.dispatchAgent("pitcher", { site: SITE, task: "Send me the next batch", requestedBy: "11111111-1111-1111-1111-111111111111", conversation: "conv2", post: null });
+  const c1 = await t.DBOS.retrieveWorkflow(chatRun).getResult();
+  check(c1.batch === 2 && c1.pitched.length === 1 && db.briefs.filter((b) => b.batch === 2).length === 1, `Chat's "next batch" sends batch 2, sized for the weeks left (${c1.pitched.length})`);
+  const s1 = await batchOf("schedule");
+  check(s1.batch === null, "the weekly run doesn't send a second batch the same week");
+  await (await t.DBOS.startWorkflow(t.weeklyBatches)(new Date("2026-10-12T07:00:00Z"))).getResult();
+  const wk = await t.DBOS.retrieveWorkflow(`pitcher-batch-${SITE}-2026-W42`).getResult();
+  check(wk && "batch" in wk, "the Monday schedule starts one batch run per tenant with plan ideas waiting");
+  db.agent_settings.push({ site: SITE, batch_cadence: "flood" });
+  const f1 = await batchOf("handoff");
+  check(f1.batch === 3 && f1.pitched.length === 5 && db.agent_ideas.filter((i) => planIds.includes(i.id) && i.status === "new").length === 0, `flood: the rest of the plan at once (${f1.pitched.length})`);
 
   console.log("cost log");
   const modelRows = db.model_calls.filter((c) => !String(c.model).startsWith("dataforseo/"));

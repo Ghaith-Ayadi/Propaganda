@@ -5,9 +5,9 @@
 // audience, outline, sources, fit with its reasons. The model judges each idea
 // (topics, timeliness, gaps, overlaps); code turns that into reasons with the
 // goals and the pipeline (fit.ts), so the same facts always rate the same.
-// Pitches go out in content batches of 3 to 5 (strategist-cold-start-and-pacing.md):
-// the rest of the ideas wait for the next batch, and each batch reads what
-// reviewers said about the last one.
+// Planned pitches go out in batches, at the tenant's cadence (batches.ts):
+// weekly by default, or all at once. The rest of the plan waits for the next
+// batch, and each batch reads what reviewers said about the last one.
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import {
@@ -20,16 +20,21 @@ import {
   publishedPosts,
   reviewerFeedback,
   settleIdea,
+  batchCadence,
+  batchedBriefs,
+  planIdeas,
+  sitesWithPlanIdeas,
   type BriefRow,
   type IdeaRow,
 } from "./store.js";
 import { rate, type FitReason, type Judgement } from "./fit.js";
-import { quarterOf, readGoals, standing, type CountedPost, type Goals } from "./goals.js";
+import { batchSize } from "./batches.js";
+import { isoWeek, quarterOf, readGoals, standing, type CountedPost, type Goals } from "./goals.js";
 import { claimsFor, renderClaims } from "./kb.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
 import { searchWeb, type SearchHit } from "./web.js";
-import { registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
+import { AGENT_QUEUE, registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
 import { writer } from "./writer.js";
 
 export interface PitchInput {
@@ -58,6 +63,10 @@ export interface PitchResult {
 }
 
 const MAX_IDEAS = 40;
+/** The most pitches one run sends (a flood of a big plan). */
+const MAX_BATCH = 500;
+/** Ideas judged per model call. */
+const JUDGE_CHUNK = 25;
 /** Bonus pitches (no batch) open in the inbox at once; the rest wait as ideas for a later run. */
 export const BONUS_OPEN = 3;
 
@@ -174,12 +183,12 @@ Use "tenant" for the business you work for. Never invent facts about the tenant:
 
 async function pitchRun(input: PitchInput): Promise<PitchResult> {
   const { site } = input;
-  const max = Math.min(Math.max(input.max ?? 5, 1), 8);
+  const max = Math.min(Math.max(input.max ?? 5, 1), MAX_BATCH);
   const now = input.today ? new Date(`${input.today}T12:00:00Z`) : new Date(await DBOS.now());
   const result: PitchResult = { pitched: [], rejected: [], waiting: [], drafting: [] };
 
   const pending = await DBOS.runStep(
-    async () => (await readIdeas(site, input.ideaIds ?? null, MAX_IDEAS)).filter((i) => i.status === "new"),
+    async () => (await readIdeas(site, input.ideaIds ?? null, Math.max(MAX_IDEAS, input.ideaIds?.length ?? 0))).filter((i) => i.status === "new"),
     { name: "read ideas" },
   );
   if (pending.length === 0) return result;
@@ -219,15 +228,19 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     ...ctx.published.map((p) => `published: ${p.title}`),
     ...ctx.briefs.map((b) => `${b.status}: ${b.title}`),
   ].slice(0, 120);
-  const judged = await askJson(
-    "judge ideas",
-    {
-      site,
-      job: "pitcher:judge",
-      model: MODELS.base,
-      maxOutputTokens: 6000,
-      system: PITCHER_SYSTEM,
-      prompt: `Today is ${now.toISOString().slice(0, 10)}. Judge each idea below for ${ctx.tenant?.name ?? "the tenant"}.
+  const chunks: IdeaRow[][] = [];
+  for (let i = 0; i < pending.length; i += JUDGE_CHUNK) chunks.push(pending.slice(i, i + JUDGE_CHUNK));
+  const judged: Judged[] = [];
+  for (const [n, chunk] of chunks.entries()) {
+    const part = await askJson(
+      chunks.length === 1 ? "judge ideas" : `judge ideas ${n + 1}`,
+      {
+        site,
+        job: "pitcher:judge",
+        model: MODELS.base,
+        maxOutputTokens: 6000,
+        system: PITCHER_SYSTEM,
+        prompt: `Today is ${now.toISOString().slice(0, 10)}. Judge each idea below for ${ctx.tenant?.name ?? "the tenant"}.
 
 ${goalsBlock(goals)}
 
@@ -235,7 +248,7 @@ Already published or in the pipeline:
 ${existing.join("\n") || "(nothing yet)"}
 
 Ideas:
-${pending.map(ideaBlock).join("\n\n")}
+${chunk.map(ideaBlock).join("\n\n")}
 
 For each idea, answer:
 - topics: the one or two goal topics it belongs to (exact names from the goals; empty if none fit).
@@ -248,9 +261,11 @@ For each idea, answer:
 - searches: one or two web searches that would find good sources for it.
 
 Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": "", "timely": false, "expiresAt": "", "answersGap": "", "demand": "", "duplicateOf": "", "replacesFlagged": "", "searches": []}]}`,
-    },
-    parseJudgements(pending.map((i) => i.id)),
-  );
+      },
+      parseJudgements(chunk.map((i) => i.id)),
+    );
+    judged.push(...part);
+  }
 
   // 2. Rate in code; the strongest go out in this batch, the rest wait.
   let st = standing(posts, goals?.perWeek ?? 0, now);
@@ -449,4 +464,83 @@ Answer with JSON only: {"ideas": [{"title": "...", "summary": "..."}]}`,
 }
 
 export const pitchFromRequest = DBOS.registerWorkflow(pitchFromRequestRun, { name: "pitcher:request" });
-registerAgent("pitcher", (input) => startForDispatch("pitcher", pitchFromRequest, input));
+
+// ---- the plan's batches ----
+
+export interface BatchInput {
+  site: string;
+  /**
+   * schedule: the weekly run (once a week at most). handoff: the plan just
+   * arrived (flood sends it all; weekly sends only the quarter's first, double
+   * batch). asked: a person wants the next batch now.
+   */
+  trigger: "schedule" | "handoff" | "asked";
+  goals?: Goals | null;
+  today?: string;
+}
+
+/** Send the plan's next batch, sized by the tenant's cadence (batches.ts). */
+async function batchRun(input: BatchInput): Promise<PitchResult & { batch: number | null }> {
+  const { site } = input;
+  const now = input.today ? new Date(`${input.today}T12:00:00Z`) : new Date(await DBOS.now());
+  const { start } = quarterOf(now);
+  const state = await DBOS.runStep(
+    async () => {
+      const [cadence, waiting, sent] = await Promise.all([batchCadence(site), planIdeas(site, 10_000), batchedBriefs(site, start.toISOString())]);
+      return { cadence, waiting: waiting.map((i) => i.id), sent };
+    },
+    { name: "read the plan" },
+  );
+  const none = { pitched: [], rejected: [], waiting: state.waiting, drafting: [], batch: null };
+  const released = state.sent.reduce((n, b) => Math.max(n, b.batch), 0);
+  if (input.trigger === "handoff" && state.cadence === "weekly" && released > 0) return none; // the weekly run sends it
+  if (input.trigger === "schedule" && state.sent.some((b) => isoWeek(new Date(b.created)) === isoWeek(now))) return none; // already sent this week
+  const size = batchSize({ remaining: state.waiting.length, released, cadence: state.cadence, quarterStart: start, now });
+  if (size === 0) return none;
+  const batch = released + 1;
+  const out = await pitchRun({
+    site,
+    ideaIds: state.waiting.slice(0, size),
+    batch,
+    max: size,
+    ...(input.goals !== undefined ? { goals: input.goals } : {}),
+    ...(input.today ? { today: input.today } : {}),
+  });
+  return { ...out, waiting: [...out.waiting, ...state.waiting.slice(size)], batch };
+}
+
+export const pitchBatch = DBOS.registerWorkflow(batchRun, { name: "pitcher:batch" });
+
+async function batchFromRequestRun(input: DispatchInput) {
+  return batchRun({ site: input.site, trigger: "asked" });
+}
+const batchFromRequest = DBOS.registerWorkflow(batchFromRequestRun, { name: "pitcher:batch-request" });
+
+/** Chat's "send me the next batch" (or "another batch"). */
+export const NEXT_BATCH = /\b(next|another|new)\s+batch\b/i;
+
+registerAgent("pitcher", (input) =>
+  NEXT_BATCH.test(input.task) ? startForDispatch("pitcher", batchFromRequest, input) : startForDispatch("pitcher", pitchFromRequest, input),
+);
+
+/** Every Monday: each tenant with planned ideas waiting gets its weekly batch. */
+async function weeklyBatchesRun(scheduled: Date): Promise<void> {
+  const week = isoWeek(scheduled);
+  const sites = await DBOS.runStep(() => sitesWithPlanIdeas(), { name: "tenants" });
+  for (const site of sites) {
+    await DBOS.startWorkflow(pitchBatch, {
+      workflowID: `pitcher-batch-${site}-${week}`,
+      queueName: AGENT_QUEUE,
+      workflowAttributes: { site },
+    })({ site, trigger: "schedule" });
+  }
+}
+
+export const weeklyBatches = DBOS.registerWorkflow(weeklyBatchesRun, { name: "pitcher:weekly-batches" });
+
+export const BATCH_CRON = process.env.PITCHER_BATCH_CRON ?? "0 7 * * 1";
+
+/** Called once after launch: the weekly schedule, kept in DBOS's own tables. */
+export async function schedulePitcher(): Promise<void> {
+  await DBOS.applySchedules([{ scheduleName: "pitcher-weekly-batches", workflowFn: weeklyBatches, schedule: BATCH_CRON, cronTimezone: "UTC" }]);
+}

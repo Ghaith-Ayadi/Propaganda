@@ -69,12 +69,22 @@ update public.voice_guides set body = 'My guide', source = 'content' where site 
 do $$ begin
   if (select source from public.voice_guides where site = 'sitetest0000001') <> 'person' then raise exception 'FAIL: a member''s edit is not marked as theirs'; end if;
 end $$;
+-- The batch cadence: a member sets it; only weekly or flood.
+insert into public.agent_settings (site, batch_cadence) values ('sitetest0000001', 'flood');
+do $$ begin
+  if (select updated_by from public.agent_settings where site = 'sitetest0000001') <> '11111111-1111-1111-1111-111111111111' then raise exception 'FAIL: the cadence change is not stamped with its author'; end if;
+  begin
+    update public.agent_settings set batch_cadence = 'monthly' where site = 'sitetest0000001';
+    raise exception 'FAIL: an unknown cadence was accepted';
+  exception when check_violation then null; end;
+end $$;
 
 -- A member of another tenant sees nothing.
 select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
 do $$ begin
   if (select count(*) from public.agent_ideas) <> 0 then raise exception 'FAIL: ideas leaked across tenants'; end if;
   if (select count(*) from public.voice_guides) <> 0 then raise exception 'FAIL: voice guides leaked across tenants'; end if;
+  if (select count(*) from public.agent_settings) <> 0 then raise exception 'FAIL: settings leaked across tenants'; end if;
 end $$;
 reset role;
 

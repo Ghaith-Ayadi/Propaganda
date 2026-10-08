@@ -15,3 +15,5 @@ export { handOffIdeas } from "./ideas.js";
 export { pitcher, pitchFromRequest } from "./pitcher.js";
 export { writer, reviser, briefForTask } from "./writer.js";
 export { voiceGuideWorkflow, DEFAULT_VOICE } from "./voice.js";
+export { pitchBatch, weeklyBatches } from "./pitcher.js";
+export { batchSize } from "./batches.js";

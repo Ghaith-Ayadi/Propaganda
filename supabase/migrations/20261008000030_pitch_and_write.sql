@@ -1,4 +1,5 @@
--- What the Pitcher and the Writer need (worker/src/agents). Additive only:
+-- What the Pitcher and the Writer need (worker/src/agents), and the tenant's
+-- batch cadence. Additive only:
 -- new tables, new nullable or defaulted columns, and two check constraints
 -- widened (dropped and re-added with more values). Nothing a client writes
 -- today is renamed, dropped or refused.
@@ -113,6 +114,41 @@ create policy "members read" on public.voice_guides for select to authenticated
 create policy "members insert" on public.voice_guides for insert to authenticated
   with check (site in (select private.my_sites()));
 create policy "members update" on public.voice_guides for update to authenticated
+  using (site in (select private.my_sites())) with check (site in (select private.my_sites()));
+
+-- ---- agent_settings: how a tenant wants its agents to work ----
+
+-- One row per tenant; no row means every default. batch_cadence: how planned
+-- pitches reach the inbox. weekly (the default): equal weekly batches through
+-- the quarter's first two months, a double batch at the start. flood: all at
+-- once. Either way a person can ask for the next batch.
+create table public.agent_settings (
+  site text primary key references public.sites (id) on delete cascade,
+  batch_cadence text not null default 'weekly' check (batch_cadence in ('weekly', 'flood')),
+  updated_by text not null default '' check (char_length(updated_by) <= 120),
+  updated timestamptz not null default private.ms_now()
+);
+
+create function private.agent_settings_stamp() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if coalesce(auth.role(), '') = 'authenticated' then
+    new.updated_by := coalesce(auth.uid()::text, '');
+  end if;
+  new.updated := private.ms_now();
+  return new;
+end
+$$;
+create trigger stamp before insert or update on public.agent_settings
+  for each row execute function private.agent_settings_stamp();
+
+alter table public.agent_settings enable row level security;
+grant select, insert, update on public.agent_settings to authenticated;
+create policy "members read" on public.agent_settings for select to authenticated
+  using (site in (select private.my_sites()));
+create policy "members insert" on public.agent_settings for insert to authenticated
+  with check (site in (select private.my_sites()));
+create policy "members update" on public.agent_settings for update to authenticated
   using (site in (select private.my_sites())) with check (site in (select private.my_sites()));
 
 -- ---- post_versions: the Writer's versions say so ----
