@@ -50,6 +50,8 @@ export const goalsActions = {
   requestChanges: goalsAdapter.requestChanges,
   savePlanDrop: goalsAdapter.savePlanDrop,
   removePlanFile: goalsAdapter.removePlanFile,
+  setBatchCadence: goalsAdapter.setBatchCadence,
+  requestNextBatch: goalsAdapter.requestNextBatch,
 };
 
 export const goalsArePlaceholder = goalsAdapter.placeholder;

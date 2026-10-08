@@ -43,7 +43,7 @@ export function LaunchCard({ launch }: { launch: Launch }) {
       <ol className="mt-6 grid gap-3 md:grid-cols-3">
         {launch.batches.map((b) => {
           const due = addDays(launch.startedAt, b.dueDay - 1);
-          const arrived = launch.day >= b.dueDay;
+          const arrived = b.arrived;
           return (
             <li key={b.number} className={cx("rounded-xl p-3 ring-1 ring-secondary ring-inset", !arrived && "opacity-70")}>
               <p className="text-sm font-semibold text-primary">

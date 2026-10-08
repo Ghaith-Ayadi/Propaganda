@@ -210,6 +210,8 @@ export interface LaunchBatch {
   briefs: number;
   drafted: number;
   approved: number;
+  /** Reached the inbox (early, when the tenant asked for it or chose Flood). */
+  arrived: boolean;
 }
 
 export interface Launch {
@@ -230,6 +232,9 @@ export interface Launch {
 }
 
 // ── Content batches (the quarter's planned list, split) ─────────────────────
+
+/** How the planned list reaches the inbox (lib/goals/batching.ts). */
+export type BatchCadence = "weekly" | "flood";
 
 export type BatchState = "pending" | "in_review" | "decided";
 
@@ -257,6 +262,7 @@ export interface ContentBatch {
 
 export interface BatchPlan {
   quarter: QuarterKey;
+  cadence: BatchCadence;
   planned: number;
   batches: ContentBatch[];
   /** Posts on top of the plan, from news or calls. */

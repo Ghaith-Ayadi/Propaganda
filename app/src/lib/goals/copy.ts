@@ -34,7 +34,7 @@ export const ZERO_OPPORTUNISTIC =
   "Everything in the quarter is planned. Posts from news and calls are a bonus on top; when one deserves a slot, a planned post moves to next quarter.";
 
 export const BATCH_RULE =
-  "One batch at a time, so review stays one sitting. The next batch arrives when two thirds of this one is decided, or after 7 days.";
+  "Content always comes in batches. They reach your inbox on your cadence, and you can ask for the next one whenever you're ready.";
 
 export const GOAL_COPY: Record<string, { title: string; question: string }> = {
   volume: { title: "Volume", question: "Are we publishing enough, on the right topics?" },

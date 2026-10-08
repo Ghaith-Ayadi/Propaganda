@@ -291,7 +291,7 @@ function BatchesTab({ quarter, onTab }: { quarter: QuarterKey; onTab: (t: Tab, q
   const plan = useBatchPlan(quarter);
   if (!plan)
     return (
-      <Card title="No batches yet" subtitle="Batches come from approved goals: the quarter's planned posts, split into 4 to 6.">
+      <Card title="No batches yet" subtitle="Batches come from approved goals: the quarter's planned posts, always delivered in batches.">
         <Button size="sm" color="secondary" iconTrailing={ArrowRight} onClick={() => onTab("strategist")}>
           The Strategist's proposal
         </Button>

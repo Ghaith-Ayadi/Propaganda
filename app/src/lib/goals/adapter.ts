@@ -8,6 +8,7 @@
 // file), a Supabase adapter implements this interface and replaces it here.
 
 import type {
+  BatchCadence,
   BatchPlan,
   GoalVersion,
   Launch,
@@ -44,6 +45,10 @@ export interface GoalsAdapter {
   /** Save the plan drop: pasted text plus files (PDF, Word, Markdown, spreadsheets, images). */
   savePlanDrop(text: string, files: File[]): Promise<PlanDrop>;
   removePlanFile(id: string): Promise<void>;
+  /** The tenant's batching cadence. Re-batches what hasn't reached the inbox yet; delivered batches stay. */
+  setBatchCadence(cadence: BatchCadence): Promise<void>;
+  /** Bring the next batch forward to today. Returns its number, or null when every batch is out. */
+  requestNextBatch(quarter: QuarterKey): Promise<number | null>;
 }
 
 export const goalsAdapter: GoalsAdapter = placeholderAdapter;

@@ -1,10 +1,16 @@
-// Content batches: the quarter's planned list in 4 to 6 batches, produced
-// through the first half of the quarter, one at a time in the inbox, published
+// Content batches: the quarter's planned list always comes in batches, on the
+// tenant's cadence (Weekly or Flood, lib/goals/batching.ts), and is published
 // across the whole quarter. Bonus posts sit on top of the plan.
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "@untitledui/icons";
-import type { BatchBriefState, BatchPlan, ContentBatch } from "@/lib/goals/types";
+import { ChevronDown, ChevronRight, FastForward } from "@untitledui/icons";
+import type { BatchBriefState, BatchCadence, BatchPlan, ContentBatch } from "@/lib/goals/types";
+import { CADENCE_COPY, CADENCE_RATIONALE } from "@/lib/goals/batching";
+import { goalsActions } from "@/lib/goals/useGoals";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
+import { toast } from "@/components/base/toast/toast";
+import { reportError } from "@/lib/telemetry";
 import { BATCH_RULE, ZERO_OPPORTUNISTIC } from "@/lib/goals/copy";
 import { quarterLabel, shortDate } from "@/lib/goals/quarter";
 import { Badge, BadgeWithDot } from "@/components/base/badges/badges";
@@ -36,7 +42,8 @@ export function batchSummary(plan: BatchPlan): string {
     : next
       ? `Batch ${next.number} of ${n} arrives ${shortDate(next.dueAt)}`
       : "Every batch decided";
-  return `${quarterLabel(plan.quarter).split(" ")[0]}: ${plan.planned} posts in ${n} batches. ${where}; all written by ${shortDate(plan.allWrittenBy)}.`;
+  const how = plan.cadence === "flood" ? "Flood" : "weekly";
+  return `${quarterLabel(plan.quarter).split(" ")[0]}: ${plan.planned} posts in ${n} ${n === 1 ? "batch" : "batches"} (${how}). ${where}; all written by ${shortDate(plan.allWrittenBy)}.`;
 }
 
 export function BatchesView({ plan }: { plan: BatchPlan }) {
@@ -57,13 +64,90 @@ export function BatchesView({ plan }: { plan: BatchPlan }) {
           )}
         </div>
         <p className="mt-3 text-sm text-tertiary">{ZERO_OPPORTUNISTIC}</p>
-        <p className="mt-1 text-sm text-tertiary">{BATCH_RULE}</p>
         <BatchStrip batches={plan.batches} />
       </Card>
+      <BatchingCard plan={plan} />
       {plan.batches.map((b) => (
         <BatchCard key={b.id} batch={b} defaultOpen={b.id === current?.id} total={plan.batches.length} />
       ))}
     </div>
+  );
+}
+
+/** The Batching setting: Weekly (recommended) or Flood, plus "next batch now". */
+function BatchingCard({ plan }: { plan: BatchPlan }) {
+  const [switchTo, setSwitchTo] = useState<BatchCadence | null>(null);
+  const [busy, setBusy] = useState(false);
+  const next = plan.batches.find((b) => b.state === "pending");
+
+  const apply = async (c: BatchCadence) => {
+    setBusy(true);
+    try {
+      await goalsActions.setBatchCadence(c);
+      setSwitchTo(null);
+      toast.add({ type: "success", title: `Batching: ${CADENCE_COPY[c].label}`, description: c === "flood" ? "Everything left comes in one batch tomorrow morning." : "What's left comes weekly from tomorrow." });
+    } catch (err) {
+      reportError("goals.setBatchCadence", err);
+      toast.add({ type: "error", title: "Couldn't change batching", description: "Try again in a moment." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const bringForward = async () => {
+    setBusy(true);
+    try {
+      const n = await goalsActions.requestNextBatch(plan.quarter);
+      toast.add(n ? { type: "success", title: `Batch ${n} is on its way`, description: "Its briefs are in your inbox now." } : { type: "error", title: "Every batch is already out" });
+    } catch (err) {
+      reportError("goals.requestNextBatch", err);
+      toast.add({ type: "error", title: "Couldn't get the next batch", description: "Try again in a moment." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card
+      title="Batching"
+      subtitle={BATCH_RULE}
+      aside={
+        <Button size="sm" color="secondary" iconLeading={FastForward} isDisabled={!next || busy} onClick={() => void bringForward()}>
+          {next ? `Get batch ${next.number} now` : "Every batch is out"}
+        </Button>
+      }
+    >
+      <ButtonGroup
+        size="sm"
+        selectedKeys={[switchTo ?? plan.cadence]}
+        disallowEmptySelection
+        aria-label="Batching cadence"
+        onSelectionChange={(keys) => {
+          const c = [...keys][0] as BatchCadence | undefined;
+          if (c) setSwitchTo(c === plan.cadence ? null : c);
+        }}
+      >
+        <ButtonGroupItem id="weekly">Weekly (recommended)</ButtonGroupItem>
+        <ButtonGroupItem id="flood">Flood</ButtonGroupItem>
+      </ButtonGroup>
+      <p className="mt-2 text-sm text-tertiary">{CADENCE_COPY[switchTo ?? plan.cadence].hint}</p>
+
+      {switchTo && (
+        <div className="mt-4 rounded-xl bg-secondary p-4">
+          <p className="text-sm font-semibold text-secondary">Before you switch to {CADENCE_COPY[switchTo].label}</p>
+          <p className="mt-1 text-sm text-secondary">{CADENCE_RATIONALE}</p>
+          <p className="mt-1 text-sm text-tertiary">Batches already in your inbox stay as they are; only what hasn't arrived is re-batched.</p>
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <Button size="sm" color="secondary" isDisabled={busy} onClick={() => setSwitchTo(null)}>
+              Keep {CADENCE_COPY[plan.cadence].label}
+            </Button>
+            <Button size="sm" color="primary" isDisabled={busy} isLoading={busy} onClick={() => void apply(switchTo)}>
+              Switch to {CADENCE_COPY[switchTo].label}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -106,7 +190,7 @@ function BatchCard({ batch, defaultOpen, total }: { batch: ContentBatch; default
             {batch.launch && <span className="font-normal text-tertiary"> · Launch</span>}
           </span>
           <span className="block text-sm text-tertiary">
-            {batch.state === "pending" ? `Arrives ${shortDate(batch.dueAt)}, or sooner once the batch before is two thirds decided` : `Landed ${shortDate(batch.dueAt)} · ${decided} of ${batch.briefs.length} briefs decided`}
+            {batch.state === "pending" ? `Arrives ${shortDate(batch.dueAt)}, or now if you ask for it` : `Landed ${shortDate(batch.dueAt)} · ${decided} of ${batch.briefs.length} briefs decided`}
           </span>
         </span>
         <BadgeWithDot type="pill-color" color={s.color} size="sm">

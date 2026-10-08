@@ -38,8 +38,6 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   const problems = [
     lowSum > draft.volume.value && `The topics' low ends add up to ${lowSum}, more than the ${draft.volume.value} total.`,
     draft.topics.some((t) => t.low > t.high) && "A topic's low end is above its high end.",
-    draft.batches.value < 4 && proposal.kind !== "onboarding" && "A quarter needs 4 to 6 batches.",
-    draft.batches.value > 6 && "A quarter needs 4 to 6 batches.",
   ].filter(Boolean) as string[];
 
   const set = (patch: Partial<Proposal>) => setDraft((d) => ({ ...d, ...patch }));
@@ -115,7 +113,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
           <NumberCell value={draft.volume.value} editable={editable} onChange={(v) => set({ volume: { ...draft.volume, value: v } })} unit="posts" />
           <Reason {...draft.volume} />
           <div className="mt-4 border-t border-secondary pt-4">
-            <NumberCell value={draft.batches.value} editable={editable} onChange={(v) => set({ batches: { ...draft.batches, value: v } })} unit="batches" small />
+            <NumberCell value={draft.batches.value} editable={false} onChange={() => {}} unit="weekly batches" small />
             <Reason {...draft.batches} />
           </div>
         </Card>
