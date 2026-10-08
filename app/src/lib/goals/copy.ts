@@ -38,7 +38,6 @@ export const BATCH_RULE =
 
 export const GOAL_COPY: Record<string, { title: string; question: string }> = {
   volume: { title: "Volume", question: "Are we publishing enough, on the right topics?" },
-  coverage: { title: "Coverage", question: "Are we using what we know and what people search for?" },
   consistency: { title: "Consistency", question: "Is what we publish true and aligned?" },
   readership: { title: "Readership", question: "Is anyone paying attention?" },
   ranking: { title: "Ranking", question: "Do we show up where it counts?" },

@@ -108,12 +108,15 @@ export function PlaceholderBanner() {
   );
 }
 
-export function ProgressBar({ value, max, marker, className }: { value: number; max: number; marker?: number; className?: string }) {
+/** `pitched` draws a lighter bar behind `value`: what was offered, behind what's done. */
+export function ProgressBar({ value, max, marker, pitched, className }: { value: number; max: number; marker?: number; pitched?: number; className?: string }) {
   const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  const pw = pitched != null && max > 0 ? Math.min(100, (pitched / max) * 100) : 0;
   const m = marker != null && max > 0 ? Math.min(100, (marker / max) * 100) : null;
   return (
     <div className={cx("relative h-2 rounded-full bg-quaternary", className)}>
-      <div className="h-2 rounded-full bg-brand-solid" style={{ width: `${w}%` }} />
+      {pw > 0 && <div className="absolute inset-y-0 left-0 rounded-full bg-fg-quaternary" style={{ width: `${pw}%` }} />}
+      <div className="relative h-2 rounded-full bg-fg-primary" style={{ width: `${w}%` }} />
       {m != null && <div className="absolute -top-1 h-4 w-0.5 rounded bg-fg-primary" style={{ left: `calc(${m}% - 1px)` }} aria-hidden />}
     </div>
   );

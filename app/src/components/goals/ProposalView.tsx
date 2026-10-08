@@ -108,32 +108,16 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
         )}
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Volume" subtitle="Planned posts for the quarter. Bonus posts come on top.">
-          <NumberCell value={draft.volume.value} editable={editable} onChange={(v) => set({ volume: { ...draft.volume, value: v } })} unit="posts" />
-          <Reason {...draft.volume} />
-          <div className="mt-4 border-t border-secondary pt-4">
-            <NumberCell value={draft.batches.value} editable={false} onChange={() => {}} unit="weekly batches" small />
-            <Reason {...draft.batches} />
-          </div>
-        </Card>
+      <Card title="Volume" subtitle="Planned posts for the quarter. Bonus posts come on top.">
+        <NumberCell value={draft.volume.value} editable={editable} onChange={(v) => set({ volume: { ...draft.volume, value: v } })} unit="posts" />
+        <Reason {...draft.volume} />
+        <div className="mt-4 border-t border-secondary pt-4">
+          <NumberCell value={draft.batches.value} editable={false} onChange={() => {}} unit="weekly batches" small />
+          <Reason {...draft.batches} />
+        </div>
+      </Card>
 
-        <Card title="Coverage" subtitle="Where the planned posts' ideas come from.">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-secondary">From your knowledge</p>
-              <NumberCell value={draft.coverage.internal} editable={editable} onChange={(v) => set({ coverage: { ...draft.coverage, internal: v } })} unit="posts" small />
-            </div>
-            <div>
-              <p className="text-sm text-secondary">From outside demand</p>
-              <NumberCell value={draft.coverage.external} editable={editable} onChange={(v) => set({ coverage: { ...draft.coverage, external: v } })} unit="posts" small />
-            </div>
-          </div>
-          <Reason why={draft.coverage.why} basis={draft.coverage.basis} />
-        </Card>
-      </div>
-
-      <Card title="Topics" subtitle="About four, ranked, each a range. The low end is what counts as on target.">
+      <Card title="Topics" subtitle="About four, ranked, each a range. The low end is what counts as on target. The Strategist pitches across all of them, and Goals shows how many it pitched next to what's done.">
         <TopicList topics={draft.topics} editable={editable} onChange={(topics) => set({ topics })} />
       </Card>
 
@@ -414,8 +398,6 @@ function diff(a: Proposal, b: Proposal): ProposalEdit[] {
   const num = (field: string, x: number | null, y: number | null) => x !== y && out.push({ field, from: String(x ?? "none"), to: String(y ?? "none") });
   num("Volume", a.volume.value, b.volume.value);
   num("Batches", a.batches.value, b.batches.value);
-  num("Coverage: from your knowledge", a.coverage.internal, b.coverage.internal);
-  num("Coverage: from outside demand", a.coverage.external, b.coverage.external);
   num("Ranking: page one", a.ranking.pageOneTarget.value, b.ranking.pageOneTarget.value);
   num("Ranking: AI answers", a.ranking.aiMentionTarget.value, b.ranking.aiMentionTarget.value);
   num("Readership", a.readership.value, b.readership.value);

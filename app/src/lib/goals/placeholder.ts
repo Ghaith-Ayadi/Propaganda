@@ -49,10 +49,10 @@ import {
 import { planBatches } from "./batching";
 import {
   consistencyNow,
-  coverageScore,
   rankingPageOne,
   scoreSeries,
   volumeScore,
+  type PitchFact,
   type QuarterFacts,
 } from "./score";
 
@@ -151,7 +151,6 @@ const LAUNCH_SIZE = 15;
 const LAUNCH_BATCH_SIZES = [6, 5, 4]; // day 1 (3 already drafted), by day 8, by day 15
 
 function newTenantTargets(total: number): GoalTargets {
-  const internal = Math.round(total * 0.3);
   return {
     volume: {
       total,
@@ -162,7 +161,6 @@ function newTenantTargets(total: number): GoalTargets {
         { name: TOPICS[3], low: Math.max(1, Math.round(total * 0.08)), high: Math.round(total * 0.17) },
       ],
     },
-    coverage: { internal, external: total - internal },
     readership: { pageviews: null, pagesPerSession: null, corpusMinutes: null, secondsPerPost: null },
     ranking: {
       searches: SEARCHES.map((s) => ({ query: s.query, topic: s.topic, position: null, volume: s.volume, difficulty: s.difficulty })),
@@ -174,7 +172,6 @@ function newTenantTargets(total: number): GoalTargets {
 
 function establishedTargets(total: number, pageOne: number): GoalTargets {
   const t = newTenantTargets(total);
-  t.coverage = { internal: Math.round(total * 0.5), external: total - Math.round(total * 0.5) };
   t.readership = { pageviews: 9000, pagesPerSession: 1.5, corpusMinutes: 5200, secondsPerPost: 150 };
   t.ranking.pageOneTarget = pageOne;
   t.ranking.aiMentionTarget = 2;
@@ -232,14 +229,6 @@ function buildProposal(
       basis: ["Your website, pricing page, onboarding answer 1", "Product page, DataForSEO: 1,980 searches/month across the cluster", "Onboarding answer 4, competitor gap", "Integrations page"][i],
       origin: plan ? (i === 0 ? "plan" : i === 1 ? "plan" : i === 2 ? "added" : "plan_changed") : undefined,
     })),
-    coverage: {
-      internal: t.coverage.internal,
-      external: t.coverage.external,
-      why: opts.established
-        ? "Last quarter half of the approved pitches came from your calls. Keep it."
-        : "You haven't connected calls yet, so most ideas start from search demand. Connect Granola and we'll shift this.",
-      basis: opts.established ? "Q3: 11 of 21 approved pitches internal" : "No sources connected",
-    },
     ranking: {
       searches: SEARCHES.map((s) => ({ query: s.query, topic: s.topic, position: null, volume: s.volume, difficulty: s.difficulty, why: s.why, origin: plan && s.topic === TOPICS[0] ? "plan" : undefined })),
       pageOneTarget: {
@@ -320,7 +309,8 @@ function buildPlan(quarter: QuarterKey, start: Day, targets: GoalTargets, launch
   const topicOrder: string[] = [];
   for (const t of targets.volume.topics) for (let i = 0; i < t.low; i++) topicOrder.push(t.name);
   while (topicOrder.length < total) topicOrder.push(targets.volume.topics[topicOrder.length % targets.volume.topics.length].name);
-  const internalShare = targets.coverage.internal / Math.max(1, targets.coverage.internal + targets.coverage.external);
+  // Where ideas start (calls and docs vs search demand): a label on each brief, not a goal.
+  const internalShare = launchFrom ? 0.3 : 0.5;
   const end = quarterEnd(quarter);
 
   const posts: PlannedPost[] = [];
@@ -446,8 +436,8 @@ function factsFor(plan: QuarterPlan, today: Day, established: boolean): QuarterF
   const r = rng(hash("facts" + plan.quarter + plan.start));
   const published = plan.posts
     .filter((p) => p.publishOn <= today && p.publishOn >= plan.start)
-    .map((p) => ({ day: p.publishOn, topics: p.topics, origin: p.origin, planned: true }));
-  for (const b of plan.bonus) if (b.day <= today && b.day >= plan.start) published.push({ day: b.day, topics: [b.topic], origin: "external", planned: false });
+    .map((p) => ({ day: p.publishOn, topics: p.topics, planned: true }));
+  for (const b of plan.bonus) if (b.day <= today && b.day >= plan.start) published.push({ day: b.day, topics: [b.topic], planned: false });
   published.sort((a, b) => (a.day < b.day ? -1 : 1));
 
   const readership: QuarterFacts["readership"] = [];
@@ -475,7 +465,7 @@ function factsFor(plan: QuarterPlan, today: Day, established: boolean): QuarterF
       kbClean: established || i > 9 ? Math.min(1, 0.8 + r() * 0.08 + i * 0.001) : null,
     });
   }
-  return { published, readership, ranking, consistency };
+  return { published, pitched: pitchesFor(plan, today, established), readership, ranking, consistency };
 }
 
 // ── The store ───────────────────────────────────────────────────────────────
@@ -644,7 +634,28 @@ function briefState(p: PlannedPost, due: Day, today: Day, idx: number): BatchBri
   return "brief";
 }
 
-const EMPTY_FACTS: QuarterFacts = { published: [], readership: [], ranking: [], consistency: [] };
+/**
+ * Every brief in a batch that reached the inbox is a pitch. A rejected brief
+ * gets a replacement in the same topic in the next batch; the established
+ * tenant also keeps turning down one topic, so its Volume shows the gap.
+ */
+function pitchesFor(plan: QuarterPlan, today: Day, established: boolean): PitchFact[] {
+  const out: PitchFact[] = [];
+  plan.batchDue.forEach((due, i) => {
+    if (due > today) return;
+    plan.posts
+      .filter((p) => p.batch === i + 1)
+      .forEach((p, k) => {
+        const st = briefState(p, due, today, k);
+        out.push({ day: due, topics: p.topics, outcome: st === "rejected" ? "rejected" : st === "brief" ? "open" : "approved" });
+        if (st === "rejected") out.push({ day: addDays(due, 7) <= today ? addDays(due, 7) : due, topics: p.topics, outcome: "open" });
+      });
+    if (established && i % 2 === 0) out.push({ day: due, topics: [TOPICS[3]], outcome: "rejected" });
+  });
+  return out;
+}
+
+const EMPTY_FACTS: QuarterFacts = { published: [], pitched: [], readership: [], ranking: [], consistency: [] };
 
 // ── Adapter ─────────────────────────────────────────────────────────────────
 
@@ -676,9 +687,8 @@ export const placeholderAdapter: GoalsAdapter = {
     const targets = current?.targets ?? newTenantTargets(0);
     const scores = current
       ? scoreSeries(quarter, until, facts, targets)
-      : { volume: [], coverage: [], consistency: [], readership: [], ranking: [] };
-    const vol = volumeScore(facts.published, targets.volume);
-    const cov = coverageScore(facts.published, targets.coverage);
+      : { volume: [], consistency: [], readership: [], ranking: [] };
+    const vol = volumeScore(facts.published, targets.volume, facts.pitched);
     const rd = facts.readership;
     const pv = rd.reduce((a, x) => a + x.pageviews, 0);
     const sessions = rd.reduce((a, x) => a + x.sessions, 0);
@@ -690,8 +700,7 @@ export const placeholderAdapter: GoalsAdapter = {
       history,
       scores,
       now: {
-        volume: { published: vol.published, byTopic: vol.byTopic, bonus: vol.bonus },
-        coverage: { internal: cov.internal, external: cov.external },
+        volume: { published: vol.published, byTopic: vol.byTopic, pitchedByTopic: vol.pitchedByTopic, rejectedByTopic: vol.rejectedByTopic, bonus: vol.bonus },
         consistency: consistencyNow(facts.consistency[facts.consistency.length - 1]),
         readership: {
           pageviews: pv,
@@ -800,7 +809,6 @@ export const placeholderAdapter: GoalsAdapter = {
     const prev = latestVersion(p.quarter);
     const targets: GoalTargets = {
       volume: { total: edited.volume.value, topics: edited.topics.map(({ name, low, high }) => ({ name, low, high })) },
-      coverage: { internal: edited.coverage.internal, external: edited.coverage.external },
       readership: { pageviews: null, pagesPerSession: null, corpusMinutes: edited.readership.value, secondsPerPost: null },
       ranking: {
         searches: edited.ranking.searches.map(({ query, topic, position, volume, difficulty }) => ({ query, topic, position, volume, difficulty })),
