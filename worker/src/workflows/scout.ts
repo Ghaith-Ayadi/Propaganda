@@ -1,12 +1,15 @@
-// The Scout (agents.md #3): once a day per tenant, check the quarter's target
-// searches (Google positions, and on Mondays the AI answers), the news and
-// Reddit on the focus topics, and the watched sites. Write the day's Ranking
-// facts, and hand the Pitcher ideas with their evidence (agent_ideas,
-// through handOffIdeas). The base model reads the day's items once; everything
-// else is code.
+// The Scout (agents.md #3): once a week per tenant, check the quarter's target
+// searches (Google positions and the AI answers), the news and Reddit on the
+// focus topics, and the watched sites. Write the week's Ranking facts, and
+// hand the Pitcher ideas with their evidence (agent_ideas, through
+// handOffIdeas). The base model reads the week's items once; everything else
+// is code.
 //
-// Every paid request is its own step, so a retry or a restart never pays for
-// one twice, and the Runs page shows the cost of each.
+// Nothing waits on the Scout, so its searches go on DataForSEO's standard
+// queue (slow, cheap): one step posts them all, then the run sleeps durably and
+// collects them as they finish. Every paid request is its own step, so a retry
+// or a restart never pays for one twice, and the Runs page shows the cost of
+// each.
 //
 // What it follows comes from scout_searches and watched_sites
 // (supabase/migrations/20261008000020_scout.sql): the Goals approval writes them.
@@ -14,7 +17,7 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { callModel } from "../../../api/_ai/gateway";
 import { modelStep } from "../limits.js";
-import { dataForSeoConfigured, googleNews, googleOrganic, llmMentions, type SerpItem } from "../scout/dataforseo.js";
+import { collectSearches, dataForSeoConfigured, llmMentions, queueSearches, type SerpItem, type SerpRequest } from "../scout/dataforseo.js";
 import { extractLinks, fetchPage, newLinks, type PageLink } from "../scout/pages.js";
 import { checkAi, checkSearch, type AiCheck, type SearchCheck } from "../scout/ranking.js";
 import {
@@ -31,12 +34,14 @@ import { MODELS } from "../agents/model.js";
 import { registerAgent, startForDispatch, startForTenantWithId, type DispatchInput } from "./agents.js";
 
 export const SCOUT_MODEL = process.env.SCOUT_MODEL ?? MODELS.base;
-/** UTC. 06:00 lands before the working day in Europe and the US. */
-export const SCOUT_CRON = process.env.SCOUT_CRON ?? "0 6 * * *";
-/** Day of the week (0 = Sunday) the AI answers are checked: they change slowly and cost the most. */
-const AI_WEEKDAY = Number(process.env.SCOUT_AI_WEEKDAY ?? 1);
-/** News older than this isn't news. */
-const NEWS_MAX_AGE_MS = 3 * 86_400_000;
+/** UTC, Mondays at 06:00: the week's ideas are in before the Pitcher's batch. */
+export const SCOUT_CRON = process.env.SCOUT_CRON ?? "0 6 * * 1";
+/** News older than this isn't news (a week, and a day of slack for the queue). */
+const NEWS_MAX_AGE_MS = 8 * 86_400_000;
+/** How long the run sleeps between looks at the queue. */
+const POLL_SECONDS = Number(process.env.SCOUT_POLL_SECONDS ?? 600);
+/** Looks before giving up on what's still queued (a day at the default). */
+const MAX_POLLS = Number(process.env.SCOUT_MAX_POLLS ?? 144);
 /** The most items one triage call reads. */
 const MAX_CANDIDATES = 60;
 const ORIGIN = { search: "search", ai: "search", news: "news", reddit: "news", watched: "watched" } as const;
@@ -64,8 +69,6 @@ export interface ScoutInput {
   site: string;
   /** 'YYYY-MM-DD', UTC: the day the facts are for. */
   day: string;
-  /** Check the AI answers whatever the weekday. */
-  checkAi?: boolean;
 }
 
 export interface ScoutSummary {
@@ -74,26 +77,22 @@ export interface ScoutSummary {
   pageOne: number;
   aiMentioned: number | null;
   candidates: number;
-  /** Ideas handed to the Pitcher today (one already handed before, like a standing search gap, counts again; the Pitcher skips it). */
+  /** Searches still queued when the run gave up on them (counted as no results). */
+  unanswered?: number;
+  /** Ideas handed to the Pitcher this run (one already handed before, like a standing search gap, counts again; the Pitcher skips it). */
   findings: number;
   costNote?: string;
 }
 
-function weekday(day: string): number {
-  return new Date(`${day}T00:00:00Z`).getUTCDay();
-}
-
 /**
- * The daily schedule and Admin pass a ScoutInput. Chat passes its hand-off
- * (DispatchInput): a run for today that checks everything, AI answers
- * included. The task's words are kept on the run; the Scout doesn't act on
- * them yet (it always checks the whole plan).
+ * The weekly schedule and Admin pass a ScoutInput. Chat passes its hand-off
+ * (DispatchInput): a run for today. The task's words are kept on the run; the
+ * Scout doesn't act on them yet (it always checks the whole plan).
  */
 async function scoutRun(input: ScoutInput | DispatchInput): Promise<ScoutSummary> {
   const site = input.site;
   const fromChat = !("day" in input);
   const day = fromChat ? new Date(await DBOS.now()).toISOString().slice(0, 10) : input.day;
-  const checkAiToday = fromChat || input.checkAi === true;
   const plan = await DBOS.runStep(() => readPlan(site, day), { name: "read plan" });
   if (!plan) return { skipped: "no such tenant", searches: 0, pageOne: 0, aiMentioned: null, candidates: 0, findings: 0 };
 
@@ -102,17 +101,38 @@ async function scoutRun(input: ScoutInput | DispatchInput): Promise<ScoutSummary
   const findings: Finding[] = [];
   const candidates: Candidate[] = [];
 
-  // ---- target searches: positions ----
-  const checks: SearchCheck[] = [];
-  if (paid) {
-    for (const s of plan.searches) {
-      const results = await DBOS.runStep(
-        () => googleOrganic({ site, locationCode: s.locationCode, languageCode: s.languageCode }, s.query),
-        { name: `search: ${s.query}`, retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 },
-      );
-      checks.push(checkSearch(plan.domains, s.query, s.topic, results));
-    }
+  // ---- every Google search of the run, on the standard queue ----
+  const place = { locationCode: plan.searches[0]?.locationCode ?? 2840, languageCode: plan.searches[0]?.languageCode ?? "en" };
+  const requests: SerpRequest[] = paid
+    ? [
+        ...plan.searches.map((s): SerpRequest => ({ kind: "organic", keyword: s.query, depth: 20, locationCode: s.locationCode, languageCode: s.languageCode })),
+        ...plan.topics.flatMap((topic): SerpRequest[] => [
+          { kind: "news", keyword: topic, depth: 20, ...place },
+          // Google's index of Reddit, through the same organic search: no
+          // Reddit API account, and the price of one ordinary search.
+          { kind: "organic", keyword: `${topic} reddit`, depth: 10, ...place },
+        ]),
+      ]
+    : [];
+  const queued = requests.length
+    ? await DBOS.runStep(() => queueSearches(site, requests), { name: "queue searches", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 })
+    : [];
+  const results: (SerpItem[] | null)[] = queued.map(() => null);
+  for (let poll = 1; poll <= MAX_POLLS && results.includes(null); poll++) {
+    await DBOS.sleep(POLL_SECONDS * 1000);
+    const waiting = results.flatMap((r, n) => (r === null ? [n] : []));
+    const got = await DBOS.runStep(() => collectSearches(waiting.map((n) => queued[n]!)), {
+      name: `collect searches (${poll})`, retriesAllowed: true, maxAttempts: 3, intervalSeconds: 30,
+    });
+    waiting.forEach((n, j) => (results[n] = got[j] ?? null));
   }
+  const unanswered = results.filter((r) => r === null).length;
+  const resultOf = (n: number): SerpItem[] => results[n] ?? [];
+
+  // ---- target searches: positions ----
+  const checks: SearchCheck[] = plan.searches.length && paid
+    ? plan.searches.map((s, n) => checkSearch(plan.domains, s.query, s.topic, resultOf(n)))
+    : [];
   if (checks.length) {
     facts.push({
       kind: "ranking_search",
@@ -142,9 +162,9 @@ async function scoutRun(input: ScoutInput | DispatchInput): Promise<ScoutSummary
     }
   }
 
-  // ---- target prompts: AI answers that mention us (weekly) ----
+  // ---- target prompts: AI answers that mention us ----
   const ai: AiCheck[] = [];
-  if (paid && plan.searches.length && (checkAiToday || weekday(day) === AI_WEEKDAY)) {
+  if (paid && plan.searches.length) {
     const prompts = plan.searches.map((s) => s.prompt);
     const first = plan.searches[0]!;
     const where = { site, locationCode: first.locationCode, languageCode: first.languageCode };
@@ -173,28 +193,20 @@ async function scoutRun(input: ScoutInput | DispatchInput): Promise<ScoutSummary
 
   // ---- news and Reddit on the focus topics ----
   if (paid) {
-    const where = { site, locationCode: plan.searches[0]?.locationCode ?? 2840, languageCode: plan.searches[0]?.languageCode ?? "en" };
     const now = await DBOS.now();
-    for (const topic of plan.topics) {
-      const news: SerpItem[] = await DBOS.runStep(() => googleNews(where, topic), {
-        name: `news: ${topic}`, retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10,
-      });
-      for (const n of news) {
+    plan.topics.forEach((topic, t) => {
+      const base = plan.searches.length + 2 * t;
+      for (const n of resultOf(base)) {
         if (n.published !== null && now - n.published <= NEWS_MAX_AGE_MS) {
           candidates.push({ kind: "news", url: n.url, title: n.title, snippet: n.description, topic, published: n.published });
         }
       }
-      // Google's index of Reddit, through the same organic search: no Reddit
-      // API account, and the price of one ordinary search.
-      const threads: SerpItem[] = await DBOS.runStep(() => googleOrganic(where, `${topic} reddit`, 10), {
-        name: `reddit: ${topic}`, retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10,
-      });
-      for (const t of threads) {
-        if (/(^|\.)reddit\.com$/.test(t.domain) && /\/comments\//.test(t.url)) {
-          candidates.push({ kind: "reddit", url: t.url, title: t.title, snippet: t.description, topic, published: t.published });
+      for (const r of resultOf(base + 1)) {
+        if (/(^|\.)reddit\.com$/.test(r.domain) && /\/comments\//.test(r.url)) {
+          candidates.push({ kind: "reddit", url: r.url, title: r.title, snippet: r.description, topic, published: r.published });
         }
       }
-    }
+    });
   }
 
   // ---- watched sites ----
@@ -246,7 +258,7 @@ async function scoutRun(input: ScoutInput | DispatchInput): Promise<ScoutSummary
   }
 
   // The Pitcher's queue first: each idea's id comes from its key, so a replay
-  // (or tomorrow's run finding the same search gap) never adds it twice.
+  // (or next week's run finding the same search gap) never adds it twice.
   const ideas = findings.map((f) => toIdea(site, f));
   // They wait for the next batch's slots with the plan's ideas; the Pitcher's morning run picks them up.
   const ideaIds = await DBOS.runStep(() => handOffIdeas(site, ideas), { name: "hand ideas to the Pitcher" });
@@ -259,6 +271,7 @@ async function scoutRun(input: ScoutInput | DispatchInput): Promise<ScoutSummary
     aiMentioned: ai.length ? new Set(ai.flatMap((a) => a.mentioned)).size : null,
     candidates: toRead.length,
     findings: ideaIds.length,
+    ...(unanswered ? { unanswered } : {}),
     ...(paid ? {} : { costNote: "DataForSEO not configured: watched sites only" }),
   };
 }
@@ -266,21 +279,21 @@ async function scoutRun(input: ScoutInput | DispatchInput): Promise<ScoutSummary
 export const scout = DBOS.registerWorkflow(scoutRun, { name: "scout" });
 registerAgent("scout", (input) => startForDispatch("scout", scout, input));
 
-/** The id of a tenant's daily run: one per tenant per day, whatever fires it. */
-export const dailyRunId = (site: string, day: string) => `scout-${site}-${day}`;
+/** The id of a tenant's scheduled run: one per tenant per day, whatever fires it. */
+export const weeklyRunId = (site: string, day: string) => `scout-${site}-${day}`;
 
 /** The schedule's run: start each tenant's Scout on the agents queue. */
-async function scoutDailyRun(scheduled: Date): Promise<void> {
+async function scoutWeeklyRun(scheduled: Date): Promise<void> {
   const day = scheduled.toISOString().slice(0, 10);
   const sites = await DBOS.runStep(() => tenantsToScout(day), { name: "tenants" });
   for (const site of sites) {
-    await startForTenantWithId(site, dailyRunId(site, day), scout, { site, day });
+    await startForTenantWithId(site, weeklyRunId(site, day), scout, { site, day });
   }
 }
 
-export const scoutDaily = DBOS.registerWorkflow(scoutDailyRun, { name: "scout-daily" });
+export const scoutWeekly = DBOS.registerWorkflow(scoutWeeklyRun, { name: "scout-weekly" });
 
-/** Called once after launch: the daily schedule, kept in DBOS's own tables. */
+/** Called once after launch: the weekly schedule, kept in DBOS's own tables. */
 export async function scheduleScout(): Promise<void> {
-  await DBOS.applySchedules([{ scheduleName: "scout-daily", workflowFn: scoutDaily, schedule: SCOUT_CRON, cronTimezone: "UTC" }]);
+  await DBOS.applySchedules([{ scheduleName: "scout-weekly", workflowFn: scoutWeekly, schedule: SCOUT_CRON, cronTimezone: "UTC" }]);
 }

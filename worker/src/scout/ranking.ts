@@ -1,4 +1,4 @@
-// The Ranking goal's daily facts (goal model, goal 5): where the tenant ranks
+// The Ranking goal's facts (goal model, goal 5; weekly rows in daily_facts): where the tenant ranks
 // for each target search, and which target prompts get an AI answer that
 // mentions it. Pure functions; the workflow fetches, these decide.
 

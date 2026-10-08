@@ -26,10 +26,10 @@ export interface TriageInput {
   day: string;
 }
 
-/** At most this many ideas a day: a review session, not a firehose. */
+/** At most this many ideas a run: a review session, not a firehose. */
 export const MAX_IDEAS = 8;
 
-export const SYSTEM = `You are the Scout for a content team. Each day you read what the web turned up
+export const SYSTEM = `You are the Scout for a content team. Each week you read what the web turned up
 on the tenant's topics and pick the few items worth a blog post. You never write the post.
 
 Keep an item only when the tenant could write something useful because of it: a rule

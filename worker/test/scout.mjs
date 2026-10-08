@@ -66,27 +66,51 @@ const iso = (ms) => new Date(ms).toISOString().replace("T", " ").replace(/\.\d+Z
 const task = (items) => ({ status_code: 20000, status_message: "Ok.", cost: 0.002, tasks: [{ status_code: 20000, status_message: "Ok.", cost: 0.002, result: [{ items }] }] });
 const organic = (rank, domain, path, title) => ({ type: "organic", rank_group: rank, domain, url: `https://${domain}${path}`, title, description: `About ${title}` });
 
-const seo = [];
-const dataforseo = await listen((req, res, body) => {
-  const [t] = JSON.parse(body);
-  seo.push({ path: req.url, ...t });
-  if (req.headers.authorization !== `Basic ${Buffer.from("login:pw").toString("base64")}`) return json(res, { status_code: 40100, status_message: "auth" }, 401);
-  if (req.url === "/v3/serp/google/organic/live/advanced") {
-    if (t.keyword === "fleet scraping framework")
-      return json(res, task([organic(1, "scrapy.org", "/", "Scrapy"), organic(4, "blog.kontra.run", "/fleet", "Kontra fleet"), organic(2, "apify.com", "/", "Apify")]));
-    if (t.keyword === "durable crawling")
-      return json(res, task([organic(1, "temporal.io", "/crawl", "Durable crawls"), organic(2, "dbos.dev", "/c", "DBOS crawls")]));
-    if (t.keyword.endsWith(" reddit"))
-      return json(res, task([organic(1, "www.reddit.com", "/r/webscraping/comments/abc/how_do_you_scale/", "How do you scale scrapers?"), organic(2, "example.com", "/r", "Not reddit")]));
-    return json(res, task([]));
-  }
-  if (req.url === "/v3/serp/google/news/live/advanced") {
-    return json(res, task([
+// The standard queue: task_post queues, task_get answers once a task is done.
+// The first look at each task finds it still queued; `stuck` keywords never finish.
+const seo = []; // every task asked for: { path, keyword, ... }
+const posts = []; // every paid request: { path, tasks }
+const queue = new Map(); // id -> { kind, task, looks }
+let nextId = 1;
+const stuck = new Set();
+const resultFor = (kind, t) => {
+  if (kind === "news")
+    return [
       { type: "news_search", rank_group: 1, domain: "news.example", url: `https://news.example/${t.keyword.replace(/\W+/g, "-")}/ruling`, title: `Court rules on ${t.keyword}`, snippet: "A ruling.", timestamp: iso(now - 3600_000) },
       { type: "news_search", rank_group: 2, domain: "old.example", url: "https://old.example/story", title: "Old story about it", snippet: "Old.", timestamp: iso(now - 30 * 86_400_000) },
-    ]));
+    ];
+  if (t.keyword === "fleet scraping framework") return [organic(1, "scrapy.org", "/", "Scrapy"), organic(4, "blog.kontra.run", "/fleet", "Kontra fleet"), organic(2, "apify.com", "/", "Apify")];
+  if (t.keyword === "durable crawling") return [organic(1, "temporal.io", "/crawl", "Durable crawls"), organic(2, "dbos.dev", "/c", "DBOS crawls")];
+  if (t.keyword.endsWith(" reddit")) return [organic(1, "www.reddit.com", "/r/webscraping/comments/abc/how_do_you_scale/", "How do you scale scrapers?"), organic(2, "example.com", "/r", "Not reddit")];
+  return [];
+};
+const dataforseo = await listen((req, res, body) => {
+  if (req.headers.authorization !== `Basic ${Buffer.from("login:pw").toString("base64")}`) return json(res, { status_code: 40100, status_message: "auth" }, 401);
+  const post = /^\/v3\/serp\/google\/(organic|news)\/task_post$/.exec(req.url);
+  if (post && req.method === "POST") {
+    const tasks = JSON.parse(body);
+    posts.push({ path: req.url, tasks });
+    const out = tasks.map((t) => {
+      const id = `task-${nextId++}`;
+      seo.push({ path: req.url, ...t });
+      queue.set(id, { kind: post[1], task: t, looks: 0 });
+      return { id, status_code: 20100, status_message: "Task Created.", cost: 0.0006 };
+    });
+    return json(res, { status_code: 20000, status_message: "Ok.", cost: Number((0.0006 * tasks.length).toFixed(4)), tasks: out });
+  }
+  const get = /^\/v3\/serp\/google\/(organic|news)\/task_get\/advanced\/(.+)$/.exec(req.url);
+  if (get && req.method === "GET") {
+    const q = queue.get(decodeURIComponent(get[2]));
+    if (!q) return json(res, { status_code: 20000, status_message: "Ok.", tasks: [{ status_code: 40400, status_message: "Not Found." }] });
+    q.looks++;
+    if (q.looks === 1 || stuck.has(q.task.keyword))
+      return json(res, { status_code: 20000, status_message: "Ok.", tasks: [{ status_code: 40602, status_message: "Task In Queue." }] });
+    return json(res, { status_code: 20000, status_message: "Ok.", tasks: [{ status_code: 20000, status_message: "Ok.", result: [{ items: resultFor(q.kind, q.task) }] }] });
   }
   if (req.url === "/v3/ai_optimization/llm_mentions/search_mentions/live") {
+    const [t] = JSON.parse(body);
+    seo.push({ path: req.url, ...t });
+    posts.push({ path: req.url, tasks: [t] });
     if (t.platform === "google") return json(res, task([{ question: "what is the best framework for fleet scraping?", sources: [{ domain: "kontra.run" }], ai_search_volume: 90 }]));
     return json(res, task([]));
   }
@@ -164,6 +188,8 @@ Object.assign(process.env, {
   SUPABASE_URL: urlOf(rest),
   SUPABASE_SERVICE_ROLE_KEY: "test",
   SCOUT_ALLOW_PRIVATE_FETCH: "1",
+  SCOUT_POLL_SECONDS: "0.2",
+  SCOUT_MAX_POLLS: "4",
 });
 const ideasOf = (origin) => [...stored.values()].filter((i) => i.site === SITE && (!origin || i.origin === origin));
 const kit = await import("../dist/testkit.js");
@@ -205,9 +231,9 @@ const ideas = kit.parseIdeas(
 check(ideas.length === 1 && ideas[0].evidence.length === 1 && ideas[0].evidence[0].url === "https://b" && ideas[0].topic === "T" && ideas[0].kind === "reddit",
   "ideas cite only items the Scout saw, once, with a known topic");
 
-// ---- day one: a Monday, so the AI answers are checked too ----
+// ---- week one ----
 
-console.log("day one");
+console.log("week one");
 reply = (text) => {
   const ids = [...text.matchAll(/\[(\d+)\] (news|reddit|watched)/g)].map((m) => Number(m[1]));
   return JSON.stringify({ ideas: [
@@ -221,6 +247,10 @@ const s1 = await h1.getResult();
 check(s1.searches === 2 && s1.pageOne === 1, `two target searches, one on page one (${JSON.stringify(s1)})`);
 check(s1.aiMentioned === 1, "one target prompt mentioned in an AI answer");
 check(!seo.some((r) => r.keyword === "last quarter search"), "only this quarter's searches");
+check(posts.filter((p) => p.path.includes("task_post")).length === 2 && !seo.some((r) => r.path.includes("/live/")),
+  "every Google search goes on the standard queue: one post for results, one for news");
+check([...queue.values()].every((q) => q.looks === 2), "the run waits out the queue and collects each search once it's done");
+check(seo.filter((r) => r.path.includes("llm_mentions")).every((r) => r.limit === 50), "AI mentions capped at 50 per call");
 
 const facts = (await app.query("select kind, value from public.daily_facts where site = $1 and day = $2 order by kind", [SITE, day1])).rows;
 const rs = facts.find((f) => f.kind === "ranking_search")?.value;
@@ -246,8 +276,11 @@ check(w1.last_items.length === 1 && w1.last_error === null, "watched page: one c
 
 const paidRows = calls.filter((c) => c.model.startsWith("dataforseo/"));
 const modelRows = calls.filter((c) => !c.model.startsWith("dataforseo/"));
-check(paidRows.length === seo.length && paidRows.every((c) => c.cost_usd === 0.002 && c.job === "scout" && c.workflow_id === "scout-test-day1" && Number.isInteger(c.step_id)),
-  `every DataForSEO request logged with its cost, run and step (${paidRows.length})`);
+check(paidRows.length === posts.length && paidRows.every((c) => c.job === "scout" && c.workflow_id === "scout-test-day1" && Number.isInteger(c.step_id)),
+  `every paid DataForSEO request logged with its run and step, collecting is free (${paidRows.length})`);
+// Five searches on one post (two targets, three Reddit) and three news, at 0.0006 each.
+check(paidRows.find((c) => c.model === "dataforseo/serp-organic-queued")?.cost_usd === 0.003 && paidRows.find((c) => c.model === "dataforseo/serp-news-queued")?.cost_usd === 0.0018,
+  "a queued post is logged at the cost DataForSEO reports for it");
 check(modelRows.length === 1 && modelRows[0].input_tokens === 1200 && modelRows[0].workflow_id === "scout-test-day1", "the model call logged with the run");
 
 // The same run again is DBOS's recorded result: nothing is paid twice.
@@ -256,9 +289,10 @@ const again = await DBOS.startWorkflow(kit.scout, { workflowID: "scout-test-day1
 await again.getResult();
 check(calls.length === before, "re-running a finished day pays nothing");
 
-// ---- day two: the watched page gained a link; yesterday's items are known ----
+// ---- week two: the watched page gained a link; last week's items are known ----
 
-console.log("day two");
+console.log("week two");
+stuck.add("durable crawling");
 pageVersion = 2;
 prompts = [];
 reply = (text) => {
@@ -266,32 +300,37 @@ reply = (text) => {
   return JSON.stringify({ ideas: m ? [{ title: "The sodium rule is open for comments", why: "Comments close soon.", topic: "Regulation", items: [Number(m[1])] }] : [] });
 };
 const seoBefore = seo.length;
-const s2 = await (await DBOS.startWorkflow(kit.scout, { workflowID: "scout-test-day2" })({ site: SITE, day: "2026-10-13" })).getResult();
-check(!seo.slice(seoBefore).some((r) => r.path.includes("llm_mentions")), "AI answers not re-checked on a Tuesday");
+const day2 = "2026-10-19";
+const s2 = await (await DBOS.startWorkflow(kit.scout, { workflowID: "scout-test-day2" })({ site: SITE, day: day2 })).getResult();
+check(seo.slice(seoBefore).some((r) => r.path.includes("llm_mentions")), "AI answers checked every week");
+check(s2.unanswered === 1, `a search still queued after the last look counts as no results (${JSON.stringify(s2)})`);
+const rs2 = (await app.query("select value from public.daily_facts where site = $1 and day = $2 and kind = 'ranking_search'", [SITE, day2])).rows[0]?.value;
+check(rs2?.searches.find((s) => s.query === "durable crawling").position === null, "and its position is unknown that week");
+stuck.clear();
 check(prompts.length === 1 && prompts[0].includes("other.example/rule?x=1&y=2") && !prompts[0].includes("#top"), "the new link reaches the model, decoded");
-check(!prompts[0].includes("how_do_you_scale") && !prompts[0].includes("news.example"), "yesterday's items aren't read again");
+check(!prompts[0].includes("how_do_you_scale") && !prompts[0].includes("news.example"), "last week's items aren't read again");
 const watchedIdea = ideasOf("watched");
 check(watchedIdea.length === 1 && watchedIdea[0].summary.includes("Regulation"), "watched-site idea saved");
-check(ideasOf("search").length === 1, `a search gap is one idea a quarter, not one a day (${JSON.stringify(s2)})`);
+check(ideasOf("search").length === 1, `a search gap is one idea a quarter, not one a week (${JSON.stringify(s2)})`);
 
-// ---- the schedule's run fans out, once per tenant per day ----
+// ---- the weekly schedule's run fans out, once per tenant ----
 
 console.log("schedule");
 await app.query("insert into public.sites (id, name, slug) values ('emptysite000000', 'Empty', 'empty')");
-const daily = await DBOS.startWorkflow(kit.scoutDaily, { workflowID: "scout-daily-test" })(new Date("2026-10-14T06:00:00Z"), null);
-await daily.getResult();
-const child = DBOS.retrieveWorkflow(kit.dailyRunId(SITE, "2026-10-14"));
+const weekly = await DBOS.startWorkflow(kit.scoutWeekly, { workflowID: "scout-weekly-test" })(new Date("2026-10-26T06:00:00Z"), null);
+await weekly.getResult();
+const child = DBOS.retrieveWorkflow(kit.weeklyRunId(SITE, "2026-10-26"));
 const s3 = await child.getResult();
-check(s3.searches === 2, "the daily run started the tenant's Scout under its daily id");
-const empty = await DBOS.getWorkflowStatus(kit.dailyRunId("emptysite000000", "2026-10-14"));
+check(s3.searches === 2, "the weekly run started the tenant's Scout under its id for the day");
+const empty = await DBOS.getWorkflowStatus(kit.weeklyRunId("emptysite000000", "2026-10-26"));
 check(empty === null, "a tenant with nothing to follow isn't scouted");
 
-// ---- Chat's hand-off: today, AI answers included ----
+// ---- Chat's hand-off: a run for today ----
 
 console.log("from Chat");
 const seoChat = seo.length;
 const s4 = await (await DBOS.startWorkflow(kit.scout)({ site: SITE, task: "anything new?", requestedBy: "u", conversation: "c", post: null })).getResult();
-check(s4.aiMentioned === 1 && seo.slice(seoChat).some((r) => r.path.includes("llm_mentions")), "a run from Chat checks the AI answers whatever the day");
+check(s4.aiMentioned === 1 && seo.slice(seoChat).some((r) => r.path.includes("llm_mentions")), "a run from Chat checks the AI answers too");
 const today = new Date().toISOString().slice(0, 10);
 check((await app.query("select 1 from public.daily_facts where site = $1 and day = $2", [SITE, today])).rowCount === 2, "and writes today's facts");
 

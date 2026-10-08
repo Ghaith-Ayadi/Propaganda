@@ -102,7 +102,7 @@ reads, except the Scout's own tables. Start a run with `startForTenant(site, ...
 waits out the Claude subscription's usage limit instead of failing. Admin > Runs reads the
 worker's Runs API (`/worker/v1/`, superadmins only). Read `worker/README.md` before adding
 a workflow: changing one that has runs in flight needs `DBOS.patch()`.
-The Scout (`workflows/scout.ts`) runs daily per tenant and writes only its own tables
+The Scout (`workflows/scout.ts`) runs weekly per tenant and writes only its own tables
 (`supabase/migrations/20261008000020_scout.sql`, as role `propaganda_scout`).
 
 ## Telemetry: PostHog

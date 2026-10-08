@@ -154,39 +154,48 @@ them the agents work from what they were given), and optionally
 
 ## The Scout
 
-Once a day (06:00 UTC, `SCOUT_CRON`) the `scout-daily` schedule starts one run
-per tenant that has something to follow, under the id `scout-<site>-<day>`, so
-a day is never scouted twice. A run:
+Once a week (Mondays 06:00 UTC, `SCOUT_CRON`) the `scout-weekly` schedule
+starts one run per tenant that has something to follow, under the id
+`scout-<site>-<day>`, so a week is never scouted twice. A run:
 
 1. reads the plan: this quarter's `scout_searches` (at most 10), the active
    `watched_sites`, and the topics they name;
-2. checks each search on Google (DataForSEO, top 20) and writes the
-   `ranking_search` fact; a search we're not on page one for becomes an idea
-   (origin search, with its `target_search`), once a quarter, with the three
-   results to beat;
-3. on Mondays (`SCOUT_AI_WEEKDAY`), asks DataForSEO's LLM Mentions which AI
+2. queues every Google search of the run on DataForSEO's standard queue
+   (`task_post`, one request for results and one for news): each target search
+   (top 20), and per topic Google News and Reddit threads (Google's index of
+   them, one ordinary search). The standard queue costs a fraction of the live
+   price and answers in minutes to hours, so the run sleeps durably and
+   collects what's done every `SCOUT_POLL_SECONDS` (600), up to
+   `SCOUT_MAX_POLLS` looks (144, a day); collecting is free. A search still
+   queued after the last look counts as no results that week;
+3. writes the `ranking_search` fact; a search we're not on page one for becomes
+   an idea (origin search, with its `target_search`), once a quarter, with the
+   three results to beat;
+4. asks DataForSEO's LLM Mentions (live, at most 50 answers a call) which AI
    answers mention the tenant (Google AI Overviews, and ChatGPT for US English)
    and writes `ranking_ai`;
-4. reads Google News (last three days) and Reddit threads (Google's index of
-   them, one ordinary search) per topic, and each watched page's links (the
-   first check is a baseline; after that, new links are the news);
-5. drops every link it has seen before (`scout_seen`), has the base model pick
+5. keeps the news from the last eight days and the Reddit threads, and reads
+   each watched page's links (the first check is a baseline; after that, new
+   links are the news);
+6. drops every link it has seen before (`scout_seen`), has the base model pick
    at most 8 ideas from the rest, and keeps only evidence it saw;
-6. hands the ideas to the Pitcher (`handOffIdeas`, one stable id per idea so a
-   replay never adds it twice; they wait for the next batch with the plan), then saves the facts,
-   the page snapshots and the seen links in one transaction.
+7. hands the ideas to the Pitcher (`handOffIdeas`, one stable id per idea so a
+   replay never adds it twice; they wait for the next batch with the plan),
+   then saves the facts, the page snapshots and the seen links in one
+   transaction.
 
-Each paid request is its own step: a retry or restart never pays twice. It
-writes its own tables as `propaganda_scout`
-(`supabase/migrations/20261008000020_scout.sql`), a role that can write nothing
-else; its pool uses `APP_DATABASE_URL` and sets that role, so if that URL ever
-names a restricted user, grant it `propaganda_scout`. Watched pages are fetched
-from public addresses only.
+Each paid request is its own step: a retry or restart never pays twice.
+Everything that talks to DataForSEO is in `src/scout/dataforseo.ts`, so
+another provider replaces that one file. The Scout writes its own tables as
+`propaganda_scout` (`supabase/migrations/20261008000020_scout.sql`), a role
+that can write nothing else; its pool uses `APP_DATABASE_URL` and sets that
+role, so if that URL ever names a restricted user, grant it `propaganda_scout`.
+Watched pages are fetched from public addresses only.
 
 Needs `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` (without them it checks the
 watched sites only). Start one by hand from Admin with
-`POST /runs/scout { site, checkAi? }`; Chat starts one for today (AI answers
-included) through `/agents/scout`.
+`POST /runs/scout { site, day? }`; Chat starts one for today through
+`/agents/scout`.
 
 ## The usage limit
 

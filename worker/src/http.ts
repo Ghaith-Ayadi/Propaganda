@@ -11,7 +11,7 @@
 //   POST /runs/:id/retry         { id, how }   id is the new run's when forked
 //   POST /runs/:id/cancel        { ok: true }
 //   POST /runs/demo              { id }        body { stallSeconds?, fail?, site? }
-//   POST /runs/scout             { id }        body { site, day?, checkAi? }: a Scout run now
+//   POST /runs/scout             { id }        body { site, day? }: a Scout run now
 
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -145,7 +145,7 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     if (typeof body.site !== "string" || !SITE_RE.test(body.site)) throw new HttpError(400, "Bad site");
     const today = new Date().toISOString().slice(0, 10);
     const day = typeof body.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.day) ? body.day : today;
-    const handle = await startForTenant(body.site, scout, { site: body.site, day, checkAi: body.checkAi === true });
+    const handle = await startForTenant(body.site, scout, { site: body.site, day });
     return send(res, 200, { id: handle.workflowID });
   }
 
