@@ -78,6 +78,9 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
   the browser. Public blogs: every site at the root of its own host, `<slug>.propaganda.pub`
   or its custom domain (Verbatim: `verbatim.ayadighaith.com`), with certificates issued on
   demand once `tls_check()` says the host is a site. Old `/@<slug>/` links forward.
+- Blog themes: [docs/blog-themes.md](docs/blog-themes.md). A site's `blog.design` setting
+  switches its public blog from the original renderer to the themed templates; writing it
+  (or `blog.themes`) on a real site is the owner's call, like any other live data.
 - `scripts/src/*` are tools from the Supabase Cloud days and stop working when that
   project is deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 
