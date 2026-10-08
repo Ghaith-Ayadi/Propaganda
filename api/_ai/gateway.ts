@@ -12,7 +12,21 @@
 // Server-side only: it writes with the service role key, which never reaches a
 // browser. Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
 
-import { generateText, type LanguageModel } from "ai";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  generateText,
+  stepCountIs,
+  streamText,
+  tool,
+  type LanguageModel,
+  type ModelMessage,
+  type TextStreamPart,
+  type ToolSet,
+  type UIMessage,
+  type UIMessageChunk,
+  type UIMessageStreamWriter,
+} from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { costUsd, decide, type Gate, type Price, type Usage } from "./cost";
@@ -33,6 +47,11 @@ import {
 
 export { BudgetError, CostLogUnavailableError, UsageLimitError } from "./errors";
 export { KeysUnavailableError, TenantKeyError, setAccounts } from "./modelKeys";
+// Tool definitions and the UI message stream are plain data, not model calls:
+// callers (Chat) use these instead of importing the SDK, which
+// check-model-paths.mjs allows only in this file.
+export { createUIMessageStream, createUIMessageStreamResponse, stepCountIs, tool };
+export type { ModelMessage, TextStreamPart, ToolSet, UIMessage, UIMessageChunk, UIMessageStreamWriter };
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 
@@ -470,3 +489,178 @@ export const tenantKeys = {
   /** True when the tenant runs on one of Ayadi's accounts, so a saved key would not be used. */
   managed: (site: string) => accountOf(site) !== null,
 };
+
+// ---- the streaming call (Chat) ----
+
+export interface StreamOptions extends Omit<CallOptions, "prompt"> {
+  messages: ModelMessage[];
+  tools?: ToolSet;
+  /** Model calls the reply may take, tool rounds included. Default 6. */
+  maxSteps?: number;
+}
+
+export interface ModelStream {
+  /** True when the tenant is past the warn ratio of its monthly budget. */
+  budgetWarning: boolean;
+  /** The SDK's stream parts. Every model call in it is logged as it ends, a stopped one included. */
+  parts: AsyncIterable<TextStreamPart<ToolSet>>;
+  /** What the logged calls cost so far; the whole reply once `parts` is done. */
+  costUsd(): number;
+}
+
+/** About four characters a token: the estimate for a call stopped before the provider reported usage. */
+const estimateTokens = (chars: number) => Math.ceil(chars / 4);
+
+function usageOf(u: {
+  inputTokens?: number;
+  outputTokens?: number;
+  inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number };
+}): Usage {
+  return {
+    inputTokens: u.inputTokens ?? 0,
+    outputTokens: u.outputTokens ?? 0,
+    cacheReadTokens: u.inputTokenDetails?.cacheReadTokens ?? 0,
+    cacheWriteTokens: u.inputTokenDetails?.cacheWriteTokens ?? 0,
+  };
+}
+
+/**
+ * callModel() for a reply that streams, with tools. Same routing (a tenant's
+ * own key for Anthropic models, never a fallback to ours) and budget rules.
+ * Each step (one request to the model) is one row in public.model_calls. A
+ * reply stopped mid-stream (the reader left, or `abortSignal` fired) never
+ * reports its usage, but the provider bills what it produced, so the step in
+ * flight is logged as `stopped` with tokens estimated from what had arrived:
+ * the input from the previous step's count (or the prompt's length) and the
+ * output from the text streamed so far.
+ */
+export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
+  const route = await routeModel(opts.site, opts.model);
+  const verdict = decide(gateFor(await readGate(opts.site), route.budgetFree), opts.background);
+  if (!verdict.allow) {
+    if (verdict.engageKill) {
+      await rest("/rpc/cost_engage_kill", {
+        method: "POST",
+        body: JSON.stringify({ p_reason: "Global daily cap reached" }),
+      }).catch(() => {});
+    }
+    throw new BudgetError(verdict.reason);
+  }
+
+  const ctx = workflowContext();
+  const base = {
+    site: opts.site,
+    job: opts.job,
+    model: opts.model,
+    background: opts.background,
+    workflow_id: ctx.workflowId,
+    step_id: ctx.stepId,
+    ...route.logged,
+  };
+  const { tenant } = route;
+
+  let price: Price | null | undefined;
+  const priceOf = async () => (price === undefined ? (price = await readPrice(opts.model).catch(() => null)) : price);
+  let total = 0;
+  let logFailure: unknown = null;
+
+  const log = async (usage: Usage, status: "ok" | "stopped") => {
+    const p = await priceOf();
+    const cost = p ? costUsd(p, usage) : 0;
+    total = Math.round((total + cost) * 1e6) / 1e6;
+    try {
+      await writeCall({
+        ...base,
+        input_tokens: usage.inputTokens,
+        output_tokens: usage.outputTokens,
+        cache_read_tokens: usage.cacheReadTokens,
+        cache_write_tokens: usage.cacheWriteTokens,
+        cost_usd: cost,
+        priced: p !== null,
+        status,
+      });
+    } catch (err) {
+      // The reply is already paid for: finish it, then fail (as callModel does).
+      logFailure ??= err;
+    }
+  };
+
+  const result = streamText({
+    model: route.model,
+    system: opts.system,
+    messages: opts.messages,
+    tools: opts.tools,
+    stopWhen: stepCountIs(opts.maxSteps ?? 6),
+    maxOutputTokens: opts.maxOutputTokens,
+    abortSignal: opts.abortSignal,
+    // A refused key is refused again: no point in the SDK's own retries.
+    ...(route.keyed ? { maxRetries: 0 } : {}),
+  });
+
+  const promptChars = (opts.system?.length ?? 0) + JSON.stringify(opts.messages).length;
+
+  async function* parts(): AsyncGenerator<TextStreamPart<ToolSet>> {
+    let open = false; // a step has started and not reported its usage
+    let started = false; // any step started at all
+    let chars = 0; // output streamed in the open step
+    let input = estimateTokens(promptChars); // best guess at the open step's input
+    let failed: unknown = null;
+    let thrown: unknown = null;
+    try {
+      for await (const part of result.fullStream) {
+        switch (part.type) {
+          case "start-step":
+            open = started = true;
+            chars = 0;
+            break;
+          case "text-delta":
+          case "reasoning-delta":
+            chars += part.text.length;
+            break;
+          case "tool-input-delta":
+            chars += part.delta.length;
+            break;
+          case "finish-step": {
+            open = false;
+            const usage = usageOf(part.usage);
+            // The next step re-sends this one's input and output.
+            input = usage.inputTokens + usage.outputTokens;
+            await log(usage, "ok");
+            break;
+          }
+          case "error":
+            failed = part.error;
+            break;
+        }
+        if (failed) break;
+        yield part;
+      }
+    } catch (err) {
+      failed = err;
+    } finally {
+      // Reached on a normal end, an abort, an error, or the reader returning early.
+      if (failed) {
+        if (route.keyed) {
+          const keyErr = await tenantKeyFailed(opts.site, route, failed);
+          // Never usageLimit, never a retry on another account.
+          if (keyErr) thrown = keyErr;
+          await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+        } else {
+          const limit = usageLimit(failed);
+          if (limit) thrown = limit; // cost nothing: not logged
+          // As callModel: billed upstream for an amount we don't know.
+          else await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+        }
+      } else {
+        if (open || (!started && opts.abortSignal?.aborted)) {
+          await log({ inputTokens: input, outputTokens: estimateTokens(chars), cacheReadTokens: 0, cacheWriteTokens: 0 }, "stopped");
+        }
+        if (started) await tenantKeyWorked(opts.site, tenant);
+      }
+    }
+    if (failed) throw thrown ?? failed;
+    if (logFailure) throw new CostLogUnavailableError(String(logFailure));
+  }
+
+  return { budgetWarning: verdict.warn, parts: parts(), costUsd: () => total };
+}

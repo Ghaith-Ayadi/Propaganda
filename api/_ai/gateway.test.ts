@@ -3,7 +3,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
 
 const calls: Record<string, unknown>[] = [];
 let gate: Record<string, unknown> = {};
@@ -205,6 +205,111 @@ test("Test: green on an answer, red with Anthropic's words, and the key never in
   assert.match((r as { error: string }).error, /out of credit/);
   assert.ok(!JSON.stringify(r).includes(KEY));
   assert.ok(!JSON.stringify(calls).includes(KEY));
+});
+
+// ---- streamModel ----
+
+const words = ["one ", "two ", "three ", "four"];
+function streaming(delayMs: number) {
+  return new MockLanguageModelV3({
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        initialDelayInMs: 0,
+        chunkDelayInMs: delayMs,
+        chunks: [
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "t" },
+          ...words.map((w) => ({ type: "text-delta" as const, id: "t", delta: w })),
+          { type: "text-end", id: "t" },
+          { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+        ],
+      }),
+    }),
+  });
+}
+const streamOpts = { site: "siteaaaaaaaaaaa", job: "chat", model: "m", background: false, messages: [{ role: "user" as const, content: "hello" }] };
+
+test("a streamed reply is logged once with the provider's usage", async () => {
+  gate = open; calls.length = 0;
+  setWorkflowContext(() => ({ workflowId: null, stepId: null }));
+  setModelResolver(() => streaming(0));
+  const s = await g.streamModel(streamOpts);
+  let text = "";
+  for await (const p of s.parts) if (p.type === "text-delta") text += p.text;
+  assert.equal(text, "one two three four");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].status, "ok");
+  assert.equal(calls[0].output_tokens, 500);
+  assert.equal(s.costUsd(), 0.002);
+});
+
+test("a reply stopped mid-stream is logged as stopped, with estimated tokens", async () => {
+  gate = open; calls.length = 0;
+  setModelResolver(() => streaming(30));
+  const ctrl = new AbortController();
+  const s = await g.streamModel({ ...streamOpts, abortSignal: ctrl.signal });
+  let text = "";
+  for await (const p of s.parts) {
+    if (p.type === "text-delta") {
+      text += p.text;
+      if (text.length >= 8) ctrl.abort();
+    }
+  }
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].status, "stopped");
+  assert.ok((calls[0].input_tokens as number) > 0);
+  assert.equal(calls[0].output_tokens, Math.ceil(text.length / 4));
+  assert.ok(s.costUsd() > 0);
+});
+
+test("a reader that leaves early still logs the stopped call", async () => {
+  gate = open; calls.length = 0;
+  setModelResolver(() => streaming(10));
+  const s = await g.streamModel(streamOpts);
+  for await (const p of s.parts) if (p.type === "text-delta") break;
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].status, "stopped");
+  assert.equal(calls[0].output_tokens, 1);
+});
+
+test("a refused stream sends nothing and logs nothing", async () => {
+  gate = { ...open, killed: true }; calls.length = 0;
+  await assert.rejects(g.streamModel(streamOpts), BudgetError);
+  assert.equal(calls.length, 0);
+});
+
+test("a streamed reply on a tenant's key uses it, is logged as the tenant's, and skips our budget", async () => {
+  await withKey();
+  gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 }; calls.length = 0;
+  let ours = 0, used = "", model = "";
+  setModelResolver(() => { ours++; return streaming(0); });
+  g.setTenantModelResolver((k, id) => { used = k; model = g.anthropicModelId(id); return streaming(0); });
+  const s = await g.streamModel({ ...streamOpts, site: tenantSite, model: "anthropic/claude-sonnet-5.5" });
+  let text = "";
+  for await (const p of s.parts) if (p.type === "text-delta") text += p.text;
+  assert.equal(text, "one two three four");
+  assert.equal(used, KEY);
+  assert.equal(model, "claude-sonnet-5-5");
+  assert.equal(ours, 0);
+  assert.equal(calls[0].paid_by, "tenant");
+});
+
+test("a refused key fails the stream with the tenant's error and never falls back to ours", async () => {
+  await withKey();
+  gate = open; calls.length = 0; keyMarks.length = 0;
+  let ours = 0;
+  setModelResolver(() => { ours++; return streaming(0); });
+  g.setTenantModelResolver(() => new MockLanguageModelV3({
+    doStream: async () => { throw Object.assign(new Error("invalid x-api-key"), { statusCode: 401, responseHeaders: {} }); },
+  }));
+  const s = await g.streamModel({ ...streamOpts, site: tenantSite, model: "anthropic/claude-sonnet-5.5" });
+  await assert.rejects(
+    (async () => { for await (const _ of s.parts) void _; })(),
+    (e: Error) => e instanceof g.TenantKeyError && /refused the key/.test(e.message),
+  );
+  assert.equal(ours, 0);
+  assert.equal(calls[0].status, "error");
+  assert.equal(keyMarks[0].status, "failed");
 });
 
 // ---- which account a tenant runs on ----
