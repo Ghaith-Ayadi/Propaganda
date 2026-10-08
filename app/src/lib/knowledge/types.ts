@@ -178,6 +178,8 @@ export interface RememberInput {
 
 // ---- flags ----
 
+export type Urgency = "high" | "normal";
+
 export interface FlagSummary {
   id: string;
   kind: FlagKind;
@@ -186,6 +188,8 @@ export interface FlagSummary {
   postTitle: string;
   /** One line: what's wrong (the claim's topic, or a short label). */
   headline: string;
+  /** How soon someone should look. Only "high" shows (an "urgent" chip, a red count). */
+  urgency: Urgency;
   confidence: number | null;
   created: string;
   batch: string | null;
@@ -201,6 +205,8 @@ export interface FlagQuery {
 export interface FlagPage {
   rows: FlagSummary[];
   total: number;
+  /** How many of `total` are urgent. */
+  urgent: number;
   next: number | null;
 }
 
@@ -224,7 +230,7 @@ export interface ContestState {
 }
 
 export interface FlagDetail extends FlagSummary {
-  /** What the content says: the quote with the text around it. */
+  /** What the content says: the quote and the rest of its paragraph. */
   passage: { before: string; quote: string; after: string; section: string; uri: string };
   claim: ClaimDetail;
   /** For a conflict between two claims. */
@@ -257,7 +263,10 @@ export interface RecheckItem {
   status: FlagStatus;
   /** One or two sentences: what in this post depends on the old claim and what to do. */
   tldr: string;
+  /** The quote and the rest of its paragraph. */
   quote: string;
+  before: string;
+  after: string;
   suggestedAction: SuggestedAction;
   fix: FixPreview | null;
 }

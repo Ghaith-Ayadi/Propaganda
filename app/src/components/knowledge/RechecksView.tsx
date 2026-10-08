@@ -16,7 +16,7 @@ import { kb } from "@/lib/knowledge/adapter";
 import { changed, useKb } from "@/lib/knowledge/hooks";
 import type { BulkAction, RecheckItem, RecheckThread, RecheckThreadSummary } from "@/lib/knowledge/types";
 import { cx } from "@/utils/cx";
-import { ActionBadge, DecisionCard, Empty, FixDiff, FlagStatusBadge, Loading, Panel, SectionLabel, SeverityBadge, formatDate } from "./bits";
+import { ActionBadge, DecisionCard, Empty, FixDiff, FlagStatusBadge, Loading, Panel, QuoteInContext, SeverityBadge, formatDate } from "./bits";
 
 const OPEN = new Set(["open", "snoozed"]);
 
@@ -81,7 +81,7 @@ export function RecheckThreadView({ id }: { id: string }) {
 }
 
 const BULK_LABEL: Record<BulkAction, string> = {
-  apply_fix: "Apply the suggested fixes",
+  apply_fix: "Apply the suggested updates",
   wont_fix: "Won't fix",
   snooze: "Snooze a week",
   retracted: "We took them down",
@@ -118,8 +118,7 @@ function ThreadBody({ thread }: { thread: RecheckThread }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <Panel>
-        <SectionLabel right={<SeverityBadge severity={thread.severity} />}>What changed</SectionLabel>
+      <Panel title="What changed" actions={<SeverityBadge severity={thread.severity} />}>
         <div className="flex flex-col gap-2 md:flex-row md:items-stretch">
           <a href={pageHref("knowledge", `claims/${thread.oldClaim.id}`)} className="flex-1 rounded-lg bg-secondary px-4 py-3 text-sm text-tertiary line-through decoration-1">
             {thread.oldClaim.text}
@@ -169,7 +168,7 @@ function ThreadBody({ thread }: { thread: RecheckThread }) {
           </span>
           {kb().sample && (
             <Button size="sm" color="primary" isDisabled={!fixable.length} isLoading={busy === "apply_fix"} onClick={() => void run("apply_fix")}>
-              {fixable.length === selection.length ? BULK_LABEL.apply_fix : `Apply fixes (${fixable.length})`}
+              {fixable.length === selection.length ? BULK_LABEL.apply_fix : `Apply updates (${fixable.length})`}
             </Button>
           )}
           <Button size="sm" color="secondary" isLoading={busy === "wont_fix"} onClick={() => void run("wont_fix")}>
@@ -216,35 +215,29 @@ function RecheckRow({ item, picked, onPick }: { item: RecheckItem; picked: boole
   const [showFix, setShowFix] = useState(false);
   const open = OPEN.has(item.status);
   return (
-    <li className={cx("rounded-xl bg-primary px-4 py-3.5 shadow-xs ring-1 ring-secondary", picked && "ring-2 ring-brand")}>
-      <div className="flex gap-3">
-        {open ? (
-          <Checkbox aria-label={`Select ${item.postTitle}`} isSelected={picked} onChange={onPick} className="mt-0.5" />
+    <li className={cx("overflow-hidden rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", picked && "ring-2 ring-brand")}>
+      <header className="flex items-center gap-3 border-b border-secondary px-5 py-3.5">
+        {open && <Checkbox aria-label={`Select ${item.postTitle}`} isSelected={picked} onChange={onPick} />}
+        {kb().sample || !item.postId ? (
+          <h3 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">{item.postTitle}</h3>
         ) : (
-          <span className="w-4 shrink-0" />
+          <a href={postHref(item.postId)} className="min-w-0 flex-1 truncate text-md font-semibold text-primary hover:underline">
+            {item.postTitle}
+          </a>
         )}
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            {kb().sample || !item.postId ? (
-              <span className="text-sm font-medium text-primary">{item.postTitle}</span>
-            ) : (
-              <a href={postHref(item.postId)} className="text-sm font-medium text-primary hover:underline">
-                {item.postTitle}
-              </a>
-            )}
-            {open ? <ActionBadge action={item.suggestedAction} /> : <FlagStatusBadge status={item.status} />}
-          </div>
-          {item.tldr && <p className="text-sm text-secondary">{item.tldr}</p>}
-          {item.quote && <p className="text-sm text-tertiary">“{item.quote}”</p>}
-          {item.fix && open && (
-            <>
-              <button type="button" onClick={() => setShowFix((s) => !s)} className="self-start text-sm text-tertiary hover:text-secondary">
-                {showFix ? "Hide the fix" : "Show the fix"}
-              </button>
-              {showFix && <FixDiff fix={item.fix} />}
-            </>
-          )}
-        </div>
+        {open ? <ActionBadge action={item.suggestedAction} /> : <FlagStatusBadge status={item.status} />}
+      </header>
+      <div className="flex flex-col gap-2.5 px-5 py-4">
+        {item.tldr && <p className="text-sm text-secondary">{item.tldr}</p>}
+        {item.quote && <QuoteInContext before={item.before} quote={item.quote} after={item.after} />}
+        {item.fix && open && (
+          <>
+            <button type="button" onClick={() => setShowFix((s) => !s)} className="self-start text-sm text-tertiary hover:text-secondary">
+              {showFix ? "Hide the suggested update" : "Show the suggested update"}
+            </button>
+            {showFix && <FixDiff fix={item.fix} />}
+          </>
+        )}
       </div>
     </li>
   );

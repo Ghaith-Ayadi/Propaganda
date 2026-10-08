@@ -23,7 +23,6 @@ import {
   RELATION_LABEL,
   RELIANCE_LABEL,
   SOURCE_KIND_LABEL,
-  SectionLabel,
   TierBadge,
   formatDate,
 } from "./bits";
@@ -46,18 +45,22 @@ export function ClaimBody({ claim }: { claim: ClaimDetail }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Panel>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <ClaimStatusBadge status={claim.status} />
-          {claim.inConflict && <ConflictBadge />}
-          {claim.weight > 1 && (
-            <Badge type="modern" size="sm" color="gray">
-              Weight {claim.weight}
-            </Badge>
-          )}
-        </div>
+      <Panel
+        title="Claim"
+        description={meta.join(" · ")}
+        actions={
+          <>
+            <ClaimStatusBadge status={claim.status} />
+            {claim.inConflict && <ConflictBadge />}
+            {claim.weight > 1 && (
+              <Badge type="modern" size="sm" color="gray">
+                Weight {claim.weight}
+              </Badge>
+            )}
+          </>
+        }
+      >
         <p className="font-title text-2xl leading-snug text-primary">{claim.text}</p>
-        <p className="mt-2 text-sm text-tertiary">{meta.join(" · ")}</p>
         {Object.keys(claim.scope).length > 0 && (
           <dl className="mt-3 flex flex-wrap gap-2">
             {Object.entries(claim.scope).map(([k, v]) => (
@@ -81,8 +84,7 @@ export function ClaimBody({ claim }: { claim: ClaimDetail }) {
         {claim.reviewAfter && <p className="mt-1 text-sm text-tertiary">Review after {formatDate(claim.reviewAfter)}.</p>}
       </Panel>
 
-      <Panel>
-        <SectionLabel>Sources ({claim.evidence.length})</SectionLabel>
+      <Panel title={`Sources (${claim.evidence.length})`}>
         {claim.evidence.length === 0 ? (
           <p className="text-sm text-tertiary">No quoted source yet.</p>
         ) : (
@@ -95,8 +97,7 @@ export function ClaimBody({ claim }: { claim: ClaimDetail }) {
       </Panel>
 
       {claim.relationships.length > 0 && (
-        <Panel>
-          <SectionLabel>Relationships</SectionLabel>
+        <Panel title="Relationships">
           <ul className="flex flex-col gap-2">
             {claim.relationships.map((r) => (
               <li key={r.id} className="flex flex-col gap-0.5 text-sm sm:flex-row sm:gap-3">
@@ -113,8 +114,7 @@ export function ClaimBody({ claim }: { claim: ClaimDetail }) {
         </Panel>
       )}
 
-      <Panel>
-        <SectionLabel>Posts that rely on it ({claim.posts.length})</SectionLabel>
+      <Panel title={`Posts that rely on it (${claim.posts.length})`}>
         {claim.posts.length === 0 ? (
           <p className="text-sm text-tertiary">Nothing published relies on it yet. Changing it won't queue any re-checks.</p>
         ) : (
@@ -142,8 +142,7 @@ export function ClaimBody({ claim }: { claim: ClaimDetail }) {
       </Panel>
 
       {(claim.admittedBy || claim.retiredBy || claim.history.length > 0) && (
-        <Panel>
-          <SectionLabel>History</SectionLabel>
+        <Panel title="History">
           <div className="flex flex-col gap-5">
             {claim.retiredBy && <DecisionCard decision={claim.retiredBy} title={claim.status === "retracted" ? "Retracted" : "Replaced"} />}
             {claim.admittedBy && <DecisionCard decision={claim.admittedBy} title="Let in" />}

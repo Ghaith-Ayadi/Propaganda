@@ -9,8 +9,8 @@
 import { useState } from "react";
 import { Plus } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
-import { Tabs } from "@/components/application/tabs/tabs";
-import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { Badge } from "@/components/base/badges/badges";
+import { PageBody, PageHeader, PageTabs } from "@/components/shell/PageHeader";
 import { goPage, usePageRest } from "@/lib/route";
 import { kb } from "@/lib/knowledge/adapter";
 import { useKb } from "@/lib/knowledge/hooks";
@@ -35,9 +35,11 @@ export function KnowledgePage() {
   const openFlags = useKb("kb.badge", () => kb().flags({ status: "open", kind: "all", offset: 0, limit: 1 }), []);
   const threads = useKb("kb.rechecks", () => kb().rechecks(), []);
   const openRechecks = (threads.data ?? []).reduce((n, t) => n + t.open, 0);
+  const flagCount = openFlags.data?.total ?? 0;
+  const urgent = (openFlags.data?.urgent ?? 0) > 0;
 
   return (
-    <PageBody wide>
+    <>
       <PageHeader
         title="Knowledge base"
         description="What your tenant actually believes, claim by claim. The Guardian is the only thing that writes to it."
@@ -46,30 +48,33 @@ export function KnowledgePage() {
             Remember
           </Button>
         }
-      >
-        <Tabs selectedKey={tab} onSelectionChange={(k) => goPage("knowledge", k === "claims" ? null : String(k))}>
-          <Tabs.List type="underline" size="sm" className="overflow-x-auto">
-            <Tabs.Item id="claims">Claims</Tabs.Item>
-            <Tabs.Item id="flags" badge={openFlags.data?.total || undefined}>
-              Flags
-            </Tabs.Item>
-            <Tabs.Item id="rechecks" badge={openRechecks || undefined}>
-              Re-checks
-            </Tabs.Item>
-            <Tabs.Item id="grades">Grades</Tabs.Item>
-          </Tabs.List>
-        </Tabs>
-      </PageHeader>
+        tabs={
+          <PageTabs
+            label="Knowledge base"
+            selected={tab}
+            onChange={(k) => goPage("knowledge", k === "claims" ? null : k)}
+            items={[
+              { id: "claims", label: "Claims" },
+              // An urgent flag is the only thing that turns the count red.
+              urgent
+                ? { id: "flags", label: <span className="flex items-center gap-1.5">Flags<Badge size="sm" type="pill-color" color="error">{flagCount}</Badge></span> }
+                : { id: "flags", label: "Flags", badge: flagCount || undefined },
+              { id: "rechecks", label: "Re-checks", badge: openRechecks || undefined },
+              { id: "grades", label: "Grades" },
+            ]}
+          />
+        }
+      />
+      <PageBody>
+        {kb().sample && <SampleNotice />}
 
-      {kb().sample && <SampleNotice />}
-
-      {tab === "claims" && <ClaimsView selected={id} />}
-      {tab === "flags" && <FlagsView selected={id} />}
-      {tab === "rechecks" && <RechecksView selected={id} />}
-      {tab === "grades" && <GradesView />}
+        {tab === "claims" && <ClaimsView selected={id} />}
+        {tab === "flags" && <FlagsView selected={id} />}
+        {tab === "rechecks" && <RechecksView selected={id} />}
+        {tab === "grades" && <GradesView />}
+      </PageBody>
 
       {remembering && <RememberDialog onClose={() => setRemembering(false)} />}
-    </PageBody>
+    </>
   );
 }
-

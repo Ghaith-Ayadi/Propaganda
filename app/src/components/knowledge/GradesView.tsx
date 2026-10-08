@@ -18,13 +18,12 @@ export function GradesView() {
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <Panel className="flex flex-col gap-5">
-        <GradeHead
-          letter={content.letter}
-          share={content.share}
-          title="Content consistency"
-          line={`${content.posts - content.flagged} of ${content.posts} published posts agree with the knowledge base.`}
-        />
+      <Panel
+        title="Content consistency"
+        description={`${content.posts - content.flagged} of ${content.posts} published posts agree with the knowledge base.`}
+        bodyClassName="flex flex-col gap-5"
+      >
+        <GradeHead letter={content.letter} share={content.share} />
         <Bands share={content.share} />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Open flags" value={content.breakdown.open} href={pageHref("knowledge", "flags")} />
@@ -55,13 +54,12 @@ export function GradesView() {
         </p>
       </Panel>
 
-      <Panel className="flex flex-col gap-5">
-        <GradeHead
-          letter={knowledge.letter}
-          share={knowledge.share}
-          title="Knowledge base consistency"
-          line={`${knowledge.claims} live claims; ${knowledge.contested} contested, ${knowledge.inConflict} in a contradiction.`}
-        />
+      <Panel
+        title="Knowledge base consistency"
+        description={`${knowledge.claims} live claims; ${knowledge.contested} contested, ${knowledge.inConflict} in a contradiction.`}
+        bodyClassName="flex flex-col gap-5"
+      >
+        <GradeHead letter={knowledge.letter} share={knowledge.share} />
         <Bands share={knowledge.share} />
         <div>
           <SectionLabel>Settle these first</SectionLabel>
@@ -93,19 +91,16 @@ export function GradesView() {
   );
 }
 
-function GradeHead({ letter, share, title, line }: { letter: Letter; share: number; title: string; line: string }) {
+function GradeHead({ letter, share }: { letter: Letter; share: number }) {
   const next = BANDS.slice()
     .reverse()
     .find((b) => b.min > share);
   return (
-    <div className="flex items-start gap-4">
+    <div className="flex items-center gap-4">
       <LetterGrade letter={letter} />
       <div className="min-w-0">
-        <h2 className="font-title text-2xl text-primary">{title}</h2>
-        <p className="mt-0.5 text-sm text-tertiary">
-          <span className="font-medium text-secondary">{percent(share)}</span> · {line}
-        </p>
-        <p className="mt-0.5 text-xs text-quaternary">
+        <p className="font-title text-3xl text-primary">{percent(share)}</p>
+        <p className="text-sm text-tertiary">
           {next ? `${percent(next.min - share)} more for ${next.letter}.` : "Top band. It doesn't need zero issues to stay here."}
         </p>
       </div>
