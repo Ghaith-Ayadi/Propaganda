@@ -1,74 +1,44 @@
-// Chat's data hooks. The page talks to these; these talk to the adapter
-// (adapter.ts), so swapping the placeholder for the real backend changes no UI.
+// Chat's data hooks. The conversation itself is the Vercel AI SDK's useChat
+// (@ai-sdk/react); these add the conversation list, loading and saving, and
+// the first-message flow. They talk to chatBackend (adapter.ts), so swapping
+// the placeholder for the real backend changes no UI.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useChat } from "@ai-sdk/react";
 import { newId } from "@/lib/supabase";
 import { reportError, track } from "@/lib/telemetry";
-import { chatAdapter } from "./adapter";
-import type { ChatEvent, ChatMessage, Conversation } from "./types";
-
-/** Folds one stream event into the reply being built. Pure, so it is easy to test. */
-export function applyEvent(m: ChatMessage, e: ChatEvent): ChatMessage {
-  switch (e.type) {
-    case "text": {
-      const parts = [...m.parts];
-      const last = parts[parts.length - 1];
-      if (last?.type === "text") parts[parts.length - 1] = { type: "text", text: last.text + e.delta };
-      else parts.push({ type: "text", text: e.delta });
-      return { ...m, parts };
-    }
-    case "handoff": {
-      const i = m.parts.findIndex((p) => p.type === "handoff" && p.handoff.id === e.handoff.id);
-      const part = { type: "handoff" as const, handoff: e.handoff };
-      if (i < 0) return { ...m, parts: [...m.parts, part] };
-      const parts = [...m.parts];
-      parts[i] = part;
-      return { ...m, parts };
-    }
-    case "citation": {
-      // The marker goes where the text has got to, so the number sits after the
-      // words it backs. A source cited twice keeps its first number.
-      const known = m.citations.find((c) => c.id === e.citation.id && c.kind === e.citation.kind);
-      const n = known?.n ?? e.citation.n;
-      const withMarker = applyEvent(m, { type: "text", delta: `[${n}](#cite-${n})` });
-      return known ? withMarker : { ...withMarker, citations: [...m.citations, e.citation] };
-    }
-    case "action":
-      return { ...m, actions: [...m.actions, e.action] };
-    case "done":
-      return { ...m, status: "done", costUsd: e.costUsd };
-    case "error":
-      return { ...m, status: "error", error: e.message };
-    case "title":
-      return m;
-  }
-}
+import { chatBackend } from "./adapter";
+import type { ChatUIMessage, Conversation } from "./types";
 
 export function useConversations(site: string) {
   const [conversations, setConversations] = useState<Conversation[] | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      setConversations(await chatAdapter.listConversations(site));
-    } catch (err) {
-      reportError("chat.listConversations", err);
-      setConversations([]);
-    }
-  }, [site]);
-
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const create = useCallback(async () => {
-    const c = await chatAdapter.createConversation(site);
-    setConversations((cs) => [c, ...(cs ?? [])]);
-    return c;
+    let live = true;
+    chatBackend
+      .listConversations(site)
+      .then((cs) => live && setConversations(cs))
+      .catch((err) => {
+        reportError("chat.listConversations", err);
+        if (live) setConversations([]);
+      });
+    return () => {
+      live = false;
+    };
   }, [site]);
+
+  const create = useCallback(
+    async (id: string) => {
+      const c = await chatBackend.createConversation(site, id);
+      setConversations((cs) => [c, ...(cs ?? [])]);
+      return c;
+    },
+    [site],
+  );
 
   const remove = useCallback(
     async (id: string) => {
-      await chatAdapter.deleteConversation(site, id);
+      await chatBackend.deleteConversation(site, id);
       setConversations((cs) => (cs ?? []).filter((c) => c.id !== id));
     },
     [site],
@@ -83,95 +53,112 @@ export function useConversations(site: string) {
     });
   }, []);
 
-  return { conversations, create, remove, touch, refresh, placeholder: chatAdapter.placeholder };
+  return { conversations, create, remove, touch, placeholder: chatBackend.placeholder };
 }
 
-export function useConversation(site: string, conversationId: string | null, onTouch?: (id: string, patch: Partial<Conversation>) => void) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [streaming, setStreaming] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  // A conversation started by send() itself: the page moves to it while the
-  // reply streams, and that move must not reload or stop anything.
-  const startedRef = useRef<string | null>(null);
+/**
+ * One conversation. `activeId` is the open conversation, or null for a new
+ * chat: then useChat runs on a fresh draft id, and the first message creates
+ * the conversation under that same id, so the chat isn't interrupted when the
+ * page moves to it.
+ */
+export function useConversation(
+  site: string,
+  activeId: string | null,
+  opts: {
+    create: (id: string) => Promise<Conversation>;
+    touch: (id: string, patch: Partial<Conversation>) => void;
+    onStarted: (id: string) => void;
+  },
+) {
+  const [draftId, setDraftId] = useState(newId);
+  const started = useRef(new Set<string>());
+  const chatId = activeId ?? draftId;
 
+  // Back on "New chat" after using the draft: mint the next one.
   useEffect(() => {
-    if (conversationId && conversationId === startedRef.current) return;
-    startedRef.current = null;
-    abortRef.current?.abort();
-    setMessages([]);
-    if (!conversationId) return;
+    if (activeId === null && started.current.has(draftId)) setDraftId(newId());
+  }, [activeId, draftId]);
+
+  const transport = useMemo(() => chatBackend.transport(site), [site]);
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+  const setMessagesRef = useRef<(ms: ChatUIMessage[]) => void>(() => {});
+
+  const chat = useChat<ChatUIMessage>({
+    id: chatId,
+    transport,
+    onData: (part) => {
+      if (part.type === "data-title") optsRef.current.touch(chatId, { title: part.data.title });
+    },
+    onFinish: ({ messages, isAbort, isError }) => {
+      let out = messages;
+      if (isAbort) {
+        const last = out[out.length - 1];
+        if (last?.role === "assistant") {
+          out = [...out.slice(0, -1), { ...last, metadata: { ...last.metadata, stopped: true } }];
+          setMessagesRef.current(out);
+        }
+      }
+      optsRef.current.touch(chatId, {});
+      chatBackend.saveMessages(site, chatId, out).catch((err) => reportError("chat.saveMessages", err));
+    },
+    onError: (err) => reportError("chat.send", err),
+  });
+
+  // Opening a saved conversation: load what it said. A conversation this hook
+  // just started already has its messages in useChat.
+  const [loading, setLoading] = useState(false);
+  const { setMessages } = chat;
+  setMessagesRef.current = setMessages;
+  useEffect(() => {
+    if (!activeId || started.current.has(activeId)) return;
     let live = true;
     setLoading(true);
-    chatAdapter
-      .listMessages(site, conversationId)
+    chatBackend
+      .loadMessages(site, activeId)
       .then((ms) => live && setMessages(ms))
-      .catch((err) => reportError("chat.listMessages", err))
+      .catch((err) => reportError("chat.loadMessages", err))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [site, conversationId]);
+  }, [site, activeId, setMessages]);
 
-  // Leaving the page stops the reply (the stopped part is kept).
-  useEffect(() => () => abortRef.current?.abort(), []);
+  const busy = chat.status === "submitted" || chat.status === "streaming";
 
   const send = useCallback(
-    async (text: string, toConversation?: string) => {
-      const convId = toConversation ?? conversationId;
+    async (text: string) => {
       const body = text.trim();
-      if (!convId || !body || streaming) return;
-      if (toConversation && toConversation !== conversationId) startedRef.current = toConversation;
-
-      const created = new Date().toISOString();
-      const user: ChatMessage = {
-        id: newId(), conversationId: convId, role: "user", parts: [{ type: "text", text: body }],
-        citations: [], actions: [], status: "done", createdAt: created,
-      };
-      let reply: ChatMessage = {
-        id: newId(), conversationId: convId, role: "assistant", parts: [],
-        citations: [], actions: [], status: "streaming", createdAt: created,
-      };
-      setMessages((ms) => [...ms, user, reply]);
-      setStreaming(true);
-      track("chat_message_sent");
-
-      const ctrl = new AbortController();
-      abortRef.current = ctrl;
-      const put = (m: ChatMessage) => setMessages((ms) => ms.map((x) => (x.id === m.id ? m : x)));
-
-      try {
-        for await (const e of chatAdapter.send(site, convId, body, ctrl.signal)) {
-          if (e.type === "title") onTouch?.(convId, { title: e.title });
-          reply = applyEvent(reply, e);
-          put(reply);
-        }
-        if (reply.status === "streaming") reply = { ...reply, status: "done" };
-      } catch (err) {
-        if ((err as Error).name === "AbortError") {
-          reply = { ...reply, status: "stopped" };
-        } else {
-          reportError("chat.send", err);
-          reply = { ...reply, status: "error", error: "The agent didn't answer. Try again in a moment." };
-        }
-      } finally {
-        put(reply);
-        setStreaming(false);
-        abortRef.current = null;
-        onTouch?.(convId, {});
-        await chatAdapter.saveMessage(site, reply).catch((err) => reportError("chat.saveMessage", err));
+      if (!body || busy) return;
+      if (!activeId) {
+        started.current.add(chatId);
+        await optsRef.current.create(chatId);
+        optsRef.current.onStarted(chatId);
       }
+      track("chat_message_sent");
+      await chat.sendMessage({ text: body });
     },
-    [site, conversationId, streaming, onTouch],
+    [activeId, chatId, busy, chat],
   );
-
-  const stop = useCallback(() => abortRef.current?.abort(), []);
 
   const remember = useCallback(
-    (statement: string, messageId: string) =>
-      chatAdapter.remember(site, statement, { conversationId: conversationId ?? "", messageId }),
-    [site, conversationId],
+    (statement: string, messageId: string) => chatBackend.remember(site, statement, { conversationId: chatId, messageId }),
+    [site, chatId],
   );
 
-  return { messages, loading, streaming, send, stop, remember };
+  return {
+    messages: chat.messages,
+    status: chat.status,
+    error: chat.error,
+    busy,
+    loading,
+    send,
+    stop: chat.stop,
+    retry: () => {
+      chat.clearError();
+      void chat.regenerate();
+    },
+    remember,
+  };
 }

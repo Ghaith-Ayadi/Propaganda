@@ -1,33 +1,37 @@
-// Where Chat's data comes from. The page and hooks only see ChatAdapter; this
-// file picks the implementation.
+// Where Chat's data comes from. useChat (Vercel AI SDK, @ai-sdk/react) runs the
+// conversation; this file gives it a transport and keeps the conversation list.
+// The page and hooks only see `chatBackend`.
 //
 // ┌──────────────────────────────────────────────────────────────────────────┐
 // │ PLACEHOLDER. There is no chat backend yet: no conversations or messages   │
-// │ tables, no /api/chat. Until they exist, placeholderAdapter keeps          │
-// │ conversations in this browser (localStorage, per site) and streams        │
-// │ scripted replies with made-up costs. Nothing here reaches a model.        │
+// │ tables, no /api/chat. Until they exist, placeholderBackend keeps          │
+// │ conversations in this browser (localStorage, per site) and its transport  │
+// │ streams scripted replies, with made-up costs, as the SDK's UI message     │
+// │ chunks. Nothing here reaches a model.                                     │
 // │                                                                          │
-// │ httpAdapter is the real contract: POST /api/chat answers one ChatEvent    │
-// │ per line (types.ts). The function runs its model calls through callModel()│
-// │ in api/_ai/gateway.ts with job "chat"; agent work longer than a request   │
-// │ starts on the DBOS worker and arrives as a handoff with its runId. Set    │
-// │ VITE_CHAT_BACKEND=http once that endpoint and the tables are deployed.    │
+// │ httpBackend is the real one: the SDK's DefaultChatTransport on            │
+// │ POST /api/chat, which answers with createUIMessageStream. Its model calls │
+// │ go through the cost gateway (api/_ai/gateway.ts, job "chat"); agent work  │
+// │ longer than a request starts on the DBOS worker and arrives as a handoff  │
+// │ with its runId. Set VITE_CHAT_BACKEND=http once it is deployed.           │
 // └──────────────────────────────────────────────────────────────────────────┘
 
+import { DefaultChatTransport, type ChatTransport, type UIMessageChunk } from "ai";
 import { authHeader, newId } from "@/lib/supabase";
-import type { AgentName, ChatEvent, ChatMessage, Citation, Conversation, Handoff, QuickAction } from "./types";
+import type { AgentName, ChatUIMessage, Citation, Conversation, Handoff, QuickAction } from "./types";
 
-export interface ChatAdapter {
+export interface ChatBackend {
   /** True while the data is fake, so the page can say so. */
   readonly placeholder: boolean;
+  /** What useChat streams replies through, for one tenant. */
+  transport(site: string): ChatTransport<ChatUIMessage>;
   listConversations(site: string): Promise<Conversation[]>;
-  createConversation(site: string): Promise<Conversation>;
+  /** `id` is the chat id useChat already holds, so the first message needs no re-key. */
+  createConversation(site: string, id: string): Promise<Conversation>;
   deleteConversation(site: string, id: string): Promise<void>;
-  listMessages(site: string, conversationId: string): Promise<ChatMessage[]>;
-  /** Saves the user's message and streams the reply. Abort to stop the reply. */
-  send(site: string, conversationId: string, text: string, signal: AbortSignal): AsyncIterable<ChatEvent>;
-  /** Persists a finished (or stopped) assistant message. */
-  saveMessage(site: string, message: ChatMessage): Promise<void>;
+  loadMessages(site: string, conversationId: string): Promise<ChatUIMessage[]>;
+  /** After a reply ends (finished or stopped). A server-backed chat stores as it streams. */
+  saveMessages(site: string, conversationId: string, messages: ChatUIMessage[]): Promise<void>;
   /** Proposes a statement to the Guardian, the only writer to the knowledge base. */
   remember(site: string, statement: string, source: { conversationId: string; messageId: string }): Promise<void>;
 }
@@ -38,17 +42,21 @@ const KEY = (site: string) => `propaganda:chat-placeholder:${site}`;
 
 interface Store {
   conversations: Conversation[];
-  messages: ChatMessage[];
+  messages: Record<string, ChatUIMessage[]>;
 }
 
 function load(site: string): Store {
   try {
     const raw = localStorage.getItem(KEY(site));
-    if (raw) return JSON.parse(raw) as Store;
+    if (raw) {
+      const s = JSON.parse(raw) as Store;
+      // The first placeholder kept messages in another shape: start those over.
+      if (s.messages && !Array.isArray(s.messages)) return s;
+    }
   } catch {
     // private window or blocked storage: start empty
   }
-  return { conversations: [], messages: [] };
+  return { conversations: [], messages: {} };
 }
 
 function save(site: string, s: Store): void {
@@ -61,11 +69,11 @@ function save(site: string, s: Store): void {
 
 const now = () => new Date().toISOString();
 
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
+function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (signal.aborted) return reject(new DOMException("Aborted", "AbortError"));
+    if (signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
     const t = setTimeout(resolve, ms);
-    signal.addEventListener(
+    signal?.addEventListener(
       "abort",
       () => {
         clearTimeout(t);
@@ -78,7 +86,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 interface Script {
   title: string;
-  steps: ({ handoff: Omit<Handoff, "id" | "status">; ms: number; queued?: boolean } | { text: string } | { citation: Omit<Citation, "n"> } | { action: Omit<QuickAction, "id"> })[];
+  steps: ({ handoff: Omit<Handoff, "status">; ms: number; queued?: boolean } | { text: string } | { citation: Omit<Citation, "n"> } | { action: QuickAction })[];
 }
 
 /** Scripted replies, picked by a word or two in the question. Demo data only. */
@@ -144,16 +152,106 @@ function scriptFor(question: string): Script {
   };
 }
 
-export const placeholderAdapter: ChatAdapter = {
+/** The scripted reply as the chunks a real /api/chat would send. */
+async function* scriptChunks(question: string, isFirst: boolean, signal: AbortSignal | undefined): AsyncGenerator<UIMessageChunk> {
+  const script = scriptFor(question);
+  yield { type: "start" };
+  if (isFirst) yield { type: "data-title", data: { title: script.title }, transient: true };
+  await sleep(450, signal);
+
+  let total = 0.0009; // the Chat agent's own calls
+  let n = 0;
+  let textId: string | null = null;
+  const endText = function* (): Generator<UIMessageChunk> {
+    if (textId) yield { type: "text-end", id: textId };
+    textId = null;
+  };
+
+  for (const step of script.steps) {
+    if ("handoff" in step) {
+      yield* endText();
+      const id = newId();
+      const { summary, costUsd, ...ask } = step.handoff;
+      yield { type: "data-handoff", id, data: { ...ask, status: step.queued ? "queued" : "running" } };
+      if (step.queued) {
+        await sleep(500, signal);
+        yield { type: "data-handoff", id, data: { ...ask, status: "running" } };
+      }
+      await sleep(step.ms, signal);
+      total += costUsd ?? 0;
+      yield { type: "data-handoff", id, data: { ...ask, status: "done", summary, costUsd } };
+    } else if ("text" in step) {
+      if (!textId) {
+        textId = newId();
+        yield { type: "text-start", id: textId };
+      }
+      // Word by word, like a model.
+      for (const word of step.text.match(/\S+\s*|\s+/g) ?? []) {
+        await sleep(18 + Math.random() * 30, signal);
+        yield { type: "text-delta", id: textId, delta: word };
+      }
+    } else if ("citation" in step) {
+      const c: Citation = { ...step.citation, n: ++n };
+      if (textId) yield { type: "text-delta", id: textId, delta: `[${c.n}](#cite-${c.n})` };
+      yield { type: "data-citation", id: newId(), data: c };
+    } else {
+      yield { type: "data-action", id: newId(), data: step.action };
+    }
+  }
+  yield* endText();
+  yield { type: "finish", messageMetadata: { costUsd: Math.round(total * 1e6) / 1e6 } };
+}
+
+function textOf(m: ChatUIMessage | undefined): string {
+  return (m?.parts ?? []).map((p) => (p.type === "text" ? p.text : "")).join("");
+}
+
+function placeholderTransport(site: string): ChatTransport<ChatUIMessage> {
+  return {
+    async sendMessages({ chatId, messages, abortSignal }) {
+      const question = textOf([...messages].reverse().find((m) => m.role === "user"));
+      const isFirst = messages.filter((m) => m.role === "user").length === 1;
+      if (isFirst) {
+        const s = load(site);
+        const conv = s.conversations.find((c) => c.id === chatId);
+        if (conv) {
+          conv.title = scriptFor(question).title;
+          save(site, s);
+        }
+      }
+      const it = scriptChunks(question, isFirst, abortSignal);
+      return new ReadableStream<UIMessageChunk>({
+        async pull(controller) {
+          try {
+            const { value, done } = await it.next();
+            if (done) controller.close();
+            else controller.enqueue(value);
+          } catch (err) {
+            controller.error(err);
+          }
+        },
+        async cancel() {
+          await it.return(undefined);
+        },
+      });
+    },
+    async reconnectToStream() {
+      return null;
+    },
+  };
+}
+
+export const placeholderBackend: ChatBackend = {
   placeholder: true,
+  transport: placeholderTransport,
 
   async listConversations(site) {
     return [...load(site).conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   },
 
-  async createConversation(site) {
+  async createConversation(site, id) {
     const s = load(site);
-    const c: Conversation = { id: newId(), site, title: "New chat", createdAt: now(), updatedAt: now() };
+    const c: Conversation = { id, site, title: "New chat", createdAt: now(), updatedAt: now() };
     s.conversations.push(c);
     save(site, s);
     return c;
@@ -161,74 +259,19 @@ export const placeholderAdapter: ChatAdapter = {
 
   async deleteConversation(site, id) {
     const s = load(site);
-    save(site, {
-      conversations: s.conversations.filter((c) => c.id !== id),
-      messages: s.messages.filter((m) => m.conversationId !== id),
-    });
-  },
-
-  async listMessages(site, conversationId) {
-    return load(site).messages.filter((m) => m.conversationId === conversationId);
-  },
-
-  async *send(site, conversationId, text, signal) {
-    const s = load(site);
-    s.messages.push({
-      id: newId(),
-      conversationId,
-      role: "user",
-      parts: [{ type: "text", text }],
-      citations: [],
-      actions: [],
-      status: "done",
-      createdAt: now(),
-    });
-    const conv = s.conversations.find((c) => c.id === conversationId);
-    const isFirst = s.messages.filter((m) => m.conversationId === conversationId).length === 1;
-    if (conv) conv.updatedAt = now();
+    s.conversations = s.conversations.filter((c) => c.id !== id);
+    delete s.messages[id];
     save(site, s);
-
-    const script = scriptFor(text);
-    if (isFirst) {
-      if (conv) conv.title = script.title;
-      save(site, s);
-      yield { type: "title", title: script.title };
-    }
-    await sleep(350, signal);
-
-    let total = 0.0009; // the Chat agent's own calls
-    let n = 0;
-    for (const step of script.steps) {
-      if ("handoff" in step) {
-        const h: Handoff = { ...step.handoff, id: newId(), status: step.queued ? "queued" : "running" };
-        const { summary, costUsd, ...start } = h;
-        yield { type: "handoff", handoff: start };
-        if (step.queued) {
-          await sleep(500, signal);
-          yield { type: "handoff", handoff: { ...start, status: "running" } };
-        }
-        await sleep(step.ms, signal);
-        total += costUsd ?? 0;
-        yield { type: "handoff", handoff: { ...h, status: "done", summary, costUsd } };
-      } else if ("text" in step) {
-        // Word by word, like a model.
-        for (const word of step.text.match(/\S+\s*|\s+/g) ?? []) {
-          await sleep(18 + Math.random() * 30, signal);
-          yield { type: "text", delta: word };
-        }
-      } else if ("citation" in step) {
-        yield { type: "citation", citation: { ...step.citation, n: ++n } };
-      } else {
-        yield { type: "action", action: { ...step.action, id: newId() } };
-      }
-    }
-    yield { type: "done", costUsd: Math.round(total * 1e6) / 1e6 };
   },
 
-  async saveMessage(site, message) {
+  async loadMessages(site, conversationId) {
+    return load(site).messages[conversationId] ?? [];
+  },
+
+  async saveMessages(site, conversationId, messages) {
     const s = load(site);
-    s.messages = s.messages.filter((m) => m.id !== message.id).concat(message);
-    const conv = s.conversations.find((c) => c.id === message.conversationId);
+    s.messages[conversationId] = messages;
+    const conv = s.conversations.find((c) => c.id === conversationId);
     if (conv) conv.updatedAt = now();
     save(site, s);
   },
@@ -250,39 +293,30 @@ async function api(path: string, init: RequestInit = {}): Promise<Response> {
 }
 
 /** The real backend, once /api/chat and its tables exist (see the PR's draft schema). */
-export const httpAdapter: ChatAdapter = {
+export const httpBackend: ChatBackend = {
   placeholder: false,
+  transport: (site) =>
+    new DefaultChatTransport<ChatUIMessage>({
+      api: "/api/chat",
+      headers: async () => ({ Authorization: await authHeader() }),
+      // The server has the history: send only the new message.
+      prepareSendMessagesRequest: ({ id, messages, trigger, messageId }) => ({
+        body: { site, id, trigger, messageId, message: messages[messages.length - 1] },
+      }),
+    }),
   async listConversations(site) {
     return (await api(`/api/chat/conversations?site=${encodeURIComponent(site)}`)).json();
   },
-  async createConversation(site) {
-    return (await api("/api/chat/conversations", { method: "POST", body: JSON.stringify({ site, id: newId() }) })).json();
+  async createConversation(site, id) {
+    return (await api("/api/chat/conversations", { method: "POST", body: JSON.stringify({ site, id }) })).json();
   },
   async deleteConversation(site, id) {
     await api(`/api/chat/conversations/${id}?site=${encodeURIComponent(site)}`, { method: "DELETE" });
   },
-  async listMessages(site, conversationId) {
+  async loadMessages(site, conversationId) {
     return (await api(`/api/chat/conversations/${conversationId}/messages?site=${encodeURIComponent(site)}`)).json();
   },
-  async *send(site, conversationId, text, signal) {
-    const res = await api("/api/chat", { method: "POST", body: JSON.stringify({ site, conversationId, text }), signal });
-    if (!res.body) throw new Error("/api/chat sent no body");
-    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buf = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += value;
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl).trim();
-        buf = buf.slice(nl + 1);
-        if (line) yield JSON.parse(line) as ChatEvent;
-      }
-    }
-    if (buf.trim()) yield JSON.parse(buf) as ChatEvent;
-  },
-  async saveMessage() {
+  async saveMessages() {
     // The server stores both sides of the conversation as it streams.
   },
   async remember(site, statement, source) {
@@ -290,7 +324,7 @@ export const httpAdapter: ChatAdapter = {
   },
 };
 
-export const chatAdapter: ChatAdapter = import.meta.env.VITE_CHAT_BACKEND === "http" ? httpAdapter : placeholderAdapter;
+export const chatBackend: ChatBackend = import.meta.env.VITE_CHAT_BACKEND === "http" ? httpBackend : placeholderBackend;
 
 /** How each agent is named on screen. */
 export const AGENT_LABEL: Record<AgentName, string> = {
