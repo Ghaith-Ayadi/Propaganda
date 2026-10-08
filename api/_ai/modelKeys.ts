@@ -164,34 +164,33 @@ export async function removeTenantKey(rest: Rest, site: string): Promise<void> {
   if (!res.ok) throw new Error(`model_keys delete answered ${res.status}`);
 }
 
-// ---- which credential a tenant runs on ----
+// ---- which account a tenant runs on ----
 //
-// model_credentials pins a tenant to one credential, set by a superadmin
-// (public.model_credential_set): 'default' (Propaganda's own), 'own' (the
-// tenant's saved key) or 'pool:<name>' (a key the server holds in
-// ANTHROPIC_KEY_<NAME>, such as a separate Console account for one customer).
-// No row: the tenant's saved key when it has one, else the default.
-// Whatever it resolves to, there is no fallback to another credential.
+// Hardcoded on purpose: the only tenants that run on Ayadi's own Anthropic
+// accounts are listed here, by site id (slugs can be edited, ids can't). Every
+// other tenant runs on the key its owner saves in Settings, and with none saved
+// its Claude calls stop and wait for one. Nobody falls back to another account.
+// The account keys live in the server's environment (ANTHROPIC_KEY_PRIVATE,
+// ANTHROPIC_KEY_AXONIQ), never in the database.
 
-export type Credential = "default" | "own" | `pool:${string}`;
+export type Account = "private" | "axoniq";
 
-export function isCredential(v: string): v is Credential {
-  return v === "default" || v === "own" || /^pool:[a-z0-9_]{1,40}$/.test(v);
+let accounts: Readonly<Record<string, Account>> = {
+  verbatimsite000: "private", // Verbatim
+  // PPGD: "private" and Axoniq: "axoniq" go here once their sites exist.
+};
+
+/** The Ayadi account a tenant runs on, or null when it brings its own key. */
+export function accountOf(site: string): Account | null {
+  return Object.hasOwn(accounts, site) ? accounts[site] : null;
 }
 
-/** The tenant's pinned credential, or null when it has none (or the table isn't on this server). */
-export async function readCredential(rest: Rest, site: string): Promise<Credential | null> {
-  const res = await rest(`/model_credentials?site=eq.${enc(site)}&select=credential&limit=1`);
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { code?: string };
-    if (missing(res, body)) return null;
-    throw new Error(`model_credentials read answered ${res.status}`);
-  }
-  const [row] = (await res.json()) as { credential: string }[];
-  return row && isCredential(row.credential) ? row.credential : null;
+/** For tests: swap the list. */
+export function setAccounts(list: Record<string, Account>): void {
+  accounts = list;
 }
 
-/** A server-held key: ANTHROPIC_KEY_<NAME> ('pool:axoniq' reads ANTHROPIC_KEY_AXONIQ, 'default' ANTHROPIC_KEY_DEFAULT). */
-export function serverKey(name: string): string | null {
-  return process.env[`ANTHROPIC_KEY_${name.toUpperCase()}`] || null;
+/** The account's API key from the server's environment, or null when it isn't set. */
+export function accountKey(account: Account): string | null {
+  return process.env[`ANTHROPIC_KEY_${account.toUpperCase()}`] || null;
 }

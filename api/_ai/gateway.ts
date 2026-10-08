@@ -22,17 +22,17 @@ import {
   readKeyInfo,
   readTenantKey,
   removeTenantKey,
-  readCredential,
+  accountKey,
+  accountOf,
+  type Account,
   saveTenantKey,
   scrub,
-  serverKey,
-  type Credential,
   TenantKeyError,
   type TenantKey,
 } from "./modelKeys";
 
 export { BudgetError, CostLogUnavailableError, UsageLimitError } from "./errors";
-export { KeysUnavailableError, TenantKeyError } from "./modelKeys";
+export { KeysUnavailableError, TenantKeyError, setAccounts } from "./modelKeys";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 
@@ -210,40 +210,43 @@ export interface Route {
   /** True when the call goes straight to Anthropic with one key: its failures are the key's, and never retried on another. */
   keyed: boolean;
   /** Extra cost-log columns, sent only when not the default, so the log works before migration 20261008000050. */
-  logged: { paid_by?: "tenant"; credential?: Credential };
+  logged: { paid_by?: "tenant"; credential?: Account | "own" };
   /** Our budget limits don't apply (the tenant pays); the kill switch still does. */
   budgetFree: boolean;
 }
 
 /**
  * How a call for `site` reaches `model`. Every path to a model goes through
- * this (callModel here, and streamModel for Chat), so a tenant always runs on
- * the credential it is pinned to (modelKeys.ts, "which credential"):
- *  - 'own': the tenant's saved key, paid by the tenant;
- *  - 'pool:<name>': ANTHROPIC_KEY_<NAME> on the server (one customer's account);
- *  - 'default': ANTHROPIC_KEY_DEFAULT when set, else the AI Gateway.
- * Only Anthropic models are routed; other providers (Gemini) stay ours.
+ * this (callModel here, and streamModel for Chat). Only Anthropic models are
+ * routed; other providers (Gemini for the editor) stay ours.
+ *  - A tenant on Ayadi's list (modelKeys.ts, accountOf) runs on that account:
+ *    'private' on ANTHROPIC_KEY_PRIVATE (the AI Gateway while it is unset),
+ *    'axoniq' on ANTHROPIC_KEY_AXONIQ, and stops when that key isn't set.
+ *  - Every other tenant runs on its saved key, paid by the tenant, and stops
+ *    when it has none. No tenant ever falls back to another account.
  */
 export async function routeModel(site: string, model: string): Promise<Route> {
   const ours = (): Route => ({ model: resolveModel(model), tenant: null, keyed: false, logged: {}, budgetFree: false });
   if (!model.startsWith("anthropic/")) return ours();
 
-  const pinned = await readCredential(rest, site);
-  if (pinned === "own" || pinned === null) {
-    const tenant = await readTenantKey(rest, site);
-    if (tenant) {
-      return { model: tenantResolve(tenant.apiKey, model), tenant, keyed: true, logged: { paid_by: "tenant" }, budgetFree: true };
-    }
-    if (pinned === "own") throw new TenantKeyError("This tenant runs on its own Anthropic key, and none is saved.");
+  const account = accountOf(site);
+  if (account) {
+    const key = accountKey(account);
+    const logged = account === "private" ? {} : { credential: account };
+    if (key) return { model: tenantResolve(key, model), tenant: null, keyed: true, logged, budgetFree: false };
+    if (account === "private") return ours();
+    throw new TenantKeyError(`The server has no ANTHROPIC_KEY_${account.toUpperCase()} for this tenant's account.`);
   }
-  if (pinned?.startsWith("pool:")) {
-    const name = pinned.slice("pool:".length);
-    const key = serverKey(name);
-    if (!key) throw new TenantKeyError(`The server has no ANTHROPIC_KEY_${name.toUpperCase()} for this tenant's account.`);
-    return { model: tenantResolve(key, model), tenant: null, keyed: true, logged: { credential: pinned }, budgetFree: false };
-  }
-  const key = serverKey("default");
-  return key ? { model: tenantResolve(key, model), tenant: null, keyed: true, logged: {}, budgetFree: false } : ours();
+
+  const tenant = await readTenantKey(rest, site);
+  if (!tenant) throw new TenantKeyError("This tenant runs on its own Anthropic key, and none is saved. An owner can add one in Settings.");
+  return {
+    model: tenantResolve(tenant.apiKey, model),
+    tenant,
+    keyed: true,
+    logged: { paid_by: "tenant", credential: "own" },
+    budgetFree: true,
+  };
 }
 
 /** Our budget limits off for a call on the tenant's key: only the kill switch applies. */
@@ -464,5 +467,6 @@ export const tenantKeys = {
   save: (site: string, apiKey: string) => saveTenantKey(rest, site, apiKey),
   mark: (site: string, ok: boolean, error = "") => markTenantKey(rest, site, ok ? "ok" : "failed", error),
   remove: (site: string) => removeTenantKey(rest, site),
-  pinned: (site: string) => readCredential(rest, site),
+  /** True when the tenant runs on one of Ayadi's accounts, so a saved key would not be used. */
+  managed: (site: string) => accountOf(site) !== null,
 };

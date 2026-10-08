@@ -11,8 +11,6 @@ let kills = 0;
 // model_keys rows by site (sealed with encryptKey), and the PATCHes the gateway sends.
 const keyRows: Record<string, Record<string, unknown>> = {};
 const keyMarks: Record<string, unknown>[] = [];
-// model_credentials pins by site.
-const pins: Record<string, string> = {};
 const server = createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
@@ -22,10 +20,6 @@ const server = createServer((req, res) => {
     if (req.url?.startsWith("/rest/v1/rpc/cost_engage_kill")) { kills++; return void res.end("null"); }
     if (req.url?.startsWith("/rest/v1/model_prices"))
       return void res.end(JSON.stringify([{ input_per_mtok: "1", output_per_mtok: "2", cache_read_per_mtok: "0", cache_write_per_mtok: "0" }]));
-    if (req.url?.startsWith("/rest/v1/model_credentials")) {
-      const site = /site=eq\.([a-z0-9]+)/.exec(req.url)?.[1] ?? "";
-      return void res.end(JSON.stringify(pins[site] ? [{ credential: pins[site] }] : []));
-    }
     if (req.url?.startsWith("/rest/v1/model_keys")) {
       const site = /site=eq\.([a-z0-9]+)/.exec(req.url)?.[1] ?? "";
       if (req.method === "PATCH") { keyMarks.push(JSON.parse(body)); return void res.end("[]"); }
@@ -148,6 +142,7 @@ test("with a key, Anthropic calls use it, are logged as the tenant's, and skip o
   assert.equal(model, "claude-sonnet-5-5");
   assert.equal(ours, 0);
   assert.equal(calls[0].paid_by, "tenant");
+  assert.equal(calls[0].credential, "own");
 
   // Gemini stays on our account, and our budget applies to it.
   gate = open; calls.length = 0;
@@ -212,72 +207,89 @@ test("Test: green on an answer, red with Anthropic's words, and the key never in
   assert.ok(!JSON.stringify(calls).includes(KEY));
 });
 
-// ---- which credential a tenant is pinned to ----
+// ---- which account a tenant runs on ----
 
-const pinnedSite = "siteccccccccccc";
+const privateSite = "siteppppppppppp";
+const axoniqSite = "siteaxaxaxaxaxa";
+const ownSite = "siteccccccccccc";
+const AXONIQ = "sk-ant-api03-axoniqaxoniqaxoniqaxoniq";
+const PRIVATE = "sk-ant-api03-privateprivateprivateprivat";
 
-test("pinned to a pool: runs on that server key, logged with it, and our budget applies", async () => {
-  pins[pinnedSite] = "pool:axoniq";
-  process.env.ANTHROPIC_KEY_AXONIQ = "sk-ant-api03-axoniqaxoniqaxoniqaxoniq";
+test("a tenant on the Axoniq account runs on its key, logged with it, and our budget applies", async () => {
+  g.setAccounts({ [privateSite]: "private", [axoniqSite]: "axoniq" });
+  process.env.ANTHROPIC_KEY_AXONIQ = AXONIQ;
   gate = open; calls.length = 0;
   let used = "", ours = 0;
   setModelResolver(() => { ours++; return ok; });
   g.setTenantModelResolver((k) => { used = k; return ok; });
-  await callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" });
-  assert.equal(used, process.env.ANTHROPIC_KEY_AXONIQ);
+  await callModel({ ...opts, site: axoniqSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(used, AXONIQ);
   assert.equal(ours, 0);
-  assert.equal(calls[0].credential, "pool:axoniq");
+  assert.equal(calls[0].credential, "axoniq");
   assert.equal(calls[0].paid_by, undefined);
 
   gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 };
-  await assert.rejects(callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" }), BudgetError);
+  await assert.rejects(callModel({ ...opts, site: axoniqSite, model: "anthropic/claude-sonnet-5.5" }), BudgetError);
 });
 
-test("a pool pin beats a saved key, and a missing pool key stops the call without falling back", async () => {
-  pins[pinnedSite] = "pool:axoniq";
+test("a listed tenant ignores a saved key, and a missing account key stops the call without falling back", async () => {
   const { encryptKey } = await import("./modelKeys");
-  keyRows[pinnedSite] = { secret: encryptKey(pinnedSite, KEY), last4: "1234", status: "ok", error: "", checked: "x" };
+  keyRows[axoniqSite] = { secret: encryptKey(axoniqSite, KEY), last4: "1234", status: "ok", error: "", checked: "x" };
   gate = open;
   let used = "";
   g.setTenantModelResolver((k) => { used = k; return ok; });
-  await callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" });
-  assert.equal(used, process.env.ANTHROPIC_KEY_AXONIQ);
+  await callModel({ ...opts, site: axoniqSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(used, AXONIQ);
 
   delete process.env.ANTHROPIC_KEY_AXONIQ; calls.length = 0;
   let ours = 0;
   setModelResolver(() => { ours++; return ok; });
   await assert.rejects(
-    callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" }),
+    callModel({ ...opts, site: axoniqSite, model: "anthropic/claude-sonnet-5.5" }),
     (e: Error) => e instanceof g.TenantKeyError && /ANTHROPIC_KEY_AXONIQ/.test(e.message),
   );
   assert.equal(ours, 0);
   assert.equal(calls.length, 0);
-  delete keyRows[pinnedSite];
+  delete keyRows[axoniqSite];
 });
 
-test("pinned to its own key with none saved: stops, never ours", async () => {
-  pins[pinnedSite] = "own";
-  gate = open;
-  let ours = 0;
-  setModelResolver(() => { ours++; return ok; });
-  await assert.rejects(callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" }), g.TenantKeyError);
-  assert.equal(ours, 0);
-});
-
-test("default: ANTHROPIC_KEY_DEFAULT when set, else the AI Gateway", async () => {
-  delete pins[pinnedSite];
-  gate = open;
+test("the private account: ANTHROPIC_KEY_PRIVATE when set, else the AI Gateway", async () => {
+  gate = open; calls.length = 0;
   let used = "", ours = 0;
   setModelResolver(() => { ours++; return ok; });
   g.setTenantModelResolver((k) => { used = k; return ok; });
-  await callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" });
+  await callModel({ ...opts, site: privateSite, model: "anthropic/claude-sonnet-5.5" });
   assert.equal(ours, 1);
-  process.env.ANTHROPIC_KEY_DEFAULT = "sk-ant-api03-defaultdefaultdefaultdefault";
+  process.env.ANTHROPIC_KEY_PRIVATE = PRIVATE;
   calls.length = 0;
-  await callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" });
-  assert.equal(used, process.env.ANTHROPIC_KEY_DEFAULT);
+  await callModel({ ...opts, site: privateSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(used, PRIVATE);
   assert.equal(calls[0].credential, undefined);
-  delete process.env.ANTHROPIC_KEY_DEFAULT;
+  delete process.env.ANTHROPIC_KEY_PRIVATE;
+});
+
+test("a tenant off the list with no key saved stops, and never runs on an Ayadi account", async () => {
+  process.env.ANTHROPIC_KEY_PRIVATE = PRIVATE;
+  gate = open; calls.length = 0;
+  let ours = 0, used = "";
+  setModelResolver(() => { ours++; return ok; });
+  g.setTenantModelResolver((k) => { used = k; return ok; });
+  await assert.rejects(
+    callModel({ ...opts, site: ownSite, model: "anthropic/claude-sonnet-5.5" }),
+    (e: Error) => e instanceof g.TenantKeyError && /none is saved/.test(e.message),
+  );
+  assert.equal(ours, 0);
+  assert.equal(used, "");
+  assert.equal(calls.length, 0);
+  delete process.env.ANTHROPIC_KEY_PRIVATE;
+});
+
+test("only listed site ids are on an Ayadi account", async () => {
+  const { accountOf, setAccounts } = await import("./modelKeys");
+  setAccounts({ verbatimsite000: "private" });
+  assert.equal(accountOf("verbatimsite000"), "private");
+  assert.equal(accountOf("kontra000000000"), null);
+  assert.equal(accountOf("constructor"), null);
 });
 
 test.after(() => server.close());

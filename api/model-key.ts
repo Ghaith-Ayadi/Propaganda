@@ -7,11 +7,11 @@
 // Members see its status and may re-test it; only owners set or remove it.
 //
 // GET    /api/model-key?site=<id>             -> { key: KeyInfo | null, managed: boolean }
-//        managed: a superadmin pinned this tenant to a key Propaganda holds for it
-//        (model_credentials 'pool:<name>'), so a key saved here would not be used.
+//        managed: the tenant runs on an account Propaganda holds for it (the
+//        hardcoded list in _ai/modelKeys.ts), so a key saved here would not be used.
 // POST   /api/model-key { site, key }          -> test, and save when green: { ok, error?, key }
 // POST   /api/model-key { site, action: "test" } -> re-test the saved key: { ok, error?, key }
-// DELETE /api/model-key?site=<id>             -> { key: null } (back to Propaganda's account)
+// DELETE /api/model-key?site=<id>             -> { key: null } (Claude work waits for a new key)
 
 import { requireMember, requireOwner } from "./_auth";
 import { withTelemetry } from "./_telemetry";
@@ -43,8 +43,7 @@ async function get(request: Request): Promise<Response> {
   return (
     (await member(request, site)) ??
     guarded(async () => {
-      const [key, pinned] = await Promise.all([tenantKeys.info(site), tenantKeys.pinned(site)]);
-      return json({ key, managed: pinned?.startsWith("pool:") ?? false });
+      return json({ key: await tenantKeys.info(site), managed: tenantKeys.managed(site) });
     })
   );
 }
@@ -69,7 +68,7 @@ async function post(request: Request): Promise<Response> {
       return json({ ...result, key: await tenantKeys.info(site) });
     }
 
-    if ((await tenantKeys.pinned(site))?.startsWith("pool:")) {
+    if (tenantKeys.managed(site)) {
       return json({ ok: false, error: "Propaganda manages this tenant's Anthropic key, so a key saved here would not be used." }, 409);
     }
     const key = typeof body.key === "string" ? body.key.trim() : "";
