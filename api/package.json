@@ -11,7 +11,7 @@
     "typescript": "^5.7.2"
   },
   "scripts": {
-    "test": "tsx --test _ai/cost.test.ts _ai/gateway.test.ts",
+    "test": "tsx --test _ai/cost.test.ts _ai/gateway.test.ts check-model-paths.test.mjs",
     "check:model-paths": "node check-model-paths.mjs"
   }
 }
