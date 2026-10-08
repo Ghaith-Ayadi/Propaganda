@@ -4,9 +4,11 @@
 //
 // Blocked everywhere outside the gateway: provider hosts, provider packages
 // (@ai-sdk/anthropic, openai, ...) and model-call functions (generateText,
-// streamText, ...). Allowed under app/src only: `ai` and `@ai-sdk/react`
-// imports, which are the browser's chat UI and types; they post to our own
-// /api and never reach a provider.
+// streamText, ...). Allowed under app/src only: type imports from `ai` and
+// `@ai-sdk/react`, plus a named allowlist of their runtime exports (the chat
+// UI: useChat, DefaultChatTransport). They post to our own /api and never
+// reach a provider. Namespace, default and unlisted named imports (even
+// aliased) are blocked.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +26,23 @@ const HOSTS = [
 const CALLS = /\b(generateText|streamText|generateObject|streamObject|embedMany)\s*\(/;
 const IMPORT = /(?:from|import)\s*\(?\s*["']([^"']+)["']/;
 const UI_PACKAGES = new Set(["ai", "@ai-sdk/react"]);
+const UI_RUNTIME_ALLOWED = new Set(["useChat", "DefaultChatTransport"]);
+// import / export-from statements of the UI packages, across lines.
+const UI_STATEMENT = /\b(import|export)\s+(type\s+)?([^;'"]*?)\s*from\s*["'](ai|@ai-sdk\/react)["']/gs;
+const UI_DYNAMIC = /\bimport\s*\(\s*["'](?:ai|@ai-sdk\/react)["']\s*\)|\brequire\s*\(\s*["'](?:ai|@ai-sdk\/react)["']\s*\)/g;
+
+/** Why a UI-package statement is not allowed, or null. `clause` is what sits between import and from. */
+function uiClauseProblem(clause) {
+  const c = clause.trim();
+  if (!c.startsWith("{")) return "default or namespace import";
+  for (const spec of c.replace(/^\{|\}$/g, "").split(",")) {
+    const part = spec.trim();
+    if (!part || part.startsWith("type ")) continue;
+    const name = part.split(/\s+as\s+/)[0].trim();
+    if (!UI_RUNTIME_ALLOWED.has(name)) return `${name} is not on the allowlist`;
+  }
+  return null;
+}
 const PROVIDER_PACKAGE = /^(@ai-sdk\/|@anthropic-ai\/|openai$|@google\/generative-ai$|@google\/genai$|ai$)/;
 
 /** Problems in one file's text. `rel` is its repo-relative path with forward slashes. */
@@ -40,6 +59,15 @@ export function scanSource(rel, text) {
       if (!(inBrowserApp && UI_PACKAGES.has(pkg))) found.push(`${at}  model SDK import (${pkg})`);
     }
   });
+  if (inBrowserApp) {
+    const lineOf = (index) => text.slice(0, index).split("\n").length;
+    for (const m of text.matchAll(UI_STATEMENT)) {
+      if (m[2]) continue; // import type / export type: types only
+      const problem = uiClauseProblem(m[3]);
+      if (problem) found.push(`${rel}:${lineOf(m.index)}  ${m[4]} import: ${problem}`);
+    }
+    for (const m of text.matchAll(UI_DYNAMIC)) found.push(`${rel}:${lineOf(m.index)}  dynamic import of a UI package`);
+  }
   return found;
 }
 
