@@ -13,15 +13,15 @@
 
 import { siteId } from "@/lib/scope";
 import { addDays, shortDate, ymd } from "./dates";
-import type { BatchInfo, PipelineItem, PipelineSettings, PipelineSnapshot, Person } from "./types";
+import type { Batch, PipelineItem, PipelineSettings, PipelineSnapshot, Person } from "./types";
 
 export interface PipelineAdapter {
   load(): PipelineSnapshot;
-  saveItems(items: PipelineItem[]): void;
+  save(state: { items: PipelineItem[]; batches: Batch[] }): void;
   reset(): void;
 }
 
-const VERSION = 1;
+const VERSION = 2;
 const key = () => `propaganda:pipeline-placeholder:v${VERSION}:${safeSiteId()}`;
 
 function safeSiteId(): string {
@@ -45,10 +45,25 @@ const SETTINGS: PipelineSettings = {
   slotDays: [2, 4], // Tuesday and Thursday
   publishTime: "09:00",
   meId: "me",
+  batching: "weekly",
+  quarter: quarterLabel(new Date()),
 };
 
-function batchInfo(today: Date): BatchInfo {
-  return { number: 2, total: 5, dueBy: ymd(addDays(today, 8)) };
+function quarterLabel(d: Date): string {
+  return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
+}
+
+/** Five weekly batches: one closed, one in review, three to come. */
+function seedBatches(): Batch[] {
+  const today = new Date();
+  const d = (n: number) => ymd(addDays(today, n));
+  return [
+    { number: 1, state: "closed", releaseOn: d(-9), quota: 5 },
+    { number: 2, state: "in_review", releaseOn: d(-2), quota: 3 },
+    { number: 3, state: "pending", releaseOn: d(5), quota: 3, expectedTopics: ["Accounts payable", "Security and audit"] },
+    { number: 4, state: "pending", releaseOn: d(12), quota: 3, expectedTopics: ["ERP integrations", "Month-end close"] },
+    { number: 5, state: "pending", releaseOn: d(19), quota: 3, expectedTopics: ["Customer stories"] },
+  ];
 }
 
 let lineSeq = 0;
@@ -87,7 +102,6 @@ function seed(): PipelineItem[] {
       ],
       goals: [
         { goal: "volume", moves: true, note: "Fills an open slot." },
-        { goal: "coverage", moves: true, note: "Month-end close is under target." },
         { goal: "ranking", moves: true, note: "\"close checklist\" is a target search." },
       ],
       writerId: "maya",
@@ -122,7 +136,6 @@ function seed(): PipelineItem[] {
       ],
       goals: [
         { goal: "volume", moves: true, note: "Fills an open slot." },
-        { goal: "coverage", moves: true, note: "Counts toward two topics." },
         { goal: "ranking", moves: true, note: "Target search, we're not in the top 50." },
       ],
       writerId: "lina",
@@ -156,7 +169,6 @@ function seed(): PipelineItem[] {
       ],
       goals: [
         { goal: "volume", moves: true, note: "Counts toward the quarter." },
-        { goal: "coverage", moves: false, note: "Month-end close is covered by the other pitch." },
       ],
       writerId: "tomas",
       reviewerId: "me",
@@ -184,7 +196,6 @@ function seed(): PipelineItem[] {
       ],
       goals: [
         { goal: "ranking", moves: true, note: "Target search." },
-        { goal: "coverage", moves: false, note: "ERP integrations is on target." },
       ],
       writerId: "tomas",
       reviewerId: "maya",
@@ -354,15 +365,67 @@ function seed(): PipelineItem[] {
       outline: [],
       batch: 1,
     },
+    {
+      ...base,
+      id: "ex-duplicate-payments",
+      title: "Duplicate payments: where they come from and how to catch them",
+      why: "Two prospects lost money to duplicates last quarter; 880 searches a month.",
+      stage: "pitched",
+      collection: "Guides",
+      topics: ["Accounts payable"],
+      origin: "calls",
+      reasons: [
+        { kind: "demand", text: "880 searches a month; raised in 2 calls.", counts: true },
+        { kind: "mix", text: "Accounts payable is under target.", counts: true },
+        { kind: "gap", text: "Nothing we've published covers it.", counts: true },
+      ],
+      goals: [
+        { goal: "volume", moves: true, note: "Batch 3." },
+        { goal: "ranking", moves: true, note: "Target search." },
+      ],
+      writerId: "maya",
+      reviewerId: "me",
+      publishBy: d(24),
+      length: "1,200–1,500 words",
+      angle: "Duplicates start at onboarding and invoice capture, not at payment. Catch them there.",
+      audience: "AP leads and controllers.",
+      outline: lines("Where duplicates come from", "The three checks that catch most of them", "What to do when one gets through"),
+      batch: 3,
+    },
+    {
+      ...base,
+      id: "ex-soc2-evidence",
+      title: "What your auditor will ask for from AP, list by list",
+      why: "Audit season, and the October post is the most read this month.",
+      stage: "pitched",
+      collection: "Guides",
+      topics: ["Security and audit"],
+      origin: "news",
+      reasons: [
+        { kind: "timeliness", text: "Audit fieldwork starts in November for most calendar-year companies.", counts: true },
+        { kind: "demand", text: "The October auditors post is the most read this month.", counts: true },
+      ],
+      goals: [{ goal: "readership", moves: true, note: "Follows the most read post." }],
+      writerId: "lina",
+      reviewerId: "me",
+      publishBy: d(26),
+      length: "900–1,200 words",
+      angle: "The exact lists, the formats auditors accept, and who on the team owns each.",
+      audience: "AP teams before their first audit.",
+      outline: lines("The five lists", "Formats that pass", "Who owns what"),
+      batch: 3,
+    },
   ];
 }
 
-function readStored(): PipelineItem[] | null {
+function readStored(): { items: PipelineItem[]; batches: Batch[] } | null {
   try {
     const raw = localStorage.getItem(key());
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? (parsed as PipelineItem[]) : null;
+    const parsed = JSON.parse(raw) as { items?: unknown; batches?: unknown };
+    return Array.isArray(parsed.items) && Array.isArray(parsed.batches)
+      ? { items: parsed.items as PipelineItem[], batches: parsed.batches as Batch[] }
+      : null;
   } catch {
     return null;
   }
@@ -370,12 +433,18 @@ function readStored(): PipelineItem[] | null {
 
 export const placeholderAdapter: PipelineAdapter = {
   load() {
-    const items = readStored() ?? seed();
-    return { items, people: PEOPLE, batch: batchInfo(new Date()), settings: SETTINGS, placeholder: true };
+    const stored = readStored();
+    return {
+      items: stored?.items ?? seed(),
+      batches: stored?.batches ?? seedBatches(),
+      people: PEOPLE,
+      settings: SETTINGS,
+      placeholder: true,
+    };
   },
-  saveItems(items) {
+  save(state) {
     try {
-      localStorage.setItem(key(), JSON.stringify(items));
+      localStorage.setItem(key(), JSON.stringify(state));
     } catch {
       // Private mode or full storage: changes last until reload.
     }

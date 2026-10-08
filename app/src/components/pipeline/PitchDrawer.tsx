@@ -26,7 +26,7 @@ const REASON_LABEL: Record<ReasonKind, string> = {
   duplicate: "Overlap",
 };
 
-const GOALS: GoalKey[] = ["volume", "coverage", "consistency", "readership", "ranking"];
+const GOALS: GoalKey[] = ["volume", "consistency", "readership", "ranking"];
 
 export function PitchDrawer({ id }: { id: string }) {
   const { items, people, settings } = usePipeline();

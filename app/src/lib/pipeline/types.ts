@@ -31,12 +31,11 @@ export interface FitReason {
   counts: boolean;
 }
 
-/** The five quarterly goals (reviews/goal-model.md). */
-export type GoalKey = "volume" | "coverage" | "consistency" | "readership" | "ranking";
+/** The quarterly goals (reviews/goal-model.md). Coverage was dropped on 2026-10-08: it lives in the Strategist's decisions and shows in Volume. */
+export type GoalKey = "volume" | "consistency" | "readership" | "ranking";
 
 export const GOAL_LABEL: Record<GoalKey, string> = {
   volume: "Volume",
-  coverage: "Coverage",
   consistency: "Consistency",
   readership: "Readership",
   ranking: "Ranking",
@@ -151,12 +150,25 @@ export interface PipelineItem {
   updatedAt: number;
 }
 
-export interface BatchInfo {
+export type BatchState = "closed" | "in_review" | "topping_up" | "pending" | "cancelled";
+
+/**
+ * A content batch (agents/strategist-cold-start-and-pacing.md): a numbered
+ * group of briefs with a release date and a quota of approved briefs. The
+ * Pitcher over-pitches; a short batch is topped up the next day.
+ */
+export interface Batch {
   number: number;
-  total: number;
-  /** YYYY-MM-DD, when this batch should be written. */
-  dueBy: string;
+  state: BatchState;
+  /** YYYY-MM-DD the pitches arrive (or arrived). */
+  releaseOn: string;
+  /** Approved briefs this batch should end with. */
+  quota: number;
+  /** For a batch not released yet: the topics the Pitcher expects to cover. */
+  expectedTopics?: string[];
 }
+
+export type Batching = "weekly" | "flood";
 
 export interface PipelineSettings {
   /** Posts a week (the Volume goal, spread over the quarter). */
@@ -166,12 +178,15 @@ export interface PipelineSettings {
   publishTime: string;
   /** The person using the app, for "you". */
   meId: string;
+  batching: Batching;
+  /** "Q4 2026" */
+  quarter: string;
 }
 
 export interface PipelineSnapshot {
   items: PipelineItem[];
   people: Person[];
-  batch: BatchInfo | null;
+  batches: Batch[];
   settings: PipelineSettings;
   /** True while the data is example data from the placeholder adapter. */
   placeholder: boolean;
