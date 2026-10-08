@@ -4,9 +4,9 @@
 import { Tab, TabList, TabPanel } from "@/components/application/tabs/tabs";
 import { Tabs } from "react-aria-components";
 import { goPage, usePageRest } from "@/lib/route";
-import { File02, Globe01, PenTool01, Target04, User01, Users01, Cube01, Zap, BookOpen01, Edit05 } from "@untitledui/icons";
+import { Brush01, File02, Globe01, PenTool01, Target04, User01, Users01, Cube01, Zap, BookOpen01, Edit05 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
-import { AuthorTab, EditorTab, SiteTab, TemplatesTab } from "@/components/SettingsDialog";
+import { AuthorTab, DesignSection, EditorTab, SiteTab, TemplatesTab } from "@/components/SettingsDialog";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { Card } from "./ui";
 import { AgentsSection } from "./AgentsSection";
@@ -22,6 +22,7 @@ const SECTIONS = [
   { id: "goals", label: "Goals", icon: Target04 },
   { id: "author", label: "Author", icon: User01 },
   { id: "site", label: "Site", icon: Globe01 },
+  { id: "design", label: "Design", icon: Brush01 },
   { id: "editor", label: "Editor", icon: PenTool01 },
   { id: "templates", label: "Templates", icon: File02 },
 ] as const;
@@ -51,6 +52,7 @@ export function SettingsPage() {
           <TabPanel id="goals"><GoalsLink /></TabPanel>
           <TabPanel id="author"><Plain title="Author"><AuthorTab /></Plain></TabPanel>
           <TabPanel id="site"><Plain title="Site"><SiteTab /></Plain></TabPanel>
+          <TabPanel id="design"><Plain title="Design"><DesignSection /></Plain></TabPanel>
           <TabPanel id="editor"><Plain title="Editor"><EditorTab /></Plain></TabPanel>
           <TabPanel id="templates"><Plain title="Templates"><TemplatesTab /></Plain></TabPanel>
         </div>
