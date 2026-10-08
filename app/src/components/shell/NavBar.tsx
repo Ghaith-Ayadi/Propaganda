@@ -6,6 +6,7 @@
 // 0.1 sidebar: the plan's few pages and Analytics on top, then every
 // collection with its posts filling the bar (components/lite).
 
+import { hookKey } from "@/components/lite/pages";
 import { BarChart01, ChevronDown, Eye, Moon01, SearchLg, Sun, SwitchHorizontal01 } from "@untitledui/icons";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { useWorkspace } from "@/components/Workspace";
@@ -55,7 +56,7 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
           {pages
             .filter((p) => p.section === "main" && !(lite && p.id === "content"))
             .map((p) => (
-              <PageItem key={p.id} page={p} active={active === p.id} route={route} currentCollection={currentCollection} />
+              <PageItem key={hookKey(p)} page={p} active={active === p.id} route={route} currentCollection={currentCollection} />
             ))}
           {lite && (
             <li>
@@ -80,7 +81,7 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
       <div className="border-t border-secondary px-2 py-2">
         <ul className="flex flex-col gap-0.5">
           {pages.filter((p) => p.section === "footer").map((p) => (
-            <PageItem key={p.id} page={p} active={active === p.id} route={route} />
+            <PageItem key={hookKey(p)} page={p} active={active === p.id} route={route} />
           ))}
           <li>
             <button type="button" onClick={toggleTheme} className={rowClass(false)}>

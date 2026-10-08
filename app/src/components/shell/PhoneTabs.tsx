@@ -1,6 +1,7 @@
 // The phone's nav: a menu button (the full nav bar in a drawer) and every
 // page in the tenant's plan as a tab in one scrolling row, the open one scrolled into view.
 
+import { hookKey } from "@/components/lite/pages";
 import { useEffect, useRef } from "react";
 import { Menu01 } from "@untitledui/icons";
 import { toggleDrawer } from "@/lib/mobile";
@@ -34,7 +35,7 @@ export function PhoneTabs() {
       </button>
       <nav aria-label="Pages" ref={row} className="flex min-w-0 flex-1 gap-1 overflow-x-auto px-1 py-2 [scrollbar-width:none]">
         {pages.map((p) => (
-          <Tab key={p.id} page={p} active={active === p.id} />
+          <Tab key={hookKey(p)} page={p} active={active === p.id} />
         ))}
       </nav>
     </div>
