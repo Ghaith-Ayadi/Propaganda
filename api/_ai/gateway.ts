@@ -200,6 +200,45 @@ function tenantKeyFailure(err: unknown): { error: TenantKeyError; broken: boolea
   return null;
 }
 
+/**
+ * How a call for `site` reaches `model`: on the tenant's own key when it has
+ * one and the model is Anthropic's, else on ours. Every path to a model goes
+ * through this (callModel here, and streamModel for Chat), so a tenant's key
+ * is never skipped. `logged` goes into the cost-log row; `budgetFree` means
+ * our budget limits don't apply (the kill switch still does).
+ */
+export async function routeModel(
+  site: string,
+  model: string,
+): Promise<{ model: LanguageModel; tenant: TenantKey | null; logged: { paid_by?: "tenant" }; budgetFree: boolean }> {
+  const tenant = model.startsWith("anthropic/") ? await readTenantKey(rest, site) : null;
+  if (!tenant) return { model: resolveModel(model), tenant: null, logged: {}, budgetFree: false };
+  // paid_by is only sent when it isn't the default, so the log works before migration 20261008000050.
+  return { model: tenantResolve(tenant.apiKey, model), tenant, logged: { paid_by: "tenant" }, budgetFree: true };
+}
+
+/** Our budget limits off for a call on the tenant's key: only the kill switch applies. */
+export function gateFor(gate: Gate, budgetFree: boolean): Gate {
+  return budgetFree ? { ...gate, tenantMonthlyLimit: null, globalDailyLimit: null } : gate;
+}
+
+/**
+ * After a call on a tenant's key failed: the TenantKeyError to throw (the key
+ * marked failed when it is broken), or null when the failure isn't the key's.
+ * Never retry such a failure on our account.
+ */
+export async function tenantKeyFailed(site: string, err: unknown): Promise<TenantKeyError | null> {
+  const failed = tenantKeyFailure(err);
+  if (!failed) return null;
+  if (failed.broken) await markTenantKey(rest, site, "failed", failed.error.message.replace(/^TENANT-KEY /, "")).catch(() => {});
+  return failed.error;
+}
+
+/** After a call on a tenant's key worked: clear a failed mark. */
+export async function tenantKeyWorked(site: string, tenant: TenantKey | null): Promise<void> {
+  if (tenant && tenant.status !== "ok") await markTenantKey(rest, site, "ok").catch(() => {});
+}
+
 /** The subscription's 5-hour limit: a 429 whose unified status is 'rejected'. */
 function usageLimit(err: unknown): UsageLimitError | null {
   const e = err as { statusCode?: number; responseHeaders?: Record<string, string> };
@@ -212,10 +251,9 @@ function usageLimit(err: unknown): UsageLimitError | null {
 // ---- the call ----
 
 export async function callModel(opts: CallOptions): Promise<CallResult> {
-  const tenant = opts.model.startsWith("anthropic/") ? await readTenantKey(rest, opts.site) : null;
-  const gate = await readGate(opts.site);
+  const route = await routeModel(opts.site, opts.model);
   // On the tenant's key, only the kill switch applies: the spend is theirs.
-  const verdict = decide(tenant ? { ...gate, tenantMonthlyLimit: null, globalDailyLimit: null } : gate, opts.background);
+  const verdict = decide(gateFor(await readGate(opts.site), route.budgetFree), opts.background);
   if (!verdict.allow) {
     if (verdict.engageKill) {
       await rest("/rpc/cost_engage_kill", {
@@ -234,11 +272,10 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
     background: opts.background,
     workflow_id: ctx.workflowId,
     step_id: ctx.stepId,
-    // Only sent when it isn't the default, so the log works before migration 20261008000050.
-    ...(tenant ? { paid_by: "tenant" } : {}),
+    ...route.logged,
   };
 
-  const result = await run(base, tenant, opts);
+  const result = await run(base, route, opts);
 
   const { usage, cost } = await logDone(base, opts.model, result.totalUsage);
   return { text: result.text, usage, costUsd: cost, budgetWarning: verdict.warn };
@@ -247,10 +284,11 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
 type Logged = Record<string, unknown>;
 
 /** The call itself, on our account or the tenant's key. A failure is logged before it is thrown. */
-async function run(base: Logged, tenant: TenantKey | null, opts: CallOptions) {
+async function run(base: Logged, route: Awaited<ReturnType<typeof routeModel>>, opts: CallOptions) {
+  const { tenant } = route;
   try {
     const result = await generateText({
-      model: tenant ? tenantResolve(tenant.apiKey, opts.model) : resolveModel(opts.model),
+      model: route.model,
       system: opts.system,
       prompt: opts.prompt,
       maxOutputTokens: opts.maxOutputTokens,
@@ -258,15 +296,14 @@ async function run(base: Logged, tenant: TenantKey | null, opts: CallOptions) {
       // A refused key is refused again: no point in the SDK's own retries.
       ...(tenant ? { maxRetries: 0 } : {}),
     });
-    if (tenant && tenant.status !== "ok") await markTenantKey(rest, opts.site, "ok").catch(() => {});
+    await tenantKeyWorked(opts.site, tenant);
     return result;
   } catch (err) {
     if (tenant) {
-      const failed = tenantKeyFailure(err);
+      const failed = await tenantKeyFailed(opts.site, err);
       if (failed) {
         await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
-        if (failed.broken) await markTenantKey(rest, opts.site, "failed", failed.error.message.replace(/^TENANT-KEY /, "")).catch(() => {});
-        throw failed.error;
+        throw failed;
       }
     } else {
       const limit = usageLimit(err);

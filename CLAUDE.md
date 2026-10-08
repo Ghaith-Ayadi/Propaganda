@@ -92,7 +92,7 @@ cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month 
 (`CostMeter`), the superadmin sees all of it in Admin > Consumption.
 
 **Own keys (BYOK).** A tenant may save its own Anthropic key (Settings, "Your Anthropic
-key", through `api/model-key.ts`). It is stored only as AES-GCM ciphertext under
+key", through `api/model-key.ts`; owners set or remove it). It is stored only as AES-GCM ciphertext under
 `MODEL_KEY_SECRET` in `model_keys` (service role only; `api/_ai/modelKeys.ts`) and never goes
 back to a browser, a log or a message. With a key saved, every `anthropic/` call for that
 tenant runs on it, logged `paid_by = 'tenant'` and outside our budgets; there is never a

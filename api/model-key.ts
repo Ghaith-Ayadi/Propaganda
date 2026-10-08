@@ -4,23 +4,24 @@
 // The key goes in once and never comes back out: answers carry only its last
 // four characters and the last test's result. It is stored encrypted
 // (_ai/modelKeys.ts) and only after one tiny real call with it succeeds.
-// Any member of the site may set, test or remove it.
+// Members see its status and may re-test it; only owners set or remove it.
 //
 // GET    /api/model-key?site=<id>             -> { key: KeyInfo | null }
 // POST   /api/model-key { site, key }          -> test, and save when green: { ok, error?, key }
 // POST   /api/model-key { site, action: "test" } -> re-test the saved key: { ok, error?, key }
 // DELETE /api/model-key?site=<id>             -> { key: null } (back to Propaganda's account)
 
-import { requireMember } from "./_auth";
+import { requireMember, requireOwner } from "./_auth";
 import { withTelemetry } from "./_telemetry";
 import { KeysUnavailableError, tenantKeys, testTenantKey } from "./_ai/gateway";
 import { looksLikeKey } from "./_ai/modelKeys";
 
-async function member(request: Request, site: string): Promise<Response | null> {
+async function member(request: Request, site: string, owner = false): Promise<Response | null> {
   try {
-    await requireMember(request, site);
+    await (owner ? requireOwner : requireMember)(request, site);
     return null;
   } catch (err) {
+    if (err instanceof Response && err.status === 403 && owner) return json({ error: "Only an owner of this site can change its Anthropic key." }, 403);
     if (err instanceof Response) return err;
     return json({ error: "Auth failed" }, 500);
   }
@@ -48,7 +49,7 @@ async function post(request: Request): Promise<Response> {
     return json({ error: "Invalid JSON" }, 400);
   }
   const site = typeof body.site === "string" ? body.site : "";
-  const denied = await member(request, site);
+  const denied = await member(request, site, body.action !== "test");
   if (denied) return denied;
 
   return guarded(async () => {
@@ -74,7 +75,7 @@ async function post(request: Request): Promise<Response> {
 async function del(request: Request): Promise<Response> {
   const site = new URL(request.url).searchParams.get("site") ?? "";
   return (
-    (await member(request, site)) ??
+    (await member(request, site, true)) ??
     guarded(async () => {
       await tenantKeys.remove(site);
       return json({ key: null });

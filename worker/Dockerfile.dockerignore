@@ -8,3 +8,4 @@
 !api/_ai/gateway.ts
 !api/_ai/cost.ts
 !api/_ai/errors.ts
+!api/_ai/modelKeys.ts

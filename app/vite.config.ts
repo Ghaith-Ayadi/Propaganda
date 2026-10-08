@@ -113,7 +113,9 @@ function localApiPlugin(serverEnv: Record<string, string>): Plugin {
           res.end(await webRes.text());
         } catch (err) {
           res.writeHead(502, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "model-key failed in dev", detail: String(err) }));
+          // Never echo a pasted key back, even in dev.
+          const detail = String(err).replace(/sk-ant-[A-Za-z0-9_-]+/g, "sk-ant-…");
+          res.end(JSON.stringify({ error: "model-key failed in dev", detail }));
         }
       });
 

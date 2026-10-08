@@ -155,7 +155,7 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
         )}
 
         <p className="text-xs text-tertiary">
-          Test makes one tiny call to Anthropic with the key and saves it only if it answers. If the key stops working later, agent
+          Only owners can save or remove the key. Test makes one tiny call to Anthropic with it and saves it only if it answers. If it stops working later, agent
           work waits for it and never switches to our account: fix it on Anthropic's side or paste a new one here, and runs carry on
           by themselves.
         </p>
