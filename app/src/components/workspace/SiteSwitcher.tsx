@@ -81,13 +81,13 @@ export function SiteSwitcher() {
                     >
                       <TenantMark siteId={s.id} name={s.name} small />
                       <span className="truncate">{s.name}</span>
+                      <PlanTag siteId={s.id} />
                       <Check
                         className={cx(
                           "ml-auto size-3.5 shrink-0 text-fg-brand-primary",
                           (a.userId !== account.userId || s.id !== site.id) && "invisible",
                         )}
                       />
-                      <PlanTag siteId={s.id} />
                     </AriaMenuItem>
                   ))}
               </AriaMenuSection>,
@@ -138,12 +138,6 @@ function initialsOf(a: { name: string; email: string }): string {
   return src.slice(0, 1).toUpperCase();
 }
 
-/** "Lite" beside a tenant on the free plan (lib/tenantPlan.ts). */
-function PlanTag({ siteId }: { siteId: string }) {
-  if (usePlan(siteId) !== "lite") return null;
-  return <span className="ml-auto shrink-0 rounded px-1.5 text-xs text-quaternary ring-1 ring-inset ring-secondary">Lite</span>;
-}
-
 /** A tenant's mark: its main site's favicon, or its initial. */
 function TenantMark({ siteId, name, small = false }: { siteId: string; name: string; small?: boolean }) {
   const icon = useSiteIcon(siteId);
@@ -163,4 +157,10 @@ function TenantMark({ siteId, name, small = false }: { siteId: string; name: str
       {(name || "?").slice(0, 1).toUpperCase()}
     </span>
   );
+}
+
+/** "Lite" beside a tenant on the free plan (lib/tenantPlan.ts). */
+function PlanTag({ siteId }: { siteId: string }) {
+  if (usePlan(siteId) !== "lite") return null;
+  return <span className="shrink-0 rounded px-1.5 text-xs text-quaternary ring-1 ring-inset ring-secondary">Lite</span>;
 }

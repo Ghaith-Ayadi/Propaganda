@@ -6,14 +6,13 @@
 // 0.1 sidebar: the plan's few pages and Analytics on top, then every
 // collection with its posts filling the bar (components/lite).
 
-import { hookKey } from "@/components/lite/pages";
 import { BarChart01, ChevronDown, Eye, SearchLg, SwitchHorizontal01 } from "@untitledui/icons";
 import { Badge } from "@/components/base/badges/badges";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { useWorkspace } from "@/components/Workspace";
 import { SiteSwitcher } from "@/components/workspace/SiteSwitcher";
 import { LiteCollections } from "@/components/lite/LiteCollections";
-import { usePages } from "@/components/lite/pages";
+import { hookKey, usePages } from "@/components/lite/pages";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { analyticsHref, pageHref, useRoute, type Route } from "@/lib/route";
 import { badgeOf, type NavNode, type PageRoute } from "@/lib/routes";
@@ -27,8 +26,7 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
   const { site } = useWorkspace();
   const active = activePageOf(route);
   const pages = usePages();
-  const plan = usePlan();
-  const lite = plan === "lite";
+  const lite = usePlan() === "lite";
   const canSwitch = useCanSwitchPlan();
 
   return (
@@ -90,11 +88,7 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
           {canSwitch && (
             <li>
               {/* Localhost, the UI preview and superadmins: see the other plan. */}
-              <button
-                type="button"
-                onClick={() => setPlanView(site.id, lite ? "full" : "lite")}
-                className={rowClass(false)}
-              >
+              <button type="button" onClick={() => setPlanView(site.id, lite ? "full" : "lite")} className={rowClass(false)}>
                 <SwitchHorizontal01 className="size-4 text-quaternary" />
                 <span>{lite ? "View as full plan" : "View as Lite"}</span>
               </button>

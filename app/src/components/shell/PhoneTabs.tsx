@@ -1,13 +1,12 @@
 // The phone's nav: a menu button (the full nav bar in a drawer) and every
 // page in the tenant's plan as a tab in one scrolling row, the open one scrolled into view.
 
-import { hookKey } from "@/components/lite/pages";
 import { useEffect, useRef } from "react";
 import { Menu01 } from "@untitledui/icons";
 import { toggleDrawer } from "@/lib/mobile";
 import { pageHref, useRoute } from "@/lib/route";
 import { badgeOf, type PageRoute } from "@/lib/routes";
-import { usePages } from "@/components/lite/pages";
+import { hookKey, usePages } from "@/components/lite/pages";
 import { Badge } from "@/components/base/badges/badges";
 import { cx } from "@/utils/cx";
 import { activePageOf } from "./nav";
