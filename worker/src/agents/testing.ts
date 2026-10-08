@@ -7,3 +7,6 @@ export { registerQueues, dispatchAgent } from "../workflows/agents.js";
 export { wireGateway, extractJson } from "./model.js";
 export { setWebFetch, htmlToText, assertPublicUrl } from "./web.js";
 export { newId, stableId } from "./ids.js";
+// The knowledge base agents' pure parts (test/agents.mjs).
+export { passages, links, numbersMatch } from "./text.js";
+export { cleanChecks, decide, severityOf } from "./verdict.js";
