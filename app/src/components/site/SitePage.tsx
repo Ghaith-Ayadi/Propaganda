@@ -11,7 +11,7 @@ import { Input } from "@/components/base/input/input";
 import { NativeSelect } from "@/components/base/select/select-native";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { useWorkspace } from "@/components/Workspace";
-import { DeleteSiteSection, SiteIdentityFields } from "@/components/SettingsDialog";
+import { DeleteSiteSection, DesignSection, SiteIdentityFields } from "@/components/SettingsDialog";
 import { readableUrl, siteHost, sitePublicUrl } from "@/lib/siteUrl";
 import { useSetting } from "@/lib/settings";
 import { goPage, usePageRest } from "@/lib/route";
@@ -78,6 +78,12 @@ export function SitePage() {
             </Button>
           </div>
           {hosted && <ThemePicker current={settings.theme} />}
+          {/* UI assembly (#37): the themes branch's Design editor (#38), until the two theme pickers become one. */}
+          {hosted && (
+            <div className="mt-5 border-t border-secondary pt-4">
+              <DesignSection />
+            </div>
+          )}
         </Card>
 
         {hosted ? <AddressCard onSetUp={() => domainRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} /> : <PitchCard where={where} />}

@@ -392,6 +392,22 @@ function Field({
   );
 }
 
+/**
+ * The Design tab with its editor, for pages outside this dialog. UI assembly
+ * (#37) only: the 0.2 shell has no settings dialog, so the Site page mounts this.
+ */
+export function DesignSection() {
+  const [studio, setStudio] = useState(false);
+  if (studio) {
+    return (
+      <Suspense fallback={null}>
+        <DesignStudio onClose={() => setStudio(false)} />
+      </Suspense>
+    );
+  }
+  return <DesignTab onOpen={() => setStudio(true)} />;
+}
+
 /** Settings → Design: what the blog uses now, and the way into the Design editor. */
 function DesignTab({ onOpen }: { onOpen: () => void }) {
   const published = asDesign(useSetting<unknown>(DESIGN_KEY, null));
