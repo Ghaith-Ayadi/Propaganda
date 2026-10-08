@@ -95,11 +95,13 @@ cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month 
 
 Agents run as DBOS workflows in `worker/` (one Node process on the box, `propaganda-worker`
 in Bedrock's `compose/propaganda-supabase`, built from the same checkout as the schema).
-DBOS keeps its tables in its own database, `propaganda_dbos`; the worker only reads the
-app's. Start a run with `startForTenant(site, ...)`; a model call is a `modelStep()`, which
+DBOS keeps its tables in its own database, `propaganda_dbos`; the worker reads the app's
+through a read-only pool and writes only through its functions. Start a run with `startForTenant(site, ...)`; a model call is a `modelStep()`, which
 waits out the Claude subscription's usage limit instead of failing. Admin > Runs reads the
 worker's Runs API (`/worker/v1/`, superadmins only). Read `worker/README.md` before adding
-a workflow: changing one that has runs in flight needs `DBOS.patch()`.
+a workflow: changing one that has runs in flight needs `DBOS.patch()`. The knowledge base
+agents (Checker, Guardian) live in `worker/src/agents/`; the KB itself is described in
+`docs/knowledge-base.md`. Only the Guardian changes claims, through `kb_guardian_decide`.
 
 ## Telemetry: PostHog
 

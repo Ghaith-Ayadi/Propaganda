@@ -106,3 +106,17 @@ export async function dispatchAgent(name: AgentName, input: DispatchInput): Prom
   if (!handler) return undefined;
   return handler(input);
 }
+
+/**
+ * The same, under a run id derived from the work itself ("checker-<version>"):
+ * starting it again returns the run that already exists, so the dispatcher can
+ * ask as often as it likes and a piece of work runs once.
+ */
+export function startOnceForTenant<Args extends unknown[], R>(
+  site: string,
+  workflowID: string,
+  workflow: (...args: Args) => Promise<R>,
+  ...args: Args
+): Promise<WorkflowHandle<R>> {
+  return DBOS.startWorkflow(workflow, { workflowID, queueName: AGENT_QUEUE, workflowAttributes: { site } })(...args);
+}

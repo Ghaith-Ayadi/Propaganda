@@ -14,9 +14,10 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
-| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them |
+| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the knowledge base agents are `checker.ts`, `guardian.ts` (+ `verdict.ts`, its rule set `guardian-policy-v1.md`), `dispatch.ts`, `text.ts` and `ai.ts` (`ask()`, with canned answers for tests) |
+| `src/kb/` | `read.ts`: what the knowledge base agents read through the read-only pool |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
-| `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
+| `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres. The knowledge base agents end to end: `supabase/tests/kb_agents.mjs` on the laptop stack |
 
 ## Where things live
 
@@ -25,8 +26,10 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
   writes is in there, so it is not part of `supabase/migrations`, and losing it
   loses run history, not content. The nightly backup covers the `postgres`
   database only.
-- **The app's database** (`postgres`) is read, never written: `private.superadmins`
-  (who may use the Runs API) and `public.model_calls` (the cost log). Both come
+- **The app's database** (`postgres`) is read through a read-only pool:
+  `private.superadmins` (who may use the Runs API), `public.model_calls` (the
+  cost log) and the knowledge base. The agents write only through its functions
+  over PostgREST (below). Both come
   from other PRs; until they are on the box the API refuses everyone (no
   superadmins) and runs show no cost (no cost log). It connects as `postgres`
   with `POSTGRES_PASSWORD` from the stack's `.env`; `JWT_SECRET` checks tokens;
@@ -66,6 +69,40 @@ export const scoutRun = DBOS.registerWorkflow(scout, { name: "scout" });
   removing or reordering steps) breaks runs still in flight: guard the change with
   `DBOS.patch("name")`, or bump `WORKER_APP_VERSION` (old in-flight runs then stay
   where they are until resumed by hand on the old code).
+
+## The knowledge base agents
+
+Design: `docs/knowledge-base.md`. Both only work for tenants with a row in
+`kb_agent_sites` (Lite tenants never spend a token on them):
+
+```sql
+insert into public.kb_agent_sites (site) values ('<site id>');  -- checks posts written from now on
+```
+
+- **The dispatcher** (`agents/dispatch.ts`) polls every `WORKER_DISPATCH_SECONDS`
+  (60) for work: the newest version of a post in `done` or `published`, left
+  alone `WORKER_SETTLE_SECONDS` (600) and not read yet; re-check flags not read
+  yet; contests with no draft; open proposals. Each run's id comes from its work
+  (`checker-<version>`, `guardian-<proposal>-<round>`), so a piece of work runs
+  once however many ticks see it. A failed run stays failed until retried from
+  Admin > Runs.
+- **The Checker** (base model, `AGENT_MODEL_BASE`): links a post version to the
+  claims it relies on, opens a flag per conflict and closes the ones a newer
+  version fixed, checks numbers and quotes against the pages the post links,
+  and offers Remember on tenant facts no claim covers (`kb_checks.report`). It
+  also re-reads posts after a claim they rely on changed (cleared, or open with
+  a suggested fix) and drafts a person's contest into changes and an argument.
+- **The Guardian** (advanced model, `AGENT_MODEL_ADVANCED`): runs policy v1's
+  checks on a proposal (a site's own `kb_policies` text wins over the bundled
+  one) and the code decides the verdict (`verdict.ts`). It only ever writes
+  through `kb_guardian_decide`.
+- **Chat's hand-off** (`POST /agents/checker`, below): the post by id, or the
+  one whose title the task names, checked under the dispatcher's run id
+  `checker-<version>`; `422` when no post matches.
+- Writes go through the database's `kb_` functions with `rpc()` from
+  `backend.ts`; reads through the read-only pool (`src/kb/read.ts`).
+- `WORKER_FAKE_ANSWERS` (tests only) replaces every model call with canned
+  answers by job name and logs nothing.
 
 ## The usage limit
 
@@ -111,7 +148,7 @@ a file `main.ts` imports, and never adds a route of its own:
 export const scoutRun = DBOS.registerWorkflow(scout, { name: "scout" });   // scout(input: DispatchInput)
 registerAgent("scout", (input) => startForDispatch("scout", scoutRun, input));
 // Or start the run your own way and return its id (null: nothing to work on):
-registerAgent("checker", (input) => startCheckOnRequest(input.site, input.post, input.task));
+registerAgent("checker", startCheckOnRequest);   // agents/dispatch.ts
 ```
 
 ## Running it
