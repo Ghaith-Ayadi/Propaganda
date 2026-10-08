@@ -120,6 +120,7 @@ export const PAGES: PageRoute[] = [
     path: "site",
     description: "Your blog: address, custom domain and theme.",
     section: "main",
+    component: lazy(() => import("@/components/site/SitePage").then((m) => ({ default: m.SitePage }))),
   },
   {
     id: "chat",

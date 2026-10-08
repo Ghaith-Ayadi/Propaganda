@@ -199,7 +199,7 @@ function SiteTab() {
  * go, and its address is free again. Not a <Field>: a click on a label's text
  * would press the first button inside it.
  */
-function DeleteSiteSection() {
+export function DeleteSiteSection() {
   const { account, site, siteDeleted } = useWorkspace();
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
@@ -281,7 +281,7 @@ function DeleteSiteSection() {
 }
 
 /** Site name + address, editable by the site's owner only (lib/accounts.ts `updateSite`). */
-function SiteIdentityFields() {
+export function SiteIdentityFields() {
   const { account, site, refreshSite } = useWorkspace();
   const canEdit = site.role === "owner";
 

@@ -19,6 +19,11 @@
 //   SITE-SEED           a new site's first settings and collections failed
 //   SITE-SWITCH         switching account or site failed
 //   UPLOAD              an image upload failed
+//   DOMAIN-CHECK        the live check of a custom domain couldn't run
+//   DOMAIN-CONNECT      connecting a custom domain failed
+//   DOMAIN-REMOVE       removing a custom domain failed
+//   (the server's own, from api/domains.ts: DOMAIN-INVALID, DOMAIN-OFF,
+//    DOMAIN-TAKEN, DOMAIN-DNS, DOMAIN-SAVE, DOMAIN-OWNER)
 
 import { BackendError } from "@/lib/supabase";
 
