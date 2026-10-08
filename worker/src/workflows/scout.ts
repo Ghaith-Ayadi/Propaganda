@@ -34,8 +34,8 @@ import { MODELS } from "../agents/model.js";
 import { registerAgent, startForDispatch, startForTenantWithId, type DispatchInput } from "./agents.js";
 
 export const SCOUT_MODEL = process.env.SCOUT_MODEL ?? MODELS.base;
-/** UTC, Mondays at 06:00: the week's ideas are in before the Pitcher's batch. */
-export const SCOUT_CRON = process.env.SCOUT_CRON ?? "0 6 * * 1";
+/** UTC, Sundays at 06:00: the queue has a day to answer before the Pitcher's Monday 07:00 run. */
+export const SCOUT_CRON = process.env.SCOUT_CRON ?? "0 6 * * 0";
 /** News older than this isn't news (a week, and a day of slack for the queue). */
 const NEWS_MAX_AGE_MS = 8 * 86_400_000;
 /** How long the run sleeps between looks at the queue. */
