@@ -27,7 +27,12 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* 1. Volume */}
-      <Card title={GOAL_COPY.volume.title} subtitle={GOAL_COPY.volume.question} className="lg:col-span-2">
+      <Card
+        title={GOAL_COPY.volume.title}
+        subtitle={GOAL_COPY.volume.question}
+        className="lg:col-span-2"
+        footer="Pitched is how hard the Strategist is covering each topic. Rejected pitches don't count as done, so a topic you keep turning down shows here as a shortfall. A post in two topics counts in both, and once in the total."
+      >
         <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
           <div>
             <Headline value={fmtPct(pct(volume.published, t.volume.total))} unit={`${volume.published} of ${t.volume.total} planned posts`} />
@@ -68,16 +73,15 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
                 })}
               </tbody>
             </table>
-            <p className="mt-3 text-xs text-quaternary">
-              Pitched is how hard the Strategist is covering each topic. Rejected pitches don't count as done, so a topic you keep turning down shows here as a shortfall. A post in two topics counts in both, and once in the total.
-            </p>
           </div>
           <LineChart label="Volume, % of the quarter's planned posts" points={goals.scores.volume} target={100} pace {...chart} format={fmtPct} minMax={100} />
         </div>
       </Card>
 
       {/* 2. Consistency */}
-      <Card title={GOAL_COPY.consistency.title} subtitle={GOAL_COPY.consistency.question} aside={<Badge type="pill-color" color="success" size="sm">Always A</Badge>}>
+      <Card title={GOAL_COPY.consistency.title} subtitle={GOAL_COPY.consistency.question} aside={<Badge type="pill-color" color="success" size="sm">Always A</Badge>}
+        footer={'A at 95%, B 85%, C 70%, D 50%. "Not worth fixing" still counts against it.'}
+      >
         {consistency.contentGrade == null && consistency.kbGrade == null ? (
           <p className="py-6 text-sm text-tertiary">Nothing to check yet. Grades appear once posts are published and the knowledge base has claims.</p>
         ) : (
@@ -92,7 +96,6 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
                 <Headline value={consistency.kbGrade ?? "–"} unit={consistency.kbClean != null ? `${fmtPct(consistency.kbClean * 100)} settled` : "no claims yet"} />
               </div>
             </div>
-            <p className="mt-3 text-xs text-quaternary">A at 95%, B 85%, C 70%, D 50%. "Not worth fixing" still counts against it.</p>
             <div className="mt-4">
               <LineChart label="Content clean share, %" points={goals.scores.consistency} target={95} {...chart} format={fmtPct} minMax={100} height={130} />
             </div>
