@@ -135,6 +135,8 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
             className="flex-1"
             size="sm"
             type="password"
+            // Session replays record inputs before GA; keep the key out even when shown.
+            inputClassName="ph-no-capture"
             label={key ? "Replace with a new key" : "API key"}
             placeholder="sk-ant-…"
             autoComplete="off"

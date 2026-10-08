@@ -1,4 +1,4 @@
--- DRAFT: moves to supabase/migrations only on Ayadi's own go (repo rule). Not applied anywhere.
+-- Ayadi gave his go on 2026-10-08 ("4-8 YES", item 4: the BYOK key storage).
 --
 -- A tenant's own Anthropic key (BYOK). Which tenants run on Ayadi's own
 -- accounts instead is hardcoded in api/_ai/modelKeys.ts, not stored here.
