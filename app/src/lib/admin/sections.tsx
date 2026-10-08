@@ -7,6 +7,8 @@
 import type { ComponentType } from "react";
 import { Activity, File05, Rows01 } from "@untitledui/icons";
 import { ComingSoon } from "@/components/admin/ComingSoon";
+import { ConsumptionPage } from "@/components/admin/ConsumptionPage";
+import { RunsPage } from "@/components/admin/RunsPage";
 
 export interface AdminSection {
   id: string;
@@ -22,14 +24,14 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     title: "Runs",
     description: "Every agent workflow: what ran, for which tenant, and how it ended.",
     icon: Activity,
-    component: () => <ComingSoon title="Runs" />,
+    component: RunsPage,
   },
   {
     id: "consumption",
     title: "Consumption",
     description: "Model spend per tenant against budgets, at API prices.",
     icon: File05,
-    component: () => <ComingSoon title="Consumption" />,
+    component: ConsumptionPage,
   },
   {
     id: "logs",

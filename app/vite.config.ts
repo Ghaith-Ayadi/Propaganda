@@ -21,7 +21,17 @@ function gitSha(): string {
 // Handles /api/* routes in `vite dev` so the Gemini key stays server-side
 // (never in the browser bundle). In production these are Vercel functions.
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
+
+/** Which api/ file Vercel would run for a /api/chat path (file-system routing). */
+function chatRoute(pathname: string): string | null {
+  const p = pathname.replace(/\/+$/, "");
+  if (p === "/api/chat") return "chat/index.ts";
+  if (p === "/api/chat/remember") return "chat/remember.ts";
+  if (p === "/api/chat/conversations") return "chat/conversations/index.ts";
+  if (/^\/api\/chat\/conversations\/[^/]+$/.test(p)) return "chat/conversations/[id].ts";
+  if (/^\/api\/chat\/conversations\/[^/]+\/messages$/.test(p)) return "chat/conversations/[id]/messages.ts";
+  return null;
+}
 
 function localApiPlugin(serverEnv: Record<string, string>): Plugin {
   return {
@@ -82,75 +92,107 @@ function localApiPlugin(serverEnv: Record<string, string>): Plugin {
         }
       });
 
-      server.middlewares.use("/api/extract-quotes", async (req, res) => {
-        if (req.method !== "POST") {
-          res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Method not allowed" }));
-          return;
-        }
-
-        const apiKey = serverEnv["GEMINI_API_KEY"];
-        if (!apiKey) {
-          res.writeHead(503, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "GEMINI_API_KEY not set in .env.local" }));
-          return;
-        }
-
-        // Read request body
-        const body = await new Promise<string>((resolve) => {
-          let data = "";
-          req.on("data", (chunk: Buffer) => { data += chunk.toString(); });
-          req.on("end", () => resolve(data));
-        });
-
-        let content: string;
+      // /api/model-key (BYOK) runs the real function, loaded through Vite's SSR
+      // loader, so the Anthropic key card works on localhost. Needs api/'s
+      // packages (npm ci in api/) and SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and
+      // MODEL_KEY_SECRET in .env.local; the key it sends never reaches the bundle.
+      server.middlewares.use("/api/model-key", async (req, res) => {
         try {
-          const parsed = JSON.parse(body) as { content?: unknown };
-          content = typeof parsed.content === "string" ? parsed.content.trim() : "";
-          if (!content) throw new Error("empty");
-        } catch {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "content is required" }));
-          return;
-        }
-
-        const prompt = `You are extracting shareable pull-quotes from a piece of writing.
-
-Return the 3 most quotable verbatim spans from the article below.
-Rules:
-- Copy the text EXACTLY as it appears — do not change a single word, punctuation mark, or capitalisation.
-- Spans may be one or two sentences. Do not restrict to single sentences.
-- Return ONLY a raw JSON array of 3 strings. No keys, no explanation, no markdown.
-
-Article:
-${content}`;
-
-        try {
-          const gemRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-            },
+          for (const k of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "MODEL_KEY_SECRET", "SUPABASE_ANON_KEY"]) {
+            if (serverEnv[k] && !process.env[k]) process.env[k] = serverEnv[k];
+          }
+          const mod = (await server.ssrLoadModule(path.resolve(__dirname, "../api/model-key.ts"))) as Record<
+            string,
+            ((r: Request) => Promise<Response>) | undefined
+          >;
+          const handler = mod[req.method ?? "GET"];
+          if (!handler) {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed" }));
+            return;
+          }
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          const webRes = await handler(
+            new Request(`http://localhost/api/model-key${req.url && req.url !== "/" ? req.url : ""}`, {
+              method: req.method,
+              headers: req.headers as Record<string, string>,
+              body: chunks.length ? Buffer.concat(chunks) : undefined,
+            }),
           );
-
-          const gemData = await gemRes.json() as {
-            candidates?: { content?: { parts?: { text?: string }[] } }[];
-          };
-          const raw = gemData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-          const cleaned = raw.replace(/```json|```/g, "").trim();
-          const parsed = JSON.parse(cleaned) as unknown[];
-          const candidates = parsed.filter((x): x is string => typeof x === "string");
-          const quotes = candidates.filter((q) => content.includes(q));
-
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ quotes }));
+          res.writeHead(webRes.status, { "Content-Type": "application/json" });
+          res.end(await webRes.text());
         } catch (err) {
           res.writeHead(502, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Gemini call failed", detail: String(err) }));
+          // Never echo a pasted key back, even in dev.
+          const detail = String(err).replace(/sk-ant-[A-Za-z0-9_-]+/g, "sk-ant-…");
+          res.end(JSON.stringify({ error: "model-key failed in dev", detail }));
         }
+      });
+
+      // /api/chat/* — the Chat agent's functions, run in-process so the Chat
+      // page works on localhost. Each request loads the function module through
+      // Vite (edits apply without a restart) and bridges Node's request to the
+      // Web Request the function expects; the reply streams through as it comes.
+      // The model is still reached only through the gateway those functions use.
+      server.middlewares.use("/api/chat", async (req, res) => {
+        const url = new URL(req.originalUrl ?? req.url ?? "/", "http://localhost");
+        const file = chatRoute(url.pathname);
+        const method = req.method ?? "GET";
+        if (!file) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Not found" }));
+          return;
+        }
+        // Server-only keys from .env files, for the functions (never the bundle).
+        for (const [k, v] of Object.entries(serverEnv)) if (process.env[k] === undefined) process.env[k] = v;
+        try {
+          const mod = (await server.ssrLoadModule(path.resolve(__dirname, "../api", file))) as Record<
+            string,
+            ((r: Request) => Promise<Response>) | undefined
+          >;
+          const handler = mod[method];
+          if (!handler) {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed" }));
+            return;
+          }
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          // The browser leaving (Stop, a closed tab) aborts the function's request.
+          const gone = new AbortController();
+          res.on("close", () => {
+            if (!res.writableFinished) gone.abort();
+          });
+          const response = await handler(
+            new Request(url, {
+              method,
+              headers: req.headers as Record<string, string>,
+              body: method === "GET" || method === "HEAD" ? undefined : Buffer.concat(chunks),
+              signal: gone.signal,
+            }),
+          );
+          res.writeHead(response.status, Object.fromEntries(response.headers));
+          if (!response.body) return void res.end();
+          const reader = response.body.getReader();
+          gone.signal.addEventListener("abort", () => void reader.cancel().catch(() => {}), { once: true });
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            res.write(value);
+          }
+          res.end();
+        } catch (err) {
+          if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Function failed", detail: String(err) }));
+        }
+      });
+
+      // No model call outside the cost-logging gateway (api/_ai/gateway.ts): the
+      // dev server does not call a model itself. Run `vercel dev` to try quotes.
+      server.middlewares.use("/api/extract-quotes", (_req, res) => {
+        res.writeHead(501, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Quote extraction runs through the cost-logging gateway: use vercel dev" }));
       });
     },
   };

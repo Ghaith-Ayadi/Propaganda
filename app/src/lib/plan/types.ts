@@ -124,5 +124,7 @@ export const BRIEF_STATUS_META: Record<BriefStatus, BriefStatusMeta> = {
 };
 
 export function statusMeta(s: BriefStatus): BriefStatusMeta {
-  return BRIEF_STATUS_META[s];
+  // The agents add statuses this board doesn't show yet ("pitched",
+  // "scheduled", "rejected"): read them as backlog rather than break.
+  return BRIEF_STATUS_META[s] ?? BRIEF_STATUS_META.backlog;
 }

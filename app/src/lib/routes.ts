@@ -28,6 +28,7 @@ import {
   Settings01,
   Target04,
 } from "@untitledui/icons";
+import { useInboxBadge } from "@/components/inbox/badge";
 import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
 import { usePipelineCount } from "@/lib/pipeline/store";
 
@@ -83,8 +84,7 @@ export const PAGES: PageRoute[] = [
     path: "home",
     description: "This week, the goals and the two grades at a glance.",
     section: "main",
-    // The 0.1 dashboard until the Home thread lands.
-    component: lazy(() => import("@/components/HomePage").then((m) => ({ default: m.HomePage }))),
+    component: lazy(() => import("@/components/home/HomePage").then((m) => ({ default: m.HomePage }))),
   },
   {
     id: "inbox",
@@ -93,6 +93,8 @@ export const PAGES: PageRoute[] = [
     path: "inbox",
     description: "Flags, pitches, knowledge and reviews waiting on you.",
     section: "main",
+    component: lazy(() => import("@/components/inbox/InboxPage").then((m) => ({ default: m.InboxPage }))),
+    useBadge: useInboxBadge,
   },
   {
     id: "pipeline",
