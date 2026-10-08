@@ -30,13 +30,13 @@ export function CardHeader({
   icon?: ReactNode;
 }) {
   return (
-    <header className="flex items-start gap-3 border-b border-secondary px-5 py-4">
+    <header className="flex flex-wrap items-start gap-3 border-b border-secondary px-5 py-4">
       {icon && <div className="mt-0.5 shrink-0 text-fg-quaternary">{icon}</div>}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[12rem] flex-1">
         <h3 className="text-md font-semibold text-primary">{title}</h3>
         {description && <p className="mt-0.5 text-sm text-tertiary">{description}</p>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

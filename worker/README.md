@@ -14,9 +14,11 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
-| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them |
+| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
+| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the knowledge base agents are `checker.ts`, `guardian.ts` (+ `verdict.ts`, its rule set `guardian-policy-v1.md`), `dispatch.ts`, `text.ts` and `ai.ts` (`ask()`, with canned answers for tests) |
+| `src/kb/` | `read.ts`: what the knowledge base agents read through the read-only pool |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
-| `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
+| `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres. The knowledge base agents end to end: `supabase/tests/kb_agents.mjs` on the laptop stack |
 
 ## Where things live
 
@@ -25,8 +27,10 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
   writes is in there, so it is not part of `supabase/migrations`, and losing it
   loses run history, not content. The nightly backup covers the `postgres`
   database only.
-- **The app's database** (`postgres`) is read, never written: `private.superadmins`
-  (who may use the Runs API) and `public.model_calls` (the cost log). Both come
+- **The app's database** (`postgres`) is read through a read-only pool:
+  `private.superadmins` (who may use the Runs API), `public.model_calls` (the
+  cost log) and the knowledge base. The agents write only through its functions
+  over PostgREST (below). Both come
   from other PRs; until they are on the box the API refuses everyone (no
   superadmins) and runs show no cost (no cost log). It connects as `postgres`
   with `POSTGRES_PASSWORD` from the stack's `.env`; `JWT_SECRET` checks tokens;
@@ -66,6 +70,152 @@ export const scoutRun = DBOS.registerWorkflow(scout, { name: "scout" });
   removing or reordering steps) breaks runs still in flight: guard the change with
   `DBOS.patch("name")`, or bump `WORKER_APP_VERSION` (old in-flight runs then stay
   where they are until resumed by hand on the old code).
+
+## The Pitcher and the Writer
+
+Specs: `reviews/agents.md` and `agents/strategist-cold-start-and-pacing.md` in
+the project files. Schema: `supabase/migrations/20261008000030_pitch_and_write.sql`.
+
+**Ideas** (`agent_ideas`) are what the Listener, the Scout, Chat and people
+hand the Pitcher (`ideas.ts`, reads and writes in `store.ts`): a title, a summary, an origin (calls, search, news, watched,
+team, plan) and the evidence. Producers only insert, with `handOffIdeas()`; a `key` (the Scout's `scout:<site>:<dedupe>`) never
+adds the same idea twice;
+the Pitcher settles each one as pitched (with its brief) or rejected (with a
+reason), and keeps both.
+
+**The Pitcher** (`pitcher`) judges ideas (25 per call: topics, timeliness,
+gaps, overlaps), then code turns that into reasons from the goals (`fit.ts`,
+the same rule as the pipeline UI's Strong / Fair / Weak). No reason: rejected,
+"No reason yet". Otherwise the strongest go out, up to the run's `max`: each a
+full brief in `briefs` with status `pitched`, angle, audience, outline, sources
+from a web search, fit and goal effects. Searches are charged and logged like
+model calls. Each batch reads what reviewers said about the last (rejections
+and notes). `draftTop: 3` has the Writer draft the three strongest before
+anyone approves them (launch day one). Goals come from the run's input until
+the Goals tables exist (`goals.ts`, `readGoals()`).
+
+**Batches** (`pitcher:batch`, `batches.ts`). Every idea, from the plan, the
+Scout, the Listener or a person, waits for a batch and competes for its slots;
+every approved brief counts toward the quarter's target. A batch's quota
+counts **approved** briefs (`content_batches`): the Pitcher over-pitches (two
+pitches per slot, then the tenant's real approval rate after 6 decisions), a
+batch still short once every pitch is decided is topped up the next morning,
+and once approvals reach the target the open batches are cancelled. What's
+left is always target minus approved. The cadence (`agent_settings.batch_cadence`)
+sizes the batches: `weekly` by default (equal weekly batches through the
+quarter's first two months, a double first batch) or `flood` (everything at
+once). Without goals yet, the plan's size stands in for the target, and with
+no plan either a batch is 3. A schedule (`PITCHER_BATCH_CRON`, every day 07:00
+UTC) runs each tenant's top-ups and, once a week, its next batch. "Send me the
+next batch" in Chat sends it now; the plan arriving sends the quarter's first.
+A person's own ask in Chat is pitched now, outside the batches.
+
+**Taste** (`taste.ts`, the `taste_log` and `taste_profiles` tables). Every
+decision on a pitch or a draft is a row in the tenant's taste log, written by
+database triggers (a pitch approved, rejected or pushed; a reviewer's first
+edit after the Writer's version) and by the app (notes, "not now"). Before
+each batch the Pitcher rewrites a short taste summary from new decisions and
+reads it with the recent decisions and the tenant's own notes. Every idea is
+checked against everything ever pitched or published (`similarity()` on
+title keywords): a near-duplicate of a rejected pitch is dropped unless
+something material changed, and then the brief says what; one of a published
+post becomes an update suggestion. Each pitch carries one line of what it
+learned (`briefs.learned`).
+
+**The Writer** (`writer`) drafts an approved brief (`todo` or `in_progress`):
+- First job on a tenant with no voice guide: writes one (`writer:voice-guide`)
+  from its published posts, or the default voice when it has fewer than two.
+  `VOICE_FROM=<tenant>:<site>` takes a tenant's voice from another site's posts
+  (Propaganda's own tenant from Verbatim). Once a person edits the guide, the
+  agent never writes it again.
+- Researches (three searches, up to six pages read), reads the knowledge base
+  (`kb_search`; an empty base when it isn't on the server), writes the post
+  (advanced model), fixes "That's not X. It's Y." sentences once, and records
+  what's left (unsourced numbers, links to pages it didn't read, facts it
+  needed and didn't have) on the version for the reviewer.
+- Writes into the empty post the pipeline made on approval, only while it is
+  still empty, or a new draft post. Version 1 is `created_by: agent:writer`. The
+  brief goes to `in_review`.
+- `writer:revise` turns review notes into a suggested version in the post's
+  history. It never changes the post itself.
+- Reads how reviewers edited its recent drafts before writing (`edits.ts`),
+  and each morning `writer:voice-suggest` turns edits that repeat across two
+  or more drafts into a suggested change in `voice_guides.suggestion`. The
+  tenant applies it to the guide, or doesn't.
+
+**From Chat**: `pitcher` and `writer` are registered for `POST /agents/:name`.
+The Pitcher turns the request into ideas (origin team) and pitches them; the
+Writer finds the approved brief whose title matches the request.
+
+**Settings** (the stack's `.env`): `SUPABASE_URL` (the compose file sets the
+public API host), `SERVICE_ROLE_KEY` (already there), whatever the gateway
+needs to reach Claude (the plan is Ayadi's Claude Max subscription; the
+gateway's resolver doesn't have that path yet and sends Claude ids to the AI
+Gateway), `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` for web search (without
+them the agents work from what they were given), and optionally
+`AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `VOICE_FROM`, `PITCHER_BATCH_CRON`.
+## The knowledge base agents
+
+Design: `docs/knowledge-base.md`. Both only work for tenants with a row in
+`kb_agent_sites` (Lite tenants never spend a token on them):
+
+```sql
+insert into public.kb_agent_sites (site) values ('<site id>');  -- checks posts written from now on
+```
+
+- **The dispatcher** (`agents/dispatch.ts`) polls every `WORKER_DISPATCH_SECONDS`
+  (60) for work: the newest version of a post in `done` or `published`, left
+  alone `WORKER_SETTLE_SECONDS` (600) and not read yet; re-check flags not read
+  yet; contests with no draft; open proposals. Each run's id comes from its work
+  (`checker-<version>`, `guardian-<proposal>-<round>`), so a piece of work runs
+  once however many ticks see it. A failed run stays failed until retried from
+  Admin > Runs.
+- **The Checker** (base model, `AGENT_MODEL_BASE`): links a post version to the
+  claims it relies on, opens a flag per conflict and closes the ones a newer
+  version fixed, checks numbers and quotes against the pages the post links,
+  and offers Remember on tenant facts no claim covers (`kb_checks.report`). It
+  also re-reads posts after a claim they rely on changed (cleared, or open with
+  a suggested fix) and drafts a person's contest into changes and an argument.
+- **The Guardian** (advanced model, `AGENT_MODEL_ADVANCED`): runs policy v1's
+  checks on a proposal (a site's own `kb_policies` text wins over the bundled
+  one) and the code decides the verdict (`verdict.ts`). It only ever writes
+  through `kb_guardian_decide`.
+- **Chat's hand-off** (`POST /agents/checker`, below): the post by id, or the
+  one whose title the task names, checked under the dispatcher's run id
+  `checker-<version>`; `422` when no post matches.
+- Writes go through the database's `kb_` functions with `rpc()` from
+  `backend.ts`; reads through the read-only pool (`src/kb/read.ts`).
+- `WORKER_FAKE_ANSWERS` (tests only) replaces every model call with canned
+  answers by job name and logs nothing.
+
+## The Listener
+
+Design and the one-time app setup: `docs/listener.md`. Code: `listener/` and
+`workflows/listener.ts`. It reads call transcripts and Slack threads, hands
+ideas to the Pitcher and opens one `kb_proposals` row per source for the
+Guardian (left `open`: the dispatcher above picks it up). Like the KB agents it
+only spends for tenants in `kb_agent_sites`.
+
+- **Every source ends in `ingest()`** (`listener/ingest.ts`): one `kb_sources`
+  row, then the `listener-<source>` run on the agents queue. The source id
+  comes from the text, so the same transcript twice is one run. From inside a
+  connector's workflow use `ingestInWorkflow()`: DBOS forbids starting a
+  workflow from inside a step.
+- **Connections** live in `private.listener_connections`, read through the
+  pool and written through `listener_connection_save` / `_revoke`. API keys and
+  tokens are sealed with `LISTENER_SECRET_KEY`; ingest URL tokens are stored as
+  a hash.
+- **Routes** (`listener/routes.ts`, checked before the superadmin gate, each
+  with its own credential): `POST /ingest/<token>`, `POST /hooks/<provider>`
+  (signed by the provider), `GET /oauth/<provider>/callback`, and the
+  Connections routes for a tenant's members (their Supabase token).
+- **Schedules**: the Granola sweep (hourly), the Meet poll (every 15 minutes),
+  the Teams subscription renewal (every 6 hours).
+- **Chat's hand-off** (`POST /agents/listener`): a pasted transcript, read like
+  an ingest URL post; `422` when the task holds no transcript.
+- `LISTENER_MODEL` overrides the model (default `AGENT_MODEL_BASE`).
+- Tests: `test/listener.mjs` (no database) and `test/listener-e2e.mjs`, which
+  needs pgvector and PostgREST (`POSTGREST_BIN`; it skips without).
 
 ## The usage limit
 
@@ -111,7 +261,7 @@ a file `main.ts` imports, and never adds a route of its own:
 export const scoutRun = DBOS.registerWorkflow(scout, { name: "scout" });   // scout(input: DispatchInput)
 registerAgent("scout", (input) => startForDispatch("scout", scoutRun, input));
 // Or start the run your own way and return its id (null: nothing to work on):
-registerAgent("checker", (input) => startCheckOnRequest(input.site, input.post, input.task));
+registerAgent("checker", startCheckOnRequest);   // agents/dispatch.ts
 ```
 
 ## Running it
