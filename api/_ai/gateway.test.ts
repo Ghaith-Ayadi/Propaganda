@@ -11,6 +11,8 @@ let kills = 0;
 // model_keys rows by site (sealed with encryptKey), and the PATCHes the gateway sends.
 const keyRows: Record<string, Record<string, unknown>> = {};
 const keyMarks: Record<string, unknown>[] = [];
+// model_credentials pins by site.
+const pins: Record<string, string> = {};
 const server = createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
@@ -20,6 +22,10 @@ const server = createServer((req, res) => {
     if (req.url?.startsWith("/rest/v1/rpc/cost_engage_kill")) { kills++; return void res.end("null"); }
     if (req.url?.startsWith("/rest/v1/model_prices"))
       return void res.end(JSON.stringify([{ input_per_mtok: "1", output_per_mtok: "2", cache_read_per_mtok: "0", cache_write_per_mtok: "0" }]));
+    if (req.url?.startsWith("/rest/v1/model_credentials")) {
+      const site = /site=eq\.([a-z0-9]+)/.exec(req.url)?.[1] ?? "";
+      return void res.end(JSON.stringify(pins[site] ? [{ credential: pins[site] }] : []));
+    }
     if (req.url?.startsWith("/rest/v1/model_keys")) {
       const site = /site=eq\.([a-z0-9]+)/.exec(req.url)?.[1] ?? "";
       if (req.method === "PATCH") { keyMarks.push(JSON.parse(body)); return void res.end("[]"); }
@@ -204,6 +210,74 @@ test("Test: green on an answer, red with Anthropic's words, and the key never in
   assert.match((r as { error: string }).error, /out of credit/);
   assert.ok(!JSON.stringify(r).includes(KEY));
   assert.ok(!JSON.stringify(calls).includes(KEY));
+});
+
+// ---- which credential a tenant is pinned to ----
+
+const pinnedSite = "siteccccccccccc";
+
+test("pinned to a pool: runs on that server key, logged with it, and our budget applies", async () => {
+  pins[pinnedSite] = "pool:axoniq";
+  process.env.ANTHROPIC_KEY_AXONIQ = "sk-ant-api03-axoniqaxoniqaxoniqaxoniq";
+  gate = open; calls.length = 0;
+  let used = "", ours = 0;
+  setModelResolver(() => { ours++; return ok; });
+  g.setTenantModelResolver((k) => { used = k; return ok; });
+  await callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(used, process.env.ANTHROPIC_KEY_AXONIQ);
+  assert.equal(ours, 0);
+  assert.equal(calls[0].credential, "pool:axoniq");
+  assert.equal(calls[0].paid_by, undefined);
+
+  gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 };
+  await assert.rejects(callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" }), BudgetError);
+});
+
+test("a pool pin beats a saved key, and a missing pool key stops the call without falling back", async () => {
+  pins[pinnedSite] = "pool:axoniq";
+  const { encryptKey } = await import("./modelKeys");
+  keyRows[pinnedSite] = { secret: encryptKey(pinnedSite, KEY), last4: "1234", status: "ok", error: "", checked: "x" };
+  gate = open;
+  let used = "";
+  g.setTenantModelResolver((k) => { used = k; return ok; });
+  await callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(used, process.env.ANTHROPIC_KEY_AXONIQ);
+
+  delete process.env.ANTHROPIC_KEY_AXONIQ; calls.length = 0;
+  let ours = 0;
+  setModelResolver(() => { ours++; return ok; });
+  await assert.rejects(
+    callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" }),
+    (e: Error) => e instanceof g.TenantKeyError && /ANTHROPIC_KEY_AXONIQ/.test(e.message),
+  );
+  assert.equal(ours, 0);
+  assert.equal(calls.length, 0);
+  delete keyRows[pinnedSite];
+});
+
+test("pinned to its own key with none saved: stops, never ours", async () => {
+  pins[pinnedSite] = "own";
+  gate = open;
+  let ours = 0;
+  setModelResolver(() => { ours++; return ok; });
+  await assert.rejects(callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" }), g.TenantKeyError);
+  assert.equal(ours, 0);
+});
+
+test("default: ANTHROPIC_KEY_DEFAULT when set, else the AI Gateway", async () => {
+  delete pins[pinnedSite];
+  gate = open;
+  let used = "", ours = 0;
+  setModelResolver(() => { ours++; return ok; });
+  g.setTenantModelResolver((k) => { used = k; return ok; });
+  await callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(ours, 1);
+  process.env.ANTHROPIC_KEY_DEFAULT = "sk-ant-api03-defaultdefaultdefaultdefault";
+  calls.length = 0;
+  await callModel({ ...opts, site: pinnedSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(used, process.env.ANTHROPIC_KEY_DEFAULT);
+  assert.equal(calls[0].credential, undefined);
+  delete process.env.ANTHROPIC_KEY_DEFAULT;
 });
 
 test.after(() => server.close());

@@ -31,6 +31,7 @@ function lightOf(key: KeyInfo | null, red: string | null): Light {
 
 export function ModelKeyCard({ site = siteId() }: { site?: string }) {
   const [key, setKey] = useState<KeyInfo | null>(null);
+  const [managed, setManaged] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState<"test" | "retest" | "remove" | null>(null);
@@ -40,7 +41,11 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
   useEffect(() => {
     let live = true;
     loadKey(site)
-      .then((r) => live && setKey(r.key))
+      .then((r) => {
+        if (!live) return;
+        setKey(r.key);
+        setManaged(r.managed === true);
+      })
       .catch((err) => {
         reportError("model-key load", err);
         if (live) toast.add({ type: "error", title: userMessage(err) });
@@ -123,7 +128,13 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
           </p>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        {managed && (
+          <p className="text-sm text-secondary">
+            Propaganda runs this tenant on an Anthropic account it manages for you, so a key saved here would not be used.
+          </p>
+        )}
+
+        <div className={cx("flex flex-col gap-2 sm:flex-row sm:items-end", managed && "hidden")}>
           <Input
             className="flex-1"
             size="sm"

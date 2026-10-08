@@ -163,3 +163,35 @@ export async function removeTenantKey(rest: Rest, site: string): Promise<void> {
   const res = await rest(`/model_keys?site=eq.${enc(site)}&provider=eq.${PROVIDER}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`model_keys delete answered ${res.status}`);
 }
+
+// ---- which credential a tenant runs on ----
+//
+// model_credentials pins a tenant to one credential, set by a superadmin
+// (public.model_credential_set): 'default' (Propaganda's own), 'own' (the
+// tenant's saved key) or 'pool:<name>' (a key the server holds in
+// ANTHROPIC_KEY_<NAME>, such as a separate Console account for one customer).
+// No row: the tenant's saved key when it has one, else the default.
+// Whatever it resolves to, there is no fallback to another credential.
+
+export type Credential = "default" | "own" | `pool:${string}`;
+
+export function isCredential(v: string): v is Credential {
+  return v === "default" || v === "own" || /^pool:[a-z0-9_]{1,40}$/.test(v);
+}
+
+/** The tenant's pinned credential, or null when it has none (or the table isn't on this server). */
+export async function readCredential(rest: Rest, site: string): Promise<Credential | null> {
+  const res = await rest(`/model_credentials?site=eq.${enc(site)}&select=credential&limit=1`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { code?: string };
+    if (missing(res, body)) return null;
+    throw new Error(`model_credentials read answered ${res.status}`);
+  }
+  const [row] = (await res.json()) as { credential: string }[];
+  return row && isCredential(row.credential) ? row.credential : null;
+}
+
+/** A server-held key: ANTHROPIC_KEY_<NAME> ('pool:axoniq' reads ANTHROPIC_KEY_AXONIQ, 'default' ANTHROPIC_KEY_DEFAULT). */
+export function serverKey(name: string): string | null {
+  return process.env[`ANTHROPIC_KEY_${name.toUpperCase()}`] || null;
+}

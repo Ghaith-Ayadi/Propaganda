@@ -97,7 +97,11 @@ key", through `api/model-key.ts`; owners set or remove it). It is stored only as
 back to a browser, a log or a message. With a key saved, every `anthropic/` call for that
 tenant runs on it, logged `paid_by = 'tenant'` and outside our budgets; there is never a
 fallback to our account. A failed key stalls the tenant's runs (`tenantKeyOf` in
-`worker/src/limits.ts`) until it works again.
+`worker/src/limits.ts`) until it works again. Which credential a tenant runs on is pinned server-side
+in `model_credentials` (superadmin, `model_credential_set`): `default` (`ANTHROPIC_KEY_DEFAULT`,
+else the AI Gateway), `own`, or `pool:<name>` (`ANTHROPIC_KEY_<NAME>`, e.g. Axoniq's own
+Console account). `routeModel()` is the one place this is decided. Claude subscription
+(Pro/Max) logins are never used for agents: Anthropic's terms allow API keys only for products.
 
 ## Agents: the DBOS worker
 
