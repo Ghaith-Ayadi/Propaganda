@@ -6,7 +6,7 @@ six themes as they are; `/author` (with `feed`, `rss`, `search` and `tags` reser
 Verbatim keeps its look as a custom theme (site data), not a public one, because of its
 fonts. This document is kept as the design record.
 Tracking: Notion task "Blog templates and themes, Part 1" (Propaganda → Tasks).
-Prototype: `prototype/dist/prototype.html` in this folder (open it in a browser; it is
+Prototype: `prototype/dist/prototype.html`, built by `python3 prototype/build.py` (open it in a browser; it is
 self-contained), also published as a private artifact linked from the Notion task.
 
 Part 1 covers the templates and six built-in themes. Custom themes (the Part 2 skill,
@@ -751,5 +751,5 @@ someone has named by then.
 | `prototype/harness.js` | The conformance harness |
 | `prototype/fuzz.js` | Random themes for the compiler and the harness |
 | `prototype/build.py` | Builds `dist/prototype.html` (the self-contained prototype) and `dist/embed.html` (the harness entry) |
-| `prototype/fonts/` | The OFL font subsets and their licences |
+| `app/public/fonts/pg/` | The OFL font subsets and their licences (the prototype build reads them from the app) |
 | `screens/` | Screenshots used above |
