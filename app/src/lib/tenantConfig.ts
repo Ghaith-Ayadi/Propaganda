@@ -109,6 +109,53 @@ export const WRITER_RULE = {
   instead: "Say it as a comparison: “This is much more of a maintenance job than it is the ol' art of writing.”",
 };
 
+// ---- Taste and voice suggestions (placeholder until #43's tables are wired) ----
+// Both are memory-only: taste and edit patterns come from the writing, and
+// app_settings is public. Swap the bodies for taste_profiles / voice_guides.suggestion.
+
+export interface TasteProfile {
+  /** Written by the Pitcher each batch. Read-only for people. */
+  summary: string;
+  updatedAt: string | null;
+  /** The signed-in member's own notes. Each member edits only theirs. */
+  myNotes: string;
+}
+
+export function useTaste(): [TasteProfile, (notes: string) => void] {
+  const [profile, setProfile] = useMemoryState<TasteProfile>("taste.profile", { summary: "", updatedAt: null, myNotes: "" });
+  return [profile, (notes) => setProfile({ ...profile, myNotes: notes })];
+}
+
+export interface VoiceSuggestion {
+  /** What the Writer noticed in repeated reviewer edits. */
+  reason: string;
+  /** The line it would add to the guide. */
+  addition: string;
+  editCount: number;
+}
+
+/** Never changes the guide until applied. Dismiss clears it. */
+export function useVoiceSuggestion() {
+  const [suggestion, setSuggestion] = useMemoryState<VoiceSuggestion | null>("voice.suggestion", null);
+  const [guide, setGuide] = useVoiceGuide();
+  return {
+    suggestion,
+    apply: () => {
+      if (!suggestion) return;
+      setGuide(guide.trim() ? `${guide.trimEnd()}\n${suggestion.addition}` : suggestion.addition);
+      setSuggestion(null);
+    },
+    dismiss: () => setSuggestion(null),
+    /** Lets the empty state show what a suggestion looks like. Placeholder only. */
+    showExample: () =>
+      setSuggestion({
+        reason: "Reviewers shortened the opening sentence in 4 of the last 5 drafts.",
+        addition: "Open with the point in one short sentence; no warm-up.",
+        editCount: 4,
+      }),
+  };
+}
+
 // ---- Knowledge ------------------------------------------------------------
 
 export interface SourceTier { id: string; name: string; what: string }
