@@ -25,6 +25,10 @@
 //   RUN-RETRY           retrying a run failed
 //   RUN-CANCEL          cancelling a run failed
 //   RUN-DEMO            starting a demo run failed
+//   MODEL-KEY-LOAD      the tenant's own Anthropic key status couldn't be loaded
+//   MODEL-KEY-SAVE      testing a new Anthropic key failed on our side (not a red test)
+//   MODEL-KEY-TEST      re-testing the saved Anthropic key failed on our side
+//   MODEL-KEY-REMOVE    removing the saved Anthropic key failed
 
 import { BackendError } from "@/lib/supabase";
 

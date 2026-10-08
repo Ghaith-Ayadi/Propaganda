@@ -7,7 +7,7 @@
 import { DBOS, type WorkflowStatus, type WorkflowStatusString } from "@dbos-inc/dbos-sdk";
 import type { Pool } from "pg";
 import { HttpError } from "./auth.js";
-import { STALL_EVENT, usageLimitOf, type Stall } from "./limits.js";
+import { STALL_EVENT, tenantKeyOf, usageLimitOf, type Stall } from "./limits.js";
 
 type StepInfo = NonNullable<Awaited<ReturnType<typeof DBOS.listWorkflowSteps>>>[number];
 
@@ -190,13 +190,13 @@ export async function listRuns(db: Pool, q: ListQuery): Promise<{ runs: RunSumma
 }
 
 function stepState(s: StepInfo): StepState {
-  if (s.error) return usageLimitOf(s.error) !== null ? "stalled" : "failed";
+  if (s.error) return usageLimitOf(s.error) !== null || tenantKeyOf(s.error) !== null ? "stalled" : "failed";
   return s.completedAtEpochMs ? "done" : "running";
 }
 
 /** Where a fork should start: the step that failed, so the ones before it (and what they cost) are kept. */
 function forkStep(steps: StepInfo[]): number {
-  const failed = steps.find((s) => s.error && usageLimitOf(s.error) === null);
+  const failed = steps.find((s) => s.error && usageLimitOf(s.error) === null && tenantKeyOf(s.error) === null);
   if (failed) return failed.functionID;
   // The workflow's own code threw after its last step: replay from that step.
   return steps.length ? Math.max(...steps.map((s) => s.functionID)) : 0;

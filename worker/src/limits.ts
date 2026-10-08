@@ -18,7 +18,10 @@ import { DBOS } from "@dbos-inc/dbos-sdk";
 export const STALL_EVENT = "stall";
 
 export interface Stall {
-  reason: "usage-limit";
+  /** usage-limit: our Claude subscription. tenant-key: the tenant's own Anthropic key failed (BYOK). */
+  reason: "usage-limit" | "tenant-key";
+  /** For tenant-key: Anthropic's answer, which the tenant sees in Settings too. */
+  message?: string;
   /** The step that hit the limit. */
   step: string;
   /** Epoch ms: when the run stopped, and when it tries again. */
@@ -28,6 +31,8 @@ export interface Stall {
 
 /** No reset time in the answer: try again after this long. */
 const DEFAULT_WAIT_MS = 30 * 60 * 1000;
+/** A tenant's key that failed is tried again this often, until it works or is replaced. */
+const KEY_RETRY_MS = Number(process.env.WORKER_KEY_RETRY_MS ?? 15 * 60 * 1000);
 /** Wake a minute after the announced reset, not on the dot. */
 const SLACK_MS = Number(process.env.WORKER_STALL_SLACK_MS ?? 60 * 1000);
 
@@ -85,6 +90,30 @@ export function usageLimitOf(err: unknown, depth = 0): number | null {
   return usageLimitOf(e.cause, depth + 1);
 }
 
+/**
+ * The gateway's TenantKeyError (api/_ai/modelKeys.ts), by shape, also after
+ * DBOS has stored and reloaded it: when to try again and what Anthropic said.
+ * Null for anything else.
+ */
+export function tenantKeyOf(err: unknown, depth = 0): { retryAt: number | null; message: string } | null {
+  if (!err || typeof err !== "object" || depth > 5) return null;
+  const e = err as Record<string, unknown>;
+  const message = String(e.message ?? "");
+  if (e.name === "TenantKeyError" || message.startsWith("TENANT-KEY ")) {
+    return {
+      retryAt: typeof e.retryAt === "number" ? e.retryAt : null,
+      message: message.replace(/^TENANT-KEY /, ""),
+    };
+  }
+  if (Array.isArray(e.errors)) {
+    for (const inner of e.errors) {
+      const r = tenantKeyOf(inner, depth + 1);
+      if (r) return r;
+    }
+  }
+  return tenantKeyOf(e.cause, depth + 1);
+}
+
 // Once one call has hit the limit, every other step in this process knows
 // until when, and stalls without spending a request to find out.
 let limitedUntil = 0;
@@ -105,7 +134,8 @@ export interface ModelStepOptions {
 /**
  * Run `fn`, a step that calls a model, inside a workflow. Errors are retried
  * like any step; a usage limit is waited out instead, as many times as it
- * takes. Each stalled attempt stays in the run's history as its own step, so
+ * takes, and so is a tenant's own key that failed (it is tried again every
+ * WORKER_KEY_RETRY_MS, and never replaced by ours). Each stalled attempt stays in the run's history as its own step, so
  * the Runs page can show when it happened.
  */
 export async function modelStep<T>(name: string, fn: () => Promise<T>, opts: ModelStepOptions = {}): Promise<T> {
@@ -129,17 +159,25 @@ export async function modelStep<T>(name: string, fn: () => Promise<T>, opts: Mod
           retriesAllowed: true,
           maxAttempts: opts.maxAttempts ?? 3,
           intervalSeconds: opts.intervalSeconds ?? 5,
-          shouldRetry: (err) => usageLimitOf(err) === null,
+          shouldRetry: (err) => usageLimitOf(err) === null && tenantKeyOf(err) === null,
         },
       );
     } catch (err) {
-      const resetsAt = usageLimitOf(err);
-      if (resetsAt === null) throw err;
       const now = await DBOS.now();
-      const until = Math.max(resetsAt, now) + SLACK_MS;
-      const stall: Stall = { reason: "usage-limit", step: name, since: now, until };
+      let stall: Stall;
+      const key = tenantKeyOf(err);
+      if (key) {
+        // One tenant's key: the other tenants' steps carry on, so nothing is shared.
+        const until = Math.max(key.retryAt ?? now + KEY_RETRY_MS, now + 1000);
+        stall = { reason: "tenant-key", message: key.message, step: name, since: now, until };
+      } else {
+        const resetsAt = usageLimitOf(err);
+        if (resetsAt === null) throw err;
+        stall = { reason: "usage-limit", step: name, since: now, until: Math.max(resetsAt, now) + SLACK_MS };
+      }
+      const until = stall.until;
       await DBOS.setEvent(STALL_EVENT, stall);
-      DBOS.logger.info(`${DBOS.workflowID}: usage limit at ${name}, sleeping until ${new Date(until).toISOString()}`);
+      DBOS.logger.info(`${DBOS.workflowID}: ${stall.reason} at ${name}, sleeping until ${new Date(until).toISOString()}`);
       await DBOS.sleep(until - now);
       await DBOS.setEvent(STALL_EVENT, null);
     }

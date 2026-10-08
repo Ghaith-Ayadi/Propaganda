@@ -13,11 +13,23 @@
 // browser. Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
 
 import { generateText, type LanguageModel } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { costUsd, decide, type Gate, type Price, type Usage } from "./cost";
 import { BudgetError, CostLogUnavailableError, UsageLimitError } from "./errors";
+import {
+  markTenantKey,
+  readKeyInfo,
+  readTenantKey,
+  removeTenantKey,
+  saveTenantKey,
+  scrub,
+  TenantKeyError,
+  type TenantKey,
+} from "./modelKeys";
 
 export { BudgetError, CostLogUnavailableError, UsageLimitError } from "./errors";
+export { KeysUnavailableError, TenantKeyError } from "./modelKeys";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 
@@ -143,6 +155,51 @@ export function setModelResolver(fn: (id: string) => LanguageModel): void {
   resolveModel = fn;
 }
 
+// ---- a tenant's own key (BYOK, modelKeys.ts) ----
+//
+// A tenant with a key set has every Anthropic call made with that key, and
+// nothing else of ours: no fallback to our account when it fails. Our budget
+// rules don't apply to its spend (cost_gate leaves out rows paid_by 'tenant'),
+// only the kill switch does. Other providers (Gemini for the editor) stay ours.
+
+/** Gateway ids to Anthropic's: 'anthropic/claude-sonnet-5.5' is 'claude-sonnet-5-5'. */
+export function anthropicModelId(id: string): string {
+  return id.slice("anthropic/".length).replace(/\./g, "-");
+}
+
+let tenantResolve: (apiKey: string, id: string) => LanguageModel = (apiKey, id) =>
+  createAnthropic({ apiKey })(anthropicModelId(id));
+
+/** For tests: swap how a tenant's key and a model id become a model. */
+export function setTenantModelResolver(fn: (apiKey: string, id: string) => LanguageModel): void {
+  tenantResolve = fn;
+}
+
+/** The model the Test button calls: the cheapest one, one token out. */
+export const KEY_TEST_MODEL = process.env.KEY_TEST_MODEL ?? "anthropic/claude-haiku-5.5";
+
+/**
+ * A failure that is the key's (refused, out of credit, rate limited), as a
+ * TenantKeyError with Anthropic's own words; null for anything else (a bad
+ * request, an outage), which fails or retries like any call.
+ */
+function tenantKeyFailure(err: unknown): { error: TenantKeyError; broken: boolean } | null {
+  const e = err as { statusCode?: number; message?: string; responseHeaders?: Record<string, string> };
+  const said = scrub(String(e?.message ?? "no answer"));
+  if (e?.statusCode === 401 || e?.statusCode === 403) {
+    return { error: new TenantKeyError(`Anthropic refused the key: ${said}`), broken: true };
+  }
+  if (e?.statusCode === 400 && /credit|billing/i.test(said)) {
+    return { error: new TenantKeyError(`The key's Anthropic account is out of credit: ${said}`), broken: true };
+  }
+  if (e?.statusCode === 429) {
+    const wait = Number(e.responseHeaders?.["retry-after"]);
+    const at = Date.now() + (Number.isFinite(wait) && wait > 0 ? wait * 1000 : 60_000);
+    return { error: new TenantKeyError(`The key hit its Anthropic rate limit: ${said}`, at), broken: false };
+  }
+  return null;
+}
+
 /** The subscription's 5-hour limit: a 429 whose unified status is 'rejected'. */
 function usageLimit(err: unknown): UsageLimitError | null {
   const e = err as { statusCode?: number; responseHeaders?: Record<string, string> };
@@ -155,7 +212,10 @@ function usageLimit(err: unknown): UsageLimitError | null {
 // ---- the call ----
 
 export async function callModel(opts: CallOptions): Promise<CallResult> {
-  const verdict = decide(await readGate(opts.site), opts.background);
+  const tenant = opts.model.startsWith("anthropic/") ? await readTenantKey(rest, opts.site) : null;
+  const gate = await readGate(opts.site);
+  // On the tenant's key, only the kill switch applies: the spend is theirs.
+  const verdict = decide(tenant ? { ...gate, tenantMonthlyLimit: null, globalDailyLimit: null } : gate, opts.background);
   if (!verdict.allow) {
     if (verdict.engageKill) {
       await rest("/rpc/cost_engage_kill", {
@@ -174,34 +234,64 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
     background: opts.background,
     workflow_id: ctx.workflowId,
     step_id: ctx.stepId,
+    // Only sent when it isn't the default, so the log works before migration 20261008000050.
+    ...(tenant ? { paid_by: "tenant" } : {}),
   };
 
-  let result;
+  const result = await run(base, tenant, opts);
+
+  const { usage, cost } = await logDone(base, opts.model, result.totalUsage);
+  return { text: result.text, usage, costUsd: cost, budgetWarning: verdict.warn };
+}
+
+type Logged = Record<string, unknown>;
+
+/** The call itself, on our account or the tenant's key. A failure is logged before it is thrown. */
+async function run(base: Logged, tenant: TenantKey | null, opts: CallOptions) {
   try {
-    result = await generateText({
-      model: resolveModel(opts.model),
+    const result = await generateText({
+      model: tenant ? tenantResolve(tenant.apiKey, opts.model) : resolveModel(opts.model),
       system: opts.system,
       prompt: opts.prompt,
       maxOutputTokens: opts.maxOutputTokens,
       abortSignal: opts.abortSignal,
+      // A refused key is refused again: no point in the SDK's own retries.
+      ...(tenant ? { maxRetries: 0 } : {}),
     });
+    if (tenant && tenant.status !== "ok") await markTenantKey(rest, opts.site, "ok").catch(() => {});
+    return result;
   } catch (err) {
-    const limit = usageLimit(err);
-    if (limit) throw limit;
+    if (tenant) {
+      const failed = tenantKeyFailure(err);
+      if (failed) {
+        await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+        if (failed.broken) await markTenantKey(rest, opts.site, "failed", failed.error.message.replace(/^TENANT-KEY /, "")).catch(() => {});
+        throw failed.error;
+      }
+    } else {
+      const limit = usageLimit(err);
+      if (limit) throw limit;
+    }
     // A failed call may still have been billed upstream, for an amount we don't know:
     // keep the trace at zero tokens and mark it unpriced so Consumption counts the gap.
     await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
     throw err;
   }
+}
 
-  const u = result.totalUsage;
+/** Price a finished call and write its row. */
+async function logDone(
+  base: Logged,
+  model: string,
+  u: Awaited<ReturnType<typeof generateText>>["totalUsage"],
+): Promise<{ usage: Usage; cost: number }> {
   const usage: Usage = {
     inputTokens: u.inputTokens ?? 0,
     outputTokens: u.outputTokens ?? 0,
     cacheReadTokens: u.inputTokenDetails?.cacheReadTokens ?? 0,
     cacheWriteTokens: u.inputTokenDetails?.cacheWriteTokens ?? 0,
   };
-  const price = await readPrice(opts.model).catch(() => null);
+  const price = await readPrice(model).catch(() => null);
   const cost = price ? costUsd(price, usage) : 0;
   // The answer is already paid for: a log failure is thrown after it is
   // reported, but never silently skipped (callers see CostLogUnavailableError).
@@ -215,8 +305,36 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
     priced: price !== null,
     status: "ok",
   });
+  return { usage, cost };
+}
 
-  return { text: result.text, usage, costUsd: cost, budgetWarning: verdict.warn };
+// ---- the Test button ----
+
+export type KeyTest = { ok: true } | { ok: false; error: string };
+
+/**
+ * One tiny real call with `apiKey` (one token out of the cheapest model),
+ * logged to the tenant as paid by its key. Green when Anthropic answers.
+ * Never throws for the key's own failures: they come back as { ok: false }.
+ */
+export async function testTenantKey(site: string, apiKey: string): Promise<KeyTest> {
+  const base = { site, job: "key-test", model: KEY_TEST_MODEL, background: false, workflow_id: null, step_id: null, paid_by: "tenant" };
+  try {
+    const result = await generateText({
+      model: tenantResolve(apiKey, KEY_TEST_MODEL),
+      prompt: "Reply with OK.",
+      maxOutputTokens: 1,
+      maxRetries: 0,
+    });
+    await logDone(base, KEY_TEST_MODEL, result.totalUsage);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof CostLogUnavailableError) throw err;
+    await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+    const failed = tenantKeyFailure(err);
+    const said = failed ? failed.error.message.replace(/^TENANT-KEY /, "") : scrub(String((err as Error)?.message ?? err));
+    return { ok: false, error: said };
+  }
 }
 
 // ---- paid APIs that aren't models ----
@@ -268,3 +386,13 @@ export async function callPaidApi<T>(
   await writeCall({ ...base, cost_usd: cost, priced: true, status: "ok" });
   return out.value;
 }
+
+// ---- the key store, for the Settings endpoint (api/model-key.ts) ----
+
+export const tenantKeys = {
+  info: (site: string) => readKeyInfo(rest, site),
+  read: (site: string) => readTenantKey(rest, site),
+  save: (site: string, apiKey: string) => saveTenantKey(rest, site, apiKey),
+  mark: (site: string, ok: boolean, error = "") => markTenantKey(rest, site, ok ? "ok" : "failed", error),
+  remove: (site: string) => removeTenantKey(rest, site),
+};
