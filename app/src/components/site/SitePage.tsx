@@ -11,7 +11,7 @@ import { Input } from "@/components/base/input/input";
 import { NativeSelect } from "@/components/base/select/select-native";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { useWorkspace } from "@/components/Workspace";
-import { DeleteSiteSection, DesignSection, SiteIdentityFields } from "@/components/SettingsDialog";
+import { DeleteSiteSection, SiteIdentityFields } from "@/components/SettingsDialog";
 import { readableUrl, siteHost, sitePublicUrl } from "@/lib/siteUrl";
 import { useSetting } from "@/lib/settings";
 import { goPage, usePageRest } from "@/lib/route";
@@ -77,12 +77,6 @@ export function SitePage() {
             </Button>
           </div>
           {hosted && <DesignSummary />}
-          {/* UI assembly (#37): the Design editor stays reachable here until #38 adds Settings > Design. */}
-          {hosted && (
-            <div className="mt-5 border-t border-secondary pt-4">
-              <DesignSection />
-            </div>
-          )}
         </Card>
 
         {hosted ? <AddressCard onSetUp={() => domainRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} /> : <PitchCard where={where} />}
