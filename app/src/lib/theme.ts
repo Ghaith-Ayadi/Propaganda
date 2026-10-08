@@ -4,19 +4,29 @@
 import { useEffect, useState } from "react";
 
 export type Theme = "light" | "dark";
+/** What the person chose: follow the system (the default), or pin one. */
+export type ThemePref = "system" | "light" | "dark";
 
 const KEY = "verbatim:theme";
 
-function read(): Theme {
-  if (typeof localStorage !== "undefined") {
+function readPref(): ThemePref {
+  try {
     const raw = localStorage.getItem(KEY);
     if (raw === "light" || raw === "dark") return raw;
+  } catch {
+    /* private mode: follow the system */
   }
+  return "system";
+}
+
+function systemTheme(): Theme {
   if (typeof window !== "undefined" && window.matchMedia) {
     return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   }
   return "dark";
 }
+
+const resolve = (p: ThemePref): Theme => (p === "system" ? systemTheme() : p);
 
 function apply(t: Theme) {
   if (typeof document === "undefined") return;
@@ -24,7 +34,8 @@ function apply(t: Theme) {
   else document.documentElement.classList.remove("dark-mode");
 }
 
-let current: Theme = read();
+let pref: ThemePref = readPref();
+let current: Theme = resolve(pref);
 apply(current);
 
 const listeners = new Set<(t: Theme) => void>();
@@ -33,12 +44,53 @@ export function getTheme(): Theme {
   return current;
 }
 
+function update(next: Theme): void {
+  if (next === current) return;
+  current = next;
+  apply(next);
+  for (const l of listeners) l(next);
+}
+
+export function getThemePref(): ThemePref {
+  return pref;
+}
+
+/** Settings > Appearance. "system" follows the OS, live. */
+export function setThemePref(p: ThemePref): void {
+  pref = p;
+  try {
+    if (p === "system") localStorage.removeItem(KEY);
+    else localStorage.setItem(KEY, p);
+  } catch {
+    /* private mode */
+  }
+  for (const l of prefListeners) l(p);
+  update(resolve(p));
+}
+
+// Follow the OS while the preference is "system".
+if (typeof window !== "undefined" && window.matchMedia) {
+  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+    if (pref === "system") update(systemTheme());
+  });
+}
+
+const prefListeners = new Set<(p: ThemePref) => void>();
+
+export function useThemePref(): [ThemePref, (p: ThemePref) => void] {
+  const [v, setV] = useState<ThemePref>(pref);
+  useEffect(() => {
+    prefListeners.add(setV);
+    return () => {
+      prefListeners.delete(setV);
+    };
+  }, []);
+  return [v, setThemePref];
+}
+
+/** Pins one theme (the keyboard toggle). */
 export function setTheme(t: Theme): void {
-  if (t === current) return;
-  current = t;
-  if (typeof localStorage !== "undefined") localStorage.setItem(KEY, t);
-  apply(t);
-  for (const l of listeners) l(t);
+  setThemePref(t);
 }
 
 export function toggleTheme(): void {
