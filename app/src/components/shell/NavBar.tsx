@@ -33,7 +33,7 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
         >
           <SearchLg className="size-4 shrink-0" />
           <span className="flex-1 text-left">Search</span>
-          <kbd className="shrink-0 rounded border border-secondary bg-secondary px-1 text-[11px]">⌘K</kbd>
+          <kbd className="shrink-0 rounded border border-secondary bg-secondary px-1 text-xs">⌘K</kbd>
         </button>
       </div>
 
@@ -154,7 +154,7 @@ function NavTree({
             {Icon ? (
               <Icon className="size-4 shrink-0 text-quaternary" />
             ) : n.emoji ? (
-              <span className="w-4 shrink-0 text-center text-[13px] leading-none">{n.emoji}</span>
+              <span className="w-4 shrink-0 text-center text-sm leading-none">{n.emoji}</span>
             ) : null}
             <span className="truncate">{n.label}</span>
             {n.note ? (

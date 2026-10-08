@@ -70,7 +70,7 @@ export function GradesView() {
               {knowledge.todo.map((c) => (
                 <li key={c.id}>
                   <a href={pageHref("knowledge", `claims/${c.id}`)} className="flex flex-col gap-1 py-2.5 hover:text-primary">
-                    <span className="text-sm text-primary">{c.text}</span>
+                    <span className="font-serif text-sm text-primary">{c.text}</span>
                     <span className="flex flex-wrap items-center gap-2 text-xs text-quaternary">
                       <ClaimStatusBadge status={c.status} />
                       {c.inConflict && <ConflictBadge />}
@@ -99,7 +99,7 @@ function GradeHead({ letter, share }: { letter: Letter; share: number }) {
     <div className="flex items-center gap-4">
       <LetterGrade letter={letter} />
       <div className="min-w-0">
-        <p className="font-title text-3xl text-primary">{percent(share)}</p>
+        <p className="type-figure text-primary">{percent(share)}</p>
         <p className="text-sm text-tertiary">
           {next ? `${percent(next.min - share)} more for ${next.letter}.` : "Top band. It doesn't need zero issues to stay here."}
         </p>
@@ -139,7 +139,7 @@ function Stat({ label, value, href }: { label: string; value: number; href?: str
   const body = (
     <>
       <span className="block text-xs text-tertiary">{label}</span>
-      <span className="block font-title text-2xl text-primary">{value}</span>
+      <span className="block type-figure text-primary">{value}</span>
     </>
   );
   return href ? (

@@ -147,7 +147,7 @@ function ClaimSide({ label, claim }: { label: string; claim: ClaimDetail }) {
     <div className="flex min-w-0 flex-col gap-2">
       <SectionLabel right={<ClaimStatusBadge status={claim.status} />}>{label}</SectionLabel>
       <a href={pageHref("knowledge", `claims/${claim.id}`)} className="rounded-lg px-4 py-3 ring-1 ring-secondary transition hover:bg-primary_hover">
-        <p className="text-md text-primary">{claim.text}</p>
+        <p className="font-serif text-lg text-primary">{claim.text}</p>
         <p className="mt-1.5 text-xs text-quaternary">
           {[
             claim.topics.map((t) => t.name).join(", "),
@@ -410,7 +410,7 @@ function ContestResult({ flagId, contest, open }: { flagId: string; contest: Con
           <ul className="flex flex-col gap-1.5">
             {contest.changes.map((c, i) => (
               <li key={i} className="rounded-lg bg-secondary px-3.5 py-2 text-sm text-primary">
-                <span className="mr-2 text-xs text-tertiary uppercase">{c.op === "add" ? "New claim" : c.op}</span>
+                <span className="mr-2 type-eyebrow text-tertiary">{c.op === "add" ? "New claim" : c.op}</span>
                 {c.text}
               </li>
             ))}

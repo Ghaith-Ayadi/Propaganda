@@ -23,7 +23,7 @@ export function AdminPage({ section }: { section: string | null }) {
     <AdminContext.Provider value={api}>
       <div className="flex h-full flex-col overflow-hidden md:flex-row">
         <nav className="shrink-0 border-b border-secondary px-3 py-4 md:w-56 md:border-b-0 md:border-r">
-          <h1 className="px-3 pb-3 font-title text-2xl text-primary">Admin</h1>
+          <h1 className="px-3 pb-3 type-title text-primary">Admin</h1>
           <ul className="flex gap-1 overflow-x-auto md:flex-col">
             {ADMIN_SECTIONS.map((s) => (
               <li key={s.id}>
@@ -43,7 +43,7 @@ export function AdminPage({ section }: { section: string | null }) {
         </nav>
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="mx-auto max-w-[1000px]">
-            <h2 className="font-title text-xl text-primary">{current.title}</h2>
+            <h2 className="type-heading text-primary">{current.title}</h2>
             <p className="mb-6 mt-1 text-sm text-tertiary">{current.description}</p>
             <Section />
           </div>

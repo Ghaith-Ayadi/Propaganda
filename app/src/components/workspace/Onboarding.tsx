@@ -150,7 +150,7 @@ export function Onboarding({
     <div className="flex h-screen w-screen items-center justify-center bg-primary">
       <div className="w-[440px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary">
         <div className="flex items-center justify-between">
-          <h1 className="font-title text-xl text-primary">
+          <h1 className="type-title text-primary">
             {step === 0 && "Name your site"}
             {step === 1 && "About you"}
             {step === 2 && "Collections"}
@@ -298,7 +298,7 @@ function slugHint(status: SlugStatus): string {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-quaternary">{label}</div>
+      <div className="mb-1 type-eyebrow text-quaternary">{label}</div>
       {children}
       {hint && <p className="mt-1.5 text-xs text-tertiary">{hint}</p>}
     </label>

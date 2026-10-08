@@ -75,7 +75,7 @@ export function PlanDropFields({ draft, compact = false, label = "Paste your pla
         <Label className="text-sm font-medium text-secondary">{label}</Label>
         <TextArea
           rows={compact ? 4 : 7}
-          className="w-full resize-y rounded-lg bg-primary px-3.5 py-3 text-md text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+          className="w-full resize-y rounded-lg bg-primary px-3.5 py-3 text-sm text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
           placeholder={"Q4 ideas:\n- Close checklist series\n- Customer story with Northwind"}
         />
       </TextField>
@@ -99,7 +99,7 @@ export function PlanDropFields({ draft, compact = false, label = "Paste your pla
         <p className="text-sm text-secondary">
           Drop files here, or{" "}
           <FileTrigger allowsMultiple acceptedFileTypes={ACCEPT} onSelect={(list) => list && add(Array.from(list))}>
-            <AriaButton className="font-semibold text-brand-secondary outline-none hover:underline focus-visible:underline">choose files</AriaButton>
+            <AriaButton className="font-medium text-brand-secondary outline-none hover:underline focus-visible:underline">choose files</AriaButton>
           </FileTrigger>
         </p>
         <p className="text-xs text-quaternary">PDF, Word, Markdown, spreadsheets, and images such as a whiteboard photo or a screenshot of your board.</p>

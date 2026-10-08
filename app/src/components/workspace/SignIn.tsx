@@ -106,7 +106,7 @@ export function SignIn({
     <div className="flex min-h-dvh w-full items-center justify-center bg-primary px-4 py-12">
       <div className="w-full max-w-[400px] rounded-2xl border border-secondary bg-secondary px-6 py-9 shadow-2xl ring-1 ring-primary sm:px-8">
         <header className="text-center">
-          <h1 className="font-title text-[28px] leading-tight text-primary">Propaganda</h1>
+          <h1 className="type-title text-primary">Propaganda</h1>
           <p className="mx-auto mt-2 max-w-[30ch] text-sm text-balance text-tertiary">{subtitle}</p>
         </header>
 
@@ -136,7 +136,7 @@ export function SignIn({
               <>
                 <div className="my-6 flex items-center gap-3" aria-hidden="true">
                   <div className="h-px flex-1 bg-border-secondary" />
-                  <span className="text-xs tracking-widest text-quaternary uppercase">or</span>
+                  <span className="type-eyebrow text-quaternary">or</span>
                   <div className="h-px flex-1 bg-border-secondary" />
                 </div>
 

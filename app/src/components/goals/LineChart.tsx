@@ -85,13 +85,13 @@ export function LineChart({ points, from, to, target, pace, marks = [], format =
         {ticks.map((t) => (
           <g key={t}>
             <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} className="stroke-[var(--color-border-secondary)]" strokeWidth={1} />
-            <text x={PAD.l - 6} y={y(t) + 3.5} textAnchor="end" className="fill-[var(--color-fg-quaternary)] text-[10px]">
+            <text x={PAD.l - 6} y={y(t) + 3.5} textAnchor="end" className="fill-[var(--color-fg-quaternary)] text-xs">
               {t >= 1000 ? `${+(t / 1000).toFixed(1)}k` : format(t)}
             </text>
           </g>
         ))}
         {months.map((m) => (
-          <text key={m.day} x={x(m.day)} y={H - 6} textAnchor="start" className="fill-[var(--color-fg-quaternary)] text-[10px]">
+          <text key={m.day} x={x(m.day)} y={H - 6} textAnchor="start" className="fill-[var(--color-fg-quaternary)] text-xs">
             {m.label}
           </text>
         ))}
@@ -126,7 +126,7 @@ export function LineChart({ points, from, to, target, pace, marks = [], format =
           style={{ left: `${(x(hp.day) / W) * 100}%` }}
         >
           <div className="text-tertiary">{shortDate(hp.day)}</div>
-          <div className="font-semibold text-primary tabular-nums">{format(hp.value)}</div>
+          <div className="font-medium text-primary tabular-nums">{format(hp.value)}</div>
           {hoverMark && <div className="mt-0.5 text-warning-primary">{hoverMark.label}</div>}
         </div>
       )}

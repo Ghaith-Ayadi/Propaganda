@@ -120,12 +120,12 @@ function ThreadBody({ thread }: { thread: RecheckThread }) {
     <div className="flex flex-col gap-5">
       <Panel title="What changed" actions={<SeverityBadge severity={thread.severity} />}>
         <div className="flex flex-col gap-2 md:flex-row md:items-stretch">
-          <a href={pageHref("knowledge", `claims/${thread.oldClaim.id}`)} className="flex-1 rounded-lg bg-secondary px-4 py-3 text-sm text-tertiary line-through decoration-1">
+          <a href={pageHref("knowledge", `claims/${thread.oldClaim.id}`)} className="flex-1 rounded-lg bg-secondary px-4 py-3 font-serif text-sm text-tertiary line-through decoration-1">
             {thread.oldClaim.text}
           </a>
           <ArrowRight className="size-4 shrink-0 self-center text-quaternary max-md:rotate-90" />
           {thread.newClaim ? (
-            <a href={pageHref("knowledge", `claims/${thread.newClaim.id}`)} className="flex-1 rounded-lg px-4 py-3 text-sm text-primary ring-1 ring-secondary hover:bg-primary_hover">
+            <a href={pageHref("knowledge", `claims/${thread.newClaim.id}`)} className="flex-1 rounded-lg px-4 py-3 font-serif text-sm text-primary ring-1 ring-secondary hover:bg-primary_hover">
               {thread.newClaim.text}
             </a>
           ) : (
@@ -219,9 +219,9 @@ function RecheckRow({ item, picked, onPick }: { item: RecheckItem; picked: boole
       <header className="flex items-center gap-3 border-b border-secondary px-5 py-3.5">
         {open && <Checkbox aria-label={`Select ${item.postTitle}`} isSelected={picked} onChange={onPick} />}
         {kb().sample || !item.postId ? (
-          <h3 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">{item.postTitle}</h3>
+          <h3 className="min-w-0 flex-1 truncate type-heading text-primary">{item.postTitle}</h3>
         ) : (
-          <a href={postHref(item.postId)} className="min-w-0 flex-1 truncate text-md font-semibold text-primary hover:underline">
+          <a href={postHref(item.postId)} className="min-w-0 flex-1 truncate type-heading text-primary hover:underline">
             {item.postTitle}
           </a>
         )}

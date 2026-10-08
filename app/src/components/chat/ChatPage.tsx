@@ -136,7 +136,7 @@ function ConversationList({
         <Plus className="size-4 text-fg-quaternary" />
         New chat
       </button>
-      {conversations.length > 0 && <p className="px-2.5 pt-3 pb-1 text-xs font-semibold text-quaternary">Recent</p>}
+      {conversations.length > 0 && <p className="px-2.5 pt-3 pb-1 text-xs font-medium text-quaternary">Recent</p>}
       {conversations.map((c) => (
         <div
           key={c.id}
@@ -174,14 +174,14 @@ function Welcome({ onPick }: { onPick: (s: string) => void }) {
         <span className="flex size-12 items-center justify-center rounded-xl bg-secondary ring-1 ring-secondary ring-inset">
           <MessageChatSquare className="size-6 text-fg-secondary" />
         </span>
-        <h2 className="font-title text-display-xs text-primary">What do you want to know?</h2>
-        <p className="max-w-md text-md text-tertiary">
+        <h2 className="type-title text-primary">What do you want to know?</h2>
+        <p className="max-w-md text-sm text-tertiary">
           The agent answers from your knowledge base and your content, and brings in the other agents when it needs
           them: the Pitcher for a pitch, the Checker for a flag, the Strategist for your goals.
         </p>
       </div>
       <div className="flex w-full max-w-2xl flex-col gap-2">
-        <p className="text-xs font-semibold tracking-wide text-quaternary uppercase">Try</p>
+        <p className="type-eyebrow text-quaternary">Try</p>
         <div className="flex flex-wrap gap-2">
           {SUGGESTIONS.map((s) => (
             <button
@@ -286,7 +286,7 @@ function Composer({ streaming, onSend, onStop }: { streaming: boolean; onSend: (
           onKeyDown={onKeyDown}
           placeholder="Ask something"
           aria-label="Message the agent"
-          className="max-h-50 min-h-9 flex-1 resize-none bg-transparent py-2 text-md text-primary outline-hidden placeholder:text-placeholder"
+          className="max-h-50 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm text-primary outline-hidden placeholder:text-placeholder"
         />
         {streaming ? (
           <Button size="sm" color="secondary" iconLeading={StopCircle} onClick={onStop}>

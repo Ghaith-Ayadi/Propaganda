@@ -41,7 +41,7 @@ export function NewCollectionDialog({ withPost = false, onClose, onConfirm }: Pr
         onSubmit={submit}
         className="w-[440px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary"
       >
-        <h2 className="font-title text-xl text-primary">New collection</h2>
+        <h2 className="type-heading text-primary">New collection</h2>
         <p className="mt-1 text-sm text-secondary">
           Give it an emoji and a name. You can edit the description later from the collection page.
         </p>

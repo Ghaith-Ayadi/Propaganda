@@ -134,7 +134,7 @@ function BatchingCard({ plan }: { plan: BatchPlan }) {
 
       {switchTo && (
         <div className="mt-4 rounded-xl bg-secondary p-4">
-          <p className="text-sm font-semibold text-secondary">Before you switch to {CADENCE_COPY[switchTo].label}</p>
+          <p className="text-sm font-medium text-secondary">Before you switch to {CADENCE_COPY[switchTo].label}</p>
           <p className="mt-1 text-sm text-secondary">{CADENCE_RATIONALE}</p>
           <p className="mt-1 text-sm text-tertiary">Batches already in your inbox stay as they are; only what hasn't arrived is re-batched.</p>
           <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -185,7 +185,7 @@ function BatchCard({ batch, defaultOpen, total }: { batch: ContentBatch; default
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-3 px-5 py-4 text-left">
         <Icon className="size-4 shrink-0 text-fg-quaternary" aria-hidden />
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-primary">
+          <span className="block font-medium text-primary">
             Batch {batch.number} of {total}
             {batch.launch && <span className="font-normal text-tertiary"> · Launch</span>}
           </span>

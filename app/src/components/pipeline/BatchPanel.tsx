@@ -83,7 +83,7 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
         <Dialog aria-label="Batches" className="flex h-full w-full flex-col overflow-y-auto bg-primary shadow-xl outline-hidden">
           <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-5">
             <div>
-              <h2 className="font-title text-2xl text-primary">Batches</h2>
+              <h2 className="type-title text-primary">Batches</h2>
               <p className="mt-1 text-sm text-tertiary">
                 {settings.quarter}, {settings.batching === "weekly" ? "weekly" : "all at once"}. What you approve, reject and note in a
                 batch shapes the next one.
@@ -105,7 +105,7 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-md font-semibold text-primary">Batch {b.number}</span>
+                      <span className="type-heading text-primary">Batch {b.number}</span>
                       <Badge type="pill-color" size="sm" color={STATE[b.state].color}>
                         {STATE[b.state].label}
                       </Badge>

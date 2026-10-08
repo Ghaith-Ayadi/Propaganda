@@ -209,7 +209,7 @@ export function DecisionCard({ decision, title = "The Guardian" }: { decision: D
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <ShieldTick className="size-4 text-tertiary" />
-        <span className="text-sm font-semibold text-primary">{title}</span>
+        <span className="text-sm font-medium text-primary">{title}</span>
         <Badge type="pill-color" size="sm" color={v.color}>
           {v.label}
         </Badge>
@@ -289,8 +289,8 @@ export function LetterGrade({ letter, size = "lg" }: { letter: Letter; size?: "s
   return (
     <span
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-xl font-title",
-        size === "lg" ? "size-16 text-4xl" : "size-8 text-lg",
+        "inline-flex shrink-0 items-center justify-center rounded-xl font-medium",
+        size === "lg" ? "size-16 type-figure" : "size-8 text-sm",
         tone,
       )}
       aria-label={`Grade ${letter}`}
@@ -350,7 +350,7 @@ export function UrgentBadge() {
 export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-2 flex items-center justify-between gap-2">
-      <h3 className="text-xs font-semibold tracking-wide text-quaternary uppercase">{children}</h3>
+      <h3 className="type-eyebrow text-quaternary">{children}</h3>
       {right}
     </div>
   );
@@ -392,7 +392,7 @@ export function TextArea({
       <AriaTextArea
         rows={rows}
         placeholder={placeholder}
-        className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-md text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+        className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-sm text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
       />
       {hint && <div className="text-sm text-tertiary">{hint}</div>}
     </AriaTextField>

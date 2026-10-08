@@ -84,7 +84,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
           </Badge>
         }
       >
-        <p className="text-lg text-primary">{proposal.summary}</p>
+        <p className="text-sm text-primary">{proposal.summary}</p>
         <p className="mt-2 text-sm text-tertiary">
           Covers {shortDate(proposal.covers.from)} to {shortDate(proposal.covers.to)}, {proposal.covers.weeks} weeks
           {proposal.covers.prorated ? ", prorated to the weeks left" : ""}. Written {shortDate(proposal.createdAt)}.
@@ -97,7 +97,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
         )}
         {proposal.questions.length > 0 && (
           <div className="mt-4 rounded-xl bg-brand-primary_alt p-4">
-            <p className="text-sm font-semibold text-brand-secondary">What it couldn't decide alone</p>
+            <p className="text-sm font-medium text-brand-secondary">What it couldn't decide alone</p>
             <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-secondary">
               {proposal.questions.map((q) => (
                 <li key={q}>{q}</li>
@@ -135,7 +135,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
           </div>
           <div>
             <p className="text-sm text-secondary">AI answers that mention you</p>
-            {draft.ranking.aiMentionTarget.value == null ? <p className="font-title text-3xl text-quaternary">No target</p> : (
+            {draft.ranking.aiMentionTarget.value == null ? <p className="type-figure text-quaternary">No target</p> : (
               <NumberCell
                 value={draft.ranking.aiMentionTarget.value}
                 editable={editable}
@@ -152,13 +152,13 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Readership" subtitle="Minutes read across every post.">
-          {draft.readership.value == null ? <p className="font-title text-3xl text-quaternary">No target yet</p> : (
+          {draft.readership.value == null ? <p className="type-figure text-quaternary">No target yet</p> : (
             <NumberCell value={draft.readership.value} editable={editable} onChange={(v) => set({ readership: { ...draft.readership, value: v } })} unit="minutes" />
           )}
           <Reason {...draft.readership} />
         </Card>
         <Card title="Consistency" subtitle="Not proposed, not editable.">
-          <p className="font-title text-3xl text-primary">A</p>
+          <p className="type-figure text-primary">A</p>
           <Reason why="Everything you publish stays true and agrees with itself. Always the target." />
         </Card>
       </div>
@@ -171,7 +171,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
         <Card>
           {edits.length > 0 && (
             <div className="mb-4">
-              <p className="text-sm font-semibold text-secondary">Your changes ({edits.length})</p>
+              <p className="text-sm font-medium text-secondary">Your changes ({edits.length})</p>
               <ul className="mt-1 text-sm text-tertiary">
                 {edits.map((e) => (
                   <li key={e.field + e.to}>
@@ -203,7 +203,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                 rows={3}
                 autoFocus
                 placeholder="What should change? e.g. we launch the close checklist on 12 Nov, give it its own topic."
-                className="w-full rounded-lg bg-primary px-3.5 py-3 text-md text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+                className="w-full rounded-lg bg-primary px-3.5 py-3 text-sm text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
               />
               <div className="flex justify-end gap-2">
                 <Button size="sm" color="secondary" onClick={() => setAsking(false)}>
@@ -245,11 +245,11 @@ function NumberCell({ value, editable, onChange, unit, small }: { value: number;
           inputMode="numeric"
           value={value}
           onChange={(e) => onChange(Math.max(0, Math.round(Number(e.target.value) || 0)))}
-          className={cx(INPUT, "font-title", small ? "w-20 text-2xl" : "w-28 text-4xl")}
+          className={cx(INPUT, "type-figure", small ? "w-20" : "w-28")}
           aria-label={unit}
         />
       ) : (
-        <span className={cx("font-title text-primary tabular-nums", small ? "text-3xl" : "text-5xl")}>{value}</span>
+        <span className={"type-figure text-primary"}>{value}</span>
       )}
       {unit && <span className="text-sm text-tertiary">{unit}</span>}
     </div>
@@ -307,7 +307,7 @@ function SearchList({ searches, topics, editable, onChange }: { searches: Propos
   const [q, setQ] = useState("");
   return (
     <div className="mt-5 border-t border-secondary pt-4">
-      <p className="mb-2 text-sm font-semibold text-secondary">The {searches.length} searches</p>
+      <p className="mb-2 text-sm font-medium text-secondary">The {searches.length} searches</p>
       <ul className="divide-y divide-secondary">
         {searches.map((s, i) => (
           <li key={s.query} className="flex items-start gap-3 py-2.5">

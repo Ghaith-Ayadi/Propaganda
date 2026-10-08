@@ -181,7 +181,7 @@ function ClaimRow({ claim, active }: { claim: ClaimSummary; active: boolean }) {
         className={cx("flex flex-col gap-2 px-4 py-3 transition hover:bg-primary_hover", active && "bg-secondary")}
         aria-current={active ? "true" : undefined}
       >
-        <span className={cx("text-sm text-primary", (claim.status === "superseded" || claim.status === "retracted") && "text-tertiary line-through decoration-1")}>
+        <span className={cx("font-serif text-sm text-primary", (claim.status === "superseded" || claim.status === "retracted") && "text-tertiary line-through decoration-1")}>
           {claim.text}
         </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-quaternary">

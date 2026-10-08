@@ -1,6 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
 @import url("https://api.fontshare.com/v2/css?f[]=zodiak@400,500,600,700&display=swap");
-@import url("https://api.fontshare.com/v2/css?f[]=rowan@300,400,500,600,700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap");
 @import "./styles/globals.css";
 
 /* Roslindale Variable Display — used for editorial headings (post titles,
@@ -22,6 +22,12 @@
   --font-serif: "Geist", -apple-system, "Segoe UI", sans-serif;
   --font-title: "Roslindale Display", "Zodiak", "Geist", -apple-system, "Segoe UI", sans-serif;
 
+  /* Inter wants tighter tracking as it grows; the app sets these (the blogs
+     leave them unset, so their fonts keep normal spacing). */
+  --text-xs--letter-spacing: var(--track-xs, normal);
+  --text-sm--letter-spacing: var(--track-sm, normal);
+  --text-md--letter-spacing: var(--track-md, normal);
+
   /* App-local aliases onto Untitled UI's semantic tokens, so existing
      Tailwind classes (`bg-bg`, `text-fg`, etc.) keep working. */
   --color-bg: var(--color-bg-primary);
@@ -37,12 +43,67 @@ html, body, #root {
   height: 100%;
 }
 
-/* The app (/admin), not the public blogs (EditorApp sets the class): Rowan is
-   the display face, and the scrollbar's room is reserved so a page that
-   starts or stops scrolling doesn't shift sideways. */
+/* The app (/admin), not the public blogs (EditorApp sets the class), which
+   keep their themes' fonts. The app is Inter, Geist Mono where mono is
+   needed, and Source Serif 4 for content: the words that go in posts and the
+   knowledge base (`font-serif`). The scrollbar's room is reserved so a page
+   that starts or stops scrolling doesn't shift sideways. */
 html.ppgd-app {
   scrollbar-gutter: stable;
-  --font-title: "Rowan", "Zodiak", "Geist", -apple-system, "Segoe UI", sans-serif;
+  --font-inter: "Inter";
+  --font-title: "Inter", -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  font-optical-sizing: auto;
+  /* One emphasis weight: the kit's semibold (buttons, badges) is 500 too. */
+  --font-weight-semibold: 500;
+  /* Inter's tracking for each size of the scale (rsms.me/inter/dynmetrics). */
+  --track-xs: 0em;
+  --track-sm: -0.006em;
+  --track-md: -0.011em;
+}
+html.ppgd-app .bn-container {
+  --bn-font-family: var(--font-serif);
+}
+html.ppgd-app .bn-editor.bn-default-styles {
+  font-family: var(--font-serif);
+}
+
+/* The app's type scale. Every page uses these and the kit's text-xs (12/16,
+   captions and meta) and text-sm (14/20, body; font-medium for labels). One
+   weight for emphasis: 500.
+     type-title    page titles, 20/28
+     type-heading  card and section titles, dialog titles, 16/24
+     type-figure   the big number on a stat, 24/32, tabular
+     type-eyebrow  the small uppercase label above a block, 12/16
+   Post and knowledge-base text adds font-serif. */
+@utility type-title {
+  font-family: var(--font-title);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 500;
+  letter-spacing: -0.017em;
+}
+@utility type-heading {
+  font-family: var(--font-title);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  letter-spacing: -0.011em;
+}
+@utility type-figure {
+  font-family: var(--font-title);
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 500;
+  letter-spacing: -0.019em;
+  font-variant-numeric: tabular-nums;
+}
+@utility type-eyebrow {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 ::selection {

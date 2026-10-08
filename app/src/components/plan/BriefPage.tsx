@@ -182,7 +182,7 @@ function BriefView({ brief }: { brief: Brief }) {
             value={brief.title}
             onChange={(e) => persist({ title: e.target.value })}
             placeholder="Brief title"
-            className="w-full bg-transparent font-title text-4xl leading-tight text-primary outline-none placeholder:text-quaternary"
+            className="w-full bg-transparent font-serif text-4xl leading-tight text-primary outline-none placeholder:text-quaternary"
           />
           <p className="mt-2 text-sm text-quaternary">
             The brief is the task. The post is written separately and linked, never in this body.
