@@ -14,13 +14,10 @@ export function LaunchCard({ launch }: { launch: Launch }) {
   const paceProduced = Math.min(launch.target, Math.round((launch.target * launch.day) / 20));
   return (
     <Card
-      title={
-        <span className="flex items-center gap-2">
-          <Rocket02 className="size-5 text-fg-brand-primary" aria-hidden />
-          Launch, day {launch.day} of 30
-        </span>
-      }
+      icon={<Rocket02 className="size-5" aria-hidden />}
+      title={`Launch, day ${launch.day} of 30`}
       subtitle={LAUNCH_WHY}
+      footer="Above 20 posts only if you bring something real for each extra one: an expert, your own data, an opinion. Every post carries a named byline."
     >
       <p className="text-md text-primary">
         <span className="font-semibold">
@@ -58,9 +55,6 @@ export function LaunchCard({ launch }: { launch: Launch }) {
           );
         })}
       </ol>
-      <p className="mt-3 text-xs text-quaternary">
-        Above 20 posts only if you bring something real for each extra one: an expert, your own data, an opinion. Every post carries a named byline.
-      </p>
 
       <div className="mt-5">
         <AuthorityExplainer />

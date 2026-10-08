@@ -181,7 +181,7 @@ function BatchCard({ batch, defaultOpen, total }: { batch: ContentBatch; default
   const decided = batch.briefs.filter((b) => b.state !== "brief").length;
   const Icon = open ? ChevronDown : ChevronRight;
   return (
-    <section className="rounded-2xl bg-primary shadow-xs ring-1 ring-secondary">
+    <section className="overflow-hidden rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-3 px-5 py-4 text-left">
         <Icon className="size-4 shrink-0 text-fg-quaternary" aria-hidden />
         <span className="min-w-0 flex-1">

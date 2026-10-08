@@ -8,22 +8,36 @@ import { goalsArePlaceholder } from "@/lib/goals/useGoals";
 import { SCENARIOS, placeholderScenario, setPlaceholderScenario, type ScenarioId } from "@/lib/goals/placeholder";
 import type { PlanOrigin } from "@/lib/goals/types";
 import { Badge } from "@/components/base/badges/badges";
+import { Card as ShellCard, CardBody, CardFooter, CardHeader } from "@/components/shell/Card";
 import { cx } from "@/utils/cx";
 
-export function Card({ title, subtitle, aside, children, className }: { title?: ReactNode; subtitle?: ReactNode; aside?: ReactNode; children?: ReactNode; className?: string }) {
+/**
+ * A Goals card on the shell's shared card (components/shell/Card.tsx): header
+ * with an edge-to-edge divider (title 16, description 14), body, optional footer.
+ */
+export function Card({
+  title,
+  subtitle,
+  aside,
+  icon,
+  footer,
+  children,
+  className,
+}: {
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  aside?: ReactNode;
+  icon?: ReactNode;
+  footer?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+}) {
   return (
-    <section className={cx("rounded-2xl bg-primary p-5 shadow-xs ring-1 ring-secondary md:p-6", className)}>
-      {(title || aside) && (
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            {title && <h2 className="font-title text-xl text-primary md:text-2xl">{title}</h2>}
-            {subtitle && <p className="mt-1 text-sm text-tertiary">{subtitle}</p>}
-          </div>
-          {aside && <div className="shrink-0">{aside}</div>}
-        </div>
-      )}
-      {children}
-    </section>
+    <ShellCard className={className}>
+      {(title || aside) && <CardHeader title={title} description={subtitle} actions={aside} icon={icon} />}
+      {children != null && <CardBody className="py-5">{children}</CardBody>}
+      {footer && <CardFooter>{footer}</CardFooter>}
+    </ShellCard>
   );
 }
 

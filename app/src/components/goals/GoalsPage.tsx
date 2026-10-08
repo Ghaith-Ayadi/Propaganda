@@ -6,8 +6,7 @@
 
 import type { ReactNode } from "react";
 import { ArrowRight, CalendarDate } from "@untitledui/icons";
-import { PageBody, PageHeader } from "@/components/shell/PageHeader";
-import { Tabs } from "@/components/application/tabs/tabs";
+import { PageBody, PageHeader, PageTabs } from "@/components/shell/PageHeader";
 import { NativeSelect } from "@/components/base/select/select-native";
 import { Button } from "@/components/base/buttons/button";
 import { goPage, usePageRest } from "@/lib/route";
@@ -60,7 +59,7 @@ export function GoalsPage() {
   const waiting = proposal && (proposal.status === "sent" || proposal.status === "changes_requested");
 
   return (
-    <PageBody>
+    <>
       <PageHeader
         title="Goals"
         description={`${quarterLabel(quarter)}${quarter === thisQuarter ? "" : quarter > thisQuarter ? ", next quarter" : ", past"}. What the agents rate every pitch against, and what Home reports on.`}
@@ -74,25 +73,18 @@ export function GoalsPage() {
             options={quarters.map((q) => ({ value: q, label: quarterLabel(q) + (q === thisQuarter ? " (now)" : q > thisQuarter ? " (next)" : "") }))}
           />
         }
-      >
-        <Tabs selectedKey={tab} onSelectionChange={(k) => nav(k as Tab)}>
-          <Tabs.List type="underline" size="sm" className="overflow-x-auto">
-            {TABS.map((t) => (
-              <Tabs.Item key={t.id} id={t.id} badge={t.id === "strategist" && waiting ? 1 : undefined}>
-                {t.label}
-              </Tabs.Item>
-            ))}
-          </Tabs.List>
-        </Tabs>
-      </PageHeader>
+        tabs={<PageTabs label="Goals sections" items={TABS.map((t) => ({ ...t, badge: t.id === "strategist" && waiting ? 1 : undefined }))} selected={tab} onChange={(id) => nav(id as Tab)} />}
+      />
 
-      <PlaceholderBanner />
+      <PageBody>
+        <PlaceholderBanner />
 
-      {tab === "goals" && <GoalsTab quarter={quarter} thisQuarter={thisQuarter} onTab={nav} />}
-      {tab === "strategist" && <StrategistTab quarter={quarter} thisQuarter={thisQuarter} onTab={nav} />}
-      {tab === "batches" && <BatchesTab quarter={quarter} onTab={nav} />}
-      {tab === "plan" && <PlanDrop />}
-    </PageBody>
+        {tab === "goals" && <GoalsTab quarter={quarter} thisQuarter={thisQuarter} onTab={nav} />}
+        {tab === "strategist" && <StrategistTab quarter={quarter} thisQuarter={thisQuarter} onTab={nav} />}
+        {tab === "batches" && <BatchesTab quarter={quarter} onTab={nav} />}
+        {tab === "plan" && <PlanDrop />}
+      </PageBody>
+    </>
   );
 }
 
@@ -145,7 +137,7 @@ function GoalsTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; thisQu
 
 function ProposalBanner({ proposal, onOpen }: { proposal: Proposal; onOpen: () => void }) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-brand-primary_alt p-5 ring-1 ring-brand ring-inset md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 rounded-xl bg-brand-primary_alt p-5 ring-1 ring-brand ring-inset md:flex-row md:items-center md:justify-between">
       <div>
         <p className="font-semibold text-brand-secondary">
           {proposal.status === "changes_requested" ? "The Strategist is revising" : `The Strategist proposed ${quarterLabel(proposal.quarter)}'s goals`}
