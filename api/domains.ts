@@ -81,7 +81,7 @@ async function handle(request: Request): Promise<Response> {
     if (!domain) return json({ error: "That isn't a domain name.", code: "DOMAIN-INVALID" }, 400);
     if (!TOKEN_SECRET) return json({ error: "Custom domains aren't switched on yet.", code: "DOMAIN-OFF" }, 503);
     const current = await siteDomains(auth.token, site, domain);
-    return json(await status(site, domain, current, false));
+    return json(await status(site, domain, current));
   }
 
   if (request.method === "POST") {
@@ -94,7 +94,7 @@ async function handle(request: Request): Promise<Response> {
       return json({ error: "Custom domains aren't switched on yet.", code: "DOMAIN-OFF" }, 503);
     }
     const current = await siteDomains(auth.token, site, domain);
-    const before = await status(site, domain, current, false);
+    const before = await status(site, domain, current);
     if (before.taken) return json({ error: "Another site already uses this domain.", code: "DOMAIN-TAKEN" }, 409);
     if (!before.records.every((r) => r.check === "ok")) {
       return json({ error: "The DNS records aren't there yet.", code: "DOMAIN-DNS", status: before }, 409);
@@ -107,8 +107,9 @@ async function handle(request: Request): Promise<Response> {
       if (res.status === 409) return json({ error: "Another site already uses this domain.", code: "DOMAIN-TAKEN" }, 409);
       if (!res.ok) return json({ error: "The domain couldn't be saved.", code: "DOMAIN-SAVE" }, 502);
     }
-    // Ask for the certificate now, so the first reader doesn't wait for it.
-    return json(await status(site, domain, { mine: domain, taken: false }, true));
+    // Starts the certificate: the handshake asks for it. A slow issuance
+    // reads as pending here, and the page's next check reports it.
+    return json(await status(site, domain, { mine: domain, taken: false }));
   }
 
   if (request.method === "DELETE") {
@@ -126,12 +127,11 @@ async function handle(request: Request): Promise<Response> {
   return json({ error: "Method not allowed" }, 405);
 }
 
-/** The DNS and HTTPS state of `domain` for `site`. `issue` waits longer for a certificate. */
+/** The DNS and HTTPS state of `domain` for `site`. */
 async function status(
   site: string,
   domain: string,
   current: { mine: string; taken: boolean },
-  issue: boolean,
 ): Promise<DomainStatus> {
   const { zone, provider } = await zoneOf(domain);
   const apex = domain === zone;
@@ -178,7 +178,7 @@ async function status(
   const connected = current.mine === domain;
   let https: DomainStatus["https"] = { check: "skipped", detail: "Waiting for DNS." };
   if (pointOk && connected && boxIps[0]) {
-    https = await handshake(boxIps[0], domain, issue ? 20000 : 6000);
+    https = await handshake(boxIps[0], domain, 6000);
   } else if (pointOk) {
     https = { check: "skipped", detail: "Requested once the domain is connected." };
   }
