@@ -1,11 +1,12 @@
 // The phone's nav: a menu button (the full nav bar in a drawer) and every
-// registered page as a tab in one scrolling row, the open one scrolled into view.
+// page in the tenant's plan as a tab in one scrolling row, the open one scrolled into view.
 
 import { useEffect, useRef } from "react";
 import { Menu01 } from "@untitledui/icons";
 import { toggleDrawer } from "@/lib/mobile";
 import { pageHref, useRoute } from "@/lib/route";
-import { PAGES, badgeOf, type PageRoute } from "@/lib/routes";
+import { badgeOf, type PageRoute } from "@/lib/routes";
+import { hookKey, usePages } from "@/components/lite/pages";
 import { Badge } from "@/components/base/badges/badges";
 import { cx } from "@/utils/cx";
 import { activePageOf } from "./nav";
@@ -13,6 +14,7 @@ import { activePageOf } from "./nav";
 export function PhoneTabs() {
   const [route] = useRoute();
   const active = activePageOf(route);
+  const pages = usePages();
   const row = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,8 +34,8 @@ export function PhoneTabs() {
         <Menu01 className="size-5" />
       </button>
       <nav aria-label="Pages" ref={row} className="flex min-w-0 flex-1 gap-1 overflow-x-auto px-1 py-2 [scrollbar-width:none]">
-        {PAGES.map((p) => (
-          <Tab key={p.id} page={p} active={active === p.id} />
+        {pages.map((p) => (
+          <Tab key={hookKey(p)} page={p} active={active === p.id} />
         ))}
       </nav>
     </div>

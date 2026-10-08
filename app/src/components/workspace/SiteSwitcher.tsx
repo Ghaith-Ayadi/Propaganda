@@ -11,6 +11,7 @@ import {
 } from "react-aria-components";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { useWorkspace } from "@/components/Workspace";
+import { usePlan } from "@/lib/tenantPlan";
 import { loadSiteIcon, useSiteIcon } from "@/lib/siteIcons";
 import { useEffect } from "react";
 import { cx } from "@/utils/cx";
@@ -80,6 +81,7 @@ export function SiteSwitcher() {
                     >
                       <TenantMark siteId={s.id} name={s.name} small />
                       <span className="truncate">{s.name}</span>
+                      <PlanTag siteId={s.id} />
                       <Check
                         className={cx(
                           "ml-auto size-3.5 shrink-0 text-fg-brand-primary",
@@ -155,4 +157,10 @@ function TenantMark({ siteId, name, small = false }: { siteId: string; name: str
       {(name || "?").slice(0, 1).toUpperCase()}
     </span>
   );
+}
+
+/** "Lite" beside a tenant on the free plan (lib/tenantPlan.ts). */
+function PlanTag({ siteId }: { siteId: string }) {
+  if (usePlan(siteId) !== "lite") return null;
+  return <span className="shrink-0 rounded px-1.5 text-xs text-quaternary ring-1 ring-inset ring-secondary">Lite</span>;
 }
