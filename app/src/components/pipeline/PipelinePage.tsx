@@ -71,7 +71,7 @@ function Board({ pitchId }: { pitchId?: string }) {
 
         {placeholder && (
           <p className="mt-4 text-sm text-quaternary">
-            Example data for a made-up tenant. Approving a pitch creates a real draft in your Test collection.
+            Example data for a made-up tenant. While it's example data, every approved pitch creates its draft in your Test collection, whatever collection the pitch names.
           </p>
         )}
 

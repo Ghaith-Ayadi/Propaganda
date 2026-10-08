@@ -44,7 +44,11 @@ export function ReviewPage({ id }: { id: string }) {
   const approve = () => {
     const when = approveAndSchedule(item.id);
     track("review_approved", { open_findings: problems });
-    toast.add({ type: "success", title: `Approved and scheduled for ${when}.` });
+    toast.add({
+      type: "success",
+      title: `Approved. Moved to Scheduled for ${when}.`,
+      description: "Publishing comes with the Publish step; the post itself isn't scheduled yet.",
+    });
     goPage("pipeline");
   };
 

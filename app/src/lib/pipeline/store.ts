@@ -7,6 +7,7 @@ import { useSyncExternalStore } from "react";
 import { db } from "@/lib/db";
 import { createPost } from "@/lib/posts";
 import { createBrief } from "@/lib/plan/briefs";
+import { createCollection } from "@/lib/collections";
 import { onScopeReset } from "@/lib/scope";
 import { placeholderAdapter, type PipelineAdapter } from "./adapter";
 import { shortDate } from "./dates";
@@ -15,11 +16,22 @@ import type { PipelineItem, PipelineSnapshot, PitchNote, Person } from "./types"
 const adapter: PipelineAdapter = placeholderAdapter;
 
 /**
- * Where a draft goes when the pitch's collection doesn't exist on this site.
- * Example pitches name a fictional tenant's collections, so their drafts land
- * in Test and never next to real articles.
+ * Where approved drafts go while the adapter is the placeholder. Example pitches
+ * name collections a real tenant can have (Guides, Product), so every approval
+ * lands in Test, never next to real articles. When the adapter reads real
+ * briefs, approvals go to the pitch's own collection.
  */
 export const FALLBACK_COLLECTION = "Test";
+
+/** The collection an approved pitch's draft is written to. */
+function draftCollection(item: PipelineItem): string {
+  return current().placeholder ? FALLBACK_COLLECTION : item.collection;
+}
+
+/** A post needs its collection row to show under a tab; create Test if the site has none. */
+async function ensureCollection(name: string): Promise<void> {
+  if (!(await db.collections.get(name))) await createCollection(name);
+}
 
 let snapshot: PipelineSnapshot | null = null;
 const listeners = new Set<() => void>();
@@ -105,8 +117,9 @@ export async function approvePitch(
   if (!item || item.stage !== "pitched") return null;
   const approved: PipelineItem = { ...item, ...decision, stage: "writing" };
 
-  const exists = (await db.collections.where("name").equals(item.collection).count()) > 0;
-  const post = await createPost(exists ? item.collection : FALLBACK_COLLECTION, { title: item.title });
+  const collection = draftCollection(item);
+  await ensureCollection(collection);
+  const post = await createPost(collection, { title: item.title });
   if (!post) return null;
   const brief = await createBrief({
     title: item.title,
@@ -134,7 +147,11 @@ export function sendBack(id: string, note: string) {
   updateItem(id, { stage: "writing", sentBackNote: note.trim() });
 }
 
-/** Approve the draft and put it in its slot: the publish-by date at the tenant's publish time. */
+/**
+ * Approve the draft and move it to Scheduled on its publish-by date at the
+ * tenant's publish time. Only the board moves: the post's own status is left
+ * alone until the Publish step exists.
+ */
 export function approveAndSchedule(id: string): string | null {
   const item = getItem(id);
   if (!item) return null;
@@ -157,7 +174,9 @@ export function setClaimState(id: string, claimId: string, state: "remembered" |
 /** "Write something yourself": a draft in the given collection that starts in Writing, with you as the writer. */
 export async function writeYourself(collection: string | null): Promise<string | null> {
   const { meId } = current().settings;
-  const post = await createPost(collection || FALLBACK_COLLECTION, { title: "" });
+  const target = collection || FALLBACK_COLLECTION;
+  await ensureCollection(target);
+  const post = await createPost(target, { title: "" });
   if (!post) return null;
   const today = new Date();
   const due = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14);
