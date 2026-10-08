@@ -93,7 +93,7 @@ Names: strategist, listener, scout, pitcher, writer, checker. A name with no
 workflow registered answers 404, which Chat reads as "not running yet". The
 tenant must exist (422 otherwise); Chat has already checked the person is a
 member. The run carries the attributes `site`, `agent`, `conversation` and
-`requestedBy`. With no secret set the route answers 503.
+`requestedBy`. With no secret set the route answers 503 (Chat reports the hand-off failed).
 
 An agent's thread plugs in with one call, in a file `main.ts` imports:
 
