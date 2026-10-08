@@ -12,7 +12,7 @@ import { PULL_OVERLAP_MS, captureCtx, type Ctx } from "@/lib/sync";
 import { reportError } from "@/lib/telemetry";
 import type { Post, PostVersion } from "@/types";
 
-export type VersionAuthor = "user" | "mcp:claude-code" | "migration";
+export type VersionAuthor = "user" | "mcp:claude-code" | "migration" | "agent:writer";
 
 /** A `post_versions` row. */
 export interface VersionRecord {
