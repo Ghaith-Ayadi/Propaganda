@@ -91,6 +91,10 @@ export function elapsedShare(key: QuarterKey, day: Day): number {
  * The join-week rule (Ayadi, 2026-10-07):
  * weeks 1-4 full targets; 5-8 prorated by weeks left ÷ 13; 9-13 no goals this
  * quarter, the first full quarter is the next one.
+ *
+ * OPEN RULE, held for Ayadi: a new tenant joining in weeks 5 to 8 also runs the
+ * 15-post Launch, which can be more than the prorated target (week 6: 24 → 13).
+ * The placeholder takes the larger of the two; the real rule isn't decided.
  */
 export function joinState(joinedAt: Day): JoinState {
   const key = quarterOf(joinedAt);

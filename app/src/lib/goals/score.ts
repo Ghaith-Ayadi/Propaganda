@@ -47,7 +47,15 @@ export function pct(n: number, d: number): number {
   return d <= 0 ? 0 : (n / d) * 100;
 }
 
-/** Volume: planned posts published ÷ the quarter's total. Can pass 100%. */
+/**
+ * Volume: planned posts published ÷ the quarter's total. Can pass 100%.
+ *
+ * OPEN RULE, held for Ayadi until the daily scoring job is built: this counts
+ * only planned posts and reports bonus posts (news, calls) on the side, after
+ * the cold-start doc's "0% opportunistic, bonus on top". The approved goal model
+ * (reviews/goal-model.md) counts every published post. Don't reuse this in the
+ * job before he picks one.
+ */
 export function volumeScore(published: PublishedFact[], t: GoalTargets["volume"]) {
   const planned = published.filter((p) => p.planned);
   const byTopic: Record<string, number> = {};
