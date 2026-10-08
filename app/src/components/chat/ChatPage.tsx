@@ -12,7 +12,7 @@ import { useConversation, useConversations } from "@/lib/chat/useChat";
 import type { Conversation } from "@/lib/chat/types";
 import { activeSite } from "@/lib/scope";
 import { goPage, usePageRest } from "@/lib/route";
-import { PageHeader } from "@/components/shell/PageHeader";
+import { CONTAINER, PageHeader } from "@/components/shell/PageHeader";
 import { useIsMobile } from "@/lib/mobile";
 import { cx } from "@/utils/cx";
 import type { ChatStatus } from "ai";
@@ -68,7 +68,7 @@ export function ChatPage() {
   );
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col px-4 pt-6 pb-4 md:px-10 md:pt-10 md:pb-6">
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Chat"
         description={`Ask the agent about anything in ${site?.name ?? "your site"}: pitches, goals, the knowledge base.`}
@@ -89,20 +89,23 @@ export function ChatPage() {
         }
       />
 
-      <div className="relative flex min-h-[420px] flex-1 overflow-hidden rounded-2xl bg-primary shadow-xs ring-1 ring-secondary">
-        {!isMobile && <aside className="flex w-60 shrink-0 flex-col border-r border-secondary bg-secondary_alt">{list}</aside>}
-        {isMobile && listOpen && (
-          <aside className="absolute inset-y-0 left-0 z-10 flex w-72 max-w-[85%] flex-col border-r border-secondary bg-primary shadow-lg">{list}</aside>
-        )}
-
-        <section className="flex min-w-0 flex-1 flex-col">
-          {messages.length > 0 || (activeId && loading) ? (
-            <Thread messages={messages} status={status} onRemember={remember} onRetry={retry} />
-          ) : (
-            <Welcome onPick={ask} />
+      {/* The shared container, stretched to the window so the composer stays put. */}
+      <div className={cx(CONTAINER, "flex min-h-0 flex-1 flex-col pt-6 pb-4 md:pt-8 md:pb-6")}>
+        <div className="relative flex min-h-[420px] flex-1 overflow-hidden rounded-2xl bg-primary shadow-xs ring-1 ring-secondary">
+          {!isMobile && <aside className="flex w-60 shrink-0 flex-col border-r border-secondary bg-secondary_alt">{list}</aside>}
+          {isMobile && listOpen && (
+            <aside className="absolute inset-y-0 left-0 z-10 flex w-72 max-w-[85%] flex-col border-r border-secondary bg-primary shadow-lg">{list}</aside>
           )}
-          <Composer streaming={busy} onSend={ask} onStop={() => void stop()} />
-        </section>
+
+          <section className="flex min-w-0 flex-1 flex-col">
+            {messages.length > 0 || (activeId && loading) ? (
+              <Thread messages={messages} status={status} onRemember={remember} onRetry={retry} />
+            ) : (
+              <Welcome onPick={ask} />
+            )}
+            <Composer streaming={busy} onSend={ask} onStop={() => void stop()} />
+          </section>
+        </div>
       </div>
     </div>
   );
