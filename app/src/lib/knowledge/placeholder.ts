@@ -9,6 +9,7 @@
 // `KB_BACKEND` in adapter.ts is "live".
 
 import type { KnowledgeBackend } from "./adapter";
+import { changed } from "./hooks";
 import {
   letterFor,
   type BulkAction,
@@ -947,7 +948,7 @@ export const placeholderKb: KnowledgeBackend = {
         });
       }
       pending = pending.map((p) => (p.id === id ? { ...p, status: "admitted" } : p));
-      onRuled?.();
+      changed();
     }, 1600);
     return id;
   },
@@ -1148,8 +1149,3 @@ export const placeholderKb: KnowledgeBackend = {
   },
 };
 
-/** The sample Guardian rules after a delay; the hooks layer sets this to refresh the pages. */
-export let onRuled: (() => void) | null = null;
-export function setOnRuled(fn: () => void) {
-  onRuled = fn;
-}
