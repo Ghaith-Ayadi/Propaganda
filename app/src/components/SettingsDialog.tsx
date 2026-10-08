@@ -409,6 +409,21 @@ export function DesignSection() {
 }
 
 /** Settings → Design: what the blog uses now, and the way into the Design editor. */
+/** The Design tab plus the full-screen Design editor it opens; the 0.2 Settings page shows it as its own section. */
+export function DesignSection() {
+  const [studio, setStudio] = useState(false);
+  return (
+    <>
+      <DesignTab onOpen={() => setStudio(true)} />
+      {studio && (
+        <Suspense fallback={null}>
+          <DesignStudio onClose={() => setStudio(false)} />
+        </Suspense>
+      )}
+    </>
+  );
+}
+
 function DesignTab({ onOpen }: { onOpen: () => void }) {
   const published = asDesign(useSetting<unknown>(DESIGN_KEY, null));
   const draft = asDesign(useSetting<unknown>(DRAFT_KEY, null));
