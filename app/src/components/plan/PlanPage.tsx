@@ -65,7 +65,7 @@ export function PlanPage() {
       {/* header */}
       <div className="flex items-center justify-between gap-3 border-b border-secondary px-6 py-4">
         <div className="flex items-center gap-3">
-          <h1 className="font-title text-2xl text-primary">Planning</h1>
+          <h1 className="type-title text-primary">Planning</h1>
           <span className="text-sm text-quaternary">
             {briefs.length} {briefs.length === 1 ? "brief" : "briefs"}
           </span>

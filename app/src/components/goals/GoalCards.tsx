@@ -140,7 +140,7 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
               return (
                 <li key={s.query} className="flex items-center justify-between gap-3 py-1.5">
                   <span className="truncate text-secondary">{s.query}</span>
-                  <span className={p != null && p <= 10 ? "font-semibold text-success-primary tabular-nums" : "text-quaternary tabular-nums"}>{p != null ? `#${p}` : "not ranked"}</span>
+                  <span className={p != null && p <= 10 ? "font-medium text-success-primary tabular-nums" : "text-quaternary tabular-nums"}>{p != null ? `#${p}` : "not ranked"}</span>
                 </li>
               );
             })}
@@ -176,7 +176,7 @@ export function ChangeHistory({ goals }: { goals: QuarterGoals }) {
             <span className="mt-1.5 size-2 shrink-0 rounded-full bg-fg-warning-secondary" aria-hidden />
             <div className="min-w-0 text-sm">
               <p className="text-primary">
-                <span className="font-semibold">Version {v.version}</span> · {shortDate(v.approvedAt)} · approved by {v.approvedBy}
+                <span className="font-medium">Version {v.version}</span> · {shortDate(v.approvedAt)} · approved by {v.approvedBy}
               </p>
               {v.changes.length ? (
                 <ul className="mt-0.5 text-secondary">

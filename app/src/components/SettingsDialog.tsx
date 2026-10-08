@@ -73,7 +73,7 @@ export function SettingsDialog({ onClose }: Props) {
       >
         {/* Side tabs */}
         <nav className="flex w-48 shrink-0 flex-col gap-0.5 border-r border-secondary bg-primary p-3">
-          <div className="mb-3 px-2 pt-1 font-title text-base text-primary">Settings</div>
+          <div className="mb-3 px-2 pt-1 type-heading text-primary">Settings</div>
           <TabButton active={tab === "author"} onClick={() => setTab("author")} icon={<User01 className="size-4" />}>
             Author
           </TabButton>
@@ -589,7 +589,7 @@ function FaviconField({ current }: { current: string | null }) {
           {current ? (
             <img src={current} alt="favicon" className="h-10 w-10 object-contain" />
           ) : (
-            <span className="font-title text-xl text-quaternary">V</span>
+            <span className="font-medium text-quaternary">V</span>
           )}
         </div>
         <div className="flex-1 text-xs text-tertiary">

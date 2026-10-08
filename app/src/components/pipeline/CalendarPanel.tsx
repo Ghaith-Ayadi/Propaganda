@@ -60,7 +60,7 @@ export function CalendarPanel() {
     <aside className="flex shrink-0 flex-col border-t border-secondary bg-primary xl:h-full xl:w-[420px] xl:border-t-0 xl:border-l">
       <div className="flex items-start justify-between gap-3 px-4 pt-6 pb-4 md:px-8 xl:px-6">
         <div>
-          <div className="text-xs font-semibold tracking-wide text-tertiary uppercase">
+          <div className="type-eyebrow text-tertiary">
             {mode === "month"
               ? "Month"
               : offset === 0
@@ -71,7 +71,7 @@ export function CalendarPanel() {
                     ? "Last week"
                     : "Week"}
           </div>
-          <div className="mt-1 font-title text-2xl text-primary">{mode === "week" ? weekLabel(start) : "Calendar"}</div>
+          <div className="mt-1 type-title text-primary">{mode === "week" ? weekLabel(start) : "Calendar"}</div>
         </div>
         <div className="flex items-center gap-2">
           <ButtonGroup
@@ -140,7 +140,7 @@ function WeekView({ start, placed }: { start: Date; placed: PipelineItem[] }) {
           const openSlot = dayItems.length === 0 && settings.slotDays.includes(d.getDay()) && key >= today;
           return (
             <li key={key} className="border-b border-secondary px-4 py-4 md:px-8 xl:px-6">
-              <div className="flex items-center justify-between text-sm font-semibold text-primary">
+              <div className="flex items-center justify-between text-sm font-medium text-primary">
                 <span>{dayLabel(d)}</span>
                 {key === today && <span className="font-normal text-tertiary">today</span>}
               </div>
@@ -154,7 +154,7 @@ function WeekView({ start, placed }: { start: Date; placed: PipelineItem[] }) {
                     i.stage === "published" ? "bg-success-primary hover:bg-success-secondary" : "bg-secondary hover:bg-secondary_hover",
                   )}
                 >
-                  <span className="text-md text-primary">{(i.postId && titles.get(i.postId)) || i.title}</span>
+                  <span className="text-sm text-primary">{(i.postId && titles.get(i.postId)) || i.title}</span>
                   <span className="flex flex-wrap items-center gap-2 text-sm text-tertiary">
                     <TopicBadge>{i.collection}</TopicBadge>
                     {personById(people, i.writerId)?.name}
@@ -216,12 +216,12 @@ function MonthsView({ placed, scrollBox }: { placed: PipelineItem[]; scrollBox: 
             className="flex min-h-[calc(100dvh-140px)] flex-col px-4 pt-3 pb-5 md:px-8 xl:px-6"
           >
             {firstOfQuarter && (
-              <div className="mb-3 flex items-center gap-3 text-xs font-semibold tracking-wide text-brand-secondary uppercase">
+              <div className="mb-3 flex items-center gap-3 type-eyebrow text-brand-secondary">
                 Q{m.getMonth() / 3 + 1} {m.getFullYear()}
                 <span className="h-px flex-1 bg-border-brand" />
               </div>
             )}
-            <h3 className="mb-2 text-md font-semibold text-primary">{MONTH.format(m)}</h3>
+            <h3 className="mb-2 type-heading text-primary">{MONTH.format(m)}</h3>
             <div className="grid grid-cols-7 text-center text-xs text-quaternary">
               {WEEKDAYS.map((w) => (
                 <div key={w} className="pb-1">
@@ -262,14 +262,14 @@ function MonthsView({ placed, scrollBox }: { placed: PipelineItem[]; scrollBox: 
                         type="button"
                         onClick={() => void openItem(i)}
                         title={`${(i.postId && titles.get(i.postId)) || i.title} · ${STAGE_LABEL[i.stage]}`}
-                        className={cx("line-clamp-2 rounded px-1 py-0.5 text-left text-[11px] leading-tight font-medium break-words", CHIP[i.stage])}
+                        className={cx("line-clamp-2 rounded px-1 py-0.5 text-left text-xs leading-tight font-medium break-words", CHIP[i.stage])}
                       >
                         {(i.postId && titles.get(i.postId)) || i.title}
                       </button>
                     ))}
-                    {dayItems.length > 2 && <span className="px-1 text-[11px] text-tertiary">+{dayItems.length - 2} more</span>}
+                    {dayItems.length > 2 && <span className="px-1 text-xs text-tertiary">+{dayItems.length - 2} more</span>}
                     {openSlot && (
-                      <span className="mt-auto rounded border border-dashed border-primary px-1 text-center text-[11px] text-quaternary" title="Open slot. Approve a pitch to fill it.">
+                      <span className="mt-auto rounded border border-dashed border-primary px-1 text-center text-xs text-quaternary" title="Open slot. Approve a pitch to fill it.">
                         Open
                       </span>
                     )}

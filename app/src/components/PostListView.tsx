@@ -12,7 +12,7 @@ export function PostListView() {
 
   return (
     <div className="mx-auto max-w-[820px] px-12 py-12">
-      <h1 className="mb-8 font-title text-3xl italic">All posts</h1>
+      <h1 className="mb-8 type-title">All posts</h1>
       <ul className="divide-y divide-border">
         {posts.map((p) => (
           <li key={p.id}>

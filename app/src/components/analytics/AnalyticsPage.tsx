@@ -24,7 +24,7 @@ export function AnalyticsPage() {
       <div className="border-b border-secondary px-6 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <h1 className="font-title text-2xl text-primary">Analytics</h1>
+            <h1 className="type-title text-primary">Analytics</h1>
           </div>
           <DateRangePicker value={range} onChange={setRange} />
         </div>

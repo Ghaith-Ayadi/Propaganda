@@ -99,7 +99,7 @@ export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
           <TextArea
             rows={q.rows}
             placeholder={q.example}
-            className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-md text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+            className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-sm text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
           />
           <span className="text-sm text-tertiary">{q.hint}</span>
         </TextField>

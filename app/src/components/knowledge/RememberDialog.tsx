@@ -66,7 +66,7 @@ export function RememberDialog({ onClose, initialText = "" }: { onClose: () => v
       <Modal className="w-full max-w-lg rounded-xl bg-primary shadow-2xl ring-1 ring-secondary outline-hidden">
         <Dialog className="flex flex-col gap-5 p-6 outline-hidden">
           <div>
-            <Heading slot="title" className="font-title text-2xl text-primary">
+            <Heading slot="title" className="type-heading text-primary">
               Remember
             </Heading>
             <p className="mt-1 text-sm text-tertiary">

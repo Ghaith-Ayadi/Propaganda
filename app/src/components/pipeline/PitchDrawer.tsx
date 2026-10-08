@@ -134,7 +134,7 @@ function PitchBody({
       <div className="border-b border-secondary px-5 pt-5 pb-5 md:px-8">
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold tracking-wide text-tertiary uppercase">Pitch</span>
+            <span className="type-eyebrow text-tertiary">Pitch</span>
             <FitBadge reasons={item.reasons} />
             {item.topics.map((t) => (
               <TopicBadge key={t}>{t}</TopicBadge>
@@ -144,8 +144,8 @@ function PitchBody({
           </div>
           <CloseButton size="md" onPress={onClose} label="Close" className="-mt-1 -mr-2 shrink-0" />
         </div>
-        <h2 className="mt-3 font-title text-3xl text-primary">{item.title}</h2>
-        <p className="mt-2 text-md text-tertiary">{item.why}</p>
+        <h2 className="mt-3 type-title text-primary">{item.title}</h2>
+        <p className="mt-2 text-sm text-tertiary">{item.why}</p>
         {item.learned && <p className="mt-2 text-sm text-tertiary italic">{item.learned}</p>}
         {item.changed && (
           <p className="mt-3 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary">
@@ -162,10 +162,10 @@ function PitchBody({
 
       {/* body */}
       <div className="flex-1 overflow-y-auto px-5 py-6 md:px-8">
-        <h3 className="text-md font-semibold text-primary">Why this, why now</h3>
+        <h3 className="type-heading text-primary">Why this, why now</h3>
         <dl className="mt-3 flex flex-col gap-1.5">
           {item.reasons.map((r, n) => (
-            <div key={n} className="grid grid-cols-[110px_1fr] gap-3 rounded-lg bg-secondary px-4 py-3 text-md">
+            <div key={n} className="grid grid-cols-[110px_1fr] gap-3 rounded-lg bg-secondary px-4 py-3 text-sm">
               <dt className="text-secondary">{REASON_LABEL[r.kind]}</dt>
               <dd className={r.counts ? "text-primary" : "text-tertiary"}>{r.text}</dd>
             </div>
@@ -173,7 +173,7 @@ function PitchBody({
           {item.reasons.length === 0 && <p className="text-sm text-tertiary">No reasons recorded.</p>}
         </dl>
 
-        <h3 className="mt-7 text-md font-semibold text-primary">Against your goals</h3>
+        <h3 className="mt-7 type-heading text-primary">Against your goals</h3>
         <ul className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {GOALS.map((g) => {
             const e = item.goals.find((x) => x.goal === g);
@@ -203,7 +203,7 @@ function PitchBody({
               value={publishBy}
               disabled={!decidable}
               onChange={(e) => e.target.value && setPublishBy(e.target.value)}
-              className="rounded-lg bg-primary px-3 py-2 text-md text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset focus:ring-2 focus:ring-brand disabled:opacity-60"
+              className="rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset focus:ring-2 focus:ring-brand disabled:opacity-60"
             />
           </label>
         </div>
@@ -217,12 +217,12 @@ function PitchBody({
           </div>
           <div>
             <Eyebrow>{item.topics.length > 1 ? "Topics" : "Topic"}</Eyebrow>
-            <div className="mt-1.5 text-md text-primary">{item.topics.join(", ")}</div>
+            <div className="mt-1.5 text-sm text-primary">{item.topics.join(", ")}</div>
             {item.topicProgress && <div className="text-sm text-tertiary">{item.topicProgress}</div>}
           </div>
           <div>
             <Eyebrow>Length</Eyebrow>
-            <div className="mt-1.5 text-md text-primary">{item.length}</div>
+            <div className="mt-1.5 text-sm text-primary">{item.length}</div>
           </div>
         </div>
 
@@ -231,7 +231,7 @@ function PitchBody({
 
         {item.outline.length > 0 && (
           <div className="mt-7">
-            <h3 className="text-md font-semibold text-primary">Outline</h3>
+            <h3 className="type-heading text-primary">Outline</h3>
             {decidable && <p className="text-sm text-tertiary">Leave a note on any line.</p>}
             <ol className="mt-3 flex flex-col gap-1">
               {item.outline.map((l, n) => {
@@ -240,8 +240,8 @@ function PitchBody({
                 return (
                   <li key={l.id} className={cx("group rounded-lg px-3 py-2", showNote && "bg-secondary")}>
                     <div className="flex items-start gap-3">
-                      <span className="w-5 shrink-0 text-right text-md text-quaternary">{n + 1}.</span>
-                      <span className="flex-1 text-md text-primary">{l.text}</span>
+                      <span className="w-5 shrink-0 text-right text-sm text-quaternary">{n + 1}.</span>
+                      <span className="flex-1 text-sm text-primary">{l.text}</span>
                       {decidable && !showNote && (
                         <button
                           type="button"
@@ -279,11 +279,11 @@ function PitchBody({
 
         {item.sources.length > 0 && (
           <div className="mt-7">
-            <h3 className="text-md font-semibold text-primary">Sources</h3>
+            <h3 className="type-heading text-primary">Sources</h3>
             <ul className="mt-2 flex flex-col gap-1">
               {item.sources.map((s) => (
                 <li key={s.url}>
-                  <a href={s.url} target="_blank" rel="noreferrer" className="text-md text-brand-secondary underline underline-offset-4">
+                  <a href={s.url} target="_blank" rel="noreferrer" className="text-sm text-brand-secondary underline underline-offset-4">
                     {s.label}
                   </a>
                 </li>
@@ -294,7 +294,7 @@ function PitchBody({
 
         {decidable && (
           <label className="mt-7 block">
-            <span className="text-md font-semibold text-primary">A note for the writer</span>
+            <span className="type-heading text-primary">A note for the writer</span>
             <span className="ml-2 text-sm text-tertiary">optional</span>
             <TextArea
               rows={2}
@@ -312,7 +312,7 @@ function PitchBody({
         (rejecting ? (
           <div className="border-t border-secondary p-4 md:px-8">
             <div className="rounded-xl bg-error-primary p-4">
-              <label htmlFor="reject-reason" className="text-xs font-semibold tracking-wide text-error-primary uppercase">
+              <label htmlFor="reject-reason" className="type-eyebrow text-error-primary">
                 Why reject it? Required.
               </label>
               <TextArea
@@ -365,8 +365,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   if (!children) return null;
   return (
     <div className="mt-7">
-      <h3 className="text-md font-semibold text-primary">{title}</h3>
-      <p className="mt-2 text-md leading-7 text-secondary">{children}</p>
+      <h3 className="type-heading text-primary">{title}</h3>
+      <p className="mt-2 text-sm text-secondary">{children}</p>
     </div>
   );
 }

@@ -217,7 +217,7 @@ export function Editor({ post }: Props) {
             }
           }}
           placeholder="Untitled"
-          className="w-full bg-transparent font-title text-3xl leading-tight md:text-4xl text-primary outline-none placeholder:text-quaternary"
+          className="w-full bg-transparent font-serif text-3xl leading-tight md:text-4xl text-primary outline-none placeholder:text-quaternary"
         />
         <textarea
           ref={subtitleRef}

@@ -45,7 +45,7 @@ export function Card({
 export function Headline({ value, unit, className }: { value: ReactNode; unit?: ReactNode; className?: string }) {
   return (
     <div className={cx("flex items-baseline gap-2", className)}>
-      <span className="font-title text-4xl text-primary tabular-nums md:text-5xl">{value}</span>
+      <span className="type-figure text-primary">{value}</span>
       {unit && <span className="text-sm text-tertiary">{unit}</span>}
     </div>
   );
@@ -86,7 +86,7 @@ export function OriginBadge({ origin }: { origin: PlanOrigin }) {
 export function AuthorityExplainer({ compact = false }: { compact?: boolean }) {
   return (
     <div className={cx("rounded-xl bg-secondary p-4 text-sm", compact && "p-3")}>
-      <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-secondary">
+      <p className="mb-1.5 flex items-center gap-1.5 font-medium text-secondary">
         <InfoCircle className="size-4 text-fg-quaternary" aria-hidden />
         Why rankings take a while
       </p>
@@ -108,7 +108,7 @@ export function PlaceholderBanner() {
   return (
     <div className="mb-6 flex flex-col gap-3 rounded-xl bg-warning-primary p-3 text-sm ring-1 ring-secondary ring-inset md:flex-row md:items-center md:justify-between">
       <p className="text-warning-primary">
-        <span className="font-semibold">Sample data.</span> The goal tables don't exist yet; this is a made-up tenant. Nothing you do here is saved.
+        <span className="font-medium">Sample data.</span> The goal tables don't exist yet; this is a made-up tenant. Nothing you do here is saved.
       </p>
       <NativeSelect
         size="sm"
