@@ -91,6 +91,24 @@ SDK). It checks the budget rules, runs the call, and writes a row to `public.mod
 cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month on Home
 (`CostMeter`), the superadmin sees all of it in Admin > Consumption.
 
+**Own keys (BYOK).** A tenant may save its own Anthropic key (Settings, "Your Anthropic
+key", through `api/model-key.ts`; owners set or remove it). It is stored only as AES-GCM ciphertext under
+`MODEL_KEY_SECRET` in `model_keys` (service role only; `api/_ai/modelKeys.ts`) and never goes
+back to a browser, a log or a message. With a key saved, every `anthropic/` call for that
+tenant runs on it, logged `paid_by = 'tenant'` and outside our budgets; there is never a
+fallback to our account. A failed key stalls the tenant's runs (`tenantKeyOf` in
+`worker/src/limits.ts`) until it works again.
+
+## Agents: the DBOS worker
+
+Agents run as DBOS workflows in `worker/` (one Node process on the box, `propaganda-worker`
+in Bedrock's `compose/propaganda-supabase`, built from the same checkout as the schema).
+DBOS keeps its tables in its own database, `propaganda_dbos`; the worker only reads the
+app's. Start a run with `startForTenant(site, ...)`; a model call is a `modelStep()`, which
+waits out the Claude subscription's usage limit instead of failing. Admin > Runs reads the
+worker's Runs API (`/worker/v1/`, superadmins only). Read `worker/README.md` before adding
+a workflow: changing one that has runs in flight needs `DBOS.patch()`.
+
 ## Telemetry: PostHog
 
 Errors (browser and Vercel functions) and product analytics go to **PostHog Cloud, EU,

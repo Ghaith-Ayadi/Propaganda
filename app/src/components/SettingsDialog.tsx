@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { File02, Globe01, PenTool01, Plus, Trash01, Upload01, User01, XClose } from "@untitledui/icons";
+import { File02, Globe01, Key01, PenTool01, Plus, Trash01, Upload01, User01, XClose } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { useWorkspace } from "@/components/Workspace";
@@ -26,12 +26,13 @@ import {
 import { toast } from "@/components/base/toast/toast";
 import { coded, userMessage } from "@/lib/errors";
 import { reportError } from "@/lib/telemetry";
+import { ModelKeyCard } from "@/components/settings/ModelKeyCard";
 
 interface Props {
   onClose: () => void;
 }
 
-type Tab = "author" | "site" | "editor" | "templates";
+type Tab = "author" | "site" | "editor" | "templates" | "anthropic";
 
 const DEFAULT_MANIFESTO =
   "It's called Verbatim because none of it is edited. I don't edit what I write. If I don't like what I said, I don't publish. No AI writing, no nonsense.";
@@ -71,6 +72,9 @@ export function SettingsDialog({ onClose }: Props) {
           <TabButton active={tab === "templates"} onClick={() => setTab("templates")} icon={<File02 className="size-4" />}>
             Templates
           </TabButton>
+          <TabButton active={tab === "anthropic"} onClick={() => setTab("anthropic")} icon={<Key01 className="size-4" />}>
+            Anthropic key
+          </TabButton>
         </nav>
 
         {/* Body */}
@@ -91,6 +95,7 @@ export function SettingsDialog({ onClose }: Props) {
             {tab === "site" && <SiteTab />}
             {tab === "editor" && <EditorTab />}
             {tab === "templates" && <TemplatesTab />}
+            {tab === "anthropic" && <ModelKeyCard />}
           </div>
         </div>
       </div>
