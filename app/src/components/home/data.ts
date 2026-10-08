@@ -96,6 +96,7 @@ function weekChange(s: DayPoint[], unit: (n: number) => string): Goal["change"] 
   const now = s[s.length - 1].value;
   const then = s[Math.max(0, s.length - 8)].value;
   const d = Math.round(now - then);
+  if (d === 0) return { text: "No change this week", direction: "flat" };
   return { text: `${d > 0 ? "+" : ""}${unit(d)} this week`, direction: d > 0 ? "up" : d < 0 ? "down" : "flat" };
 }
 
