@@ -143,7 +143,7 @@ function TabButton({
   );
 }
 
-function AuthorTab() {
+export function AuthorTab() {
   const name = useSetting<string>("author.name", "");
   const tagline = useSetting<string>("author.tagline", "");
   const bio = useSetting<string>("author.bio", "");
@@ -196,7 +196,7 @@ function AuthorTab() {
   );
 }
 
-function SiteTab() {
+export function SiteTab() {
   // The built-in manifesto is Verbatim's; other sites start blank.
   const { site } = useWorkspace();
   const manifesto = useSetting<string>("site.manifesto", site.slug === "verbatim" ? DEFAULT_MANIFESTO : "");
@@ -610,7 +610,7 @@ function FaviconField({ current }: { current: string | null }) {
   );
 }
 
-function EditorTab() {
+export function EditorTab() {
   return (
     <div className="space-y-8">
       <BlockSection title="Paragraph">
@@ -792,7 +792,7 @@ function OptionGroup({
   );
 }
 
-function TemplatesTab() {
+export function TemplatesTab() {
   useEffect(() => {
     void seedTemplatesIfEmpty();
   }, []);

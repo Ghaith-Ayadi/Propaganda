@@ -143,6 +143,7 @@ export const PAGES: PageRoute[] = [
     path: "connections",
     description: "Where Propaganda listens: calls, Slack and documents.",
     section: "main",
+    component: lazy(() => import("@/components/connections/ConnectionsPage").then((m) => ({ default: m.ConnectionsPage }))),
   },
   {
     id: "settings",
@@ -151,8 +152,7 @@ export const PAGES: PageRoute[] = [
     path: "settings",
     description: "People, content, agents and this tenant's details.",
     section: "footer",
-    // Opens the 0.1 settings dialog until the Settings thread lands.
-    component: lazy(() => import("@/components/pages/SettingsPage").then((m) => ({ default: m.SettingsPage }))),
+    component: lazy(() => import("@/components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage }))),
   },
 ];
 
