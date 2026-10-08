@@ -218,11 +218,14 @@ async function main() {
   check((await api("/agents/checker", { method: "POST", body: { ...handoff, task: " " }, headers: D })).status === 400, "empty task: 400");
   check((await api("/agents/checker", { method: "POST", body: { ...handoff, requestedBy: "me" }, headers: D })).status === 400, "bad requestedBy: 400");
   check((await api("/agents/checker", { method: "POST", body: { ...handoff, site: "nosuchsite0000a" }, headers: D })).status === 422, "unknown tenant: 422");
+  check((await api("/agents/checker", { method: "POST", body: { ...handoff, post: "not a post id" }, headers: D })).status === 400, "bad post: 400");
+  check((await api("/agents/checker", { method: "POST", body: { ...handoff, task: "nothing" }, headers: D })).status === 422, "the agent finds nothing to work on: 422");
   const started = await api("/agents/checker", { method: "POST", body: handoff, headers: D });
   check(started.status === 202 && typeof started.json?.runId === "string", "starts the run: 202 { runId }");
   const dispatched = await until("dispatched run done", async () => ((await run(started.json.runId))?.state === "done" ? run(started.json.runId) : null));
   check(dispatched.name === "demo-agent" && dispatched.site === SITE, "the run is the agent's workflow, for that tenant");
   check(dispatched.output === "got: Check the post about pricing", "it got Chat's task");
+  check(dispatched.input?.[0]?.post === null, "no post named: post is null");
   check((await api(`/runs?site=${SITE}`)).json.runs.some((r) => r.id === started.json.runId), "listed on the Runs page");
 
   console.log("errors");

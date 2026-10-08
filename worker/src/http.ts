@@ -5,7 +5,7 @@
 // token.
 //
 //   GET  /health                 200 "ok"
-//   POST /agents/:name           202 { runId }  body { site, task, requestedBy, conversation }
+//   POST /agents/:name           202 { runId }  body { site, task, requestedBy, conversation, post? }
 //   GET  /runs?state=&site=&name=&limit=&offset=
 //   GET  /runs/:id
 //   POST /runs/:id/retry         { id, how }   id is the new run's when forked
@@ -65,16 +65,19 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** The hand-off body, checked; the tenant must exist. */
 async function dispatchInput(db: Pool, req: IncomingMessage): Promise<DispatchInput> {
   const body = await readJson(req);
-  const { site, task, requestedBy, conversation } = body;
+  const { site, task, requestedBy, conversation, post } = body;
   if (typeof site !== "string" || !SITE_RE.test(site)) throw new HttpError(400, "Bad site");
   if (typeof task !== "string" || !task.trim() || task.length > 8000) throw new HttpError(400, "Bad task");
   if (typeof requestedBy !== "string" || !UUID_RE.test(requestedBy)) throw new HttpError(400, "Bad requestedBy");
   if (typeof conversation !== "string" || !conversation || conversation.length > 200) {
     throw new HttpError(400, "Bad conversation");
   }
+  if (post !== undefined && post !== null && (typeof post !== "string" || !SITE_RE.test(post))) {
+    throw new HttpError(400, "Bad post");
+  }
   const found = await db.query("select 1 from public.sites where id = $1", [site]);
   if (!found.rowCount) throw new HttpError(422, "No such tenant");
-  return { site, task, requestedBy, conversation };
+  return { site, task, requestedBy, conversation, post: typeof post === "string" ? post : null };
 }
 
 async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -101,9 +104,10 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     const name = decodeURIComponent(agent[1]!);
     if (!isAgentName(name)) throw new HttpError(404, "No such agent");
     const input = await dispatchInput(db, req);
-    const handle = await dispatchAgent(name, input);
-    if (!handle) throw new HttpError(404, `The ${name} agent isn't running yet`);
-    return send(res, 202, { runId: handle.workflowID });
+    const runId = await dispatchAgent(name, input);
+    if (runId === undefined) throw new HttpError(404, `The ${name} agent isn't running yet`);
+    if (runId === null) throw new HttpError(422, `The ${name} found nothing to work on: name the post or the thing to look at.`);
+    return send(res, 202, { runId });
   }
 
   await requireSuperadmin(db, req.headers.authorization, config.jwtSecret());

@@ -43,38 +43,58 @@ export interface DispatchInput {
   requestedBy: string;
   /** The Chat conversation the result goes back to. */
   conversation: string;
+  /** The post the ask is about, when Chat knows it (a 15-character id). */
+  post: string | null;
 }
 
 /** The names Chat may dispatch to (api/_chat/dispatch.ts DISPATCHABLE). */
 export const AGENT_NAMES = ["strategist", "listener", "scout", "pitcher", "writer", "checker"] as const;
 export type AgentName = (typeof AGENT_NAMES)[number];
 
-type AgentWorkflow = (input: DispatchInput) => Promise<unknown>;
-const agents = new Map<AgentName, AgentWorkflow>();
+/**
+ * How an agent takes a hand-off: start its run and return the run id, or null
+ * when the ask names nothing it can work on (the route answers 422). Most
+ * agents are one line: `(input) => startForDispatch("scout", scout, input)`.
+ * One that derives its run from the work (the Checker's "checker-<version>")
+ * starts it its own way and returns that id.
+ */
+export type AgentHandler = (input: DispatchInput) => Promise<string | null>;
+const agents = new Map<AgentName, AgentHandler>();
 
 /**
- * Make `workflow` (a DBOS.registerWorkflow result taking a DispatchInput) the
- * one Chat starts for `name`. Call it at module load, from a file main.ts
- * imports, so it is registered before launch.
+ * Make `handler` the one Chat's hand-offs to `name` go to. Call it at module
+ * load, from a file main.ts imports, so it is there before the server starts.
  */
-export function registerAgent(name: AgentName, workflow: AgentWorkflow): void {
+export function registerAgent(name: AgentName, handler: AgentHandler): void {
   if (agents.has(name)) throw new Error(`agent ${name} is registered twice`);
-  agents.set(name, workflow);
+  agents.set(name, handler);
 }
 
 export function isAgentName(name: string): name is AgentName {
   return (AGENT_NAMES as readonly string[]).includes(name);
 }
 
-/** The run started for `name`, or null when no workflow is registered for it. */
-export async function dispatchAgent(name: AgentName, input: DispatchInput): Promise<WorkflowHandle<unknown> | null> {
-  const workflow = agents.get(name);
-  if (!workflow) return null;
-  // The conversation and the asker are attributes too, so Chat (and the Runs
-  // page) can find every run a conversation started.
-  return startWithAttributes(
-    { site: input.site, agent: name, conversation: input.conversation, requestedBy: input.requestedBy },
-    workflow,
-    input,
-  );
+/** The attributes a dispatched run carries, so Chat and the Runs page can find every run a conversation started. */
+export function dispatchAttributes(name: AgentName, input: DispatchInput): Record<string, string> {
+  return { site: input.site, agent: name, conversation: input.conversation, requestedBy: input.requestedBy };
+}
+
+/** Start `workflow` (taking the DispatchInput) for a hand-off to `name`; returns the run id. */
+export async function startForDispatch(
+  name: AgentName,
+  workflow: (input: DispatchInput) => Promise<unknown>,
+  input: DispatchInput,
+): Promise<string> {
+  const handle = await startWithAttributes(dispatchAttributes(name, input), workflow, input);
+  return handle.workflowID;
+}
+
+/**
+ * The hand-off's run id; undefined when no agent is registered for `name`
+ * (404, "not running yet"), null when it found nothing to work on (422).
+ */
+export async function dispatchAgent(name: AgentName, input: DispatchInput): Promise<string | null | undefined> {
+  const handler = agents.get(name);
+  if (!handler) return undefined;
+  return handler(input);
 }

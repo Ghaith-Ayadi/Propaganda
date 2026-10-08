@@ -87,19 +87,24 @@ Every route but `/health` needs a superadmin's Supabase access token.
 ### Dispatch, from Chat
 
 `POST /agents/:name` with `Authorization: Bearer $WORKER_DISPATCH_SECRET` and
-`{ site, task, requestedBy, conversation }` starts that agent's workflow on the
-`agents` queue and answers `202 { runId }` (the contract is `api/_chat/dispatch.ts`).
+`{ site, task, requestedBy, conversation, post? }` hands the ask to that agent,
+which starts its run on the `agents` queue, and answers `202 { runId }` (the
+contract is `api/_chat/dispatch.ts`; `post` is an optional post id).
 Names: strategist, listener, scout, pitcher, writer, checker. A name with no
 workflow registered answers 404, which Chat reads as "not running yet". The
-tenant must exist (422 otherwise); Chat has already checked the person is a
-member. The run carries the attributes `site`, `agent`, `conversation` and
+tenant must exist (422 otherwise), and so must something to work on: an agent
+that finds nothing in the ask answers null, and the route 422. Chat has already
+checked the person is a member. A run started with `startForDispatch()` carries the attributes `site`, `agent`, `conversation` and
 `requestedBy`. With no secret set the route answers 503 (Chat reports the hand-off failed).
 
-An agent's thread plugs in with one call, in a file `main.ts` imports:
+This is the only dispatch route: an agent's thread plugs in with one call, in
+a file `main.ts` imports, and never adds a route of its own:
 
 ```ts
-export const checkerRun = DBOS.registerWorkflow(checker, { name: "checker" });
-registerAgent("checker", checkerRun);   // checker(input: DispatchInput)
+export const scoutRun = DBOS.registerWorkflow(scout, { name: "scout" });   // scout(input: DispatchInput)
+registerAgent("scout", (input) => startForDispatch("scout", scoutRun, input));
+// Or start the run your own way and return its id (null: nothing to work on):
+registerAgent("checker", (input) => startCheckOnRequest(input.site, input.post, input.task));
 ```
 
 ## Running it

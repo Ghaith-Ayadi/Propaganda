@@ -5,7 +5,7 @@
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { modelStep } from "../limits.js";
-import { isAgentName, registerAgent, type DispatchInput } from "./agents.js";
+import { isAgentName, registerAgent, startForDispatch, type DispatchInput } from "./agents.js";
 
 export interface DemoInput {
   /** When the run was asked for (epoch ms): the pretend limit lasts until startedAt + stallSeconds. */
@@ -55,4 +55,9 @@ async function demoAgentRun(input: DispatchInput): Promise<string> {
 }
 const demoAgent = DBOS.registerWorkflow(demoAgentRun, { name: "demo-agent" });
 const testAgent = process.env.WORKER_TEST_AGENT;
-if (testAgent && isAgentName(testAgent)) registerAgent(testAgent, demoAgent);
+if (testAgent && isAgentName(testAgent)) {
+  // A task of "nothing" finds nothing to work on, to test the 422.
+  registerAgent(testAgent, (input) =>
+    input.task === "nothing" ? Promise.resolve(null) : startForDispatch(testAgent, demoAgent, input),
+  );
+}
