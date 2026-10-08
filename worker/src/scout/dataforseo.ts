@@ -33,6 +33,8 @@ interface Task {
   status_code: number;
   status_message: string;
   cost?: number;
+  /** What was posted, echoed back (task_post: the task's fields, our tag included). */
+  data?: { tag?: string };
   result?: unknown[] | null;
 }
 
@@ -178,11 +180,13 @@ export async function queueSearches(site: string, requests: SerpRequest[]): Prom
         );
         return { value: body.tasks ?? [], costUsd: Number(body.cost ?? 0) || 0 };
       });
-      chunk.forEach(({ n }, j) => {
-        const t = tasks[j];
+      // Matched on the tag each task carries, not on its place in the answer.
+      const byTag = new Map(tasks.filter((t) => t.data?.tag !== undefined).map((t) => [t.data!.tag!, t]));
+      for (const { n } of chunk) {
+        const t = byTag.get(String(n));
         // 20100: "Task Created". A refused task is reported as missing results, not a failed run.
         out[n] = t?.id && t.status_code === 20100 ? { kind, id: t.id } : null;
-      });
+      }
     }
   }
   return out.map((q, n) => q ?? { kind: requests[n]!.kind, id: "" });

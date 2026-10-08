@@ -219,7 +219,8 @@ only spends for tenants in `kb_agent_sites`.
 
 ## The Scout
 
-Once a week (Mondays 06:00 UTC, `SCOUT_CRON`) the `scout-weekly` schedule
+Once a week (Sundays 06:00 UTC, `SCOUT_CRON`, so its ideas are in before the
+Pitcher's Monday 07:00 run) the `scout-weekly` schedule
 starts one run per tenant that has something to follow, under the id
 `scout-<site>-<day>`, so a week is never scouted twice. A run:
 
