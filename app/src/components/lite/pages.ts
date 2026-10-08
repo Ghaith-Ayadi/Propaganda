@@ -68,3 +68,12 @@ export function findPlanPage(plan: Plan, path: string): { page: PageRoute; locke
   const other = PAGES.find((p) => p.path === path);
   return other ? { page: other, locked: true } : undefined;
 }
+
+/**
+ * A React key for a page's nav row. A plan can drop a page's hooks (Lite has no
+ * Pipeline count), and a row that keeps its key while its hook count changes
+ * breaks React's rules of hooks, so the key changes with them. (UI assembly #37.)
+ */
+export function hookKey(p: PageRoute): string {
+  return `${p.id}${p.useBadge ? ":b" : ""}${p.useChildren ? ":c" : ""}`;
+}
