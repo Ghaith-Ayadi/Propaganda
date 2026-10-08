@@ -60,7 +60,7 @@ export interface GoalsAdapter {
   /**
    * The onboarding answers the Strategist starts from, per site. Not in
    * app_settings (public): competitor lists and plans are private.
-   * Real adapter: tenant_profile.answers (draft table in the PR).
+   * Real adapter: tenant_profile.answers (draft shape in this PR's body).
    */
   strategyAnswers(siteId: string): StrategyAnswers;
   saveStrategyAnswers(siteId: string, answers: StrategyAnswers): Promise<void>;
