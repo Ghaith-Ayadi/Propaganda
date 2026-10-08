@@ -9,4 +9,3 @@ node test/shared.mjs
 node test/agents.mjs
 node test/pitch-write.mjs
 node test/e2e.mjs
-# Needs PostgREST (POSTGREST_BIN) and pgvector on the server; skips without PostgREST.
