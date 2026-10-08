@@ -15,7 +15,9 @@ import { goPage, usePageRest } from "@/lib/route";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { useIsMobile } from "@/lib/mobile";
 import { cx } from "@/utils/cx";
-import { Message } from "./Message";
+import type { ChatStatus } from "ai";
+import type { ChatUIMessage } from "@/lib/chat/types";
+import { Message, ReplyError, ReplyRow, Thinking } from "./Message";
 
 const SUGGESTIONS = [
   "Why is the SOC 2 pitch rated a strong fit?",
@@ -31,7 +33,11 @@ export function ChatPage() {
   const siteId = site?.id ?? "";
 
   const { conversations, create, remove, touch, placeholder } = useConversations(siteId);
-  const { messages, loading, streaming, send, stop, remember } = useConversation(siteId, activeId, touch);
+  const { messages, status, loading, busy, send, stop, retry, remember } = useConversation(siteId, activeId, {
+    create,
+    touch,
+    onStarted: (id) => goPage("chat", id),
+  });
   const isMobile = useIsMobile();
   const [listOpen, setListOpen] = useState(false);
 
@@ -40,18 +46,7 @@ export function ChatPage() {
     if (activeId && conversations && !conversations.some((c) => c.id === activeId)) goPage("chat");
   }, [activeId, conversations]);
 
-  const ask = async (text: string) => {
-    if (activeId) return send(text);
-    const c = await create();
-    goPage("chat", c.id);
-    await send(text, c.id);
-  };
-
-  const retry = () => {
-    const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    const text = lastUser?.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
-    if (text) void send(text);
-  };
+  const ask = (text: string) => void send(text);
 
   const list = (
     <ConversationList
@@ -101,12 +96,12 @@ export function ChatPage() {
         )}
 
         <section className="flex min-w-0 flex-1 flex-col">
-          {activeId && (messages.length > 0 || loading) ? (
-            <Thread messages={messages} onRemember={remember} onRetry={streaming ? undefined : retry} />
+          {messages.length > 0 || (activeId && loading) ? (
+            <Thread messages={messages} status={status} onRemember={remember} onRetry={retry} />
           ) : (
-            <Welcome onPick={(s) => void ask(s)} />
+            <Welcome onPick={ask} />
           )}
-          <Composer streaming={streaming} onSend={(t) => void ask(t)} onStop={stop} />
+          <Composer streaming={busy} onSend={ask} onStop={() => void stop()} />
         </section>
       </div>
     </div>
@@ -202,12 +197,14 @@ function Welcome({ onPick }: { onPick: (s: string) => void }) {
 
 function Thread({
   messages,
+  status,
   onRemember,
   onRetry,
 }: {
-  messages: ReturnType<typeof useConversation>["messages"];
+  messages: ChatUIMessage[];
+  status: ChatStatus;
   onRemember: (statement: string, messageId: string) => Promise<void>;
-  onRetry?: () => void;
+  onRetry: () => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -216,7 +213,7 @@ function Thread({
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, status]);
 
   const last = messages[messages.length - 1];
   return (
@@ -230,8 +227,20 @@ function Thread({
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
         {messages.map((m) => (
-          <Message key={m.id} message={m} onRemember={onRemember} onRetry={m === last ? onRetry : undefined} />
+          <Message
+            key={m.id}
+            message={m}
+            streaming={status === "streaming" && m === last && m.role === "assistant"}
+            onRemember={onRemember}
+          />
         ))}
+        {/* Sent, nothing back yet: useChat adds the reply on its first chunk. */}
+        {status === "submitted" && (
+          <ReplyRow>
+            <Thinking />
+          </ReplyRow>
+        )}
+        {status === "error" && <ReplyError onRetry={onRetry} />}
       </div>
     </div>
   );

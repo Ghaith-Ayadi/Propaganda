@@ -29,7 +29,7 @@ import { Badge } from "@/components/base/badges/badges";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
 import { toast } from "@/components/base/toast/toast";
 import { AGENT_LABEL } from "@/lib/chat/adapter";
-import type { AgentName, ChatMessage, Citation, Handoff, QuickAction, RefKind } from "@/lib/chat/types";
+import type { AgentName, ChatUIMessage, Citation, Handoff, QuickAction, RefKind } from "@/lib/chat/types";
 import { reportError } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
 import { hrefFor } from "./targets";
@@ -77,94 +77,112 @@ function open(ref: Citation | NonNullable<QuickAction["target"]>) {
   else toast.add({ title: `${KIND_LABEL[ref.kind]}s don't have a page yet`, description: "It arrives with the rest of the 0.2 screens." });
 }
 
+type Part = ChatUIMessage["parts"][number];
+
+export function textOf(m: ChatUIMessage): string {
+  return m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+}
+
 export function Message({
   message,
+  streaming,
   onRemember,
-  onRetry,
 }: {
-  message: ChatMessage;
+  message: ChatUIMessage;
+  /** This reply is the one streaming in. */
+  streaming: boolean;
   onRemember: (statement: string, messageId: string) => Promise<void>;
-  onRetry?: () => void;
 }) {
   if (message.role === "user") {
-    const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary-solid px-4 py-2.5 text-md whitespace-pre-wrap text-white">
-          {text}
+          {textOf(message)}
         </div>
       </div>
     );
   }
-  return <Reply message={message} onRemember={onRemember} onRetry={onRetry} />;
+  return <Reply message={message} streaming={streaming} onRemember={onRemember} />;
 }
 
-function Reply({
-  message,
-  onRemember,
-  onRetry,
-}: {
-  message: ChatMessage;
-  onRemember: (statement: string, messageId: string) => Promise<void>;
-  onRetry?: () => void;
-}) {
-  const handoffs = message.parts.filter((p) => p.type === "handoff").map((p) => p.handoff);
-  const empty = message.parts.length === 0;
-  const streaming = message.status === "streaming";
-  const lastIsText = message.parts[message.parts.length - 1]?.type === "text";
-
+/** The agent's avatar column beside a reply, or beside "Thinking" before the reply starts. */
+export function ReplyRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex gap-3">
       <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-secondary text-fg-brand-primary">
         <Stars02 className="size-4" />
       </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        {empty && streaming && <Thinking />}
-
-        {message.parts.map((p, i) =>
-          p.type === "handoff" ? (
-            <HandoffCard key={p.handoff.id} handoff={p.handoff} />
-          ) : (
-            <Prose
-              key={i}
-              text={p.text}
-              citations={message.citations}
-              caret={streaming && lastIsText && i === message.parts.length - 1}
-            />
-          ),
-        )}
-
-        {message.citations.length > 0 && !streaming && <Sources citations={message.citations} />}
-
-        {message.actions.length > 0 && !streaming && (
-          <div className="flex flex-wrap gap-2">
-            {message.actions.map((a) => (
-              <ActionButton key={a.id} action={a} onRemember={(s) => onRemember(s, message.id)} />
-            ))}
-          </div>
-        )}
-
-        {message.status === "error" && (
-          <div className="flex items-center gap-2 text-sm text-error-primary">
-            <AlertCircle className="size-4" />
-            <span>{message.error}</span>
-            {onRetry && (
-              <Button size="xs" color="link-gray" onClick={onRetry}>
-                Try again
-              </Button>
-            )}
-          </div>
-        )}
-
-        {!streaming && message.status !== "error" && (
-          <Footer message={message} handoffs={handoffs} />
-        )}
-      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">{children}</div>
     </div>
   );
 }
 
-function Thinking() {
+function Reply({
+  message,
+  streaming,
+  onRemember,
+}: {
+  message: ChatUIMessage;
+  streaming: boolean;
+  onRemember: (statement: string, messageId: string) => Promise<void>;
+}) {
+  const citations: Citation[] = [];
+  const actions: QuickAction[] = [];
+  const handoffs: Handoff[] = [];
+  const shown: Part[] = [];
+  for (const p of message.parts) {
+    if (p.type === "data-citation") citations.push(p.data);
+    else if (p.type === "data-action") actions.push(p.data);
+    else if (p.type === "data-handoff") {
+      handoffs.push(p.data);
+      shown.push(p);
+    } else if (p.type === "text") shown.push(p);
+  }
+  const last = shown[shown.length - 1];
+
+  return (
+    <ReplyRow>
+      {shown.length === 0 && streaming && <Thinking />}
+
+      {shown.map((p, i) =>
+        p.type === "data-handoff" ? (
+          <HandoffCard key={p.id ?? i} handoff={p.data} />
+        ) : p.type === "text" ? (
+          <Prose key={i} text={p.text} citations={citations} caret={streaming && p === last} />
+        ) : null,
+      )}
+
+      {citations.length > 0 && !streaming && <Sources citations={citations} />}
+
+      {actions.length > 0 && !streaming && (
+        <div className="flex flex-wrap gap-2">
+          {actions.map((a, i) => (
+            <ActionButton key={i} action={a} onRemember={(s) => onRemember(s, message.id)} />
+          ))}
+        </div>
+      )}
+
+      {!streaming && <Footer message={message} handoffs={handoffs} />}
+    </ReplyRow>
+  );
+}
+
+/** Under the thread when the last reply failed. */
+export function ReplyError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <ReplyRow>
+      <div className="flex items-center gap-2 text-sm text-error-primary">
+        <AlertCircle className="size-4" />
+        <span>The agent didn't answer.</span>
+        <Button size="xs" color="link-gray" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    </ReplyRow>
+  );
+}
+
+export function Thinking() {
   return (
     <div className="flex items-center gap-2 py-1 text-sm text-tertiary">
       <Loading02 className="size-4 animate-spin" />
@@ -173,12 +191,12 @@ function Thinking() {
   );
 }
 
-function Footer({ message, handoffs }: { message: ChatMessage; handoffs: Handoff[] }) {
+function Footer({ message, handoffs }: { message: ChatUIMessage; handoffs: Handoff[] }) {
   const agents = new Set(handoffs.map((h) => h.agent)).size;
   const bits: string[] = [];
-  if (message.status === "stopped") bits.push("Stopped");
+  if (message.metadata?.stopped) bits.push("Stopped");
   if (agents > 0) bits.push(`${agents} ${agents === 1 ? "agent" : "agents"}`);
-  if (message.costUsd !== undefined) bits.push(formatUsd(message.costUsd));
+  if (message.metadata?.costUsd !== undefined) bits.push(formatUsd(message.metadata.costUsd));
   if (bits.length === 0) return null;
   return <p className="text-xs text-quaternary">{bits.join(" · ")}</p>;
 }

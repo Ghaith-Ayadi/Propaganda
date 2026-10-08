@@ -1,9 +1,12 @@
-// The Chat page's shapes. A conversation belongs to one tenant (site) and one
-// account; a message is a list of parts so a single reply can carry text, the
-// agents it handed work to, its sources and the actions it offers.
-//
-// The server streams a reply as ChatEvent lines (one JSON object per line,
-// application/x-ndjson); applyEvent() in useChat.ts folds them into a message.
+// The Chat page's shapes, on the Vercel AI SDK's message model. A message is a
+// UIMessage: its text streams as text parts, and what Propaganda adds rides as
+// typed data parts (`data-handoff`, `data-citation`, `data-action`). The server
+// sends them with the SDK's UI message stream (createUIMessageStream /
+// writer.write), and useChat folds them into messages; a data part re-sent with
+// the same id replaces the earlier one, which is how a handoff moves from
+// queued to done.
+
+import type { UIMessage } from "ai";
 
 /** The agents of 0.2 (see /mnt/project-files/reviews/agents.md). */
 export type AgentName =
@@ -26,20 +29,22 @@ export interface Ref {
   label: string;
 }
 
-/** A source the reply relies on, numbered in the order it was first cited. */
+/**
+ * A source the reply relies on, numbered in the order it was first cited. The
+ * text marks the spot with a markdown link to `#cite-<n>`.
+ */
 export interface Citation extends Ref {
   n: number;
-  /** The exact span quoted from the source, when there is one. */
+  /** The exact passage quoted from the source, when there is one. */
   quote?: string;
 }
 
 /** Work the Chat agent handed to another agent (or the knowledge base). */
 export interface Handoff {
-  id: string;
   agent: AgentName;
   /** What it was asked, in a few words: "Search the knowledge base for SOC 2". */
   task: string;
-  status: "running" | "done" | "failed" | "queued";
+  status: "queued" | "running" | "done" | "failed";
   /** One line on what came back. */
   summary?: string;
   /** API-price cost of the model calls this step made, from public.model_calls. */
@@ -48,11 +53,8 @@ export interface Handoff {
   runId?: string;
 }
 
-export type QuickActionKind = "remember" | "open";
-
 export interface QuickAction {
-  id: string;
-  kind: QuickActionKind;
+  kind: "remember" | "open";
   label: string;
   /** For "open": what to open. */
   target?: Ref;
@@ -60,23 +62,23 @@ export interface QuickAction {
   statement?: string;
 }
 
-export type MessagePart =
-  | { type: "text"; text: string }
-  | { type: "handoff"; handoff: Handoff };
+/** Data parts, by name: `data-handoff` carries a Handoff, and so on. */
+export type ChatDataParts = {
+  handoff: Handoff;
+  citation: Citation;
+  action: QuickAction;
+  /** Transient: names a new conversation from its first question. */
+  title: { title: string };
+};
 
-export interface ChatMessage {
-  id: string;
-  conversationId: string;
-  role: "user" | "assistant";
-  parts: MessagePart[];
-  citations: Citation[];
-  actions: QuickAction[];
-  status: "streaming" | "done" | "stopped" | "error";
-  error?: string;
+export interface ChatMetadata {
   /** Sum of every model call behind this reply, chat's own included. */
   costUsd?: number;
-  createdAt: string;
+  /** Set when the operator stopped the reply part way. */
+  stopped?: boolean;
 }
+
+export type ChatUIMessage = UIMessage<ChatMetadata, ChatDataParts>;
 
 export interface Conversation {
   id: string;
@@ -85,13 +87,3 @@ export interface Conversation {
   createdAt: string;
   updatedAt: string;
 }
-
-/** One line of the reply stream. */
-export type ChatEvent =
-  | { type: "text"; delta: string }
-  | { type: "handoff"; handoff: Handoff }
-  | { type: "citation"; citation: Citation }
-  | { type: "action"; action: QuickAction }
-  | { type: "title"; title: string }
-  | { type: "done"; costUsd: number }
-  | { type: "error"; message: string };
