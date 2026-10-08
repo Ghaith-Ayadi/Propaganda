@@ -14,6 +14,7 @@ import {
   type Account,
   type SiteRef,
 } from "@/lib/accounts";
+import { refreshSuperadmin } from "@/lib/superadmin";
 import { waitForWrites } from "@/lib/db";
 import { captureCtx, pushInBackground, setSyncEnabled } from "@/lib/sync";
 import { stopRealtime } from "@/lib/realtime";
@@ -152,6 +153,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     adoptPocketBaseAccounts();
     void boot();
     void refreshAllAccounts();
+    refreshSuperadmin();
   }, [boot]);
 
   // The old tree has unmounted: drain, then open the new scope.
