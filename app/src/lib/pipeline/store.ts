@@ -11,7 +11,7 @@ import { createCollection } from "@/lib/collections";
 import { onScopeReset } from "@/lib/scope";
 import { placeholderAdapter, type PipelineAdapter } from "./adapter";
 import { addDays, shortDate, ymd } from "./dates";
-import type { Batch, PipelineItem, PipelineSnapshot, PitchNote, Person, Stage } from "./types";
+import type { Batch, PipelineItem, PipelineSnapshot, PitchNote, Person, Stage, TasteEntry } from "./types";
 
 const adapter: PipelineAdapter = placeholderAdapter;
 
@@ -45,9 +45,9 @@ function emit() {
   for (const l of listeners) l();
 }
 
-function commit(next: Partial<Pick<PipelineSnapshot, "items" | "batches">>) {
+function commit(next: Partial<Pick<PipelineSnapshot, "items" | "batches" | "tasteLog">>) {
   snapshot = { ...current(), ...next };
-  adapter.save({ items: snapshot.items, batches: snapshot.batches });
+  adapter.save({ items: snapshot.items, batches: snapshot.batches, tasteLog: snapshot.tasteLog });
   emit();
 }
 
@@ -98,7 +98,7 @@ export function runBatch(number: number) {
   commit({
     batches: batches.map((b) =>
       b.number === number
-        ? { ...b, state: "in_review", releaseOn: today }
+        ? { ...b, state: "in_review", releasedAt: today, expectedOn: undefined }
         : b.state === "in_review" || b.state === "topping_up"
           ? { ...b, state: "closed" }
           : b,
@@ -106,10 +106,42 @@ export function runBatch(number: number) {
   });
 }
 
+/** "That's enough": a member closes a batch that's out. Its open pitches stay on the board. */
+export function closeBatch(number: number) {
+  commit({
+    batches: current().batches.map((b) =>
+      b.number === number && (b.state === "in_review" || b.state === "topping_up") ? { ...b, state: "closed" } : b,
+    ),
+  });
+}
+
+/**
+ * Append a `taste_log` row. On the server, triggers log pitch decisions from
+ * the status change; the app adds what a status can't say (a "not now", a note).
+ */
+function logTaste(item: PipelineItem, fields: Pick<TasteEntry, "decision"> & Partial<TasteEntry>) {
+  const entry: TasteEntry = {
+    id: `taste-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    at: Date.now(),
+    actor: current().settings.meId,
+    objectKind: "pitch",
+    objectId: item.briefId ?? item.id,
+    reason: "",
+    title: item.title,
+    topic: item.topics[0] ?? "",
+    angle: item.angle,
+    origin: item.origin,
+    ...fields,
+  };
+  commit({ tasteLog: [...current().tasteLog, entry] });
+}
+
+const BOARD = new Set<Stage>(["pitched", "writing", "in_review", "scheduled"]);
+
 /** The nav badge: everything on the board (pitched to scheduled). */
 export function usePipelineCount(): number | null {
   const { items, batches } = usePipeline();
-  const n = items.filter((i) => i.stage !== "published" && i.stage !== "rejected" && isReleased(i, batches)).length;
+  const n = items.filter((i) => BOARD.has(i.stage) && isReleased(i, batches)).length;
   return n || null;
 }
 
@@ -172,11 +204,26 @@ export async function approvePitch(
     postId: post.id,
   });
   updateItem(id, { ...decision, stage: "writing", postId: post.id, briefId: brief.id });
+  logTaste(approved, {
+    decision: decision.notes.length ? "approved_with_notes" : "approved",
+    notes: decision.notes.length ? decision.notes : undefined,
+  });
   return post.id;
 }
 
 export function rejectPitch(id: string, reason: string) {
+  const item = getItem(id);
+  if (!item) return;
   updateItem(id, { stage: "rejected", rejectReason: reason.trim() });
+  logTaste(item, { decision: "rejected", reason: reason.trim() });
+}
+
+/** Not now: off the board, kept for later (a `backlog` brief), with an optional reason. */
+export function notNowPitch(id: string, reason: string) {
+  const item = getItem(id);
+  if (!item) return;
+  updateItem(id, { stage: "not_now" });
+  logTaste(item, { decision: "not_now", reason: reason.trim() });
 }
 
 /** The writer's handoff to review. */
@@ -185,7 +232,10 @@ export function sendForReview(id: string) {
 }
 
 export function sendBack(id: string, note: string) {
+  const item = getItem(id);
+  if (!item) return;
   updateItem(id, { stage: "writing", sentBackNote: note.trim() });
+  logTaste(item, { decision: "sent_back", objectKind: "draft", objectId: item.postId ?? item.id, reason: note.trim() });
 }
 
 /**

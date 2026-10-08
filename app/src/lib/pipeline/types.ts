@@ -6,7 +6,7 @@
 // the placeholder adapter (lib/pipeline/adapter.ts) until they do.
 
 /** Board stages. Ideas are not here: the agent triages them and nobody sees them. */
-export type Stage = "pitched" | "writing" | "in_review" | "scheduled" | "published" | "rejected";
+export type Stage = "pitched" | "writing" | "in_review" | "scheduled" | "published" | "rejected" | "not_now";
 
 export const BOARD_STAGES: Stage[] = ["pitched", "writing", "in_review", "scheduled"];
 
@@ -17,6 +17,7 @@ export const STAGE_LABEL: Record<Stage, string> = {
   scheduled: "Scheduled",
   published: "Published",
   rejected: "Rejected",
+  not_now: "Not now",
 };
 
 export type FitGrade = "strong" | "fair" | "weak";
@@ -139,6 +140,10 @@ export interface PipelineItem {
   notes: PitchNote[];
   rejectReason?: string;
   sentBackNote?: string;
+  /** briefs.learned: one line the Pitcher took from the taste log for this pitch. */
+  learned?: string;
+  /** briefs.changed: what is materially different from a rejected near-duplicate. */
+  changed?: string;
   /** Content batch (1-based); null for a bonus post outside the plan. */
   batch: number | null;
   /** The draft post in the editor, once the pitch is approved. */
@@ -153,19 +158,43 @@ export interface PipelineItem {
 export type BatchState = "closed" | "in_review" | "topping_up" | "pending" | "cancelled";
 
 /**
- * A content batch (agents/strategist-cold-start-and-pacing.md): a numbered
- * group of briefs with a release date and a quota of approved briefs. The
- * Pitcher over-pitches; a short batch is topped up the next day.
+ * A content batch: `content_batches` (#43). A batch's quota counts approved
+ * briefs; the Pitcher over-pitches and tops a short batch up the next morning.
+ * A member can close one ("that's enough").
  */
 export interface Batch {
+  /** "2026-Q4" */
+  quarter: string;
   number: number;
   state: BatchState;
-  /** YYYY-MM-DD the pitches arrive (or arrived). */
-  releaseOn: string;
   /** Approved briefs this batch should end with. */
   quota: number;
-  /** For a batch not released yet: the topics the Pitcher expects to cover. */
+  /** YYYY-MM-DD the pitches went out; unset while pending. */
+  releasedAt?: string;
+  /** Top-up rounds sent so far. */
+  topups: number;
+  /** Placeholder only (no column): when a pending batch is expected, and on what. */
+  expectedOn?: string;
   expectedTopics?: string[];
+}
+
+export type TasteDecision = "approved" | "approved_with_notes" | "rejected" | "not_now" | "cancelled" | "edited" | "sent_back" | "note";
+
+/** One `taste_log` row (#43): a decision on a pitch or a draft. Append-only. */
+export interface TasteEntry {
+  id: string;
+  /** ms since epoch */
+  at: number;
+  actor: string;
+  objectKind: "pitch" | "draft" | "plan";
+  objectId: string;
+  decision: TasteDecision;
+  reason: string;
+  notes?: PitchNote[];
+  title: string;
+  topic: string;
+  angle: string;
+  origin: string;
 }
 
 export type Batching = "weekly" | "flood";
@@ -187,6 +216,7 @@ export interface PipelineSnapshot {
   items: PipelineItem[];
   people: Person[];
   batches: Batch[];
+  tasteLog: TasteEntry[];
   settings: PipelineSettings;
   /** True while the data is example data from the placeholder adapter. */
   placeholder: boolean;

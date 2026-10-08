@@ -11,7 +11,7 @@ import { NativeSelect } from "@/components/base/select/select-native";
 import { toast } from "@/components/base/toast/toast";
 import { go, goPage } from "@/lib/route";
 import { shortDate } from "@/lib/pipeline/dates";
-import { approvePitch, personById, rejectPitch, usePipeline } from "@/lib/pipeline/store";
+import { approvePitch, notNowPitch, personById, rejectPitch, usePipeline } from "@/lib/pipeline/store";
 import { GOAL_LABEL, ORIGIN_LABEL, STAGE_LABEL, type GoalKey, type PipelineItem, type PitchNote, type ReasonKind } from "@/lib/pipeline/types";
 import { reportError, track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
@@ -113,6 +113,13 @@ function PitchBody({
     }
   };
 
+  const notNow = () => {
+    notNowPitch(item.id, reason);
+    track("pitch_not_now");
+    toast.add({ title: "Kept for later. It's off the board for this batch." });
+    onClose();
+  };
+
   const reject = () => {
     if (!reason.trim()) return;
     rejectPitch(item.id, reason);
@@ -139,6 +146,12 @@ function PitchBody({
         </div>
         <h2 className="mt-3 font-title text-3xl text-primary">{item.title}</h2>
         <p className="mt-2 text-md text-tertiary">{item.why}</p>
+        {item.learned && <p className="mt-2 text-sm text-tertiary italic">{item.learned}</p>}
+        {item.changed && (
+          <p className="mt-3 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary">
+            <span className="font-medium text-primary">Pitched before, with a change.</span> {item.changed}
+          </p>
+        )}
         {!decidable && (
           <p className="mt-3 text-sm font-medium text-secondary">
             {STAGE_LABEL[item.stage]}
@@ -326,9 +339,14 @@ function PitchBody({
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-secondary px-5 py-4 md:px-8">
-            <Button size="md" color="secondary-destructive" onClick={() => setRejecting(true)}>
-              Reject…
-            </Button>
+            <div className="flex gap-2">
+              <Button size="md" color="secondary-destructive" onClick={() => setRejecting(true)}>
+                Reject…
+              </Button>
+              <Button size="md" color="secondary" onClick={notNow}>
+                Not now
+              </Button>
+            </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
               <span className="text-sm text-tertiary">
                 {writerName} · {reviewerName} · by {shortDate(publishBy)}

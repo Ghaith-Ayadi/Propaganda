@@ -59,6 +59,7 @@ export function PipelinePage() {
       scheduled: [],
       published: [],
       rejected: [],
+      not_now: [],
     };
     for (const i of items) if (isReleased(i, batches)) by[i.stage].push(i);
     by.pitched.sort(byFitThenDate);
@@ -106,6 +107,11 @@ export function PipelinePage() {
                               <TopicBadge key={t}>{t}</TopicBadge>
                             ))}
                           </div>
+                          {item.learned && (
+                            <p className="line-clamp-2 text-sm text-tertiary italic">
+                              {item.learned}
+                            </p>
+                          )}
                           <div className="text-sm text-tertiary">
                             {personById(people, item.writerId)?.name} · by{" "}
                             {shortDate(item.publishBy)}

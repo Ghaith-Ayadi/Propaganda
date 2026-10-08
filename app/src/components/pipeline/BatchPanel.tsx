@@ -11,7 +11,7 @@ import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { toast } from "@/components/base/toast/toast";
 import { shortDate } from "@/lib/pipeline/dates";
-import { currentBatch, nextBatch, runBatch, usePipeline } from "@/lib/pipeline/store";
+import { closeBatch, currentBatch, nextBatch, runBatch, usePipeline } from "@/lib/pipeline/store";
 import type { Batch, BatchState, PipelineItem } from "@/lib/pipeline/types";
 import { track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
@@ -43,8 +43,9 @@ function tally(items: PipelineItem[], n: number) {
   const mine = items.filter((i) => i.batch === n);
   return {
     pitched: mine.length,
-    approved: mine.filter((i) => i.stage !== "pitched" && i.stage !== "rejected").length,
+    approved: mine.filter((i) => i.stage !== "pitched" && i.stage !== "rejected" && i.stage !== "not_now").length,
     rejected: mine.filter((i) => i.stage === "rejected").length,
+    later: mine.filter((i) => i.stage === "not_now").length,
     waiting: mine.filter((i) => i.stage === "pitched").length,
   };
 }
@@ -63,6 +64,12 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
       description: count ? `${count} ${count === 1 ? "pitch is" : "pitches are"} waiting on you.` : "Its pitches arrive as the Pitcher writes them.",
     });
     onClose();
+  };
+
+  const close = (b: Batch) => {
+    closeBatch(b.number);
+    track("batch_closed", { batch: b.number });
+    toast.add({ title: `Batch ${b.number} closed.`, description: "Its open pitches stay on the board." });
   };
 
   return (
@@ -104,7 +111,7 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
                       </Badge>
                     </div>
                     <span className="text-sm text-tertiary">
-                      {released ? `Arrived ${shortDate(b.releaseOn)}` : `Arrives ${shortDate(b.releaseOn)}`}
+                      {b.releasedAt ? `Out ${shortDate(b.releasedAt)}` : b.expectedOn ? `Expected ${shortDate(b.expectedOn)}` : ""}
                     </span>
                   </div>
                   {released ? (
@@ -113,10 +120,22 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
                         {t.approved} of {b.quota} approved{t.approved >= b.quota ? ", quota met" : ""}
                       </li>
                       <li className="text-tertiary">
-                        {t.pitched} pitched · {t.rejected} rejected{t.waiting ? ` · ${t.waiting} waiting on you` : ""}
+                        {t.pitched} pitched · {t.rejected} rejected{t.later ? ` · ${t.later} not now` : ""}
+                        {t.waiting ? ` · ${t.waiting} waiting on you` : ""}
                       </li>
+                      {b.topups > 0 && (
+                        <li className="text-tertiary">Topped up {b.topups === 1 ? "once" : `${b.topups} times`} after falling short.</li>
+                      )}
                       {b.state === "topping_up" && (
                         <li className="text-tertiary">Short of its quota: top-up pitches arrive tomorrow, shaped by your rejections.</li>
+                      )}
+                      {(b.state === "in_review" || b.state === "topping_up") && (
+                        <li className="mt-2 flex items-center gap-2">
+                          <Button size="sm" color="secondary" onClick={() => close(b)}>
+                            That's enough
+                          </Button>
+                          <span className="text-tertiary">Closes the batch, with no more top-ups.</span>
+                        </li>
                       )}
                     </ul>
                   ) : (
