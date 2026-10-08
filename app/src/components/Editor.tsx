@@ -15,7 +15,8 @@ import { updatePost } from "@/lib/posts";
 import { beginWrite } from "@/lib/db";
 import { uploadFile } from "@/lib/uploads";
 import { hasImageFileBlock, normalizeImageBlocks, promoteImageFileBlocks } from "@/lib/images";
-import { go } from "@/lib/route";
+import { go, goPage } from "@/lib/route";
+import { usePipelineItemForPost } from "@/lib/pipeline/store";
 import { collectionDisplay } from "@/lib/collections";
 import { useTheme } from "@/lib/theme";
 import { countWords, formatWordCount } from "@/lib/format";
@@ -290,6 +291,8 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
   const prev = idx > 0 ? sorted[idx - 1] : null;
   const next = idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
   const display = collectionDisplay(post.type, collections);
+  // Posts in the pipeline go back to it.
+  const pipelineItem = usePipelineItemForPost(post.id);
   const isMobile = useIsMobile();
 
   return (
@@ -308,23 +311,52 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
               <Menu01 className="size-5" />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => go({ view: "list" })}
-            className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 transition hover:bg-primary_hover hover:text-secondary"
-          >
-            <ArrowLeft className="size-3.5" />
-            {display.emoji && <span className="text-sm leading-none">{display.emoji}</span>}
-            <span className="max-md:max-w-[9rem] max-md:truncate">{display.label || post.type || "Home"}</span>
-          </button>
-          {showTitle && (
-            <>
-              <span className="shrink-0 text-quaternary">/</span>
-              <span className="truncate text-sm text-primary">
-                {post.title || "Untitled"}
-              </span>
-            </>
+          {pipelineItem ? (
+            <button
+              type="button"
+              onClick={() => goPage("pipeline")}
+              className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 transition hover:bg-primary_hover hover:text-secondary"
+            >
+              <ArrowLeft className="size-3.5" />
+              <span>Pipeline</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label={`Back to ${display.label || post.type}`}
+              onClick={() => go({ view: "list" })}
+              className="shrink-0 rounded-md p-1 transition hover:bg-primary_hover hover:text-secondary"
+            >
+              <ArrowLeft className="size-3.5" />
+            </button>
           )}
+          {/* Breadcrumbs: Content / Blog / Collection / post id. */}
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
+            <button type="button" onClick={() => goPage("content")} className="rounded-md px-1 py-1 transition hover:text-secondary max-md:hidden">
+              Content
+            </button>
+            <span className="text-quaternary max-md:hidden">/</span>
+            <button type="button" onClick={() => go({ view: "list" })} className="rounded-md px-1 py-1 transition hover:text-secondary max-md:hidden">
+              Blog
+            </button>
+            <span className="text-quaternary max-md:hidden">/</span>
+            <button
+              type="button"
+              onClick={() => go({ view: "list" })}
+              className="flex shrink-0 items-center gap-1 rounded-md px-1 py-1 transition hover:text-secondary"
+            >
+              {display.emoji && <span className="text-sm leading-none">{display.emoji}</span>}
+              <span className="max-md:max-w-[9rem] max-md:truncate">{display.label || post.type || "Home"}</span>
+            </button>
+            <span className="text-quaternary">/</span>
+            <span className="truncate font-mono text-quaternary">{post.postId || post.id}</span>
+            {showTitle && (
+              <>
+                <span className="shrink-0 text-quaternary">·</span>
+                <span className="truncate text-sm text-primary">{post.title || "Untitled"}</span>
+              </>
+            )}
+          </nav>
         </div>
         <div className="flex items-center gap-1">
           {post.wordCount != null && (

@@ -21,6 +21,12 @@
 //   UPLOAD              an image upload failed
 //   COST-USAGE          the tenant's model usage for the month couldn't be loaded
 //   COST-ADMIN          the Admin consumption figures or limits couldn't be loaded or saved
+//   KB-LOAD             a knowledge base page couldn't load its data
+//   KB-REMEMBER         a Remember couldn't be sent
+//   KB-FLAG-CLOSE       closing or snoozing a flag failed
+//   KB-FIX              applying a flag's fix failed
+//   KB-CONTEST          contesting a flag, or sending the contest, failed
+//   KB-BULK             a bulk action on a re-check thread failed
 
 import { BackendError } from "@/lib/supabase";
 

@@ -17,9 +17,6 @@ import { causeDetails, codeOf, describe } from "@/lib/errors";
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
 
-/** The writing itself: replays show the editor's shape, never its text. */
-const PRIVATE_TEXT = ".bn-container";
-
 let enabled = false;
 let identifiedAs: string | null = null;
 
@@ -56,7 +53,11 @@ function exceptionBudget(event: CaptureResult | null): CaptureResult | null {
 
 // ---- who and where ----
 
-/** The signed-in account is the person; the active site rides on every event. */
+/**
+ * The signed-in account is the person; the active site (the tenant) rides on
+ * every event and so on every replay: filter recordings by tenant_id,
+ * tenant_slug or account_id.
+ */
 function identify(): void {
   const scope = currentScope();
   if (!scope) {
@@ -69,7 +70,14 @@ function identify(): void {
   const { account, site } = scope;
   if (identifiedAs && identifiedAs !== account.userId) posthog.reset();
   posthog.identify(account.userId, { email: account.email, name: account.name });
-  posthog.register({ site_id: site.id, site_slug: site.slug, site_role: site.role });
+  posthog.register({
+    site_id: site.id,
+    site_slug: site.slug,
+    site_role: site.role,
+    tenant_id: site.id,
+    tenant_slug: site.slug,
+    account_id: account.userId,
+  });
   identifiedAs = account.userId;
 }
 
@@ -84,9 +92,10 @@ export function initTelemetry(): void {
     defaults: "2026-08-30",
     person_profiles: "identified_only",
     capture_exceptions: true,
-    // Clicks on controls only: a click inside the editor would carry its text.
-    autocapture: { element_allowlist: ["a", "button", "form", "input", "select", "textarea", "label"] },
-    session_recording: { maskTextSelector: PRIVATE_TEXT },
+    // Pre-GA, we watch everything: every click, and replays with nothing
+    // masked (the writing and inputs included). Revisit before GA.
+    autocapture: true,
+    session_recording: { maskAllInputs: false, maskTextSelector: null },
     before_send: exceptionBudget,
   });
   posthog.register({ app_env: DEPLOY_ENV, commit: COMMIT_SHA });
