@@ -15,6 +15,7 @@
 import type { GoalsAdapter } from "./adapter";
 import type {
   BatchBrief,
+  BatchCadence,
   BatchBriefState,
   BatchPlan,
   ContentBatch,
@@ -45,6 +46,7 @@ import {
   toDay,
   weekStart,
 } from "./quarter";
+import { planBatches } from "./batching";
 import {
   consistencyNow,
   coverageScore,
@@ -191,7 +193,9 @@ function buildProposal(
   const weeks = Math.round((daysBetween(from, to) + 1) / 7);
   const plan = opts.fromPlan;
   const launch = kind === "onboarding";
-  const batches = launch ? Math.min(6, 3 + Math.max(1, Math.round((total - LAUNCH_SIZE) / 4))) : Math.min(6, Math.max(4, Math.round(total / 4)));
+  const batches = launch
+    ? 3 + planBatches("weekly", quarter, addDays(from, 21), Math.max(0, total - LAUNCH_SIZE)).length
+    : planBatches("weekly", quarter, addDays(from, -7), total).length;
   return {
     id: `prop-${quarter}-${kind}`,
     quarter,
@@ -267,9 +271,9 @@ function buildProposal(
     batches: {
       value: batches,
       why: launch
-        ? `The Launch's 3 batches (day 1, 8 and 15), then ${batches - 3} more, all written by ${shortDate(weekStart(quarter, 7))}.`
-        : `${total} posts in ${batches} batches of 3 to 5, all written by mid-quarter, published across the whole quarter.`,
-      basis: "Batch rule: 4 to 6 a quarter, one at a time in your inbox",
+        ? `The Launch's 3 batches (day 1, 8 and 15), then a batch every week until ${shortDate(weekStart(quarter, 9))}. Published across the whole quarter.`
+        : `A double batch to start, then one every week through the first two months. Published across the whole quarter.`,
+      basis: "Batching: Weekly (recommended). You can switch to Flood, or ask for the next batch early, any time",
     },
     questions: launch
       ? [
@@ -292,6 +296,8 @@ interface PlannedPost {
   launch: boolean;
   /** Drafted before the batch landed (the Launch's day-one three). */
   preDrafted: boolean;
+  /** Its Launch batch (1 to 3), kept when the tenant re-batches; 0 outside the Launch. */
+  launchBatch: number;
 }
 
 interface QuarterPlan {
@@ -308,14 +314,13 @@ function titleFor(topic: string, i: number): string {
   return list[i % list.length] + (i >= list.length ? ` (part ${Math.floor(i / list.length) + 1})` : "");
 }
 
-function buildPlan(quarter: QuarterKey, start: Day, targets: GoalTargets, launchFrom: Day | null): QuarterPlan {
+function buildPlan(quarter: QuarterKey, start: Day, targets: GoalTargets, launchFrom: Day | null, cadence: BatchCadence = "weekly"): QuarterPlan {
   const r = rng(hash(quarter + start));
   const total = targets.volume.total;
   const topicOrder: string[] = [];
   for (const t of targets.volume.topics) for (let i = 0; i < t.low; i++) topicOrder.push(t.name);
   while (topicOrder.length < total) topicOrder.push(targets.volume.topics[topicOrder.length % targets.volume.topics.length].name);
   const internalShare = targets.coverage.internal / Math.max(1, targets.coverage.internal + targets.coverage.external);
-  const mid = weekStart(quarter, 7);
   const end = quarterEnd(quarter);
 
   const posts: PlannedPost[] = [];
@@ -334,6 +339,7 @@ function buildPlan(quarter: QuarterKey, start: Day, targets: GoalTargets, launch
       batch,
       launch,
       preDrafted,
+      launchBatch: launch ? batch : 0,
     });
   };
 
@@ -360,24 +366,20 @@ function buildPlan(quarter: QuarterKey, start: Day, targets: GoalTargets, launch
   }
 
   if (rest > 0) {
-    const n = Math.max(1, Math.min(6 - batchDue.length, Math.round(rest / 4)));
-    // An established tenant's batch 1 was written in the last week of the quarter before.
+    // An established tenant's first batch was written in the last week of the quarter before.
     const ongoing = !launchFrom && start === quarterStart(quarter);
     const firstDue = launchFrom ? addDays(launchFrom, 21) : ongoing ? addDays(start, -7) : start;
-    const lastDue = mid > firstDue ? mid : addDays(firstDue, 7);
-    const sizes = Array.from({ length: n }, (_, i) => Math.floor(rest / n) + (i < rest % n ? 1 : 0));
     const pubFrom = launchFrom ? afterLaunch : ongoing ? addDays(start, 1) : addDays(start, 10);
     const span = Math.max(1, daysBetween(pubFrom, addDays(end, -3)));
     let k = 0;
-    sizes.forEach((size, b) => {
-      const due = n === 1 ? firstDue : addDays(firstDue, Math.round((b * daysBetween(firstDue, lastDue)) / (n - 1)));
-      batchDue.push(due);
-      for (let i = 0; i < size; i++, k++) {
+    for (const slot of planBatches(cadence, quarter, firstDue, rest)) {
+      batchDue.push(slot.due);
+      for (let i = 0; i < slot.size; i++, k++) {
         let publishOn = addDays(pubFrom, Math.round((k * span) / Math.max(1, rest - 1)));
-        if (publishOn < addDays(due, 7)) publishOn = addDays(due, 7);
+        if (publishOn < addDays(slot.due, 7)) publishOn = addDays(slot.due, 7);
         push(topicOrder.shift() ?? TOPICS[k % TOPICS.length], publishOn, batchDue.length, false, false);
       }
-    });
+    }
   }
 
   const bonus: QuarterPlan["bonus"] = [];
@@ -406,9 +408,38 @@ function reshapePlan(plan: QuarterPlan, targets: GoalTargets, today: Day): Quart
       batch: plan.batchDue.length,
       launch: false,
       preDrafted: false,
+      launchBatch: 0,
     });
   }
   return { ...plan, posts };
+}
+
+/**
+ * Re-batch what hasn't reached the inbox yet with a new cadence, the Launch's
+ * remaining batches included. Delivered batches stay; publish dates don't move.
+ */
+function rebatch(plan: QuarterPlan, cadence: BatchCadence, today: Day): QuarterPlan {
+  const keep = plan.batchDue.map((due) => due <= today);
+  const waiting = plan.posts.filter((p) => !keep[p.batch - 1]).sort((a, b) => (a.publishOn < b.publishOn ? -1 : 1));
+  if (!waiting.length) return plan;
+  const renumber = new Map<number, number>();
+  const batchDue: Day[] = [];
+  plan.batchDue.forEach((due, i) => {
+    if (keep[i]) {
+      batchDue.push(due);
+      renumber.set(i + 1, batchDue.length);
+    }
+  });
+  const posts = plan.posts.map((p) => (keep[p.batch - 1] ? { ...p, batch: renumber.get(p.batch)! } : p));
+  let k = 0;
+  for (const slot of planBatches(cadence, plan.quarter, addDays(today, 1), waiting.length)) {
+    batchDue.push(slot.due);
+    for (let i = 0; i < slot.size; i++, k++) {
+      const p = posts.find((x) => x.id === waiting[k].id)!;
+      p.batch = batchDue.length;
+    }
+  }
+  return { ...plan, batchDue, posts };
 }
 
 function factsFor(plan: QuarterPlan, today: Day, established: boolean): QuarterFacts {
@@ -459,6 +490,7 @@ interface State {
   plans: Map<QuarterKey, QuarterPlan>;
   facts: Map<QuarterKey, QuarterFacts>;
   drop: PlanDrop;
+  cadence: BatchCadence;
 }
 
 let state: State;
@@ -492,6 +524,7 @@ function build(scenario: ScenarioId): State {
     plans: new Map(),
     facts: new Map(),
     drop: { text: "", files: [], readAt: null },
+    cadence: "weekly",
   };
   const approve = (quarter: QuarterKey, version: number, approvedAt: Day, targets: GoalTargets, changes: string[] = [], note?: string, covers?: GoalVersion["covers"]) =>
     s.versions.push({ quarter, version, approvedAt, approvedBy: "Ayadi", changes, note, targets, covers });
@@ -575,7 +608,7 @@ function planFor(quarter: QuarterKey): QuarterPlan | null {
   if (!plan) {
     const start = v.covers?.from && state.launchFrom == null ? v.covers.from : quarterStart(quarter) > state.ctx.joinedAt ? quarterStart(quarter) : state.ctx.joinedAt;
     const launchHere = state.launchFrom && quarterOf(state.launchFrom) === quarter ? state.launchFrom : null;
-    plan = buildPlan(quarter, start, v.targets, launchHere);
+    plan = buildPlan(quarter, start, v.targets, launchHere, state.cadence);
     state.plans.set(quarter, plan);
   } else if (plan.posts.length !== v.targets.volume.total) {
     plan = reshapePlan(plan, v.targets, state.ctx.today);
@@ -703,11 +736,12 @@ export const placeholderAdapter: GoalsAdapter = {
       indexed: Math.floor(live.length * 0.8),
       clusters: CLUSTERS.map((name) => ({ name, planned: lp.filter((p) => p.topics[0] === name).length, live: live.filter((p) => p.topics[0] === name).length })),
       batches: LAUNCH_BATCH_SIZES.map((size, b) => {
-        const posts = lp.filter((p) => p.batch === b + 1);
+        const posts = lp.filter((p) => p.launchBatch === b + 1);
         const st = posts.map((p) => states[lp.indexOf(p)]);
         return {
           number: (b + 1) as 1 | 2 | 3,
           dueDay: 1 + b * 7,
+          arrived: posts.length > 0 && plan.batchDue[posts[0].batch - 1] <= today,
           briefs: size,
           drafted: st.filter((s) => s === "drafted" || s === "scheduled" || s === "published").length,
           approved: st.filter((s) => s === "scheduled" || s === "published").length,
@@ -748,6 +782,7 @@ export const placeholderAdapter: GoalsAdapter = {
     const bonusDone = plan.bonus.filter((b) => b.day <= today);
     return {
       quarter,
+      cadence: state.cadence,
       planned: plan.posts.length,
       batches,
       bonus: { count: bonusDone.length, sources: bonusDone.map((b) => b.source) },
@@ -811,6 +846,25 @@ export const placeholderAdapter: GoalsAdapter = {
     state.drop = { text, files: [...state.drop.files, ...added], readAt: null };
     emit();
     return state.drop;
+  },
+
+  async setBatchCadence(cadence) {
+    if (cadence === state.cadence) return;
+    state.cadence = cadence;
+    for (const [q, plan] of state.plans) state.plans.set(q, rebatch(plan, cadence, state.ctx.today));
+    emit();
+  },
+
+  async requestNextBatch(quarter) {
+    const plan = state.plans.get(quarter);
+    if (!plan) return null;
+    const i = plan.batchDue.findIndex((due) => due > state.ctx.today);
+    if (i < 0) return null;
+    const batchDue = [...plan.batchDue];
+    batchDue[i] = state.ctx.today;
+    state.plans.set(quarter, { ...plan, batchDue });
+    emit();
+    return i + 1;
   },
 
   async removePlanFile(id) {
