@@ -31,6 +31,7 @@ const OnboardingFlow = lazy(() =>
 
 // Errors and product analytics, editor only (lib/telemetry.ts).
 initTelemetry();
+import { exposeThemeConsole } from "@/lib/customThemes";
 
 // The service worker is the editor's offline shell, so only the editor
 // registers it: blog readers never download the whole app. The same call
@@ -38,6 +39,9 @@ initTelemetry();
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
 }
+
+// Custom blog themes are installed from the console for now (lib/customThemes.ts).
+exposeThemeConsole();
 
 export function EditorApp() {
   return (

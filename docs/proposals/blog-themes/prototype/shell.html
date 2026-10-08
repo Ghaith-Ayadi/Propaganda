@@ -1,0 +1,299 @@
+<title>PPGD Blog Themes</title>
+<style>
+/* Prototype chrome: a quiet tool frame around the live blog preview.
+   Layout: controls on the left, the device preview filling the rest. */
+:root {
+  --bg: #f3f2ef; --panel: #fbfaf8; --fg: #1d1c1a; --fg-2: #55524c; --line: #dddad3; --line-2: #c9c5bc;
+  --chip: #eceae4; --chip-on: #1d1c1a; --chip-on-fg: #fbfaf8; --accent: #3a5bd6; --stage: #e6e4df; --dot: #d0552e;
+  --device: #ffffff;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1b1b1a; --panel: #222220; --fg: #ecebe7; --fg-2: #a9a69f; --line: #34332f; --line-2: #45443f;
+  --chip: #2d2c29; --chip-on: #ecebe7; --chip-on-fg: #1b1b1a; --accent: #8ea6ff; --stage: #141413; --dot: #f08a5d; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #1b1b1a; --panel: #222220; --fg: #ecebe7; --fg-2: #a9a69f; --line: #34332f; --line-2: #45443f;
+  --chip: #2d2c29; --chip-on: #ecebe7; --chip-on-fg: #1b1b1a; --accent: #8ea6ff; --stage: #141413; --dot: #f08a5d; color-scheme: dark; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--ui); margin: 0; }
+.app { display: grid; grid-template-columns: 340px minmax(0, 1fr); height: 100%; }
+.panel { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 20px 20px 28px; display: grid; align-content: start; gap: 20px; }
+.panel h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; }
+.panel .sub { color: var(--fg-2); font-size: 12.5px; margin: 2px 0 0; }
+.group { display: grid; gap: 8px; }
+.group > h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-2); margin: 0; font-weight: 600; }
+.themes { display: grid; gap: 8px; }
+.theme-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.theme-card[aria-checked="true"] { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg) inset; }
+.theme-card .name { font-size: 22px; line-height: 1.1; }
+.theme-card .sum { grid-column: 1 / -1; color: var(--fg-2); font-size: 12.5px; }
+.theme-card .aud { grid-column: 1 / -1; color: var(--fg); font-size: 12px; margin-top: 2px; }
+.theme-card .dots { display: flex; gap: 4px; align-self: center; }
+.theme-card .dots i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line-2); }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button { font: inherit; font-size: 12.5px; padding: 6px 10px; min-height: 32px; border-radius: 7px; border: 1px solid transparent; background: var(--chip); color: var(--fg); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-fg); }
+.seg button:focus-visible, .theme-card:focus-visible, .switch:focus-visible, .linkish:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.section { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 10px; }
+.section header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.section h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.section .comp { font-family: var(--mono); font-size: 11px; color: var(--fg-2); }
+.row { display: grid; gap: 5px; }
+.row > label, .row > .lbl { font-size: 12.5px; color: var(--fg-2); display: flex; align-items: center; gap: 6px; }
+.row .changed { width: 6px; height: 6px; border-radius: 50%; background: var(--dot); display: inline-block; }
+.row-bool { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; }
+.switch { position: relative; width: 36px; height: 22px; flex: none; border-radius: 11px; border: 0; background: var(--line-2); cursor: pointer; padding: 0; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); transition: transform 0.15s; }
+.switch[aria-checked="true"] { background: var(--chip-on); }
+.switch[aria-checked="true"]::after { transform: translateX(14px); }
+.hint { color: var(--fg-2); font-size: 12px; margin: 0; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
+details.src { border-top: 1px solid var(--line); padding-top: 12px; }
+details.src summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.swatches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.swatch { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px 8px; align-items: center; font-size: 11.5px; }
+.swatch i { grid-row: 1 / span 2; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line-2); }
+.swatch b { font-weight: 600; overflow-wrap: anywhere; }
+.swatch span { color: var(--fg-2); font-family: var(--mono); font-size: 10.5px; }
+.report { margin: 10px 0 0; padding-left: 16px; font-size: 12px; color: var(--fg-2); }
+pre.json { font: 11px/1.45 var(--mono); background: var(--chip); padding: 10px 12px; border-radius: 8px; max-height: 320px; overflow: auto; margin: 10px 0 0; }
+.credits { font-size: 11.5px; color: var(--fg-2); border-top: 1px solid var(--line); padding-top: 12px; }
+.credits p { margin: 0 0 6px; }
+.credits a { color: var(--accent); }
+.stage { display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--stage); min-width: 0; min-height: 0; }
+.bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg); min-width: 0; }
+.url { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; color: var(--fg-2); background: var(--chip); border-radius: 7px; padding: 6px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.url b { color: var(--fg); font-weight: 500; }
+.bar .size { font-family: var(--mono); font-size: 12px; color: var(--fg-2); white-space: nowrap; }
+.viewport { position: relative; overflow: hidden; min-height: 0; }
+.device-wrap { position: absolute; top: 16px; left: 50%; }
+.device { position: absolute; top: 0; left: 0; transform-origin: 0 0; background: var(--device); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 12px 40px rgba(0,0,0,.14); border-radius: 12px; overflow: hidden; }
+.device iframe { display: block; width: 100%; height: 100%; border: 0; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(560px, 1fr); height: auto; min-height: 100%; }
+  .panel { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; padding-inline: 16px; }
+  .stage { min-height: 560px; }
+}
+@media (prefers-reduced-motion: reduce) { .switch::after { transition: none; } }
+</style>
+<!--FONTS-->
+<div class="app">
+  <aside class="panel" aria-label="Prototype controls">
+    <div>
+      <h1>Blog themes</h1>
+      <p class="sub">Propaganda, Part 1 prototype: four templates, page options, six themes.</p>
+    </div>
+    <div class="group"><h2 id="h-theme">Theme</h2><div class="themes" role="radiogroup" aria-labelledby="h-theme" id="themes"></div></div>
+    <div class="group"><h2 id="h-page">Page</h2><div class="seg" role="group" aria-labelledby="h-page" id="pages"></div></div>
+    <div class="group"><h2 id="h-content">Content</h2><div class="seg" role="group" aria-labelledby="h-content" id="contents"></div><p class="hint" id="content-hint"></p></div>
+    <div class="group"><h2 id="h-device">Width</h2><div class="seg" role="group" aria-labelledby="h-device" id="devices"></div></div>
+    <div class="group"><h2>Page options</h2><p class="hint">Defaults come from the theme; a dot marks a choice you changed.</p><div id="options"></div></div>
+    <div class="group"><div class="row-bool"><span class="lbl" id="l-outline">Outline the template parts</span><button class="switch" role="switch" aria-checked="false" aria-labelledby="l-outline" id="outline"></button></div></div>
+    <details class="src" id="src"><summary>Theme source and compiled colours</summary><div id="src-body"></div></details>
+    <div class="credits">
+      <p>Fonts: Crimson Pro, Epilogue, Public Sans, JetBrains Mono, Red Hat Display, Azeret Mono, Sora, Lora and Plus Jakarta Sans, from Fontshare under the SIL Open Font License 1.1, subset to Latin. Copyright their project authors; licence text in each font file.</p>
+      <p>Sample writing and images are made up for this prototype.</p>
+      <p>The proposal: <a href="https://github.com/Ghaith-Ayadi/Propaganda/blob/claude/wonderful-dirac-maz405/docs/proposals/blog-themes/README.md" target="_blank" rel="noopener">docs/proposals/blog-themes</a> in the Propaganda repo.</p>
+    </div>
+  </aside>
+  <main class="stage">
+    <div class="bar"><div class="url" id="url"></div><span class="size" id="size"></span></div>
+    <div class="viewport" id="viewport"><div class="device-wrap" id="wrap"><div class="device" id="device"><iframe id="frame" title="Blog preview"></iframe></div></div></div>
+  </main>
+</div>
+<script id="pg-site-css" type="text/plain">/*SITECSS*/</script>
+<script>/*ENGINE*/</script>
+<script>/*FIXTURES*/</script>
+<script>
+(function () {
+  "use strict";
+  const E = window.PPGD_ENGINE, FX = window.PPGD_FIXTURES.fixtures();
+  const SITE_CSS = document.getElementById("pg-site-css").textContent;
+  const FONT_CSS = (document.getElementById("pg-fonts") || {}).textContent || "";
+  const PAGES = [["home", "Home"], ["collection", "Collection"], ["post", "Post"], ["author", "Author"]];
+  const CONTENTS = [["sample", "Essays"], ["engineering", "Engineering"], ["photo", "Photography"], ["kitchen", "Kitchen & garden"], ["edge", "Edge cases"], ["empty", "Empty blog"]];
+  const NATURAL = { rubric: "sample", edition: "sample", ledger: "sample", manual: "engineering", plate: "photo", almanac: "kitchen" };
+  const CONTENT_HINT = {
+    sample: "A made-up essay blog: four collections, fourteen posts.",
+    engineering: "A made-up engineering blog: postmortems and deep dives with Go, SQL, tables and few images.",
+    photo: "A made-up photography portfolio: every post is a picture with a caption.",
+    kitchen: "A made-up cooking and allotment blog: recipes with ingredient lists and numbered steps.",
+    edge: "Very long names and titles, unbroken strings, emoji, Arabic and Japanese, missing fields, broken and extreme images, 12 collections, 64 posts.",
+    empty: "A new blog: one collection, nothing published.",
+  };
+  const DEVICES = [[390, "Phone"], [820, "Tablet"], [1280, "Desktop"]];
+
+  const load = () => { try { return JSON.parse(localStorage.getItem("ppgd-proto") || "{}"); } catch (_) { return {}; } };
+  const saved = load();
+  const st = Object.assign({ theme: "rubric", fixture: "sample", width: 1280, overrides: {}, route: { tpl: "home" }, outline: false, more: {}, homeTab: null }, saved, { more: {} });
+  const hashTheme = (location.hash || "").replace("#", "");
+  if (E.THEMES[hashTheme]) st.theme = hashTheme;
+  const save = () => { try { localStorage.setItem("ppgd-proto", JSON.stringify({ theme: st.theme, fixture: st.fixture, width: st.width, overrides: st.overrides, route: st.route, outline: st.outline })); } catch (_) { /* private mode */ } };
+
+  /* ---------- the preview frame ---------- */
+  const frame = document.getElementById("frame");
+  let doc = null, lastRouteKey = "";
+  frame.srcdoc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${FONT_CSS}</style><style>${SITE_CSS}</style><style id="theme"></style><style>html,body{margin:0}</style></head><body></body></html>`;
+  frame.addEventListener("load", () => { doc = frame.contentDocument; wire(); render(true); });
+
+  function wire() {
+    doc.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action='more']");
+      if (btn) { const k = btn.getAttribute("data-key"); st.more[k] = (st.more[k] || 0) + 12; render(false); return; }
+      const a = e.target.closest("a"); if (!a) return;
+      const href = a.getAttribute("href") || "";
+      e.preventDefault();
+      if (href.startsWith("#/")) navigate(href.slice(2));
+    });
+  }
+  function navigate(path) {
+    const [kind, slug] = path.split("/");
+    if (kind === "c") st.route = { tpl: "collection", collection: slug };
+    else if (kind === "p") st.route = { tpl: "post", post: slug };
+    else if (kind === "author") st.route = { tpl: "author" };
+    else if (kind === "tab") { st.homeTab = slug; st.route = { tpl: "home" }; }
+    else st.route = { tpl: "home" };
+    st.more = {};
+    save(); render(true); panel();
+  }
+  function fixBrokenImages() {
+    doc.querySelectorAll(".pg-site img").forEach((img) => {
+      const swap = () => {
+        const box = img.closest(".pg-media, .pg-avatar");
+        if (box) { box.setAttribute("data-placeholder", ""); box.innerHTML = `<span aria-hidden="true">${E.esc(img.dataset.initial || "·")}</span>`; }
+        else { const fig = img.closest("figure"); if (fig) fig.setAttribute("data-broken", ""); img.remove(); }
+      };
+      if (img.complete && img.naturalWidth === 0) swap(); else img.addEventListener("error", swap, { once: true });
+    });
+  }
+  function currentRoute() {
+    const fx = FX[st.fixture];
+    const r = Object.assign({}, st.route);
+    if (r.tpl === "collection" && !fx.collections.some((c) => c.slug === r.collection)) r.collection = fx.collections[0]?.slug;
+    if (r.tpl === "post" && !fx.posts.some((p) => p.slug === r.post)) r.post = fx.posts[0]?.slug;
+    return r;
+  }
+  function render(toTop) {
+    if (!doc) return;
+    const route = currentRoute();
+    const out = E.renderSite(FX[st.fixture], st.theme, st.overrides, route, st);
+    doc.getElementById("theme").textContent = out.css;
+    const y = doc.scrollingElement.scrollTop;
+    doc.body.innerHTML = out.html;
+    doc.title = out.title;
+    fixBrokenImages();
+    const key = JSON.stringify(route) + st.fixture;
+    doc.scrollingElement.scrollTop = toTop || key !== lastRouteKey ? 0 : y;
+    lastRouteKey = key;
+    const fx = FX[st.fixture];
+    const path = route.tpl === "collection" ? `/${route.collection}` : route.tpl === "post" ? `/${(fx.posts.find((p) => p.slug === route.post) || {}).collection || ""}/${route.post || ""}` : route.tpl === "author" ? "/author" : "/";
+    document.getElementById("url").innerHTML = `https://<b>${E.esc(fx.site.host)}</b>${E.esc(path)}`;
+    renderSource(out.compiled);
+  }
+
+  /* ---------- device sizing ---------- */
+  const viewport = document.getElementById("viewport"), wrap = document.getElementById("wrap"), device = document.getElementById("device");
+  function size() {
+    const W = viewport.clientWidth - 32, H = viewport.clientHeight - 32;
+    const s = Math.min(1, W / st.width);
+    device.style.width = st.width + "px";
+    device.style.height = Math.max(200, H / s) + "px";
+    device.style.transform = `scale(${s})`;
+    wrap.style.width = st.width * s + "px";
+    wrap.style.height = H + "px";
+    wrap.style.marginLeft = -(st.width * s) / 2 + "px";
+    document.getElementById("size").textContent = `${st.width}px${s < 1 ? ` · shown at ${Math.round(s * 100)}%` : ""}`;
+  }
+  new ResizeObserver(size).observe(viewport);
+
+  /* ---------- controls ---------- */
+  function seg(el, items, cur, onPick) {
+    el.innerHTML = items.map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${String(v) === String(cur)}">${l}</button>`).join("");
+    el.onclick = (e) => { const b = e.target.closest("button"); if (b) onPick(b.dataset.v); };
+  }
+  function themesUI() {
+    const el = document.getElementById("themes");
+    el.innerHTML = Object.values(E.THEMES).map((t) => {
+      const c = E.compileTheme(t).palette;
+      return `<button type="button" class="theme-card" role="radio" aria-checked="${t.id === st.theme}" data-id="${t.id}">
+        <span class="name" style="font-family:${E.esc(E.compileTheme(t).vars["--pg-font-display"])};font-weight:${t.type.display.weight}">${t.name}</span>
+        <span class="dots" aria-hidden="true"><i style="background:${c.paper}"></i><i style="background:${c.ink}"></i><i style="background:${c.accent}"></i></span>
+        <span class="sum">${E.esc(t.summary)}</span>${t.audience ? `<span class="aud">For ${E.esc(t.audience.charAt(0).toLowerCase() + t.audience.slice(1))}</span>` : ""}</button>`;
+    }).join("");
+    el.onclick = (e) => {
+      const b = e.target.closest(".theme-card"); if (!b) return;
+      st.theme = b.dataset.id;
+      // show each theme with the kind of blog it was made for; stress content stays selected
+      if (st.fixture !== "edge" && st.fixture !== "empty") { st.fixture = NATURAL[st.theme] || "sample"; st.route = { tpl: currentRoute().tpl }; st.homeTab = null; }
+      st.more = {}; save(); themesUI(); panel(); render(true);
+    };
+  }
+  function optionsUI() {
+    const tpl = currentRoute().tpl;
+    const theme = E.THEMES[st.theme];
+    const { design } = E.resolveDesign(st.theme, st.overrides);
+    const blocks = [[tpl, E.SCHEMA[tpl]], ["frame", E.SCHEMA.frame]];
+    let html = "";
+    for (const [t, sections] of blocks) {
+      for (const [sec, def] of Object.entries(sections)) {
+        const vals = design[t][sec];
+        const base = E.resolveDesign(st.theme, {}).design[t][sec];
+        const changed = Object.keys(st.overrides?.[t]?.[sec] || {}).length > 0;
+        html += `<section class="section"><header><h3>${def.label}${t === "frame" ? " <span class=\"hint\">(every page)</span>" : ""}</h3>${def.component ? `<span class="comp">${def.component}</span>` : ""}${changed ? `<button class="linkish" data-reset="${t}.${sec}">Reset</button>` : ""}</header>`;
+        for (const [k, spec] of Object.entries(def.options)) {
+          if (spec.when && !spec.when(vals)) continue;
+          const id = `o-${t}-${sec}-${k}`;
+          const dot = vals[k] !== base[k] ? `<i class="changed" title="Changed from the theme default"></i>` : "";
+          if (spec.type === "bool") {
+            html += `<div class="row-bool"><span class="lbl" id="${id}-l">${dot}${spec.label}</span><button class="switch" role="switch" id="${id}" aria-labelledby="${id}-l" aria-checked="${vals[k]}" data-opt="${t}.${sec}.${k}" data-bool="1"></button></div>`;
+          } else {
+            const list = spec.dependsOn ? spec.values[vals[spec.dependsOn]] : spec.values;
+            html += `<div class="row"><span class="lbl" id="${id}-l">${dot}${spec.label}</span><div class="seg" role="group" aria-labelledby="${id}-l">${list.map((v) => `<button type="button" aria-pressed="${String(v) === String(vals[k])}" data-opt="${t}.${sec}.${k}" data-v="${v}"${spec.hints?.[v] ? ` title="${E.esc(spec.hints[v])}"` : ""}>${spec.labels?.[v] ?? v}</button>`).join("")}</div>${spec.hints && spec.hints[vals[k]] ? `<p class="hint">${E.esc(spec.hints[vals[k]])}</p>` : ""}</div>`;
+          }
+        }
+        html += `</section>`;
+      }
+    }
+    const el = document.getElementById("options");
+    el.innerHTML = html;
+    el.onclick = (e) => {
+      const r = e.target.closest("[data-reset]");
+      if (r) { const [t, sec] = r.dataset.reset.split("."); if (st.overrides[t]) delete st.overrides[t][sec]; save(); panel(); render(false); return; }
+      const b = e.target.closest("[data-opt]"); if (!b) return;
+      const [t, sec, k] = b.dataset.opt.split(".");
+      const cur = E.resolveDesign(st.theme, st.overrides).design[t][sec];
+      let v = b.dataset.bool ? !(b.getAttribute("aria-checked") === "true") : b.dataset.v;
+      st.overrides[t] = st.overrides[t] || {}; st.overrides[t][sec] = Object.assign({}, st.overrides[t][sec], { [k]: v });
+      const spec = E.SCHEMA[t][sec].options[k];
+      // switching the layout picks that layout's default card, so the pair stays valid
+      if (k === "layout") { const card = E.SCHEMA[t][sec].options.card; if (!card.values[v].includes(cur.card)) st.overrides[t][sec].card = card.values[v][v === "grid" ? 1 : 1]; }
+      void spec; st.more = {}; save(); panel(); render(false);
+    };
+    void theme;
+  }
+  function renderSource(compiled) {
+    const p = compiled.palette, paper = p.paper;
+    const sw = [["Paper", p.paper], ["Ink", p.ink], ["Ink 2", p.ink2], ["Muted", p.muted], ["Accent", p.accent], ["Accent text", p.accentText], ["Rule", p.rule], ["Highlight", p.highlight]];
+    const rows = sw.map(([n, c]) => `<div class="swatch"><i style="background:${c}"></i><b>${n}</b><span>${c} · ${E.contrast(c, n === "Highlight" ? p.ink : paper).toFixed(2)}:1${n === "Highlight" ? " with ink" : ""}</span></div>`).join("");
+    const rep = compiled.report.length ? `<ul class="report">${compiled.report.map((r) => `<li>${E.esc(r.msg)}</li>`).join("")}</ul>` : `<p class="hint" style="margin-top:10px">The compiler changed nothing in this theme.</p>`;
+    const srcJson = JSON.stringify(E.THEMES[st.theme], null, 2);
+    document.getElementById("src-body").innerHTML = `<div class="swatches">${rows}</div>${rep}<pre class="json" tabindex="0">${E.esc(srcJson)}</pre>`;
+  }
+  function panel() {
+    seg(document.getElementById("pages"), PAGES, currentRoute().tpl, (v) => {
+      const fx = FX[st.fixture];
+      st.route = v === "collection" ? { tpl: v, collection: (fx.collections.find((c) => fx.posts.some((p) => p.collection === c.slug)) || fx.collections[0] || {}).slug } : v === "post" ? { tpl: v, post: fx.posts[0]?.slug } : { tpl: v };
+      st.more = {}; save(); panel(); render(true);
+    });
+    seg(document.getElementById("contents"), CONTENTS, st.fixture, (v) => { st.fixture = v; st.more = {}; st.homeTab = null; save(); panel(); render(true); });
+    document.getElementById("content-hint").textContent = CONTENT_HINT[st.fixture];
+    seg(document.getElementById("devices"), DEVICES, st.width, (v) => { st.width = +v; save(); panel(); size(); });
+    const o = document.getElementById("outline");
+    o.setAttribute("aria-checked", String(!!st.outline));
+    o.onclick = () => { st.outline = !st.outline; save(); panel(); render(false); };
+    optionsUI();
+  }
+  themesUI(); panel(); size();
+})();
+</script>
