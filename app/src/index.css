@@ -37,16 +37,11 @@ html, body, #root {
   height: 100%;
 }
 
-/* Reserve the scrollbar's room so a page that starts or stops scrolling
-   doesn't shift sideways. The app only: public blogs (and the theme harness)
-   keep their full width. */
+/* The app (/admin), not the public blogs (EditorApp sets the class): Rowan is
+   the display face, and the scrollbar's room is reserved so a page that
+   starts or stops scrolling doesn't shift sideways. */
 html.ppgd-app {
   scrollbar-gutter: stable;
-}
-
-/* The app (/admin), not the public blogs: Rowan is the display face. The class
-   is set by EditorApp. */
-html.ppgd-app {
   --font-title: "Rowan", "Zodiak", "Geist", -apple-system, "Segoe UI", sans-serif;
 }
 
