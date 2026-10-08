@@ -19,6 +19,8 @@
 //   SITE-SEED           a new site's first settings and collections failed
 //   SITE-SWITCH         switching account or site failed
 //   UPLOAD              an image upload failed
+//   COST-USAGE          the tenant's model usage for the month couldn't be loaded
+//   COST-ADMIN          the Admin consumption figures or limits couldn't be loaded or saved
 //   KB-LOAD             a knowledge base page couldn't load its data
 //   KB-REMEMBER         a Remember couldn't be sent
 //   KB-FLAG-CLOSE       closing or snoozing a flag failed

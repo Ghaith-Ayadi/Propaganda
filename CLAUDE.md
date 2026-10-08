@@ -81,6 +81,16 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
 - `scripts/src/*` are tools from the Supabase Cloud days and stop working when that
   project is deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 
+## Model calls: one logged path
+
+Every call to a language model goes through `callModel()` in `api/_ai/gateway.ts` (Vercel AI
+SDK). It checks the budget rules, runs the call, and writes a row to `public.model_calls`
+(tenant, job, model, tokens, cost at API prices, DBOS workflow and step). Prices
+(`model_prices`) and limits (`cost_limits`) are data. Never call a provider directly:
+`npm run check:model-paths` (in `api/`) fails on it. Limits default to off; the global daily
+cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month on Home
+(`CostMeter`), the superadmin sees all of it in Admin > Consumption.
+
 ## Telemetry: PostHog
 
 Errors (browser and Vercel functions) and product analytics go to **PostHog Cloud, EU,

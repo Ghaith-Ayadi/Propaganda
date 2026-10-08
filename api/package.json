@@ -1,9 +1,17 @@
 {
   "dependencies": {
+    "@ai-sdk/google": "^4.0.90",
     "@vercel/blob": "^0.27.0",
+    "ai": "^7.0.131",
     "posthog-node": "^5.55.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.2"
+  },
+  "scripts": {
+    "test": "tsx --test _ai/cost.test.ts _ai/gateway.test.ts check-model-paths.test.mjs",
+    "check:model-paths": "node check-model-paths.mjs"
   }
 }
