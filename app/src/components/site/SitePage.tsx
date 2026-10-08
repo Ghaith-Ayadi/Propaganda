@@ -1,4 +1,4 @@
-// #/site: the tenant's blog. Hosted here: its address, theme and custom
+// #/site: the tenant's blog. Hosted here: its address, design and custom
 // domain. Hosted elsewhere (headless): where it lives, and our pitch for
 // moving it. Then the tenant's details and, for the owner, deleting it.
 // #/site/domain scrolls to the custom domain.
@@ -21,15 +21,14 @@ import { PENDING_DOMAIN_KEY } from "./domains";
 import {
   LANGUAGES,
   PLATFORMS,
-  THEMES,
   platformLabel,
   setHosting,
   setLanguage,
   setPlatform,
   setPlatformUrl,
-  setTheme,
   setTimeZone,
   timeZones,
+  useDesignName,
   useHosting,
 } from "./hosting";
 
@@ -56,7 +55,7 @@ export function SitePage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <div className="flex items-start justify-between gap-3">
-            <CardTitle title="Your blog" description="Address, theme and the collections it shows." />
+            <CardTitle title="Your blog" description="Address, design and the collections it shows." />
             <Badge type="pill-color" size="sm" color={hosted ? "brand" : "gray"}>
               {hosted ? "Propaganda" : where}
             </Badge>
@@ -77,8 +76,8 @@ export function SitePage() {
               Collections
             </Button>
           </div>
-          {hosted && <ThemePicker current={settings.theme} />}
-          {/* UI assembly (#37): the themes branch's Design editor (#38), until the two theme pickers become one. */}
+          {hosted && <DesignSummary />}
+          {/* UI assembly (#37): the Design editor stays reachable here until #38 adds Settings > Design. */}
           {hosted && (
             <div className="mt-5 border-t border-secondary pt-4">
               <DesignSection />
@@ -164,29 +163,21 @@ function CardTitle({ title, description }: { title: string; description?: string
   );
 }
 
-function ThemePicker({ current }: { current: string }) {
+/** The published design, and the way to Settings › Design, which edits it. */
+function DesignSummary() {
+  const name = useDesignName();
   return (
-    <div className="mt-5 border-t border-secondary pt-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-secondary">
-        <Brush01 className="size-4 text-fg-quaternary" />
-        Theme
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-secondary pt-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm font-medium text-secondary">
+          <Brush01 className="size-4 text-fg-quaternary" />
+          Design
+        </div>
+        <p className="mt-0.5 text-sm text-tertiary">{name ? `The ${name} theme.` : "The original design."}</p>
       </div>
-      <div className="mt-2 grid gap-2">
-        {THEMES.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => void setTheme(t.id)}
-            className={cx(
-              "rounded-xl px-3 py-2.5 text-left ring-1 ring-inset transition",
-              t.id === current ? "bg-brand-primary ring-brand" : "bg-primary ring-secondary hover:bg-primary_hover",
-            )}
-          >
-            <span className="block text-sm font-medium text-primary">{t.label}</span>
-            <span className="block text-xs text-tertiary">{t.description}</span>
-          </button>
-        ))}
-      </div>
+      <Button size="sm" color="secondary" onClick={() => goPage("settings", "design")}>
+        Change the design
+      </Button>
     </div>
   );
 }

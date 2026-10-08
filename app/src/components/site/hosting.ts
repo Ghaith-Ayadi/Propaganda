@@ -1,4 +1,4 @@
-// Where a tenant's blog lives and how it looks: settings of the site
+// Where a tenant's blog lives, and the tenant's own details: settings of the site
 // (app_settings, lib/settings.ts), so every member sees the same and nothing
 // needs a schema change.
 //
@@ -8,12 +8,12 @@
 //                          site has its blog at <slug>.propaganda.pub today.
 //   site.hosting.platform  for "elsewhere": framer, webflow, wordpress, ...
 //   site.hosting.url       for "elsewhere": the blog's address there
-//   blog.theme             the blog's theme (THEMES below)
 //   tenant.timezone        an IANA zone; sweeps and quarters follow it
 //   tenant.language        the content language, a BCP 47 tag
 //
-// The blog renderer doesn't read blog.theme yet: there is one theme today. The
-// key is here so the tenant's pick (Kontra's is made) is stored from day one.
+// How the blog looks is blog.design, which Settings › Design edits (the themes
+// work, blog/theme/design.ts). This page only says which theme is published:
+// designName() reads the stored value without the theme code.
 
 import { setSetting, useSetting } from "@/lib/settings";
 
@@ -35,15 +35,24 @@ export function platformLabel(value: string): string {
   return PLATFORMS.find((p) => p.value === value)?.label ?? "another platform";
 }
 
-export interface Theme {
-  id: string;
-  label: string;
-  description: string;
+/**
+ * The published design's theme name, from blog.design ({ theme }) and the
+ * site's own themes in blog.themes ({ [id]: { name } }). Null when the blog
+ * still has the original design.
+ */
+export function designName(design: unknown, custom: unknown): string | null {
+  const id = design && typeof design === "object" ? (design as { theme?: unknown }).theme : null;
+  if (typeof id !== "string" || !id) return null;
+  const own = custom && typeof custom === "object" ? (custom as Record<string, { name?: unknown }>)[id] : null;
+  if (own && typeof own.name === "string" && own.name) return own.name;
+  return id.charAt(0).toUpperCase() + id.slice(1).replace(/[-_]+/g, " ");
 }
 
-export const THEMES: Theme[] = [
-  { id: "verbatim", label: "Verbatim", description: "Serif titles, a calm reading column, the post list on the home page." },
-];
+export function useDesignName(): string | null {
+  const design = useSetting<unknown>("blog.design", null);
+  const custom = useSetting<unknown>("blog.themes", null);
+  return designName(design, custom);
+}
 
 export const LANGUAGES: { value: string; label: string }[] = [
   { value: "en", label: "English" },
@@ -79,7 +88,6 @@ export interface HostingSettings {
   hosting: Hosting;
   platform: string;
   url: string;
-  theme: string;
   timezone: string;
   language: string;
 }
@@ -88,15 +96,13 @@ export function useHosting(): HostingSettings {
   const hosting = useSetting<Hosting>("site.hosting", "propaganda") ?? "propaganda";
   const platform = useSetting<string>("site.hosting.platform", "") ?? "";
   const url = useSetting<string>("site.hosting.url", "") ?? "";
-  const theme = useSetting<string>("blog.theme", THEMES[0].id) ?? THEMES[0].id;
   const timezone = useSetting<string>("tenant.timezone", "") || browserTimeZone();
   const language = useSetting<string>("tenant.language", "en") ?? "en";
-  return { hosting: hosting === "elsewhere" ? "elsewhere" : "propaganda", platform, url, theme, timezone, language };
+  return { hosting: hosting === "elsewhere" ? "elsewhere" : "propaganda", platform, url, timezone, language };
 }
 
 export const setHosting = (v: Hosting) => setSetting("site.hosting", v);
 export const setPlatform = (v: string) => setSetting("site.hosting.platform", v);
 export const setPlatformUrl = (v: string) => setSetting("site.hosting.url", v);
-export const setTheme = (v: string) => setSetting("blog.theme", v);
 export const setTimeZone = (v: string) => setSetting("tenant.timezone", v);
 export const setLanguage = (v: string) => setSetting("tenant.language", v);
