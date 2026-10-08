@@ -22,6 +22,17 @@ function gitSha(): string {
 // (never in the browser bundle). In production these are Vercel functions.
 
 
+/** Which api/ file Vercel would run for a /api/chat path (file-system routing). */
+function chatRoute(pathname: string): string | null {
+  const p = pathname.replace(/\/+$/, "");
+  if (p === "/api/chat") return "chat/index.ts";
+  if (p === "/api/chat/remember") return "chat/remember.ts";
+  if (p === "/api/chat/conversations") return "chat/conversations/index.ts";
+  if (/^\/api\/chat\/conversations\/[^/]+$/.test(p)) return "chat/conversations/[id].ts";
+  if (/^\/api\/chat\/conversations\/[^/]+\/messages$/.test(p)) return "chat/conversations/[id]/messages.ts";
+  return null;
+}
+
 function localApiPlugin(serverEnv: Record<string, string>): Plugin {
   return {
     name: "local-api",
@@ -116,6 +127,64 @@ function localApiPlugin(serverEnv: Record<string, string>): Plugin {
           // Never echo a pasted key back, even in dev.
           const detail = String(err).replace(/sk-ant-[A-Za-z0-9_-]+/g, "sk-ant-…");
           res.end(JSON.stringify({ error: "model-key failed in dev", detail }));
+        }
+      });
+
+      // /api/chat/* — the Chat agent's functions, run in-process so the Chat
+      // page works on localhost. Each request loads the function module through
+      // Vite (edits apply without a restart) and bridges Node's request to the
+      // Web Request the function expects; the reply streams through as it comes.
+      // The model is still reached only through the gateway those functions use.
+      server.middlewares.use("/api/chat", async (req, res) => {
+        const url = new URL(req.originalUrl ?? req.url ?? "/", "http://localhost");
+        const file = chatRoute(url.pathname);
+        const method = req.method ?? "GET";
+        if (!file) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Not found" }));
+          return;
+        }
+        // Server-only keys from .env files, for the functions (never the bundle).
+        for (const [k, v] of Object.entries(serverEnv)) if (process.env[k] === undefined) process.env[k] = v;
+        try {
+          const mod = (await server.ssrLoadModule(path.resolve(__dirname, "../api", file))) as Record<
+            string,
+            ((r: Request) => Promise<Response>) | undefined
+          >;
+          const handler = mod[method];
+          if (!handler) {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed" }));
+            return;
+          }
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          // The browser leaving (Stop, a closed tab) aborts the function's request.
+          const gone = new AbortController();
+          res.on("close", () => {
+            if (!res.writableFinished) gone.abort();
+          });
+          const response = await handler(
+            new Request(url, {
+              method,
+              headers: req.headers as Record<string, string>,
+              body: method === "GET" || method === "HEAD" ? undefined : Buffer.concat(chunks),
+              signal: gone.signal,
+            }),
+          );
+          res.writeHead(response.status, Object.fromEntries(response.headers));
+          if (!response.body) return void res.end();
+          const reader = response.body.getReader();
+          gone.signal.addEventListener("abort", () => void reader.cancel().catch(() => {}), { once: true });
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            res.write(value);
+          }
+          res.end();
+        } catch (err) {
+          if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Function failed", detail: String(err) }));
         }
       });
 
