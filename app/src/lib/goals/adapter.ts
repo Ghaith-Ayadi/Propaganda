@@ -45,9 +45,15 @@ export interface GoalsAdapter {
   /** Save the plan drop: pasted text plus files (PDF, Word, Markdown, spreadsheets, images). */
   savePlanDrop(text: string, files: File[]): Promise<PlanDrop>;
   removePlanFile(id: string): Promise<void>;
-  /** The tenant's batching cadence. Re-batches what hasn't reached the inbox yet; delivered batches stay. */
+  /**
+   * The tenant's batching cadence. Re-batches what hasn't reached the inbox yet; delivered batches stay.
+   * Real adapter: update agent_settings.batch_cadence ('weekly' | 'flood', one row per site; PR #43).
+   */
   setBatchCadence(cadence: BatchCadence): Promise<void>;
-  /** Bring the next batch forward to today. Returns its number, or null when every batch is out. */
+  /**
+   * Bring the next batch forward to today. Returns its number, or null when every batch is out.
+   * Real adapter: a Chat dispatch to "pitcher" with "next batch" in the task (PR #43).
+   */
   requestNextBatch(quarter: QuarterKey): Promise<number | null>;
 }
 
