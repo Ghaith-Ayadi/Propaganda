@@ -1,14 +1,16 @@
-// What Home shows: the quarter, the five goals as daily lines, the
-// Strategist's drift notes, the Launch card, and this week's count.
+// What Home shows: the running campaign (the Launch first), and the four goal
+// cards with their numbers, a small line each and the quarter's goal.
 //
 // Sources today:
 //   Volume line     LIVE: published posts this quarter, from the local posts table
 //   Readership line LIVE when the analytics worker is configured (pageviews a day)
-//   Planned posts   LIVE: briefs with a planned date this week
-//   Inbox counts    from useInbox() (components/inbox/data.ts)
+//   Inbox count     from useInbox() (components/inbox/data.ts)
 //   Everything else PLACEHOLDER (placeholder.ts): goal targets (goals,
-//                   goal_topics), stored scores (goal_scores), drift_notes,
-//                   the Launch (content_batches), grades (kb_grade views)
+//                   goal_topics), stored scores (goal_scores), campaigns
+//                   (the Launch), grades (kb_grade views)
+//
+// Coverage is not on Home (Ayadi, 2026-10-08); the Strategist's drift notes
+// moved to the Inbox tab they concern.
 //
 // The goal model stores a score for every day (goal_scores) rather than
 // computing on demand; when that table lands, the live adapter reads it and
@@ -22,60 +24,56 @@ import { useSiteViews } from "@/lib/analytics/hook";
 import type { DayPoint } from "@/lib/analytics/types";
 import type { Post } from "@/types";
 import { useInbox } from "@/components/inbox/data";
-import { dayKey, quarterDays, quarterOf, weekOf, weekOfQuarter, type Quarter } from "@/components/shared/quarter";
+import { dayKey, quarterDays, quarterOf, shortDate, weekOfQuarter, type Quarter } from "@/components/shared/quarter";
 import { placeholderHome } from "./placeholder";
 
-export type GoalKey = "volume" | "coverage" | "consistency" | "readership" | "ranking";
+export type GoalKey = "volume" | "consistency" | "readership" | "ranking";
 
 export interface Goal {
   key: GoalKey;
   name: string;
   question: string;
-  /** The big number: "6 of 18", "55%", "C · B". */
+  /** The big number: "6 of 18", "C · B", "1,204". */
   headline: string;
-  /** One line under it. */
-  detail: string;
+  /** What moved in the last 7 days: "+2 this week". */
+  change: { text: string; direction: "up" | "down" | "flat" } | null;
   points: DayPoint[];
-  target: { value: number; shape: "flat" | "pace" } | null;
-  /** Days the goals changed (the quarter was recalculated). */
-  changes: string[];
-  format: (v: number) => string;
-  /** The y axis tops out here (100 for shares). */
-  max?: number;
+  /** The quarter's goal, in a sentence: the card's footer. */
+  goal: string;
+  /** Volume only: each topic's published, pitched and target counts. */
+  topics?: { name: string; published: number; pitched: number; target: number }[];
   /** Set while any of it is example data: why. */
   example?: string;
 }
 
-export interface DriftNote {
-  id: string;
-  goal: GoalKey;
-  severity: "info" | "warning";
-  message: string;
-  action?: { label: string; page: string; rest?: string };
+export interface Objective {
+  label: string;
+  value: number;
+  target: number;
 }
 
-export interface Launch {
+/** A campaign: a stretch of work with its own objectives. The Launch is the first. */
+export interface Campaign {
+  id: string;
+  name: string;
+  description: string;
   day: number;
-  live: number;
-  planned: number;
-  clusters: { name: string; live: number; planned: number }[];
-  indexed: number;
+  days: number;
+  objectives: Objective[];
   why: string;
 }
 
 /** What the placeholder adapter fills in until the goal tables exist. */
 export interface HomePlaceholder {
   volumeTarget: number;
-  volumeTopics: { onTarget: number; of: number };
-  coverage: (days: string[]) => DayPoint[];
+  volumeTopics: { name: string; published: number; pitched: number; target: number }[];
   consistency: (days: string[]) => DayPoint[];
-  grades: { content: string; kb: string };
+  grades: { content: string; kb: string; contentTarget: string; kbTarget: string };
   ranking: (days: string[]) => DayPoint[];
   readership: (days: string[]) => DayPoint[];
   rankingTargets: number;
-  changes: (q: Quarter) => string[];
-  drift: DriftNote[];
-  launch: Launch | null;
+  rankingGoal: number;
+  campaigns: Campaign[];
 }
 
 export interface Home {
@@ -83,18 +81,35 @@ export interface Home {
   quarter: Quarter;
   week: number;
   goals: Goal[];
-  drift: DriftNote[];
-  launch: Launch | null;
-  thisWeek: { flags: number; pitches: number; reviews: number; knowledge: number; planned: number };
+  /** The campaign running now, with its status. */
+  campaign: (Campaign & { progress: number; onTrack: boolean }) | null;
   /** The same count the Inbox page shows, example items included. */
   inboxTotal: number;
-  /** The inbox's flags, pitches and knowledge are example data (Home marks them). */
-  inboxExample: boolean;
   example: boolean;
 }
 
-const pct = (v: number) => `${Math.round(v)}%`;
 const count = (v: number) => Math.round(v).toLocaleString("en-US");
+
+/** The change over the last 7 days of a cumulative or level series. */
+function weekChange(s: DayPoint[], unit: (n: number) => string): Goal["change"] {
+  if (s.length < 2) return null;
+  const now = s[s.length - 1].value;
+  const then = s[Math.max(0, s.length - 8)].value;
+  const d = Math.round(now - then);
+  if (d === 0) return { text: "No change this week", direction: "flat" };
+  return { text: `${d > 0 ? "+" : ""}${unit(d)} this week`, direction: d > 0 ? "up" : d < 0 ? "down" : "flat" };
+}
+
+/** Views in the last 7 days against the 7 before. */
+function viewsChange(s: DayPoint[]): Goal["change"] {
+  if (s.length < 14) return null;
+  const sum = (a: DayPoint[]) => a.reduce((t, d) => t + d.value, 0);
+  const now = sum(s.slice(-7));
+  const before = sum(s.slice(-14, -7));
+  if (before === 0) return null;
+  const pct = Math.round(((now - before) / before) * 100);
+  return { text: `${pct > 0 ? "+" : ""}${pct}% vs last week`, direction: pct > 0 ? "up" : pct < 0 ? "down" : "flat" };
+}
 
 export function useHome(): Home {
   const quarter = useMemo(() => quarterOf(new Date()), []);
@@ -103,17 +118,10 @@ export function useHome(): Home {
   const p = placeholderHome;
 
   const posts = useLiveQuery(() => db.posts.where("status").equals("published").toArray(), [], [] as Post[]);
-  const planned = useLiveQuery(
-    () => {
-      const w = weekOf();
-      return db.briefs.where("plannedDate").between(dayKey(w.start), dayKey(w.end), true, true).count();
-    },
-    [],
-    0,
-  );
   const views = useSiteViews("90d");
 
   const goals = useMemo<Goal[]>(() => {
+    const end = shortDate(quarter.end);
     // Volume: published posts, cumulative over the quarter.
     const perDay = new Map<string, number>();
     for (const post of posts) {
@@ -128,10 +136,8 @@ export function useHome(): Home {
     const readership = views ? days.map((day) => ({ day, value: viewsByDay.get(day) ?? 0 })) : p.readership(days);
     const readTotal = readership.reduce((s, d) => s + d.value, 0);
 
-    const coverage = p.coverage(days);
     const consistency = p.consistency(days);
     const ranking = p.ranking(days);
-    const changes = p.changes(quarter);
     const last = (s: DayPoint[]) => s[s.length - 1]?.value ?? 0;
 
     return [
@@ -139,38 +145,21 @@ export function useHome(): Home {
         key: "volume",
         name: "Volume",
         question: "Are we publishing enough, on the right topics?",
-        headline: `${volume.length ? last(volume) : 0} of ${p.volumeTarget}`,
-        detail: `posts published this quarter · ${p.volumeTopics.onTarget} of ${p.volumeTopics.of} topics on target`,
+        headline: `${last(volume)} of ${p.volumeTarget}`,
+        change: weekChange(volume, (n) => `${n} ${Math.abs(n) === 1 ? "post" : "posts"}`),
         points: volume,
-        target: { value: p.volumeTarget, shape: "pace" },
-        changes,
-        format: (v) => `${count(v)} posts`,
-        example: "The count is your published posts. The target and topics are examples until the Strategist's goals are stored.",
-      },
-      {
-        key: "coverage",
-        name: "Coverage",
-        question: "Are we using what we know and what people search for?",
-        headline: pct(last(coverage)),
-        detail: "internal and external, combined; each capped at its goal",
-        points: coverage,
-        target: { value: 100, shape: "pace" },
-        changes,
-        format: pct,
-        max: 100,
-        example: "Coverage needs the knowledge base and search data; example line until goal_scores exists.",
+        goal: `Quarter goal: ${p.volumeTarget} posts published by ${end}.`,
+        topics: p.volumeTopics,
+        example: "The count is your published posts. The target and the topics are examples until the Strategist's goals are stored.",
       },
       {
         key: "consistency",
         name: "Consistency",
         question: "Is what we publish true and aligned?",
         headline: `${p.grades.content} · ${p.grades.kb}`,
-        detail: "content grade · knowledge base grade; the line is the share of clean content",
+        change: weekChange(consistency, (n) => `${n}% clean`),
         points: consistency,
-        target: { value: 95, shape: "flat" },
-        changes: [],
-        format: (v) => `${pct(v)} clean`,
-        max: 100,
+        goal: `Quarter goal: content ${p.grades.contentTarget}, knowledge base ${p.grades.kbTarget}.`,
         example: "Grades come from the knowledge base views, which aren't on the server yet.",
       },
       {
@@ -178,11 +167,9 @@ export function useHome(): Home {
         name: "Readership",
         question: "Is anyone reading?",
         headline: count(readTotal),
-        detail: "pageviews this quarter",
+        change: viewsChange(readership),
         points: readership,
-        target: null,
-        changes: [],
-        format: (v) => `${count(v)} views`,
+        goal: "No target this quarter: views are tracked, not graded.",
         example: views ? undefined : "The analytics worker isn't configured here, so this is an example line.",
       },
       {
@@ -190,33 +177,30 @@ export function useHome(): Home {
         name: "Ranking",
         question: "Do we show up where it counts?",
         headline: `${last(ranking)} of ${p.rankingTargets}`,
-        detail: "target searches on page one",
+        change: weekChange(ranking, (n) => `${n} on page one`),
         points: ranking,
-        target: { value: Math.ceil(p.rankingTargets / 5), shape: "flat" },
-        changes,
-        format: (v) => `${Math.round(v)} on page one`,
-        max: p.rankingTargets,
+        goal: `Quarter goal: ${p.rankingGoal} of ${p.rankingTargets} target searches on page one by ${end}.`,
         example: "Rankings need the Scout's search checks; example line until then.",
       },
     ];
   }, [posts, views, days, quarter, p]);
+
+  const campaign = useMemo(() => {
+    const c = p.campaigns[0];
+    if (!c) return null;
+    const main = c.objectives[0];
+    const progress = main ? main.value / main.target : 0;
+    // On track while the main objective is at or ahead of the days gone.
+    return { ...c, progress, onTrack: progress >= c.day / c.days };
+  }, [p]);
 
   return {
     tenant: activeSite()?.name ?? "Your tenant",
     quarter,
     week: weekOfQuarter(quarter),
     goals,
-    drift: p.drift,
-    launch: p.launch,
-    thisWeek: {
-      flags: inbox.flags.length,
-      pitches: inbox.pendingPitches,
-      reviews: inbox.reviews.length,
-      knowledge: inbox.knowledge.length,
-      planned,
-    },
+    campaign,
     inboxTotal: inbox.total,
-    inboxExample: inbox.example,
     example: true,
   };
 }
