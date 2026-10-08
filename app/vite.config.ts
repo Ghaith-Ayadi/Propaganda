@@ -81,6 +81,44 @@ function localApiPlugin(serverEnv: Record<string, string>): Plugin {
         }
       });
 
+      // /api/model-key (BYOK) runs the real function, loaded through Vite's SSR
+      // loader, so the Anthropic key card works on localhost. Needs api/'s
+      // packages (npm ci in api/) and SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and
+      // MODEL_KEY_SECRET in .env.local; the key it sends never reaches the bundle.
+      server.middlewares.use("/api/model-key", async (req, res) => {
+        try {
+          for (const k of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "MODEL_KEY_SECRET", "SUPABASE_ANON_KEY"]) {
+            if (serverEnv[k] && !process.env[k]) process.env[k] = serverEnv[k];
+          }
+          const mod = (await server.ssrLoadModule(path.resolve(__dirname, "../api/model-key.ts"))) as Record<
+            string,
+            ((r: Request) => Promise<Response>) | undefined
+          >;
+          const handler = mod[req.method ?? "GET"];
+          if (!handler) {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed" }));
+            return;
+          }
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          const webRes = await handler(
+            new Request(`http://localhost/api/model-key${req.url && req.url !== "/" ? req.url : ""}`, {
+              method: req.method,
+              headers: req.headers as Record<string, string>,
+              body: chunks.length ? Buffer.concat(chunks) : undefined,
+            }),
+          );
+          res.writeHead(webRes.status, { "Content-Type": "application/json" });
+          res.end(await webRes.text());
+        } catch (err) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          // Never echo a pasted key back, even in dev.
+          const detail = String(err).replace(/sk-ant-[A-Za-z0-9_-]+/g, "sk-ant-…");
+          res.end(JSON.stringify({ error: "model-key failed in dev", detail }));
+        }
+      });
+
       // No model call outside the cost-logging gateway (api/_ai/gateway.ts): the
       // dev server does not call a model itself. Run `vercel dev` to try quotes.
       server.middlewares.use("/api/extract-quotes", (_req, res) => {

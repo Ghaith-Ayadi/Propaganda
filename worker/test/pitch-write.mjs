@@ -242,6 +242,8 @@ const t = await import("../dist/agents/testing.js");
 t.setModelResolver(() => model);
 t.setWebFetch(web);
 t.wireGateway();
+// Both test tenants run on our own account (BYOK, api/_ai/modelKeys.ts), so no key is needed.
+t.setAccounts({ [SITE]: "private", [OTHER]: "private" });
 t.DBOS.setConfig({ name: "propaganda-agents-test", systemDatabaseUrl: `${PGURL}/${SYS_DB}`, applicationVersion: "test" });
 await t.DBOS.launch();
 await t.registerQueues();

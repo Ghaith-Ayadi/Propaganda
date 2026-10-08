@@ -77,3 +77,16 @@ export async function requireMember(request: Request, siteId: string): Promise<A
   }
   return user;
 }
+
+/** Require a signed-in owner of `siteId` (site_members.role = 'owner'). Throws a Response on failure. */
+export async function requireOwner(request: Request, siteId: string): Promise<AuthedUser> {
+  const user = await requireMember(request, siteId);
+  const res = await backendGet(
+    `/rest/v1/site_members?select=role&site=eq.${siteId}&user_id=eq.${user.userId}&limit=1`,
+    user.token,
+  );
+  if (!res.ok) throw new Response("Membership check failed", { status: 502 });
+  const [row] = (await res.json()) as { role?: string }[];
+  if (row?.role !== "owner") throw new Response("Only an owner can change the key", { status: 403 });
+  return user;
+}
