@@ -1,5 +1,6 @@
-// Admin home dashboard: writing-activity heatmap (optional Verbose module) plus
-// "Last added" and "Last edited" recent-post tables side by side.
+// The 0.1 dashboard, now the bottom of Home: writing-activity heatmap
+// (optional Verbose module) plus "Last added" and "Last edited" recent-post
+// tables side by side.
 
 import { lazy, Suspense, useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -7,7 +8,6 @@ import { db } from "@/lib/db";
 import { go } from "@/lib/route";
 import { collectionDisplay } from "@/lib/collections";
 import { WordCountDot } from "@/components/WordCountDot";
-import { CostMeter } from "@/components/cost/CostMeter";
 import type { Collection, Post } from "@/types";
 
 // VERBOSE MODULE (optional, personal). Renders null when disabled. To remove
@@ -18,7 +18,7 @@ const VerboseActivity = lazy(() =>
 
 const LIMIT = 10;
 
-export function HomePage() {
+export function RecentWriting() {
   const posts = useLiveQuery(() => db.posts.toArray(), [], [] as Post[]);
   const collections = useLiveQuery(
     () => db.collections.orderBy("position").toArray(),
@@ -36,15 +36,13 @@ export function HomePage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] px-4 pt-6 pb-16 md:px-10 md:pt-10">
+    <div>
       {/* VERBOSE MODULE (optional, personal) */}
       <Suspense fallback={null}>
         <VerboseActivity />
       </Suspense>
 
-      <CostMeter />
-
-      <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         <RecentTable title="Last added" posts={lastAdded} collections={collections} />
         <RecentTable title="Last edited" posts={lastEdited} collections={collections} />
       </div>
