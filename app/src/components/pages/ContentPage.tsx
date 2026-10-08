@@ -33,7 +33,7 @@ export function ContentPage() {
               className={cx(
                 "shrink-0 rounded-full px-3 py-1 text-sm ring-1 ring-inset transition",
                 c.id === channel
-                  ? "bg-primary-solid text-white ring-transparent"
+                  ? "bg-(--color-fg-primary) text-(--color-bg-primary) ring-transparent"
                   : "text-secondary ring-primary hover:bg-primary_hover",
               )}
             >
