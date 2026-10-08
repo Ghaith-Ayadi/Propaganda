@@ -11,9 +11,14 @@ export type QuarterKey = `${number}-Q${1 | 2 | 3 | 4}`;
 /** YYYY-MM-DD, local. */
 export type Day = string;
 
-export type GoalKind = "volume" | "coverage" | "consistency" | "readership" | "ranking";
+/**
+ * Four goals. Coverage was the fifth until Ayadi folded it into Volume
+ * (2026-10-08): covering every topic is the Strategist's job, and it shows as
+ * each topic's pitched count next to its goal and what's done.
+ */
+export type GoalKind = "volume" | "consistency" | "readership" | "ranking";
 
-export const GOAL_KINDS: GoalKind[] = ["volume", "coverage", "consistency", "readership", "ranking"];
+export const GOAL_KINDS: GoalKind[] = ["volume", "consistency", "readership", "ranking"];
 
 export interface TopicTarget {
   name: string;
@@ -35,7 +40,6 @@ export interface RankingSearch {
 /** The targets of one goal version. Every number here was approved by the tenant. */
 export interface GoalTargets {
   volume: { total: number; topics: TopicTarget[] };
-  coverage: { internal: number; external: number };
   readership: {
     pageviews: number | null;
     pagesPerSession: number | null;
@@ -72,13 +76,15 @@ export interface ScorePoint {
 export interface VolumeNow {
   published: number;
   byTopic: Record<string, number>;
+  /**
+   * Pitches the Strategist put in front of the tenant, per topic: its attempt to
+   * cover every topic. Pitched well above done means the topic keeps getting
+   * rejected, and the Volume shortfall shows it.
+   */
+  pitchedByTopic: Record<string, number>;
+  rejectedByTopic: Record<string, number>;
   /** Posts published that weren't planned (Scout, Listener). Counted on top. */
   bonus: number;
-}
-
-export interface CoverageNow {
-  internal: number;
-  external: number;
 }
 
 export interface ConsistencyNow {
@@ -115,7 +121,6 @@ export interface QuarterGoals {
   scores: Record<GoalKind, ScorePoint[]>;
   now: {
     volume: VolumeNow;
-    coverage: CoverageNow;
     consistency: ConsistencyNow;
     readership: ReadershipNow;
     ranking: RankingNow;
@@ -169,7 +174,6 @@ export interface Proposal {
   covers: { from: Day; to: Day; weeks: number; prorated: boolean };
   volume: Reasoned<number>;
   topics: ProposedTopic[];
-  coverage: { internal: number; external: number; why: string; basis: string };
   ranking: {
     searches: ProposedSearch[];
     pageOneTarget: Reasoned<number>;

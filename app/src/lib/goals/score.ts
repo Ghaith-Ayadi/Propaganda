@@ -11,9 +11,15 @@ import { quarterDays } from "./quarter";
 export interface PublishedFact {
   day: Day;
   topics: string[];
-  origin: "internal" | "external";
   /** false = a bonus post (news, calls), counted on top of the plan. */
   planned: boolean;
+}
+
+/** One pitch the tenant saw (a brief in a batch that reached the inbox). */
+export interface PitchFact {
+  day: Day;
+  topics: string[];
+  outcome: "open" | "approved" | "rejected";
 }
 
 export interface ReadershipFact {
@@ -38,6 +44,7 @@ export interface ConsistencyFact {
 
 export interface QuarterFacts {
   published: PublishedFact[];
+  pitched: PitchFact[];
   readership: ReadershipFact[];
   ranking: RankingFact[];
   consistency: ConsistencyFact[];
@@ -56,33 +63,29 @@ export function pct(n: number, d: number): number {
  * (reviews/goal-model.md) counts every published post. Don't reuse this in the
  * job before he picks one.
  */
-export function volumeScore(published: PublishedFact[], t: GoalTargets["volume"]) {
+export function volumeScore(published: PublishedFact[], t: GoalTargets["volume"], pitched: PitchFact[] = []) {
   const planned = published.filter((p) => p.planned);
   const byTopic: Record<string, number> = {};
+  const pitchedByTopic: Record<string, number> = {};
+  const rejectedByTopic: Record<string, number> = {};
   // A post in two topics counts in each topic, once in the total.
   for (const p of planned) for (const topic of p.topics) byTopic[topic] = (byTopic[topic] ?? 0) + 1;
+  // Coverage lives here now (Ayadi, 2026-10-08): what the Strategist pitched per topic.
+  for (const p of pitched)
+    for (const topic of p.topics) {
+      pitchedByTopic[topic] = (pitchedByTopic[topic] ?? 0) + 1;
+      if (p.outcome === "rejected") rejectedByTopic[topic] = (rejectedByTopic[topic] ?? 0) + 1;
+    }
   const onTarget = t.topics.filter((x) => (byTopic[x.name] ?? 0) >= x.low).length;
   return {
     published: planned.length,
     bonus: published.length - planned.length,
     byTopic,
+    pitchedByTopic,
+    rejectedByTopic,
     percent: pct(planned.length, t.total),
     topicsOnTarget: onTarget,
     topicCount: t.topics.length,
-  };
-}
-
-/** Coverage: each side capped at its goal before combining, so one side can't hide the other. */
-export function coverageScore(published: PublishedFact[], t: GoalTargets["coverage"]) {
-  const internal = published.filter((p) => p.origin === "internal").length;
-  const external = published.filter((p) => p.origin === "external").length;
-  const total = t.internal + t.external;
-  return {
-    internal,
-    external,
-    internalPercent: Math.min(100, pct(internal, t.internal)),
-    externalPercent: Math.min(100, pct(external, t.external)),
-    combined: pct(Math.min(internal, t.internal) + Math.min(external, t.external), total),
   };
 }
 
@@ -124,7 +127,7 @@ export function scoreSeries(
 ): Record<GoalKind, ScorePoint[]> {
   const days = quarterDays(quarter, until);
   const queries = targets.ranking.searches.map((s) => s.query);
-  const out: Record<GoalKind, ScorePoint[]> = { volume: [], coverage: [], consistency: [], readership: [], ranking: [] };
+  const out: Record<GoalKind, ScorePoint[]> = { volume: [], consistency: [], readership: [], ranking: [] };
   let readingSeconds = 0;
   const rByDay = new Map(facts.readership.map((r) => [r.day, r]));
   const rankByDay = new Map(facts.ranking.map((r) => [r.day, r]));
@@ -132,7 +135,6 @@ export function scoreSeries(
   for (const day of days) {
     const pub = facts.published.filter((p) => p.day <= day);
     out.volume.push({ day, value: volumeScore(pub, targets.volume).percent });
-    out.coverage.push({ day, value: coverageScore(pub, targets.coverage).combined });
     const c = consByDay.get(day);
     if (c?.contentClean != null) out.consistency.push({ day, value: c.contentClean * 100 });
     readingSeconds += rByDay.get(day)?.readingSeconds ?? 0;

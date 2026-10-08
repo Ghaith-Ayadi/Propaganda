@@ -1,10 +1,11 @@
-// The five goals of a quarter, each with its number, the detail behind it and
-// its daily score as a line. Five separate numbers, never merged.
+// The four goals of a quarter, each with its number, the detail behind it and
+// its daily score as a line. Separate numbers, never merged. Coverage is no
+// longer a goal: it lives in Volume as each topic's pitched count.
 
 import type { QuarterGoals } from "@/lib/goals/types";
 import { GOAL_COPY } from "@/lib/goals/copy";
 import { quarterEnd, quarterStart, shortDate } from "@/lib/goals/quarter";
-import { coverageScore, pct } from "@/lib/goals/score";
+import { pct } from "@/lib/goals/score";
 import { Card, Headline, ProgressBar, fmtInt, fmtPct } from "./bits";
 import { LineChart, type ChangeMark } from "./LineChart";
 import { Badge } from "@/components/base/badges/badges";
@@ -17,17 +18,9 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
     .filter((v) => v.approvedAt >= from && v.approvedAt <= to)
     .map((v) => ({ day: v.approvedAt, label: v.version === 1 ? "Goals set" : `Goals changed (v${v.version})` }));
   const chart = { from, to, marks };
-  const { volume, coverage, consistency, readership, ranking } = goals.now;
+  const { volume, consistency, readership, ranking } = goals.now;
 
   const onTarget = t.volume.topics.filter((x) => (volume.byTopic[x.name] ?? 0) >= x.low).length;
-  const cov = coverageScore(
-    // Rebuild the capped split from the counts: same rule as the scores.
-    [
-      ...Array.from({ length: coverage.internal }, () => ({ day: "", topics: [], origin: "internal" as const, planned: true })),
-      ...Array.from({ length: coverage.external }, () => ({ day: "", topics: [], origin: "external" as const, planned: true })),
-    ],
-    t.coverage,
-  );
   const queries = t.ranking.searches.map((s) => s.query);
   const pageOne = queries.filter((q) => (ranking.positions[q] ?? 999) <= 10).length;
 
@@ -42,54 +35,48 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
               Topics on target: {onTarget} of {t.volume.topics.length}
               {volume.bonus > 0 && <span className="ml-2 text-quaternary">+{volume.bonus} bonus {volume.bonus === 1 ? "post" : "posts"}</span>}
             </p>
-            <ul className="mt-4 space-y-3">
-              {t.volume.topics.map((x) => {
-                const n = volume.byTopic[x.name] ?? 0;
-                return (
-                  <li key={x.name}>
-                    <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
-                      <span className="truncate text-secondary">{x.name}</span>
-                      <span className="shrink-0 text-tertiary tabular-nums">
-                        {n} / {x.low === x.high ? x.low : `${x.low} to ${x.high}`}
-                      </span>
-                    </div>
-                    <ProgressBar value={n} max={Math.max(x.high, n)} marker={x.low} />
-                  </li>
-                );
-              })}
-            </ul>
-            <p className="mt-3 text-xs text-quaternary">A post in two topics counts in both, and once in the total.</p>
+            <table className="mt-4 w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-quaternary">
+                  <th className="pb-1.5 font-medium">Topic</th>
+                  <th className="pb-1.5 text-right font-medium">Goal</th>
+                  <th className="pb-1.5 text-right font-medium">Done</th>
+                  <th className="pb-1.5 text-right font-medium">Pitched</th>
+                </tr>
+              </thead>
+              <tbody>
+                {t.volume.topics.map((x) => {
+                  const n = volume.byTopic[x.name] ?? 0;
+                  const pitched = volume.pitchedByTopic[x.name] ?? 0;
+                  const rejected = volume.rejectedByTopic[x.name] ?? 0;
+                  return (
+                    <tr key={x.name} className="align-top">
+                      <td className="pt-2 pr-3">
+                        <span className="block truncate text-secondary">{x.name}</span>
+                        <ProgressBar className="mt-1.5" value={n} pitched={pitched} max={Math.max(x.high, n, pitched)} marker={x.low} />
+                        {rejected > 0 && (
+                          <span className="mt-1 block text-xs text-quaternary">
+                            {rejected} {rejected === 1 ? "pitch" : "pitches"} rejected
+                          </span>
+                        )}
+                      </td>
+                      <td className="pt-2 pl-2 text-right text-tertiary tabular-nums">{x.low === x.high ? x.low : `${x.low} to ${x.high}`}</td>
+                      <td className="pt-2 pl-2 text-right font-medium text-primary tabular-nums">{n}</td>
+                      <td className="pt-2 pl-2 text-right text-tertiary tabular-nums">{pitched}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="mt-3 text-xs text-quaternary">
+              Pitched is how hard the Strategist is covering each topic. Rejected pitches don't count as done, so a topic you keep turning down shows here as a shortfall. A post in two topics counts in both, and once in the total.
+            </p>
           </div>
           <LineChart label="Volume, % of the quarter's planned posts" points={goals.scores.volume} target={100} pace {...chart} format={fmtPct} minMax={100} />
         </div>
       </Card>
 
-      {/* 2. Coverage */}
-      <Card title={GOAL_COPY.coverage.title} subtitle={GOAL_COPY.coverage.question}>
-        <Headline value={fmtPct(cov.combined)} unit="combined" />
-        <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-secondary">From your knowledge</p>
-            <p className="text-tertiary tabular-nums">
-              {coverage.internal} of {t.coverage.internal} · {fmtPct(cov.internalPercent)}
-            </p>
-            <ProgressBar className="mt-1.5" value={Math.min(coverage.internal, t.coverage.internal)} max={t.coverage.internal} />
-          </div>
-          <div>
-            <p className="text-secondary">From outside demand</p>
-            <p className="text-tertiary tabular-nums">
-              {coverage.external} of {t.coverage.external} · {fmtPct(cov.externalPercent)}
-            </p>
-            <ProgressBar className="mt-1.5" value={Math.min(coverage.external, t.coverage.external)} max={t.coverage.external} />
-          </div>
-        </div>
-        <p className="mt-3 text-xs text-quaternary">Each side is capped at its goal before they're combined, so one side can't hide the other.</p>
-        <div className="mt-4">
-          <LineChart label="Coverage, combined %" points={goals.scores.coverage} target={100} pace {...chart} format={fmtPct} minMax={100} height={130} />
-        </div>
-      </Card>
-
-      {/* 3. Consistency */}
+      {/* 2. Consistency */}
       <Card title={GOAL_COPY.consistency.title} subtitle={GOAL_COPY.consistency.question} aside={<Badge type="pill-color" color="success" size="sm">Always A</Badge>}>
         {consistency.contentGrade == null && consistency.kbGrade == null ? (
           <p className="py-6 text-sm text-tertiary">Nothing to check yet. Grades appear once posts are published and the knowledge base has claims.</p>
@@ -113,7 +100,7 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
         )}
       </Card>
 
-      {/* 4. Readership */}
+      {/* 3. Readership */}
       <Card title={GOAL_COPY.readership.title} subtitle={GOAL_COPY.readership.question}>
         <Headline value={fmtInt(readership.corpusMinutes)} unit={t.readership.corpusMinutes ? `of ${fmtInt(t.readership.corpusMinutes)} minutes read` : "minutes read, no target yet"} />
         <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
@@ -127,8 +114,8 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
         </div>
       </Card>
 
-      {/* 5. Ranking */}
-      <Card title={GOAL_COPY.ranking.title} subtitle={GOAL_COPY.ranking.question}>
+      {/* 4. Ranking */}
+      <Card title={GOAL_COPY.ranking.title} subtitle={GOAL_COPY.ranking.question} className="lg:col-span-2">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-sm text-secondary">Search</p>

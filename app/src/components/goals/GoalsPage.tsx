@@ -1,4 +1,4 @@
-// #/goals[/<tab>][/<quarter>]: the quarter's five goals, the Strategist's
+// #/goals[/<tab>][/<quarter>]: the quarter's four goals, the Strategist's
 // proposal, the content batches and the plan drop.
 // Tabs: (none) goals, "strategist", "batches", "plan". Quarter: "2026-q4".
 // Data comes from lib/goals/useGoals.ts (a placeholder adapter until the
