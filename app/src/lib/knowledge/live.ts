@@ -5,7 +5,7 @@
 // NOT IN USE until two drafts in the project files are applied (adapter.ts
 // says "placeholder" until then):
 //   - kb-data-model/20261006000001_knowledge_base.sql: the tables and functions;
-//   - kb-ui/20261008000001_kb_ui_views.sql: kb_claim_list (the list with weight,
+//   - kb-ui/20261008000012_kb_ui_views.sql: kb_claim_list (the list with weight,
 //     post count and conflict state, sortable on the server),
 //     kb_evidence_context (the text around each quote, cut on the server) and
 //     kb_grade's total_weight and bad_weight columns.
@@ -218,7 +218,7 @@ function flagSummary(r: Row, claimText: string): FlagSummary {
     postId: r.post ?? null,
     postTitle: r.posts?.title || (r.post ? "Untitled" : "Two claims disagree"),
     headline: claimText.length > 70 ? claimText.slice(0, 69) + "…" : claimText,
-    // kb_flags.urgency is proposed in kb-ui/20261008000001_kb_ui_views.sql; the Guardian sets it.
+    // kb_flags.urgency is proposed in kb-ui/20261008000012_kb_ui_views.sql; the Guardian sets it.
     urgency: r.urgency === "high" ? "high" : "normal",
     confidence: null,
     created: r.created,
