@@ -22,6 +22,7 @@ import {
   Target04,
 } from "@untitledui/icons";
 import { useContentTree } from "@/components/pages/contentTree";
+import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
 
 export type Icon = ComponentType<{ className?: string }>;
 
@@ -104,6 +105,8 @@ export const PAGES: PageRoute[] = [
     path: "knowledge",
     description: "What your tenant actually believes, claim by claim.",
     section: "main",
+    component: lazy(() => import("@/components/knowledge/KnowledgePage").then((m) => ({ default: m.KnowledgePage }))),
+    useBadge: useKnowledgeBadge,
   },
   {
     id: "goals",
