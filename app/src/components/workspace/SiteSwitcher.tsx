@@ -12,6 +12,8 @@ import {
 import { Avatar } from "@/components/base/avatar/avatar";
 import { useWorkspace } from "@/components/Workspace";
 import { usePlan } from "@/lib/tenantPlan";
+import { loadSiteIcon, useSiteIcon } from "@/lib/siteIcons";
+import { useEffect } from "react";
 import { cx } from "@/utils/cx";
 
 /**
@@ -23,18 +25,21 @@ import { cx } from "@/utils/cx";
 export function SiteSwitcher() {
   const { account, site, accounts, sitesOf, switchTo, addAccount, newSite, signOut, isSignedIn } = useWorkspace();
 
+  // Every tenant's favicon, once per page load (lib/siteIcons.ts).
+  useEffect(() => {
+    for (const a of accounts) {
+      if (!isSignedIn(a.userId)) continue;
+      for (const s of sitesOf(a.userId)) loadSiteIcon(a, s.id);
+    }
+  }, [accounts, sitesOf, isSignedIn]);
+
   return (
     <AriaMenuTrigger>
       <AriaButton
         aria-label="Switch tenant"
         className="-mx-1 flex max-w-full items-center gap-2 rounded-md px-1 py-1 outline-none transition hover:bg-primary_hover data-[pressed]:bg-primary_hover"
       >
-        <span
-          aria-hidden
-          className="flex size-7 shrink-0 items-center justify-center rounded-md bg-(--color-fg-primary) font-title text-base text-(--color-bg-primary)"
-        >
-          {(site.name || "?").slice(0, 1).toUpperCase()}
-        </span>
+        <TenantMark siteId={site.id} name={site.name} />
         <span className="truncate font-title text-xl tracking-tight text-primary">{site.name}</span>
         <ChevronDown className="size-4 shrink-0 text-quaternary" />
       </AriaButton>
@@ -74,14 +79,15 @@ export function SiteSwitcher() {
                       id={`site:${a.userId}:${s.id}`}
                       className="mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-secondary outline-none hover:bg-tertiary hover:text-primary focus:bg-tertiary focus:text-primary"
                     >
+                      <TenantMark siteId={s.id} name={s.name} small />
+                      <span className="truncate">{s.name}</span>
+                      <PlanTag siteId={s.id} />
                       <Check
                         className={cx(
-                          "size-3.5 shrink-0 text-fg-brand-primary",
+                          "ml-auto size-3.5 shrink-0 text-fg-brand-primary",
                           (a.userId !== account.userId || s.id !== site.id) && "invisible",
                         )}
                       />
-                      <span className="truncate">{s.name}</span>
-                      <PlanTag siteId={s.id} />
                     </AriaMenuItem>
                   ))}
               </AriaMenuSection>,
@@ -132,8 +138,29 @@ function initialsOf(a: { name: string; email: string }): string {
   return src.slice(0, 1).toUpperCase();
 }
 
+/** A tenant's mark: its main site's favicon, or its initial. */
+function TenantMark({ siteId, name, small = false }: { siteId: string; name: string; small?: boolean }) {
+  const icon = useSiteIcon(siteId);
+  const box = small ? "size-5 rounded" : "size-7 rounded-md";
+  if (icon) {
+    return <img src={icon} alt="" aria-hidden className={cx(box, "shrink-0 object-cover")} />;
+  }
+  return (
+    <span
+      aria-hidden
+      className={cx(
+        box,
+        "flex shrink-0 items-center justify-center bg-(--color-fg-primary) font-title text-(--color-bg-primary)",
+        small ? "text-xs" : "text-base",
+      )}
+    >
+      {(name || "?").slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
 /** "Lite" beside a tenant on the free plan (lib/tenantPlan.ts). */
 function PlanTag({ siteId }: { siteId: string }) {
   if (usePlan(siteId) !== "lite") return null;
-  return <span className="ml-auto shrink-0 rounded px-1.5 text-xs text-quaternary ring-1 ring-inset ring-secondary">Lite</span>;
+  return <span className="shrink-0 rounded px-1.5 text-xs text-quaternary ring-1 ring-inset ring-secondary">Lite</span>;
 }
