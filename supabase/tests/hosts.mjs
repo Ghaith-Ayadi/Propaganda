@@ -1,5 +1,6 @@
-// Blogs on their own subdomains: Caddy's on-demand TLS check (tls_check)
-// answers 200 only for the app host and the subdomain of an existing site, and
+// Blogs on their own hosts: Caddy's on-demand TLS check (tls_check) answers
+// 200 only for the app host, the subdomain of an existing site and a site's
+// connected custom domain (sites.domain, set by api/domains.ts), and
 // slugs stay DNS-shaped and clear of the platform's own hosts. The port of
 // pb/rehearsal/hosts.mjs. Caddy calls PostgREST directly on the box; here it
 // goes through the gateway, which is the same request.
@@ -17,7 +18,10 @@ check("the app host gets a certificate too", (await tls("app.propaganda.pub")) =
 check("two labels deep isn't a blog", (await tls("a.verbatim.propaganda.pub")) === 404);
 check("the bare platform domain isn't a blog", (await tls("propaganda.pub")) === 404);
 check("a lookalike suffix isn't the platform", (await tls("verbatim.propaganda.pub.evil.test")) === 404);
-check("another domain isn't one (custom domains come later)", (await tls("verbatim.ayadighaith.com")) === 404);
+check("a site's custom domain gets a certificate", (await tls("verbatim.ayadighaith.com")) === 200);
+check("…in any case, with a trailing dot", (await tls("Verbatim.AyadiGhaith.com.")) === 200);
+check("a domain no site has connected doesn't", (await tls("blog.kontra.run")) === 404);
+check("nor a subdomain of a connected one", (await tls("x.verbatim.ayadighaith.com")) === 404);
 check("no domain at all", (await tls("")) === 404);
 check("no parameter at all", (await fetch(`${API}/rest/v1/rpc/tls_check`)).status >= 400);
 
