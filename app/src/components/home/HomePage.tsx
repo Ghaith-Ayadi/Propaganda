@@ -30,7 +30,12 @@ export function HomePage() {
 
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-secondary bg-primary px-5 py-4">
         <div>
-          <h2 className="text-xs font-semibold tracking-wide text-tertiary uppercase">This week</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-semibold tracking-wide text-tertiary uppercase">This week</h2>
+            {home.inboxExample && (
+              <ExampleBadge why="Flags, pitches and knowledge rulings are the Inbox's example items until their tables exist. Reviews and planned posts are real." />
+            )}
+          </div>
           <p className="mt-1 text-md text-primary">{weekLine(w)}</p>
         </div>
         <Button size="sm" color="secondary" iconTrailing={ArrowRight} href={pageHref("pipeline")}>
