@@ -26,6 +26,12 @@
 //   DOMAIN-REMOVE       removing a custom domain failed
 //   (the server's own, from api/domains.ts: DOMAIN-INVALID, DOMAIN-OFF,
 //    DOMAIN-TAKEN, DOMAIN-DNS, DOMAIN-SAVE, DOMAIN-OWNER)
+//   KB-LOAD             a knowledge base page couldn't load its data
+//   KB-REMEMBER         a Remember couldn't be sent
+//   KB-FLAG-CLOSE       closing or snoozing a flag failed
+//   KB-FIX              applying a flag's fix failed
+//   KB-CONTEST          contesting a flag, or sending the contest, failed
+//   KB-BULK             a bulk action on a re-check thread failed
 
 import { BackendError } from "@/lib/supabase";
 
