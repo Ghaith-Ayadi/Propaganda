@@ -162,7 +162,8 @@ export interface WatchedSite {
 }
 
 export type ProposalKind = "onboarding" | "quarterly" | "revision";
-export type ProposalStatus = "draft" | "consultant" | "sent" | "changes_requested" | "approved" | "superseded";
+/** No consultant review step (Ayadi, 2026-10-08): a proposal goes straight to the tenant. */
+export type ProposalStatus = "draft" | "sent" | "changes_requested" | "approved" | "superseded";
 
 export interface Proposal {
   id: string;
@@ -301,6 +302,20 @@ export interface PlanDrop {
   files: PlanFile[];
   /** When the Strategist last read it. */
   readAt: Day | null;
+}
+
+// ── Onboarding: the Strategist's questions ─────────────────────────────────
+
+/**
+ * The four answers the Strategist starts from, in Ayadi's order (2026-10-08).
+ * Review capacity is asked earlier, in "Your business", and lives in the site
+ * setting strategist.reviewPerMonth. Free text: the Strategist reads it.
+ */
+export interface StrategyAnswers {
+  offer: string;
+  searches: string;
+  watch: string;
+  upcoming: string;
 }
 
 // ── Tenant context for the page ─────────────────────────────────────────────

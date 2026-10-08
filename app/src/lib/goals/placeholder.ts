@@ -30,6 +30,7 @@ import type {
   ProposalEdit,
   QuarterGoals,
   QuarterKey,
+  StrategyAnswers,
   TenantGoalsContext,
 } from "./types";
 import {
@@ -69,6 +70,8 @@ export const SCENARIOS: { id: ScenarioId; label: string; hint: string }[] = [
 ];
 
 const SCENARIO_KEY = "propaganda:goals-placeholder-scenario";
+/** Same key as the onboarding fallback in #35 (StrategyQuestions.tsx), so typed answers carry over. */
+const answersKey = (siteId: string) => `propaganda:onboarding:strategy:${siteId}`;
 
 // ── Sample tenant ───────────────────────────────────────────────────────────
 
@@ -873,6 +876,24 @@ export const placeholderAdapter: GoalsAdapter = {
     state.plans.set(quarter, { ...plan, batchDue });
     emit();
     return i + 1;
+  },
+
+  strategyAnswers(siteId) {
+    try {
+      const a = JSON.parse(localStorage.getItem(answersKey(siteId)) || "{}") as Partial<StrategyAnswers>;
+      return { offer: a.offer ?? "", searches: a.searches ?? "", watch: a.watch ?? "", upcoming: a.upcoming ?? "" };
+    } catch {
+      return { offer: "", searches: "", watch: "", upcoming: "" };
+    }
+  },
+
+  async saveStrategyAnswers(siteId, answers) {
+    try {
+      localStorage.setItem(answersKey(siteId), JSON.stringify(answers));
+    } catch {
+      // Private window or full storage: the answers just don't survive a reload.
+    }
+    emit();
   },
 
   async removePlanFile(id) {

@@ -17,7 +17,6 @@ import { cx } from "@/utils/cx";
 
 const STATUS: Record<Proposal["status"], { label: string; color: "gray" | "brand" | "warning" | "success" }> = {
   draft: { label: "Draft", color: "gray" },
-  consultant: { label: "With your consultant", color: "gray" },
   sent: { label: "Waiting on you", color: "brand" },
   changes_requested: { label: "Revision asked for", color: "warning" },
   approved: { label: "Approved", color: "success" },
@@ -32,7 +31,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   const [busy, setBusy] = useState(false);
   useEffect(() => setDraft(proposal), [proposal]);
 
-  const editable = proposal.status === "sent" || proposal.status === "consultant" || proposal.status === "draft";
+  const editable = proposal.status === "sent" || proposal.status === "draft";
   const edits = useMemo(() => diff(proposal, draft), [proposal, draft]);
   const lowSum = draft.topics.reduce((a, t) => a + t.low, 0);
   const problems = [
