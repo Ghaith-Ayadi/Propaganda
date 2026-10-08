@@ -105,6 +105,7 @@ analytics worker, never by PostHog.
   an event property: it bloats events and replays already show it.
 - Events go through `/ingest` on our own host (`vercel.json` rewrites, Vite proxy in dev).
   `VITE_POSTHOG_KEY` unset means telemetry is off.
+- Every event and replay carries `tenant_id`, `tenant_slug` and `account_id`; filter recordings by those.
 
 ## Notion is mandatory and is part of "done"
 
