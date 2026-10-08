@@ -17,10 +17,5 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ],
-  "git": {
-    "deploymentEnabled": {
-      "claude/ui-assembly-51q568": false
-    }
-  }
+  ]
 }
