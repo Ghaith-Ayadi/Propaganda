@@ -170,8 +170,6 @@ export interface Inbox extends InboxSnapshot {
   /** Pitches in the batch still waiting on a decision. */
   pendingPitches: number;
   total: number;
-  /** What counts outside the Inbox page (nav, Home): example items left out. */
-  liveTotal: number;
   example: boolean;
   source: InboxSource;
 }
@@ -185,7 +183,6 @@ export function useInbox(): Inbox {
     reviews,
     pendingPitches,
     total: snap.flags.length + pendingPitches + snap.knowledge.length + reviews.length,
-    liveTotal: inboxSource.example ? reviews.length : snap.flags.length + pendingPitches + snap.knowledge.length + reviews.length,
     example: inboxSource.example,
     source: inboxSource,
   };

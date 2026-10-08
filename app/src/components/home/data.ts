@@ -86,8 +86,10 @@ export interface Home {
   drift: DriftNote[];
   launch: Launch | null;
   thisWeek: { flags: number; pitches: number; reviews: number; knowledge: number; planned: number };
-  /** Live items only while the inbox is example data (see inbox/badge.ts). */
+  /** The same count the Inbox page shows, example items included. */
   inboxTotal: number;
+  /** The inbox's flags, pitches and knowledge are example data (Home marks them). */
+  inboxExample: boolean;
   example: boolean;
 }
 
@@ -207,14 +209,14 @@ export function useHome(): Home {
     drift: p.drift,
     launch: p.launch,
     thisWeek: {
-      // Example inbox items stay off Home, like the nav badge (inbox/badge.ts).
-      flags: inbox.example ? 0 : inbox.flags.length,
-      pitches: inbox.example ? 0 : inbox.pendingPitches,
+      flags: inbox.flags.length,
+      pitches: inbox.pendingPitches,
       reviews: inbox.reviews.length,
-      knowledge: inbox.example ? 0 : inbox.knowledge.length,
+      knowledge: inbox.knowledge.length,
       planned,
     },
-    inboxTotal: inbox.liveTotal,
+    inboxTotal: inbox.total,
+    inboxExample: inbox.example,
     example: true,
   };
 }
