@@ -219,6 +219,9 @@ async function main() {
   const db = new pg.Client({ connectionString: `${PGURL}/${APP}` });
   await db.connect();
   await db.query(readFileSync(SHIM, "utf8"));
+  // As on Supabase: service_role gets every table made from here on (the
+  // Pitcher's agent_ideas relies on it, like the box does).
+  await db.query("alter default privileges in schema public grant all on tables to service_role");
   for (const f of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
     await db.query(readFileSync(new URL(f, MIGRATIONS), "utf8"));
   }
@@ -329,7 +332,12 @@ async function main() {
     return r.rows[0];
   };
   const out = await runOut(post.json.run);
-  check(out?.status === "SUCCESS" && /SSO on the Pro plan/.test(out.output ?? ""), `the idea is in the run's output for the Pitcher (${out?.status} ${String(out?.output).slice(0, 200)})`);
+  check(out?.status === "SUCCESS" && /"ideasHandedOff":true/.test(out.output ?? ""), `the run handed its idea over (${out?.status} ${String(out?.output).slice(0, 160)})`);
+  const idea = (await db.query("select * from public.agent_ideas where site = $1 and title = 'SSO on the Pro plan'", [SITE])).rows;
+  check(
+    idea.length === 1 && idea[0].origin === "calls" && idea[0].source_agent === "listener" && idea[0].status === "new" && idea[0].evidence?.[0]?.source_id === src,
+    `the idea waits in the Pitcher's inbox, citing its source (${idea.length} ${idea[0]?.origin} ${idea[0]?.status})`,
+  );
 
   const again = await api(path, { method: "POST", raw: "Ayadi: We ship the Pro plan with three seats.\nDana: Is there SSO on Pro?", type: "text/plain" });
   check(again.status === 202 && again.json.created === false && again.json.source === src, `the same transcript again is the same source, not read twice (${again.status} ${again.text.slice(0, 120)})`);
