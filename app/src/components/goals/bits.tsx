@@ -1,0 +1,128 @@
+// Small shared pieces of the Goals pages.
+
+import type { ReactNode } from "react";
+import { InfoCircle } from "@untitledui/icons";
+import { NativeSelect } from "@/components/base/select/select-native";
+import { AUTHORITY_EXPLAINER } from "@/lib/goals/copy";
+import { goalsArePlaceholder } from "@/lib/goals/useGoals";
+import { SCENARIOS, placeholderScenario, setPlaceholderScenario, type ScenarioId } from "@/lib/goals/placeholder";
+import type { PlanOrigin } from "@/lib/goals/types";
+import { Badge } from "@/components/base/badges/badges";
+import { cx } from "@/utils/cx";
+
+export function Card({ title, subtitle, aside, children, className }: { title?: ReactNode; subtitle?: ReactNode; aside?: ReactNode; children?: ReactNode; className?: string }) {
+  return (
+    <section className={cx("rounded-2xl bg-primary p-5 shadow-xs ring-1 ring-secondary md:p-6", className)}>
+      {(title || aside) && (
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {title && <h2 className="font-title text-xl text-primary md:text-2xl">{title}</h2>}
+            {subtitle && <p className="mt-1 text-sm text-tertiary">{subtitle}</p>}
+          </div>
+          {aside && <div className="shrink-0">{aside}</div>}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+/** A big number with its unit: "9 of 18". */
+export function Headline({ value, unit, className }: { value: ReactNode; unit?: ReactNode; className?: string }) {
+  return (
+    <div className={cx("flex items-baseline gap-2", className)}>
+      <span className="font-title text-4xl text-primary tabular-nums md:text-5xl">{value}</span>
+      {unit && <span className="text-sm text-tertiary">{unit}</span>}
+    </div>
+  );
+}
+
+/** "Why" in ink, "based on" in grey: every number the Strategist proposes carries both. */
+export function Reason({ why, basis, origin, planSaid }: { why: string; basis?: string; origin?: PlanOrigin; planSaid?: string }) {
+  return (
+    <div className="mt-1.5 space-y-0.5 text-sm">
+      <p className="text-secondary">{why}</p>
+      {(basis || origin) && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-quaternary">
+          {origin && <OriginBadge origin={origin} />}
+          {planSaid && <span>Your plan said {planSaid}.</span>}
+          {basis && <span>Based on: {basis}</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const ORIGIN_LABEL: Record<PlanOrigin, { label: string; color: "brand" | "warning" | "gray" }> = {
+  plan: { label: "From your plan", color: "brand" },
+  plan_changed: { label: "From your plan, changed", color: "warning" },
+  added: { label: "Added", color: "gray" },
+};
+
+export function OriginBadge({ origin }: { origin: PlanOrigin }) {
+  const o = ORIGIN_LABEL[origin];
+  return (
+    <Badge type="pill-color" color={o.color} size="sm">
+      {o.label}
+    </Badge>
+  );
+}
+
+/** Why a new blog ranks slowly. Same words on the Launch card, Goals and the proposal. */
+export function AuthorityExplainer({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={cx("rounded-xl bg-secondary p-4 text-sm", compact && "p-3")}>
+      <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-secondary">
+        <InfoCircle className="size-4 text-fg-quaternary" aria-hidden />
+        Why rankings take a while
+      </p>
+      <ul className="space-y-1 text-tertiary">
+        {AUTHORITY_EXPLAINER.map((l) => (
+          // Help center articles come before GA; the slug is kept so the link lands then.
+          <li key={l.helpSlug} data-help={l.helpSlug}>
+            {l.text}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Says the page shows sample data, and lets you switch the sample tenant's situation. */
+export function PlaceholderBanner() {
+  if (!goalsArePlaceholder) return null;
+  return (
+    <div className="mb-6 flex flex-col gap-3 rounded-xl bg-warning-primary p-3 text-sm ring-1 ring-secondary ring-inset md:flex-row md:items-center md:justify-between">
+      <p className="text-warning-primary">
+        <span className="font-semibold">Sample data.</span> The goal tables don't exist yet; this is a made-up tenant. Nothing you do here is saved.
+      </p>
+      <NativeSelect
+        size="sm"
+        aria-label="Sample situation"
+        className="md:w-72"
+        value={placeholderScenario()}
+        onChange={(e) => setPlaceholderScenario(e.target.value as ScenarioId)}
+        options={SCENARIOS.map((s) => ({ value: s.id, label: s.label }))}
+      />
+    </div>
+  );
+}
+
+export function ProgressBar({ value, max, marker, className }: { value: number; max: number; marker?: number; className?: string }) {
+  const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  const m = marker != null && max > 0 ? Math.min(100, (marker / max) * 100) : null;
+  return (
+    <div className={cx("relative h-2 rounded-full bg-quaternary", className)}>
+      <div className="h-2 rounded-full bg-brand-solid" style={{ width: `${w}%` }} />
+      {m != null && <div className="absolute -top-1 h-4 w-0.5 rounded bg-fg-primary" style={{ left: `calc(${m}% - 1px)` }} aria-hidden />}
+    </div>
+  );
+}
+
+export function fmtInt(n: number): string {
+  return Math.round(n).toLocaleString("en-US");
+}
+
+export function fmtPct(n: number): string {
+  return `${Math.round(n)}%`;
+}
