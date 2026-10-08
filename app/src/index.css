@@ -38,8 +38,9 @@ html, body, #root {
 }
 
 /* Reserve the scrollbar's room so a page that starts or stops scrolling
-   doesn't shift sideways. */
-html {
+   doesn't shift sideways. The app only: public blogs (and the theme harness)
+   keep their full width. */
+html.ppgd-app {
   scrollbar-gutter: stable;
 }
 
