@@ -7,6 +7,13 @@
 // sub-path with usePageRest() and moves with goPage(id, rest) (lib/route.ts).
 // It renders its own header (components/shell/PageHeader.tsx) and fills the
 // main column; the shell scrolls it.
+//
+// Frozen for the 0.2 batch (pages are being built on it in parallel): `id`,
+// `path`, `component` with no props, usePageRest() for the sub-path.
+//
+// `useBadge` and `useChildren` are plain imports, so they and what they import
+// ship in the main bundle: keep them small and Dexie-only, and keep page code
+// behind the lazy `component`.
 
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 import {
