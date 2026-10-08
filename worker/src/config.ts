@@ -27,6 +27,11 @@ export const config = {
    */
   systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL ?? url("propaganda_dbos"),
   jwtSecret: () => env("JWT_SECRET"),
+  /**
+   * The bearer secret Chat (a Vercel function) sends to start an agent run.
+   * Unset: the dispatch route refuses everything (503).
+   */
+  dispatchSecret: process.env.WORKER_DISPATCH_SECRET ?? "",
   port: Number(process.env.WORKER_PORT ?? 3010),
   /**
    * DBOS recovers only workflows stamped with the running version. Without a

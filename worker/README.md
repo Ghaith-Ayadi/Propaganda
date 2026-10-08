@@ -11,7 +11,7 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/config.ts` | Settings, all from the environment |
 | `src/limits.ts` | The Claude Max usage limit: `modelStep()` waits it out instead of failing |
 | `src/runs.ts` | Runs, steps, cost, retry and cancel, from DBOS's management API and the cost log |
-| `src/http.ts` | The Runs API, superadmins only |
+| `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
 | `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
@@ -27,7 +27,9 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
   (who may use the Runs API) and `public.model_calls` (the cost log). Both come
   from other PRs; until they are on the box the API refuses everyone (no
   superadmins) and runs show no cost (no cost log). It connects as `postgres`
-  with `POSTGRES_PASSWORD` from the stack's `.env`; `JWT_SECRET` checks tokens.
+  with `POSTGRES_PASSWORD` from the stack's `.env`; `JWT_SECRET` checks tokens;
+  `WORKER_DISPATCH_SECRET` (same file, and the same value in Vercel for Chat)
+  guards the dispatch route.
 - **Every run belongs to a tenant**: start it with `startForTenant(site, workflow, ...args)`,
   which records the workflow attribute `site` and queues it on `agents`
   (three at a time).
@@ -81,6 +83,24 @@ Every route but `/health` needs a superadmin's Supabase access token.
 | `POST /runs/:id/retry` | A failed run is **forked** from the failed step: a new run that keeps the steps before it (their model calls aren't paid again). A cancelled run, or one DBOS gave up recovering, **resumes** under its own id |
 | `POST /runs/:id/cancel` | A queued, running or stalled run |
 | `POST /runs/demo` | `{ stallSeconds?, fail?, site? }`: a three-step run that spends nothing |
+
+### Dispatch, from Chat
+
+`POST /agents/:name` with `Authorization: Bearer $WORKER_DISPATCH_SECRET` and
+`{ site, task, requestedBy, conversation }` starts that agent's workflow on the
+`agents` queue and answers `202 { runId }` (the contract is `api/_chat/dispatch.ts`).
+Names: strategist, listener, scout, pitcher, writer, checker. A name with no
+workflow registered answers 404, which Chat reads as "not running yet". The
+tenant must exist (422 otherwise); Chat has already checked the person is a
+member. The run carries the attributes `site`, `agent`, `conversation` and
+`requestedBy`. With no secret set the route answers 503.
+
+An agent's thread plugs in with one call, in a file `main.ts` imports:
+
+```ts
+export const checkerRun = DBOS.registerWorkflow(checker, { name: "checker" });
+registerAgent("checker", checkerRun);   // checker(input: DispatchInput)
+```
 
 ## Running it
 

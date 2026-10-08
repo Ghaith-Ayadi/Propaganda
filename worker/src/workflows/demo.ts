@@ -5,6 +5,7 @@
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { modelStep } from "../limits.js";
+import { isAgentName, registerAgent, type DispatchInput } from "./agents.js";
 
 export interface DemoInput {
   /** When the run was asked for (epoch ms): the pretend limit lasts until startedAt + stallSeconds. */
@@ -46,3 +47,12 @@ async function demoRun(input: DemoInput): Promise<string> {
 }
 
 export const demo = DBOS.registerWorkflow(demoRun, { name: "demo" });
+
+// For the end-to-end test only: with WORKER_TEST_AGENT set, Chat's dispatch
+// route can start this under that agent name. Never set on the box.
+async function demoAgentRun(input: DispatchInput): Promise<string> {
+  return DBOS.runStep(async () => `got: ${input.task.slice(0, 40)}`, { name: "acknowledge" });
+}
+const demoAgent = DBOS.registerWorkflow(demoAgentRun, { name: "demo-agent" });
+const testAgent = process.env.WORKER_TEST_AGENT;
+if (testAgent && isAgentName(testAgent)) registerAgent(testAgent, demoAgent);

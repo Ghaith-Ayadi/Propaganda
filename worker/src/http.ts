@@ -1,20 +1,24 @@
-// The Runs API, for Admin's Runs page. Caddy serves it on app.propaganda.pub
-// under /worker/v1/ (the prefix is stripped before it gets here). Every route
-// but /health needs a superadmin's access token.
+// The Runs API, for Admin's Runs page, and the dispatch route Chat starts
+// agents through. Caddy serves both on app.propaganda.pub under /worker/v1/
+// (the prefix is stripped before it gets here). /agents/:name takes the
+// dispatch secret; every other route but /health needs a superadmin's access
+// token.
 //
 //   GET  /health                 200 "ok"
+//   POST /agents/:name           202 { runId }  body { site, task, requestedBy, conversation }
 //   GET  /runs?state=&site=&name=&limit=&offset=
 //   GET  /runs/:id
 //   POST /runs/:id/retry         { id, how }   id is the new run's when forked
 //   POST /runs/:id/cancel        { ok: true }
 //   POST /runs/demo              { id }        body { stallSeconds?, fail?, site? }
 
+import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Pool } from "pg";
 import { HttpError, requireSuperadmin } from "./auth.js";
 import { config } from "./config.js";
 import { cancelRun, getRun, listRuns, retryRun, type RunState } from "./runs.js";
-import { startForTenant } from "./workflows/agents.js";
+import { dispatchAgent, isAgentName, startForTenant, type DispatchInput } from "./workflows/agents.js";
 import { demo } from "./workflows/demo.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
@@ -37,7 +41,7 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   let raw = "";
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > 16_384) throw new HttpError(413, "Body too large");
+    if (raw.length > 65_536) throw new HttpError(413, "Body too large");
   }
   if (!raw) return {};
   try {
@@ -46,6 +50,31 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   } catch {
     throw new HttpError(400, "Body is not JSON");
   }
+}
+
+function requireDispatchSecret(authorization: string | undefined): void {
+  const secret = config.dispatchSecret;
+  if (!secret) throw new HttpError(503, "Dispatch is not configured");
+  const got = Buffer.from((authorization ?? "").replace(/^Bearer\s+/i, ""));
+  const want = Buffer.from(secret);
+  if (got.length !== want.length || !timingSafeEqual(got, want)) throw new HttpError(401, "Unauthorized");
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The hand-off body, checked; the tenant must exist. */
+async function dispatchInput(db: Pool, req: IncomingMessage): Promise<DispatchInput> {
+  const body = await readJson(req);
+  const { site, task, requestedBy, conversation } = body;
+  if (typeof site !== "string" || !SITE_RE.test(site)) throw new HttpError(400, "Bad site");
+  if (typeof task !== "string" || !task.trim() || task.length > 8000) throw new HttpError(400, "Bad task");
+  if (typeof requestedBy !== "string" || !UUID_RE.test(requestedBy)) throw new HttpError(400, "Bad requestedBy");
+  if (typeof conversation !== "string" || !conversation || conversation.length > 200) {
+    throw new HttpError(400, "Bad conversation");
+  }
+  const found = await db.query("select 1 from public.sites where id = $1", [site]);
+  if (!found.rowCount) throw new HttpError(422, "No such tenant");
+  return { site, task, requestedBy, conversation };
 }
 
 async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -64,6 +93,18 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     return;
   }
   if (path === "/health") return send(res, 200, "ok");
+
+  const agent = /^\/agents\/([^/]+)$/.exec(path);
+  if (agent) {
+    if (method !== "POST") throw new HttpError(405, "Method not allowed");
+    requireDispatchSecret(req.headers.authorization);
+    const name = decodeURIComponent(agent[1]!);
+    if (!isAgentName(name)) throw new HttpError(404, "No such agent");
+    const input = await dispatchInput(db, req);
+    const handle = await dispatchAgent(name, input);
+    if (!handle) throw new HttpError(404, `The ${name} agent isn't running yet`);
+    return send(res, 202, { runId: handle.workflowID });
+  }
 
   await requireSuperadmin(db, req.headers.authorization, config.jwtSecret());
 
