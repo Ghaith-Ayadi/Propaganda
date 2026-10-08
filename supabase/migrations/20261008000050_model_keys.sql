@@ -1,8 +1,10 @@
--- DRAFT: moves to supabase/migrations only on Ayadi's own go (repo rule). Not applied anywhere.
+-- Ayadi gave his go on 2026-10-08 ("4-8 YES", item 4: the BYOK key storage).
 --
--- A tenant's own Anthropic key (BYOK). Additive only: one new table, one new
--- column with a default, and new versions of two cost functions that return
--- the same keys plus one. Needs the cost log (20261007000002) first.
+-- A tenant's own Anthropic key (BYOK). Which tenants run on Ayadi's own
+-- accounts instead is hardcoded in api/_ai/modelKeys.ts, not stored here.
+-- Additive only: one new table, two new columns with defaults, and new
+-- versions of two cost functions that return the same keys plus one. Needs the
+-- cost log (20261007000002) first.
 --
 -- The key itself is never readable from a browser: model_keys is service-role
 -- only, and holds AES-256-GCM ciphertext sealed by the API and the worker
@@ -38,6 +40,10 @@ grant all on public.model_keys to service_role;
 -- 'tenant' when the call ran on the tenant's own key. Existing rows are ours.
 alter table public.model_calls
   add column paid_by text not null default 'propaganda' check (paid_by in ('propaganda', 'tenant'));
+-- Which account the call ran on: Ayadi's private one (every row so far), the
+-- Ayadi-Axoniq one, or the tenant's own key.
+alter table public.model_calls
+  add column credential text not null default 'private' check (credential in ('private', 'axoniq', 'own'));
 
 -- Our budget rules count only what we pay for. Same keys as before.
 create or replace function public.cost_gate(p_site text) returns jsonb

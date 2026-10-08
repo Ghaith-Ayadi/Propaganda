@@ -2,7 +2,8 @@
 // Test: one tiny real call to Anthropic, and a green light when it answers.
 // Only a key that passes is saved, and it never comes back to the browser.
 // With a key saved, every Claude call for this tenant runs on it and nothing
-// else does; if it stops working, runs wait for it instead of using ours.
+// else does; if it stops working, runs wait for it. Without a key, Claude work
+// waits too: only the tenants Propaganda runs itself have another account.
 
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/base/badges/badges";
@@ -22,15 +23,17 @@ function clock(iso: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function lightOf(key: KeyInfo | null, red: string | null): Light {
+function lightOf(key: KeyInfo | null, red: string | null, managed: boolean): Light {
+  if (managed) return { tone: "green", text: "Claude runs on an Anthropic account Propaganda manages for this tenant." };
   if (red) return { tone: "red", text: red };
-  if (!key) return { tone: "gray", text: "No key: Claude runs on Propaganda's account." };
+  if (!key) return { tone: "gray", text: "No key yet. Agent work waits until an owner saves one." };
   if (key.status === "failed") return { tone: "red", text: `Key ending ${key.last4} failed ${clock(key.checked)}: ${key.error}` };
   return { tone: "green", text: `Key ending ${key.last4} works. Last checked ${clock(key.checked)}.` };
 }
 
 export function ModelKeyCard({ site = siteId() }: { site?: string }) {
   const [key, setKey] = useState<KeyInfo | null>(null);
+  const [managed, setManaged] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState<"test" | "retest" | "remove" | null>(null);
@@ -40,7 +43,11 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
   useEffect(() => {
     let live = true;
     loadKey(site)
-      .then((r) => live && setKey(r.key))
+      .then((r) => {
+        if (!live) return;
+        setKey(r.key);
+        setManaged(r.managed === true);
+      })
       .catch((err) => {
         reportError("model-key load", err);
         if (live) toast.add({ type: "error", title: userMessage(err) });
@@ -92,7 +99,7 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
       toast.add({ type: "success", title: "Key removed" });
     });
 
-  const light = lightOf(key, red);
+  const light = lightOf(key, red, managed);
 
   return (
     <section className="rounded-xl border border-secondary bg-primary p-5 shadow-xs">
@@ -123,11 +130,13 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
           </p>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className={cx("flex flex-col gap-2 sm:flex-row sm:items-end", managed && "hidden")}>
           <Input
             className="flex-1"
             size="sm"
             type="password"
+            // Session replays record inputs before GA; keep the key out even when shown.
+            inputClassName="ph-no-capture"
             label={key ? "Replace with a new key" : "API key"}
             placeholder="sk-ant-…"
             autoComplete="off"
@@ -143,7 +152,7 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
           </Button>
         </div>
 
-        {key && (
+        {key && !managed && (
           <div className="flex gap-2">
             <Button size="sm" color="secondary" onClick={retest} isDisabled={busy !== null} isLoading={busy === "retest"}>
               Test again
@@ -154,9 +163,9 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
           </div>
         )}
 
-        <p className="text-xs text-tertiary">
+        <p className={cx("text-xs text-tertiary", managed && "hidden")}>
           Only owners can save or remove the key. Test makes one tiny call to Anthropic with it and saves it only if it answers. If it stops working later, agent
-          work waits for it and never switches to our account: fix it on Anthropic's side or paste a new one here, and runs carry on
+          work waits for it and never switches to another account: fix it on Anthropic's side or paste a new one here, and runs carry on
           by themselves.
         </p>
       </div>

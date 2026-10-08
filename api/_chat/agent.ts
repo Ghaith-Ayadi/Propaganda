@@ -109,9 +109,10 @@ export function failureMessage(err: unknown): string {
   }
   if (err instanceof TenantKeyError) {
     // The provider's own words stay in the cost log, not in the conversation.
-    return err.retryAt
-      ? "Your Anthropic key hit its rate limit. Try again in a minute."
-      : "Anthropic refused this tenant's own key, or its account is out of credit. An owner can fix it in Settings.";
+    if (err.retryAt) return "The Anthropic key hit its rate limit. Try again in a minute.";
+    if (/none is saved/.test(err.message)) return "This tenant runs on its own Anthropic key, and none is saved. An owner can add one in Settings.";
+    if (/ANTHROPIC_KEY_/.test(err.message)) return "The server has no Anthropic key set for this tenant's account.";
+    return "Anthropic refused this tenant's key, or its account is out of credit. An owner can fix it in Settings.";
   }
   if (err instanceof KeysUnavailableError) return "This tenant's own Anthropic key can't be read on this server right now.";
   if (err instanceof CostLogUnavailableError) return "Model usage logging isn't set up on this server, so Chat can't call a model.";

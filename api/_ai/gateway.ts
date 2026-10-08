@@ -36,6 +36,9 @@ import {
   readKeyInfo,
   readTenantKey,
   removeTenantKey,
+  accountKey,
+  accountOf,
+  type Account,
   saveTenantKey,
   scrub,
   TenantKeyError,
@@ -43,7 +46,7 @@ import {
 } from "./modelKeys";
 
 export { BudgetError, CostLogUnavailableError, UsageLimitError } from "./errors";
-export { KeysUnavailableError, TenantKeyError } from "./modelKeys";
+export { KeysUnavailableError, TenantKeyError, setAccounts } from "./modelKeys";
 // Tool definitions and the UI message stream are plain data, not model calls:
 // callers (Chat) use these instead of importing the SDK, which
 // check-model-paths.mjs allows only in this file.
@@ -219,21 +222,50 @@ function tenantKeyFailure(err: unknown): { error: TenantKeyError; broken: boolea
   return null;
 }
 
+export interface Route {
+  model: LanguageModel;
+  /** The tenant's own key, when the call runs on it (marked ok or failed after the call). */
+  tenant: TenantKey | null;
+  /** True when the call goes straight to Anthropic with one key: its failures are the key's, and never retried on another. */
+  keyed: boolean;
+  /** Extra cost-log columns, sent only when not the default, so the log works before migration 20261008000050. */
+  logged: { paid_by?: "tenant"; credential?: Account | "own" };
+  /** Our budget limits don't apply (the tenant pays); the kill switch still does. */
+  budgetFree: boolean;
+}
+
 /**
- * How a call for `site` reaches `model`: on the tenant's own key when it has
- * one and the model is Anthropic's, else on ours. Every path to a model goes
- * through this (callModel here, and streamModel for Chat), so a tenant's key
- * is never skipped. `logged` goes into the cost-log row; `budgetFree` means
- * our budget limits don't apply (the kill switch still does).
+ * How a call for `site` reaches `model`. Every path to a model goes through
+ * this (callModel here, and streamModel for Chat). Only Anthropic models are
+ * routed; other providers (Gemini for the editor) stay ours.
+ *  - A tenant on Ayadi's list (modelKeys.ts, accountOf) runs on that account:
+ *    'private' on ANTHROPIC_KEY_PRIVATE (the AI Gateway while it is unset),
+ *    'axoniq' on ANTHROPIC_KEY_AXONIQ, and stops when that key isn't set.
+ *  - Every other tenant runs on its saved key, paid by the tenant, and stops
+ *    when it has none. No tenant ever falls back to another account.
  */
-export async function routeModel(
-  site: string,
-  model: string,
-): Promise<{ model: LanguageModel; tenant: TenantKey | null; logged: { paid_by?: "tenant" }; budgetFree: boolean }> {
-  const tenant = model.startsWith("anthropic/") ? await readTenantKey(rest, site) : null;
-  if (!tenant) return { model: resolveModel(model), tenant: null, logged: {}, budgetFree: false };
-  // paid_by is only sent when it isn't the default, so the log works before migration 20261008000050.
-  return { model: tenantResolve(tenant.apiKey, model), tenant, logged: { paid_by: "tenant" }, budgetFree: true };
+export async function routeModel(site: string, model: string): Promise<Route> {
+  const ours = (): Route => ({ model: resolveModel(model), tenant: null, keyed: false, logged: {}, budgetFree: false });
+  if (!model.startsWith("anthropic/")) return ours();
+
+  const account = accountOf(site);
+  if (account) {
+    const key = accountKey(account);
+    const logged = account === "private" ? {} : { credential: account };
+    if (key) return { model: tenantResolve(key, model), tenant: null, keyed: true, logged, budgetFree: false };
+    if (account === "private") return ours();
+    throw new TenantKeyError(`The server has no ANTHROPIC_KEY_${account.toUpperCase()} for this tenant's account.`);
+  }
+
+  const tenant = await readTenantKey(rest, site);
+  if (!tenant) throw new TenantKeyError("This tenant runs on its own Anthropic key, and none is saved. An owner can add one in Settings.");
+  return {
+    model: tenantResolve(tenant.apiKey, model),
+    tenant,
+    keyed: true,
+    logged: { paid_by: "tenant", credential: "own" },
+    budgetFree: true,
+  };
 }
 
 /** Our budget limits off for a call on the tenant's key: only the kill switch applies. */
@@ -242,14 +274,17 @@ export function gateFor(gate: Gate, budgetFree: boolean): Gate {
 }
 
 /**
- * After a call on a tenant's key failed: the TenantKeyError to throw (the key
- * marked failed when it is broken), or null when the failure isn't the key's.
- * Never retry such a failure on our account.
+ * After a call on one Anthropic key failed (route.keyed): the TenantKeyError
+ * to throw, or null when the failure isn't the key's. The tenant's own key is
+ * marked failed when it is broken. Never retry such a failure on another key.
  */
-export async function tenantKeyFailed(site: string, err: unknown): Promise<TenantKeyError | null> {
+export async function tenantKeyFailed(site: string, route: Route, err: unknown): Promise<TenantKeyError | null> {
+  if (!route.keyed) return null;
   const failed = tenantKeyFailure(err);
   if (!failed) return null;
-  if (failed.broken) await markTenantKey(rest, site, "failed", failed.error.message.replace(/^TENANT-KEY /, "")).catch(() => {});
+  if (failed.broken && route.tenant) {
+    await markTenantKey(rest, site, "failed", failed.error.message.replace(/^TENANT-KEY /, "")).catch(() => {});
+  }
   return failed.error;
 }
 
@@ -303,7 +338,7 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
 type Logged = Record<string, unknown>;
 
 /** The call itself, on our account or the tenant's key. A failure is logged before it is thrown. */
-async function run(base: Logged, route: Awaited<ReturnType<typeof routeModel>>, opts: CallOptions) {
+async function run(base: Logged, route: Route, opts: CallOptions) {
   const { tenant } = route;
   try {
     const result = await generateText({
@@ -313,13 +348,13 @@ async function run(base: Logged, route: Awaited<ReturnType<typeof routeModel>>, 
       maxOutputTokens: opts.maxOutputTokens,
       abortSignal: opts.abortSignal,
       // A refused key is refused again: no point in the SDK's own retries.
-      ...(tenant ? { maxRetries: 0 } : {}),
+      ...(route.keyed ? { maxRetries: 0 } : {}),
     });
     await tenantKeyWorked(opts.site, tenant);
     return result;
   } catch (err) {
-    if (tenant) {
-      const failed = await tenantKeyFailed(opts.site, err);
+    if (route.keyed) {
+      const failed = await tenantKeyFailed(opts.site, route, err);
       if (failed) {
         await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
         throw failed;
@@ -451,6 +486,8 @@ export const tenantKeys = {
   save: (site: string, apiKey: string) => saveTenantKey(rest, site, apiKey),
   mark: (site: string, ok: boolean, error = "") => markTenantKey(rest, site, ok ? "ok" : "failed", error),
   remove: (site: string) => removeTenantKey(rest, site),
+  /** True when the tenant runs on one of Ayadi's accounts, so a saved key would not be used. */
+  managed: (site: string) => accountOf(site) !== null,
 };
 
 // ---- the streaming call (Chat) ----
@@ -557,7 +594,7 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
     maxOutputTokens: opts.maxOutputTokens,
     abortSignal: opts.abortSignal,
     // A refused key is refused again: no point in the SDK's own retries.
-    ...(tenant ? { maxRetries: 0 } : {}),
+    ...(route.keyed ? { maxRetries: 0 } : {}),
   });
 
   const promptChars = (opts.system?.length ?? 0) + JSON.stringify(opts.messages).length;
@@ -603,9 +640,9 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
     } finally {
       // Reached on a normal end, an abort, an error, or the reader returning early.
       if (failed) {
-        if (tenant) {
-          const keyErr = await tenantKeyFailed(opts.site, failed);
-          // Never usageLimit, never a retry on our account.
+        if (route.keyed) {
+          const keyErr = await tenantKeyFailed(opts.site, route, failed);
+          // Never usageLimit, never a retry on another account.
           if (keyErr) thrown = keyErr;
           await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
         } else {
