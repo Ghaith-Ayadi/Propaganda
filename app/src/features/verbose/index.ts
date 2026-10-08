@@ -3,7 +3,7 @@
 // EXTRACTION: this whole feature lives under src/features/verbose. To remove it
 // from a Propaganda distribution, delete this folder and the two call sites
 // marked "VERBOSE MODULE": the install block in EditorApp.tsx and the heatmap
-// mount in HomePage.tsx. The generic lib/postEvents.ts seam and the
+// mount in components/home/RecentWriting.tsx. The generic lib/postEvents.ts seam and the
 // writing_activity SQL can stay (both are harmless no-ops without the module).
 
 import { onScopeReset } from "@/lib/scope";

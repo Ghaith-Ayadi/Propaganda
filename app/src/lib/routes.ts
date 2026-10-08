@@ -28,6 +28,9 @@ import {
   Settings01,
   Target04,
 } from "@untitledui/icons";
+import { useInboxBadge } from "@/components/inbox/badge";
+import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
+import { usePipelineCount } from "@/lib/pipeline/store";
 
 export type Icon = ComponentType<{ className?: string }>;
 
@@ -81,8 +84,7 @@ export const PAGES: PageRoute[] = [
     path: "home",
     description: "This week, the goals and the two grades at a glance.",
     section: "main",
-    // The 0.1 dashboard until the Home thread lands.
-    component: lazy(() => import("@/components/HomePage").then((m) => ({ default: m.HomePage }))),
+    component: lazy(() => import("@/components/home/HomePage").then((m) => ({ default: m.HomePage }))),
   },
   {
     id: "inbox",
@@ -91,6 +93,8 @@ export const PAGES: PageRoute[] = [
     path: "inbox",
     description: "Flags, pitches, knowledge and reviews waiting on you.",
     section: "main",
+    component: lazy(() => import("@/components/inbox/InboxPage").then((m) => ({ default: m.InboxPage }))),
+    useBadge: useInboxBadge,
   },
   {
     id: "pipeline",
@@ -99,8 +103,8 @@ export const PAGES: PageRoute[] = [
     path: "pipeline",
     description: "Every piece from pitch to published.",
     section: "main",
-    // The 0.1 planning board until the Pipeline thread lands.
-    component: lazy(() => import("@/components/plan/PlanPage").then((m) => ({ default: m.PlanPage }))),
+    useBadge: usePipelineCount,
+    component: lazy(() => import("@/components/pipeline/PipelinePage").then((m) => ({ default: m.PipelinePage }))),
   },
   {
     id: "content",
@@ -118,6 +122,8 @@ export const PAGES: PageRoute[] = [
     path: "knowledge",
     description: "What your tenant actually believes, claim by claim.",
     section: "main",
+    component: lazy(() => import("@/components/knowledge/KnowledgePage").then((m) => ({ default: m.KnowledgePage }))),
+    useBadge: useKnowledgeBadge,
   },
   {
     id: "goals",
@@ -126,6 +132,7 @@ export const PAGES: PageRoute[] = [
     path: "goals",
     description: "This quarter's five goals and how they are tracking.",
     section: "main",
+    component: lazy(() => import("@/components/goals/GoalsPage").then((m) => ({ default: m.GoalsPage }))),
   },
   {
     id: "site",
@@ -143,6 +150,7 @@ export const PAGES: PageRoute[] = [
     path: "chat",
     description: "Ask the agent anything about your content and knowledge base.",
     section: "main",
+    component: lazy(() => import("@/components/chat/ChatPage").then((m) => ({ default: m.ChatPage }))),
   },
   {
     id: "connections",
@@ -151,6 +159,7 @@ export const PAGES: PageRoute[] = [
     path: "connections",
     description: "Where Propaganda listens: calls, Slack and documents.",
     section: "main",
+    component: lazy(() => import("@/components/connections/ConnectionsPage").then((m) => ({ default: m.ConnectionsPage }))),
   },
   {
     id: "settings",
@@ -159,8 +168,7 @@ export const PAGES: PageRoute[] = [
     path: "settings",
     description: "People, content, agents and this tenant's details.",
     section: "footer",
-    // Opens the 0.1 settings dialog until the Settings thread lands.
-    component: lazy(() => import("@/components/pages/SettingsPage").then((m) => ({ default: m.SettingsPage }))),
+    component: lazy(() => import("@/components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage }))),
   },
 ];
 

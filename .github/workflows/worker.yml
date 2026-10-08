@@ -1,0 +1,32 @@
+# The DBOS worker (worker/): typecheck, then the end-to-end test against a
+# real Postgres (the worker as a process, its Runs API, a usage-limit stall
+# across a restart, retry and cancel), and the Listener end to end through a
+# real PostgREST (it applies every migration, so the image carries pgvector).
+name: worker
+on:
+  pull_request:
+    paths: ["worker/**", "api/_ai/**", "supabase/migrations/**", ".github/workflows/worker.yml"]
+  push:
+    branches: [main]
+    paths: ["worker/**", "api/_ai/**", "supabase/migrations/**", ".github/workflows/worker.yml"]
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: worker } }
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - name: PostgREST, the version the box runs
+        run: |
+          curl -fsSL https://github.com/PostgREST/postgrest/releases/download/v14.17/postgrest-v14.17-linux-static-x86-64.tar.xz | tar -xJ -C "$RUNNER_TEMP"
+          echo "POSTGREST_BIN=$RUNNER_TEMP/postgrest" >> "$GITHUB_ENV"
+      - run: npm test
+        env: { PGURL: "postgres://postgres:postgres@localhost:5432" }

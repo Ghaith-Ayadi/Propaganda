@@ -1,0 +1,30 @@
+{
+  "name": "propaganda-worker",
+  "private": true,
+  "type": "module",
+  "description": "Propaganda's agents as DBOS workflows, on the Bedrock box, plus the Runs API for Admin",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node build.mjs && cp src/agents/guardian-policy-v1.md dist/",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "sh test/run.sh",
+    "fixtures": "node build.mjs && node test/agents.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.76",
+    "@ai-sdk/google": "^4.0.92",
+    "@dbos-inc/dbos-sdk": "5.2.11",
+    "ai": "^7.0.133",
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.15.6",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.7.2",
+    "yaml": "^2.9.1"
+  }
+}
