@@ -26,6 +26,14 @@
 //   DOMAIN-REMOVE       removing a custom domain failed
 //   (the server's own, from api/domains.ts: DOMAIN-INVALID, DOMAIN-OFF,
 //    DOMAIN-TAKEN, DOMAIN-DNS, DOMAIN-SAVE, DOMAIN-OWNER)
+//   RUNS-LOAD           Admin couldn't load agent runs from the worker
+//   RUN-RETRY           retrying a run failed
+//   RUN-CANCEL          cancelling a run failed
+//   RUN-DEMO            starting a demo run failed
+//   MODEL-KEY-LOAD      the tenant's own Anthropic key status couldn't be loaded
+//   MODEL-KEY-SAVE      testing a new Anthropic key failed on our side (not a red test)
+//   MODEL-KEY-TEST      re-testing the saved Anthropic key failed on our side
+//   MODEL-KEY-REMOVE    removing the saved Anthropic key failed
 //   KB-LOAD             a knowledge base page couldn't load its data
 //   KB-REMEMBER         a Remember couldn't be sent
 //   KB-FLAG-CLOSE       closing or snoozing a flag failed

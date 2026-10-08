@@ -1,0 +1,169 @@
+# Guardian fixtures for policy v1: the regression suite.
+#
+# Run all of them whenever the policy text, the prompt or the model changes.
+# Each case runs 3 times; the majority verdict counts. Ship a change only if:
+#   - every case marked `must: true` passes (these protect the decisions), and
+#   - at least 90% of the rest pass.
+# A retraction report that names a check that should have caught it adds a case here.
+#
+# The example company: Tidewell, scheduling software for physiotherapy clinics.
+# Tiers: 1 a person's Remember, 2 a document or call with an owner, 3 other
+# documents, calls and Slack, 4 chat, 5 a published post.
+
+- id: remember-conflict
+  must: true
+  why: H1. A Remember is admitted even when it contradicts a settled claim.
+  origin: remember
+  add: "Onboarding a clinic takes two weeks."
+  evidence: [{tier: 1, quote: "Onboarding a clinic takes two weeks."}]
+  nearby: [{id: c1, status: settled, text: "Onboarding a clinic takes one week."}]
+  expect: {verdict: admit, relate: {contradicts: c1}, checks: {C8: pass}}
+
+- id: remember-with-name
+  must: true
+  why: H1 wins over C2. Admit, note the wording.
+  origin: remember
+  add: "Ayadi says Tidewell will not build a patient app."
+  evidence: [{tier: 1, quote: "Ayadi says Tidewell will not build a patient app."}]
+  nearby: []
+  expect: {verdict: admit, checks: {C2: fail}}
+
+- id: two-facts
+  why: C1. Two things that change separately.
+  origin: ingest
+  add: "Tidewell integrates with Cliniko and stores data in Frankfurt."
+  evidence: [{tier: 3, quote: "we integrate with Cliniko, and all data sits in Frankfurt"}]
+  nearby: []
+  expect: {verdict: reject, checks: {C1: fail}}
+
+- id: style-rule
+  why: C3. Voice is a writer setting.
+  origin: chat
+  add: "Tidewell never calls clinics 'customers' in writing."
+  evidence: [{tier: 4, quote: "we never say customers, always clinics"}]
+  nearby: []
+  expect: {verdict: reject, checks: {C3: fail}}
+
+- id: why-is-a-fact
+  why: C3. A reason is a fact.
+  origin: ingest
+  add: "Tidewell has no patient app because clinics already use their own booking pages."
+  evidence: [{tier: 2, quote: "no patient app, clinics already have booking pages they like"}]
+  nearby: []
+  expect: {verdict: admit, checks: {C3: pass}}
+
+- id: rounded-number
+  must: true
+  why: C5. "About 300" can't become "300".
+  origin: ingest
+  add: "Tidewell has 300 clinics as customers."
+  scope: {as_of: 2026-09-01}
+  evidence: [{tier: 3, quote: "we're at about 300 clinics now"}]
+  nearby: []
+  expect: {verdict: reject, checks: {C5: fail}}
+
+- id: undated-count
+  why: C6. A count without a date is admitted contested.
+  origin: ingest
+  add: "Tidewell has about 300 clinics as customers."
+  evidence: [{tier: 3, quote: "we're at about 300 clinics now"}]
+  nearby: []
+  expect: {verdict: admit_contested, checks: {C6: weak}}
+
+- id: duplicate
+  why: C7.
+  origin: ingest
+  add: "A new clinic is set up within a week."
+  evidence: [{tier: 3, quote: "new clinics are set up within the week"}]
+  nearby: [{id: c1, status: settled, text: "Onboarding a clinic takes one week."}]
+  expect: {verdict: reject, checks: {C7: fail}}
+
+- id: contradiction-weak-source
+  why: C8. A Slack message doesn't overturn a settled claim.
+  origin: ingest
+  add: "Onboarding a clinic takes three days."
+  evidence: [{tier: 3, quote: "onboarding is like 3 days honestly"}]
+  nearby: [{id: c1, status: settled, text: "Onboarding a clinic takes one week."}]
+  expect: {verdict: reject, checks: {C8: fail}}
+
+- id: contradiction-strong-source
+  must: true
+  why: C8 and H2. Newer owner-level evidence is a change of position.
+  origin: ingest
+  add: "Onboarding a clinic takes three days."
+  evidence: [{tier: 2, quote: "From October, onboarding is three days: we cut the data import step.", date: 2026-10-01}]
+  nearby: [{id: c1, status: settled, text: "Onboarding a clinic takes one week.", since: 2025-03-01}]
+  expect: {verdict: escalate, checks: {C8: escalate}}
+
+- id: pushback-scope-strong
+  why: C9 pass. Scope, with a document that isn't the post.
+  origin: pushback
+  flag: {claim: "Tidewell stores all clinic data in Frankfurt.", post_quote: "Australian clinics' data stays in Sydney."}
+  owned_topic: true
+  argument: "Australian clinics are hosted in Sydney since the 2025 launch there."
+  add: "Data of clinics in Australia is stored in Sydney."
+  supersede: {target: "Tidewell stores all clinic data in Frankfurt.", with: "Data of clinics outside Australia is stored in Frankfurt."}
+  evidence: [{tier: 2, quote: "AU region: Sydney (ap-southeast-2), live since May 2025"}]
+  expect: {verdict: escalate, checks: {C9: pass, C11: minor}, note: "Narrowing an owned claim's scope needs the owner (H2); the reconciliation itself passes."}
+
+- id: pushback-scope-unowned
+  why: C9 pass on an unowned topic.
+  origin: pushback
+  flag: {claim: "Tidewell integrates with Cliniko.", post_quote: "Tidewell syncs with Cliniko and Nookal."}
+  argument: "Nookal shipped in August; the claim is just incomplete."
+  add: "Tidewell integrates with Nookal."
+  evidence: [{tier: 3, quote: "Nookal integration released 2026-08-14", date: 2026-08-14}]
+  nearby: [{id: c4, status: settled, text: "Tidewell integrates with Cliniko."}]
+  expect: {verdict: admit, checks: {C9: pass, C8: pass}}
+
+- id: pushback-only-the-post
+  must: true
+  why: C10. The post can't excuse itself.
+  origin: pushback
+  flag: {claim: "Onboarding a clinic takes one week.", post_quote: "Most clinics are live in three days."}
+  argument: "Most clinics are faster than a week, the post says so."
+  add: "Most clinics are live within three days."
+  evidence: [{tier: 5, quote: "Most clinics are live in three days.", flagged_post: true}]
+  expect: {verdict: admit_contested, checks: {C9: weak, C10: weak}}
+
+- id: pushback-same-thing
+  why: C9 fail. Different numbers aren't different wording.
+  origin: pushback
+  flag: {claim: "Tidewell supports 4 languages.", post_quote: "available in 6 languages"}
+  argument: "It's just marketing wording."
+  evidence: []
+  expect: {verdict: reject, checks: {C9: fail}}
+
+- id: pushback-changed-mind
+  must: true
+  why: C9 escalate. A change of position goes to the owner.
+  origin: pushback
+  flag: {claim: "Tidewell will not build a patient app.", post_quote: "Our patient app arrives next year."}
+  argument: "We decided to build one after all."
+  evidence: [{tier: 4, quote: "we're doing the patient app"}]
+  expect: {verdict: escalate, checks: {C9: escalate}}
+
+- id: severity-patch
+  why: C11. Same meaning.
+  origin: chat
+  supersede: {target: "Onboarding a clinic takes one week.", with: "A clinic is fully onboarded within one week."}
+  evidence: [{tier: 2, quote: "fully onboarded within one week"}]
+  expect: {verdict: admit, checks: {C11: patch}}
+
+- id: severity-major
+  why: C11. Reversed meaning, and an owned topic.
+  origin: chat
+  owned_topic: true
+  supersede: {target: "Tidewell will not build a patient app.", with: "Tidewell is building a patient app, due in 2027."}
+  evidence: [{tier: 2, quote: "Board approved the patient app for 2027", date: 2026-09-20}]
+  expect: {verdict: escalate, checks: {C11: major}}
+
+- id: sweep-posts-disagree
+  why: "The first sweep: newest post settles, the older one goes in contested."
+  origin: sweep
+  add: ["Onboarding a clinic takes one week.", "Onboarding a clinic takes two weeks."]
+  evidence:
+    - {tier: 5, quote: "you're live in a week", date: 2026-06-01}
+    - {tier: 5, quote: "two weeks to get your clinic running", date: 2024-11-12}
+  nearby: []
+  expect: {verdict: admit, statuses: [settled, contested], relate: {contradicts: [0, 1]}}
