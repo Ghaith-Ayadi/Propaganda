@@ -22,6 +22,7 @@ import {
   Target04,
 } from "@untitledui/icons";
 import { useContentTree } from "@/components/pages/contentTree";
+import { useInboxBadge } from "@/components/inbox/badge";
 
 export type Icon = ComponentType<{ className?: string }>;
 
@@ -66,8 +67,7 @@ export const PAGES: PageRoute[] = [
     path: "home",
     description: "This week, the goals and the two grades at a glance.",
     section: "main",
-    // The 0.1 dashboard until the Home thread lands.
-    component: lazy(() => import("@/components/HomePage").then((m) => ({ default: m.HomePage }))),
+    component: lazy(() => import("@/components/home/HomePage").then((m) => ({ default: m.HomePage }))),
   },
   {
     id: "inbox",
@@ -76,6 +76,8 @@ export const PAGES: PageRoute[] = [
     path: "inbox",
     description: "Flags, pitches, knowledge and reviews waiting on you.",
     section: "main",
+    component: lazy(() => import("@/components/inbox/InboxPage").then((m) => ({ default: m.InboxPage }))),
+    useBadge: useInboxBadge,
   },
   {
     id: "pipeline",
