@@ -86,7 +86,9 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
 Every call to a language model goes through `callModel()` in `api/_ai/gateway.ts` (Vercel AI
 SDK). It checks the budget rules, runs the call, and writes a row to `public.model_calls`
 (tenant, job, model, tokens, cost at API prices, DBOS workflow and step). Prices
-(`model_prices`) and limits (`cost_limits`) are data. Never call a provider directly:
+(`model_prices`) and limits (`cost_limits`) are data. Paid APIs that aren't models (DataForSEO)
+go through `callPaidApi()` in the same file: same budget rules, one row per request at the
+provider's reported cost. Never call a provider directly:
 `npm run check:model-paths` (in `api/`) fails on it. Limits default to off; the global daily
 cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month on Home
 (`CostMeter`), the superadmin sees all of it in Admin > Consumption.
@@ -108,6 +110,13 @@ Every other tenant runs on the key its owner saves, and with none its Claude cal
 
 Agents run as DBOS workflows in `worker/` (one Node process on the box, `propaganda-worker`
 in Bedrock's `compose/propaganda-supabase`, built from the same checkout as the schema).
+DBOS keeps its tables in its own database, `propaganda_dbos`; in the app's the worker only
+reads, except the Scout's own tables. Start a run with `startForTenant(site, ...)`; a model call is a `modelStep()`, which
+waits out the Claude subscription's usage limit instead of failing. Admin > Runs reads the
+worker's Runs API (`/worker/v1/`, superadmins only). Read `worker/README.md` before adding
+a workflow: changing one that has runs in flight needs `DBOS.patch()`.
+The Scout (`workflows/scout.ts`) runs weekly per tenant and writes only its own tables
+(`supabase/migrations/20261008000020_scout.sql`, as role `propaganda_scout`).
 DBOS keeps its tables in its own database, `propaganda_dbos`; the worker reads the app's
 through a read-only pool and writes only through its functions. Start a run with `startForTenant(site, ...)`; a model call is a `modelStep()`, which
 waits out the Claude subscription's usage limit instead of failing. Admin > Runs reads the

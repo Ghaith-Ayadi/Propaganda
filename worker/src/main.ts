@@ -10,6 +10,7 @@ import pg from "pg";
 import { wireGateway } from "./agents/model.js";
 import { config } from "./config.js";
 import { startServer } from "./http.js";
+import { closeScoutDb } from "./scout/store.js";
 import { setAppDb } from "./kb/read.js";
 import { startDispatcher } from "./agents/dispatch.js";
 import { registerQueues } from "./workflows/agents.js";
@@ -19,6 +20,7 @@ import "./agents/pitcher.js";
 import "./agents/writer.js";
 import "./agents/voice.js";
 import { schedulePitcher } from "./agents/pitcher.js";
+import { scheduleScout } from "./workflows/scout.js";
 import "./agents/checker.js";
 import "./agents/guardian.js";
 import { setListenerPool, startListener } from "./listener/index.js";
@@ -36,6 +38,7 @@ async function main(): Promise<void> {
   await DBOS.launch();
   await registerQueues();
   await schedulePitcher();
+  await scheduleScout();
 
   // The app's database holds people's content: this pool can only read it.
   // Any write through it fails at the server, whatever code asks for one.
@@ -58,6 +61,7 @@ async function main(): Promise<void> {
     server.close();
     await DBOS.shutdown();
     await db.end();
+    await closeScoutDb();
     process.exit(0);
   };
   process.on("SIGTERM", () => void stop("SIGTERM"));

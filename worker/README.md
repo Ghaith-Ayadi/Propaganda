@@ -14,8 +14,8 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
-| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
-| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the knowledge base agents are `checker.ts`, `guardian.ts` (+ `verdict.ts`, its rule set `guardian-policy-v1.md`), `dispatch.ts`, `text.ts` and `ai.ts` (`ask()`, with canned answers for tests) |
+| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`), the knowledge base (`kb.ts`), and the knowledge base agents: `checker.ts`, `guardian.ts` (+ `verdict.ts`, its rule set `guardian-policy-v1.md`), `dispatch.ts`, `text.ts` and `ai.ts` (`ask()`, with canned answers for tests) |
+| `src/workflows/scout.ts`, `src/scout/` | The Scout: DataForSEO, watched pages, ranking facts, the model's triage, its database role |
 | `src/kb/` | `read.ts`: what the knowledge base agents read through the read-only pool |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
 | `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres. The knowledge base agents end to end: `supabase/tests/kb_agents.mjs` on the laptop stack |
@@ -217,6 +217,51 @@ only spends for tenants in `kb_agent_sites`.
 - Tests: `test/listener.mjs` (no database) and `test/listener-e2e.mjs`, which
   needs pgvector and PostgREST (`POSTGREST_BIN`; it skips without).
 
+## The Scout
+
+Once a week (Mondays 06:00 UTC, `SCOUT_CRON`) the `scout-weekly` schedule
+starts one run per tenant that has something to follow, under the id
+`scout-<site>-<day>`, so a week is never scouted twice. A run:
+
+1. reads the plan: this quarter's `scout_searches` (at most 10), the active
+   `watched_sites`, and the topics they name;
+2. queues every Google search of the run on DataForSEO's standard queue
+   (`task_post`, one request for results and one for news): each target search
+   (top 20), and per topic Google News and Reddit threads (Google's index of
+   them, one ordinary search). The standard queue costs a fraction of the live
+   price and answers in minutes to hours, so the run sleeps durably and
+   collects what's done every `SCOUT_POLL_SECONDS` (600), up to
+   `SCOUT_MAX_POLLS` looks (144, a day); collecting is free. A search still
+   queued after the last look counts as no results that week;
+3. writes the `ranking_search` fact; a search we're not on page one for becomes
+   an idea (origin search, with its `target_search`), once a quarter, with the
+   three results to beat;
+4. asks DataForSEO's LLM Mentions (live, at most 50 answers a call) which AI
+   answers mention the tenant (Google AI Overviews, and ChatGPT for US English)
+   and writes `ranking_ai`;
+5. keeps the news from the last eight days and the Reddit threads, and reads
+   each watched page's links (the first check is a baseline; after that, new
+   links are the news);
+6. drops every link it has seen before (`scout_seen`), has the base model pick
+   at most 8 ideas from the rest, and keeps only evidence it saw;
+7. hands the ideas to the Pitcher (`handOffIdeas`, one stable id per idea so a
+   replay never adds it twice; they wait for the next batch with the plan),
+   then saves the facts, the page snapshots and the seen links in one
+   transaction.
+
+Each paid request is its own step: a retry or restart never pays twice.
+Everything that talks to DataForSEO is in `src/scout/dataforseo.ts`, so
+another provider replaces that one file. The Scout writes its own tables as
+`propaganda_scout` (`supabase/migrations/20261008000020_scout.sql`), a role
+that can write nothing else; its pool uses `APP_DATABASE_URL` and sets that
+role, so if that URL ever names a restricted user, grant it `propaganda_scout`.
+Watched pages are fetched from public addresses only.
+
+Needs `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` (without them it checks the
+watched sites only). Start one by hand from Admin with
+`POST /runs/scout { site, day? }`; Chat starts one for today through
+`/agents/scout`.
+
 ## The usage limit
 
 The Claude subscription answers 429 with `anthropic-ratelimit-unified-status:
@@ -240,6 +285,7 @@ Every route but `/health` needs a superadmin's Supabase access token.
 | `POST /runs/:id/retry` | A failed run is **forked** from the failed step: a new run that keeps the steps before it (their model calls aren't paid again). A cancelled run, or one DBOS gave up recovering, **resumes** under its own id |
 | `POST /runs/:id/cancel` | A queued, running or stalled run |
 | `POST /runs/demo` | `{ stallSeconds?, fail?, site? }`: a three-step run that spends nothing |
+| `POST /runs/scout` | `{ site, day?, checkAi? }`: a Scout run now |
 
 ### Dispatch, from Chat
 
@@ -269,6 +315,7 @@ registerAgent("checker", startCheckOnRequest);   // agents/dispatch.ts
 ```
 cd worker && npm install
 npm test                      # PGURL=postgres://postgres:postgres@localhost:5432 by default
+npm run typecheck && npm run build
 ```
 
 Against the laptop stack (`supabase/docker-compose.yml`): `POSTGRES_PASSWORD`

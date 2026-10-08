@@ -233,6 +233,12 @@ async function main() {
   check((await api(`/runs/${ok}/retry`, { method: "POST" })).status === 409, "a finished run can't be retried");
   check((await api("/runs?state=bogus")).status === 400, "unknown state: 400");
 
+  console.log("the Scout")
+  const scoutRun = await api("/agents/scout", { method: "POST", body: handoff, headers: D });
+  check(scoutRun.status === 202 && (await run(scoutRun.json.runId))?.name === "scout", "Chat starts the Scout");
+  check((await api("/runs/scout", { method: "POST", body: { site: SITE }, headers: { Authorization: `Bearer ${jwt(stranger)}` } })).status === 403,
+    "only a superadmin starts one from Admin");
+
   await stopWorker();
   await app.end();
   console.log(failures ? `\n${failures} FAILED` : "\nALL PASSED");
