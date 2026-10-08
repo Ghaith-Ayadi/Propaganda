@@ -5,7 +5,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { reportError } from "@/lib/telemetry";
 import { kb } from "./adapter";
-import { setOnRuled } from "./placeholder";
 import type { ClaimPage, ClaimQuery, ClaimSummary, FlagPage, FlagQuery } from "./types";
 
 const listeners = new Set<() => void>();
@@ -14,9 +13,6 @@ const listeners = new Set<() => void>();
 export function changed(): void {
   for (const fn of listeners) fn();
 }
-
-// The sample Guardian rules a moment after a Remember; refresh when it does.
-setOnRuled(changed);
 
 function useChangeTick(): number {
   const [tick, setTick] = useState(0);
@@ -99,9 +95,11 @@ export function useFlagPage(q: FlagQuery) {
 
 /** The nav bar's count beside "Knowledge base": open flags plus open re-checks. */
 export function useKnowledgeBadge(): number | null {
+  // Sample data isn't this tenant's: no number beside the nav entry.
+  const sample = kb().sample;
   const flags = useKb("kb.badge", () => kb().flags({ status: "open", kind: "all", offset: 0, limit: 1 }), []);
   const threads = useKb("kb.rechecks", () => kb().rechecks(), []);
-  if (!flags.data) return null;
+  if (sample || !flags.data) return null;
   const n = flags.data.total + (threads.data ?? []).reduce((s, t) => s + t.open, 0);
   return n || null;
 }
