@@ -16,7 +16,6 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
 | `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
 | `src/workflows/scout.ts`, `src/scout/` | The Scout: DataForSEO, watched pages, ranking facts, the model's triage, its database role |
-| `sql/scout.draft.sql` | The Scout's tables, a draft kept out of `supabase/migrations` until it's approved |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
 | `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
 
@@ -178,8 +177,11 @@ a day is never scouted twice. A run:
    the page snapshots and the seen links in one transaction.
 
 Each paid request is its own step: a retry or restart never pays twice. It
-writes its own tables as `propaganda_scout`, a role that can write nothing
-else. Watched pages are fetched from public addresses only.
+writes its own tables as `propaganda_scout`
+(`supabase/migrations/20261008000020_scout.sql`), a role that can write nothing
+else; its pool uses `APP_DATABASE_URL` and sets that role, so if that URL ever
+names a restricted user, grant it `propaganda_scout`. Watched pages are fetched
+from public addresses only.
 
 Needs `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` (without them it checks the
 watched sites only). Start one by hand from Admin with

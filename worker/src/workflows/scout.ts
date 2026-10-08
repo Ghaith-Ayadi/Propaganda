@@ -9,7 +9,7 @@
 // one twice, and the Runs page shows the cost of each.
 //
 // What it follows comes from scout_searches and watched_sites
-// (worker/sql/scout.draft.sql): the Goals approval writes them.
+// (supabase/migrations/20261008000020_scout.sql): the Goals approval writes them.
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { callModel } from "../../../api/_ai/gateway";

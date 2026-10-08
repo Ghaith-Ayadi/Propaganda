@@ -1,7 +1,5 @@
--- The Scout's tables (Propaganda 0.2), to land as supabase/migrations/20261008000020_scout.sql.
--- DRAFT: not in supabase/migrations yet, so
--- no Bedrock deploy applies it; it waits for Ayadi's go-ahead, like the other
--- 0.2 drafts. Additive only: new tables, one new role, nothing existing is
+-- The Scout's tables (Propaganda 0.2). Approved by Ayadi in the Scout thread, 2026-10-08.
+-- Additive only: new tables, one new role, nothing existing is
 -- renamed, dropped or rewritten, and no client syncs any of these tables.
 --
 -- Needs the 0.2 site schema (public.sites, private.my_sites, private.new_id,

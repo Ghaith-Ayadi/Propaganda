@@ -103,7 +103,7 @@ waits out the Claude subscription's usage limit instead of failing. Admin > Runs
 worker's Runs API (`/worker/v1/`, superadmins only). Read `worker/README.md` before adding
 a workflow: changing one that has runs in flight needs `DBOS.patch()`.
 The Scout (`workflows/scout.ts`) runs daily per tenant and writes only its own tables
-(`worker/sql/scout.draft.sql`, as role `propaganda_scout`).
+(`supabase/migrations/20261008000020_scout.sql`, as role `propaganda_scout`).
 
 ## Telemetry: PostHog
 

@@ -1,5 +1,5 @@
 // The Scout end to end, in this process, against a real Postgres: the app's
-// migrations plus worker/sql/scout.draft.sql, DBOS in its own database, and
+// migrations (the Scout's included), DBOS in its own database, and
 // local stand-ins for DataForSEO, the cost log's REST API, a watched page and
 // the model. Run through test/run.sh.
 
@@ -57,7 +57,6 @@ await app.query(sql(new URL("./sql-shim.sql", import.meta.url)));
 for (const f of readdirSync(`${ROOT}supabase/migrations`).sort()) {
   await app.query(sql(`${ROOT}supabase/migrations/${f}`));
 }
-await app.query(sql(`${ROOT}worker/sql/scout.draft.sql`));
 await app.query("insert into public.sites (id, name, slug, domain) values ($1, 'Kontra', 'kontra', 'blog.kontra.run')", [SITE]);
 
 // ---- stand-ins ----

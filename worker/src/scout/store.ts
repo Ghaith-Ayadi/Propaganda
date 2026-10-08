@@ -1,5 +1,5 @@
 // The Scout's reads and writes in the app's database. It connects as
-// propaganda_scout (worker/sql/scout.draft.sql), a role that can write the
+// propaganda_scout (supabase/migrations/20261008000020_scout.sql), a role that can write the
 // Scout's own tables and nothing else: a bug here can't touch a post.
 
 import pg from "pg";
