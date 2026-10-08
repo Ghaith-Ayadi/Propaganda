@@ -16,7 +16,7 @@ import { useActiveCollection } from "@/lib/activeCollection";
 import { analyticsHref, pageHref, useRoute, type Route } from "@/lib/route";
 import type { NavNode, PageRoute } from "@/lib/routes";
 import { sitePublicUrl } from "@/lib/siteUrl";
-import { planOf, setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
+import { setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
 import { toggleTheme, useTheme } from "@/lib/theme";
 import { cx } from "@/utils/cx";
 import { activePageOf, toggleFolded, useFolded } from "./nav";
@@ -30,7 +30,6 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
   const plan = usePlan();
   const lite = plan === "lite";
   const canSwitch = useCanSwitchPlan();
-  const ownPlan = planOf(site.id);
 
   return (
     <aside className="flex h-full w-[260px] max-w-full shrink-0 flex-col border-r border-secondary bg-secondary max-md:w-[300px]">
@@ -99,7 +98,7 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
               {/* Localhost, the UI preview and superadmins: see the other plan. */}
               <button
                 type="button"
-                onClick={() => setPlanView(lite ? (ownPlan === "full" ? null : "full") : ownPlan === "lite" ? null : "lite")}
+                onClick={() => setPlanView(site.id, lite ? "full" : "lite")}
                 className={rowClass(false)}
               >
                 <SwitchHorizontal01 className="size-4 text-quaternary" />

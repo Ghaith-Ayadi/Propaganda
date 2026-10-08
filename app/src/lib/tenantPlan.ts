@@ -8,8 +8,12 @@
 // upgrade itself). Until then: Verbatim, Ayadi's own blog, is Lite and every
 // other tenant is full. What this returns only decides what the UI shows.
 //
-// A viewer can be switched by hand to see the other plan: on localhost, in
-// the UI preview build, and for a superadmin. That choice is per browser.
+// The plan is per tenant, so one account can hold a Lite tenant (Verbatim)
+// and a full one (PPGD) and the switcher moves between them.
+//
+// A viewer can be switched by hand to see a tenant on the other plan: on
+// localhost, in the UI preview build, and for a superadmin. That choice is
+// per tenant and per browser.
 
 import { useSyncExternalStore } from "react";
 import { useWorkspace } from "@/components/Workspace";
@@ -25,14 +29,14 @@ export function planOf(siteId: string): Plan {
   return LITE_SITES.has(siteId) ? "lite" : "full";
 }
 
-// The hand-picked view, if any: the same for every tenant on this browser.
+// The hand-picked view per tenant: site id -> plan.
 const KEY = "propaganda:plan-view";
-let view: Plan | null = (() => {
+let views: Record<string, Plan> = (() => {
   try {
-    const v = localStorage.getItem(KEY);
-    return v === "lite" || v === "full" ? v : null;
+    const v = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
   } catch {
-    return null;
+    return {};
   }
 })();
 const listeners = new Set<() => void>();
@@ -44,11 +48,13 @@ function subscribe(cb: () => void) {
   };
 }
 
-export function setPlanView(next: Plan | null) {
-  view = next;
+/** Show a tenant as the other plan; back to its own plan when `next` is its own. */
+export function setPlanView(siteId: string, next: Plan) {
+  views = { ...views };
+  if (next === planOf(siteId)) delete views[siteId];
+  else views[siteId] = next;
   try {
-    if (next) localStorage.setItem(KEY, next);
-    else localStorage.removeItem(KEY);
+    localStorage.setItem(KEY, JSON.stringify(views));
   } catch {}
   for (const l of listeners) l();
 }
@@ -59,10 +65,11 @@ export function useCanSwitchPlan(): boolean {
   return import.meta.env.DEV || import.meta.env.VITE_UI_PREVIEW === "1" || superadmin != null;
 }
 
-/** The plan the UI shows for the open tenant. */
-export function usePlan(): Plan {
+/** The plan the UI shows for a tenant (the open one by default). */
+export function usePlan(siteId?: string): Plan {
   const { site } = useWorkspace();
-  const picked = useSyncExternalStore(subscribe, () => view);
+  const id = siteId ?? site.id;
+  const picked = useSyncExternalStore(subscribe, () => views[id] ?? null);
   const canSwitch = useCanSwitchPlan();
-  return (canSwitch && picked) || planOf(site.id);
+  return (canSwitch && picked) || planOf(id);
 }

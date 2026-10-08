@@ -8,7 +8,7 @@ import { search, subscribeSearch } from "@/lib/search";
 import { go, goPage } from "@/lib/route";
 import { usePages } from "@/components/lite/pages";
 import { useWorkspace } from "@/components/Workspace";
-import { planOf, setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
+import { setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
 import { useLayout } from "@/lib/layout";
 import { collectionDisplay } from "@/lib/collections";
 import { createPost, duplicatePost, setPostStatus, toggleFavorite } from "@/lib/posts";
@@ -308,9 +308,7 @@ export function CommandPalette({ currentPostId }: Props) {
             label: plan === "lite" ? "View as full plan" : "View as Lite",
             icon: <SwitchHorizontal01 className="size-4" />,
             onSelect: () => {
-              const own = planOf(workspaceSite.id);
-              const next = plan === "lite" ? "full" : "lite";
-              setPlanView(next === own ? null : next);
+              setPlanView(workspaceSite.id, plan === "lite" ? "full" : "lite");
               setOpen(false);
             },
           } satisfies CommandRow,
