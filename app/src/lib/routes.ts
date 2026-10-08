@@ -29,6 +29,7 @@ import {
   Target04,
 } from "@untitledui/icons";
 import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
+import { usePipelineCount } from "@/lib/pipeline/store";
 
 export type Icon = ComponentType<{ className?: string }>;
 
@@ -100,8 +101,8 @@ export const PAGES: PageRoute[] = [
     path: "pipeline",
     description: "Every piece from pitch to published.",
     section: "main",
-    // The 0.1 planning board until the Pipeline thread lands.
-    component: lazy(() => import("@/components/plan/PlanPage").then((m) => ({ default: m.PlanPage }))),
+    useBadge: usePipelineCount,
+    component: lazy(() => import("@/components/pipeline/PipelinePage").then((m) => ({ default: m.PipelinePage }))),
   },
   {
     id: "content",
@@ -145,6 +146,7 @@ export const PAGES: PageRoute[] = [
     path: "chat",
     description: "Ask the agent anything about your content and knowledge base.",
     section: "main",
+    component: lazy(() => import("@/components/chat/ChatPage").then((m) => ({ default: m.ChatPage }))),
   },
   {
     id: "connections",
@@ -153,6 +155,7 @@ export const PAGES: PageRoute[] = [
     path: "connections",
     description: "Where Propaganda listens: calls, Slack and documents.",
     section: "main",
+    component: lazy(() => import("@/components/connections/ConnectionsPage").then((m) => ({ default: m.ConnectionsPage }))),
   },
   {
     id: "settings",
@@ -161,8 +164,7 @@ export const PAGES: PageRoute[] = [
     path: "settings",
     description: "People, content, agents and this tenant's details.",
     section: "footer",
-    // Opens the 0.1 settings dialog until the Settings thread lands.
-    component: lazy(() => import("@/components/pages/SettingsPage").then((m) => ({ default: m.SettingsPage }))),
+    component: lazy(() => import("@/components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage }))),
   },
 ];
 
