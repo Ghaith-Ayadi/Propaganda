@@ -20,7 +20,7 @@ export function HomePage() {
   const home = useHome();
 
   return (
-    <PageBody>
+    <>
       <PageHeader
         title={home.tenant}
         description={`${home.quarter.label} · week ${home.week} of 13`}
@@ -30,7 +30,7 @@ export function HomePage() {
           </Button>
         }
       />
-
+      <PageBody>
       {home.campaign && <CampaignCard campaign={home.campaign} />}
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -45,7 +45,8 @@ export function HomePage() {
         <h2 className="font-title text-2xl text-primary">Your writing</h2>
         <RecentWriting />
       </section>
-    </PageBody>
+      </PageBody>
+    </>
   );
 }
 

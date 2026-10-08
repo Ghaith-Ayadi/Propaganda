@@ -8,10 +8,9 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowLeft, ArrowUpRight, Flag01, InfoCircle, Lightbulb02, Scales02, FileCheck02, SearchLg, Lock01 } from "@untitledui/icons";
-import { Tabs } from "@/components/application/tabs/tabs";
 import { Badge } from "@/components/base/badges/badges";
 import { Input } from "@/components/base/input/input";
-import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { PageBody, PageHeader, PageTabs } from "@/components/shell/PageHeader";
 import { ExampleBadge } from "@/components/shared/ExampleBadge";
 import { ObjectIcon } from "@/components/shared/ObjectIcon";
 import { parseDay, shortDate } from "@/components/shared/quarter";
@@ -47,8 +46,16 @@ export function InboxPage() {
 
   const open = (t: Tab, id?: string | null) => goPage("inbox", id ? `${t}/${encodeURIComponent(id)}` : t);
 
+  const withIcon = (Icon: typeof Flag01, label: string, badge?: ReactNode) => (
+    <span className="flex items-center gap-2">
+      <Icon className="size-4" />
+      {label}
+      {badge}
+    </span>
+  );
+
   return (
-    <PageBody wide>
+    <>
       <PageHeader
         title="Inbox"
         description={
@@ -64,24 +71,33 @@ export function InboxPage() {
             </div>
           </div>
         }
-      >
-        <Tabs selectedKey={tab} onSelectionChange={(k) => open(k as Tab)}>
-          <Tabs.List type="underline" size="sm" className="flex-wrap">
-            <Tabs.Item id="flags" icon={Flag01}>
-              Flags
-              {inbox.flags.length > 0 && (
-                <Badge size="sm" type="pill-color" color={inbox.urgent > 0 ? "error" : "gray"} className="-my-px hidden md:flex">
-                  {inbox.flags.length}
-                </Badge>
-              )}
-            </Tabs.Item>
-            <Tabs.Item id="pitches" icon={Lightbulb02} badge={inbox.pendingPitches || undefined}>Pitches</Tabs.Item>
-            <Tabs.Item id="knowledge" icon={Scales02} badge={inbox.knowledge.length || undefined}>Knowledge</Tabs.Item>
-            <Tabs.Item id="review" icon={FileCheck02} badge={inbox.reviews.length || undefined}>Review</Tabs.Item>
-          </Tabs.List>
-        </Tabs>
-      </PageHeader>
-
+        tabs={
+          <PageTabs
+            label="Inbox sections"
+            selected={tab}
+            onChange={(id) => open(id as Tab)}
+            items={[
+              {
+                id: "flags",
+                // The count is red only while a flag is urgent.
+                label: withIcon(
+                  Flag01,
+                  "Flags",
+                  inbox.flags.length > 0 && (
+                    <Badge size="sm" type="pill-color" color={inbox.urgent > 0 ? "error" : "gray"} className="-my-px hidden md:flex">
+                      {inbox.flags.length}
+                    </Badge>
+                  ),
+                ),
+              },
+              { id: "pitches", label: withIcon(Lightbulb02, "Pitches"), badge: inbox.pendingPitches || undefined },
+              { id: "knowledge", label: withIcon(Scales02, "Knowledge"), badge: inbox.knowledge.length || undefined },
+              { id: "review", label: withIcon(FileCheck02, "Review"), badge: inbox.reviews.length || undefined },
+            ]}
+          />
+        }
+      />
+      <PageBody>
       <Notes notes={inbox.notes.filter((n) => n.tab === tab)} />
 
       {tab === "flags" && (
@@ -142,7 +158,8 @@ export function InboxPage() {
             ))}
           </div>
         ))}
-    </PageBody>
+      </PageBody>
+    </>
   );
 }
 

@@ -1,46 +1,17 @@
-// The 0.2 card: a header (16px title, 14px description, actions on the right)
-// and an optional footer, each set off by a divider that runs edge to edge.
-// Sections inside a card are plain, labelled blocks (CardSection), never
-// nested cards.
+// The shell's card (components/shell/Card.tsx: a header whose divider runs
+// edge to edge, 16px title, 14px description, a footer), plus the pieces Home
+// and the Inbox put inside it. Sections inside a card are plain, labelled
+// blocks (CardSection), never nested cards.
 
 import type { ReactNode } from "react";
+import { CardBody as ShellCardBody } from "@/components/shell/Card";
 import { cx } from "@/utils/cx";
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={cx("flex flex-col rounded-xl border border-secondary bg-primary shadow-xs", className)}>{children}</section>;
-}
+export { Card, CardFooter, CardHeader } from "@/components/shell/Card";
 
-export function CardHeader({
-  title,
-  description,
-  icon,
-  actions,
-}: {
-  title: ReactNode;
-  description?: ReactNode;
-  icon?: ReactNode;
-  actions?: ReactNode;
-}) {
-  return (
-    <header className="flex flex-wrap items-start justify-between gap-3 border-b border-secondary px-5 py-4">
-      <div className="flex min-w-0 flex-1 gap-3">
-        {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
-        <div className="min-w-0">
-          <h3 className="text-md font-semibold text-primary">{title}</h3>
-          {description && <p className="mt-0.5 text-sm text-tertiary">{description}</p>}
-        </div>
-      </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
-    </header>
-  );
-}
-
+/** The shell's body, with its sections stacked. */
 export function CardBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx("flex flex-1 flex-col gap-6 px-5 py-5", className)}>{children}</div>;
-}
-
-export function CardFooter({ children }: { children: ReactNode }) {
-  return <footer className="border-t border-secondary px-5 py-3 text-sm text-tertiary">{children}</footer>;
+  return <ShellCardBody className={cx("flex flex-col gap-6 py-5", className)}>{children}</ShellCardBody>;
 }
 
 /** A labelled block inside a card: "Why now", "Angle", "Metadata". */

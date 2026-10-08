@@ -28,7 +28,6 @@ import {
   Settings01,
   Target04,
 } from "@untitledui/icons";
-import { useContentTree } from "@/components/pages/contentTree";
 import { useInboxBadge } from "@/components/inbox/badge";
 
 export type Icon = ComponentType<{ className?: string }>;
@@ -47,6 +46,15 @@ export interface NavNode {
   children?: NavNode[];
 }
 
+/** A nav count. `urgent` turns the chip the error color (Inbox: high-urgency flags). */
+export type BadgeValue = number | { count: number; urgent?: boolean } | null;
+
+export function badgeOf(v: BadgeValue | undefined): { count: number; urgent: boolean } | null {
+  if (v == null) return null;
+  const b = typeof v === "number" ? { count: v, urgent: false } : { count: v.count, urgent: !!v.urgent };
+  return b.count > 0 ? b : null;
+}
+
 export interface PageRoute {
   /** Stable key; also the default path. */
   id: string;
@@ -60,8 +68,8 @@ export interface PageRoute {
   section: "main" | "footer";
   /** The page. Absent: an empty state until a thread builds it. */
   component?: LazyExoticComponent<ComponentType>;
-  /** A count beside the label (Inbox). A hook: it may read Dexie or the server. */
-  useBadge?: () => number | null;
+  /** A count chip beside the label (Inbox). A hook: it may read Dexie or the server. */
+  useBadge?: () => BadgeValue;
   /** A tree under the label (Content). A hook, like useBadge. */
   useChildren?: () => NavNode[];
 }
@@ -104,7 +112,6 @@ export const PAGES: PageRoute[] = [
     description: "Everything you publish, by channel.",
     section: "main",
     component: lazy(() => import("@/components/pages/ContentPage").then((m) => ({ default: m.ContentPage }))),
-    useChildren: useContentTree,
   },
   {
     id: "knowledge",
