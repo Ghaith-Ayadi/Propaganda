@@ -45,4 +45,13 @@ export const config = {
    * run can't replay; see worker/README.md.
    */
   appVersion: process.env.WORKER_APP_VERSION ?? "1",
+  /** How often the agents look for work (seconds); 0 turns the dispatcher off. */
+  dispatchSeconds: Number(process.env.WORKER_DISPATCH_SECONDS ?? 60),
+  /** A post version is read once it has been left alone this long (seconds): autosaves settle first. */
+  settleSeconds: Number(process.env.WORKER_SETTLE_SECONDS ?? 600),
+  /**
+   * Tests only: a JSON file of canned model answers by job name. When set, no
+   * model is called and nothing is logged to the cost log.
+   */
+  fakeAnswers: process.env.WORKER_FAKE_ANSWERS ?? "",
 };

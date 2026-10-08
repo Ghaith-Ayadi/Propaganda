@@ -7,10 +7,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node build.mjs",
+    "build": "tsc -p tsconfig.json && node build.mjs && cp src/agents/guardian-policy-v1.md dist/",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "sh test/run.sh"
+    "test": "sh test/run.sh",
+    "fixtures": "node build.mjs && node test/agents.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.76",
@@ -23,6 +24,7 @@
     "@types/node": "^22.10.5",
     "@types/pg": "^8.15.6",
     "esbuild": "^0.25.10",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "yaml": "^2.9.1"
   }
 }

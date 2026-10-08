@@ -6,4 +6,9 @@ cd "$(dirname "$0")/.."
 npm run build
 node test/limits.mjs
 node test/shared.mjs
+node test/agents.mjs
+node test/pitch-write.mjs
 node test/e2e.mjs
+node test/listener.mjs
+# Needs PostgREST (POSTGREST_BIN) and pgvector on the server; skips without PostgREST.
+node test/listener-e2e.mjs
