@@ -1,10 +1,11 @@
 // Lite's nav puts the writing first, as the 0.1 sidebar did: every collection
 // as a folder with its newest posts inside, filling the nav bar.
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ChevronDown, Folder } from "@untitledui/icons";
 import { contentRest } from "@/components/pages/contentTree";
+import { toggleFolded, useFolded } from "@/components/shell/nav";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { collectionDisplay } from "@/lib/collections";
 import { db } from "@/lib/db";
@@ -70,7 +71,9 @@ function CollectionFolder({
   rowClass: (active: boolean) => string;
 }) {
   const display = collectionDisplay(collection.name, all);
-  const [open, setOpen] = useState(isActive || items.some((p) => p.id === currentPostId));
+  // Open unless folded by hand (remembered per browser, like the full nav's tree).
+  const key = `lite/${collection.name}`;
+  const open = !useFolded().has(key);
   const href = pageHref("content", contentRest("blog", collection.name));
 
   return (
@@ -90,7 +93,7 @@ function CollectionFolder({
             type="button"
             aria-label={open ? "Collapse" : "Expand"}
             aria-expanded={open}
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => toggleFolded(key)}
             className="absolute right-1 rounded p-1 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
           >
             <ChevronDown className={cx("size-3.5 transition", !open && "-rotate-90")} />

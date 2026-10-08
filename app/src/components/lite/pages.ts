@@ -20,6 +20,8 @@ const LITE: Record<string, false | Partial<PageRoute>> = {
     label: "Planning",
     icon: Calendar,
     description: "What goes out, and when.",
+    // The Pipeline's count is pitches waiting: agent work.
+    useBadge: undefined,
     component: lazy(() => import("@/components/plan/PlanPage").then((m) => ({ default: m.PlanPage }))),
   },
   knowledge: false,
