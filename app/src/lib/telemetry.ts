@@ -97,14 +97,7 @@ export function initTelemetry(): void {
     capture_exceptions: true,
     // Clicks on controls only: a click inside the editor would carry its text.
     autocapture: { element_allowlist: ["a", "button", "form", "input", "select", "textarea", "label"] },
-    // Replays: every input is masked (passwords, the one-time code, the
-    // Strategist's pasted plans), and the editor's text with it. Switched on
-    // in the PostHog project too (Settings > Session replay).
-    disable_session_recording: false,
-    session_recording: {
-      maskAllInputs: true,
-      maskTextSelector: PRIVATE_TEXT,
-    },
+    session_recording: { maskTextSelector: PRIVATE_TEXT },
     before_send: exceptionBudget,
   });
   posthog.register({ app_env: DEPLOY_ENV, commit: COMMIT_SHA });
