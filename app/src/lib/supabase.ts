@@ -3,8 +3,11 @@ import { createClient as createSupabaseClient, type SupabaseClient } from "@supa
 // The backend: Propaganda's self-hosted Supabase on Bedrock (Ghaith-Ayadi/Bedrock),
 // schema in supabase/migrations. Same host as the app: Caddy sends /auth/v1,
 // /rest/v1 and /realtime/v1 to it.
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// UI preview mode (lib/preview.ts) runs without a server: a placeholder address
+// that never answers stands in when none is configured.
+const preview = import.meta.env.VITE_UI_PREVIEW === "1";
+const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || (preview ? "http://preview.invalid" : undefined);
+const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || (preview ? "preview" : undefined);
 
 if (!url || !anonKey) {
   throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY");

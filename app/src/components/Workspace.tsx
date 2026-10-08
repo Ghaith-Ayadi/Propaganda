@@ -29,6 +29,7 @@ import { SignIn } from "@/components/workspace/SignIn";
 import { Onboarding } from "@/components/workspace/Onboarding";
 import { coded } from "@/lib/errors";
 import { reportError } from "@/lib/telemetry";
+import { UI_PREVIEW, seedPreviewContent } from "@/lib/preview";
 
 /**
  * The editor's outer shell: which account and site are open.
@@ -114,7 +115,8 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   // Open a scope. Called with nothing mounted under us.
   const open = useCallback(async (account: Account, site: SiteRef) => {
     await activateScope(account, site);
-    setSyncEnabled(true);
+    if (UI_PREVIEW) await seedPreviewContent().catch(() => undefined);
+    setSyncEnabled(!UI_PREVIEW);
     setPhase({ kind: "ready", key: `${account.userId}:${site.id}` });
   }, []);
 

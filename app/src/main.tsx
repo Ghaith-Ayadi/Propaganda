@@ -4,6 +4,7 @@ import App from "./App.tsx";
 import { editorRedirect } from "./lib/siteUrl";
 import { isOAuthCallback, relayOAuthResult } from "./lib/oauthCallback";
 import "./index.css";
+import { installPreview } from "./lib/preview";
 
 // Side-effect: reads localStorage, applies `.dark-mode` class to <html>
 // before first paint so there's no flash.
@@ -25,6 +26,9 @@ function redirectTarget(): string | null {
   if (standalone && (path === "/" || path === "")) return "/admin" + window.location.hash;
   return editorRedirect();
 }
+
+// Local-only UI preview (VITE_UI_PREVIEW=1): fake tenant, no server.
+installPreview();
 
 const target = isOAuthCallback() ? null : redirectTarget();
 if (isOAuthCallback()) {
