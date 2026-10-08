@@ -19,6 +19,8 @@
 //   SITE-SEED           a new site's first settings and collections failed
 //   SITE-SWITCH         switching account or site failed
 //   UPLOAD              an image upload failed
+//   COST-USAGE          the tenant's model usage for the month couldn't be loaded
+//   COST-ADMIN          the Admin consumption figures or limits couldn't be loaded or saved
 
 import { BackendError } from "@/lib/supabase";
 

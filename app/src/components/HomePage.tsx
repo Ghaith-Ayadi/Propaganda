@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { go } from "@/lib/route";
 import { collectionDisplay } from "@/lib/collections";
 import { WordCountDot } from "@/components/WordCountDot";
+import { CostMeter } from "@/components/cost/CostMeter";
 import type { Collection, Post } from "@/types";
 
 // VERBOSE MODULE (optional, personal). Renders null when disabled. To remove
@@ -40,6 +41,8 @@ export function HomePage() {
       <Suspense fallback={null}>
         <VerboseActivity />
       </Suspense>
+
+      <CostMeter />
 
       <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
         <RecentTable title="Last added" posts={lastAdded} collections={collections} />
