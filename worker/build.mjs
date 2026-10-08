@@ -15,6 +15,7 @@ await build({
     "src/main.ts",
     "src/limits.ts",
     "src/agents/testing.ts",
+    "src/listener/testing.ts",
   ],
   outdir: "dist",
   outbase: "src",

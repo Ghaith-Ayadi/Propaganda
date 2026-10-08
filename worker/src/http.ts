@@ -11,6 +11,7 @@
 //   POST /runs/:id/retry         { id, how }   id is the new run's when forked
 //   POST /runs/:id/cancel        { ok: true }
 //   POST /runs/demo              { id }        body { stallSeconds?, fail?, site? }
+//   The Listener's routes (ingest URL, webhooks, OAuth, Connections): src/listener/routes.ts.
 
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -20,6 +21,7 @@ import { config } from "./config.js";
 import { cancelRun, getRun, listRuns, retryRun, type RunState } from "./runs.js";
 import { dispatchAgent, isAgentName, startForTenant, type DispatchInput } from "./workflows/agents.js";
 import { demo } from "./workflows/demo.js";
+import { listenerRoute } from "./listener/index.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
 const SITE_RE = /^[a-z0-9]{15}$/;
@@ -88,7 +90,7 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
   if (method === "OPTIONS") {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Authorization, Content-Type",
       "Access-Control-Max-Age": "86400",
     });
@@ -109,6 +111,9 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     if (runId === null) throw new HttpError(422, `The ${name} found nothing to work on: name the post or the thing to look at.`);
     return send(res, 202, { runId });
   }
+
+  // The Listener's ingest URL, webhooks, OAuth callbacks and Connections routes check their own credentials.
+  if (await listenerRoute(db, req, res, url)) return;
 
   await requireSuperadmin(db, req.headers.authorization, config.jwtSecret());
 

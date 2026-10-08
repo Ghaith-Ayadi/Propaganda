@@ -188,6 +188,35 @@ insert into public.kb_agent_sites (site) values ('<site id>');  -- checks posts 
 - `WORKER_FAKE_ANSWERS` (tests only) replaces every model call with canned
   answers by job name and logs nothing.
 
+## The Listener
+
+Design and the one-time app setup: `docs/listener.md`. Code: `listener/` and
+`workflows/listener.ts`. It reads call transcripts and Slack threads, hands
+ideas to the Pitcher and opens one `kb_proposals` row per source for the
+Guardian (left `open`: the dispatcher above picks it up). Like the KB agents it
+only spends for tenants in `kb_agent_sites`.
+
+- **Every source ends in `ingest()`** (`listener/ingest.ts`): one `kb_sources`
+  row, then the `listener-<source>` run on the agents queue. The source id
+  comes from the text, so the same transcript twice is one run. From inside a
+  connector's workflow use `ingestInWorkflow()`: DBOS forbids starting a
+  workflow from inside a step.
+- **Connections** live in `private.listener_connections`, read through the
+  pool and written through `listener_connection_save` / `_revoke`. API keys and
+  tokens are sealed with `LISTENER_SECRET_KEY`; ingest URL tokens are stored as
+  a hash.
+- **Routes** (`listener/routes.ts`, checked before the superadmin gate, each
+  with its own credential): `POST /ingest/<token>`, `POST /hooks/<provider>`
+  (signed by the provider), `GET /oauth/<provider>/callback`, and the
+  Connections routes for a tenant's members (their Supabase token).
+- **Schedules**: the Granola sweep (hourly), the Meet poll (every 15 minutes),
+  the Teams subscription renewal (every 6 hours).
+- **Chat's hand-off** (`POST /agents/listener`): a pasted transcript, read like
+  an ingest URL post; `422` when the task holds no transcript.
+- `LISTENER_MODEL` overrides the model (default `AGENT_MODEL_BASE`).
+- Tests: `test/listener.mjs` (no database) and `test/listener-e2e.mjs`, which
+  needs pgvector and PostgREST (`POSTGREST_BIN`; it skips without).
+
 ## The usage limit
 
 The Claude subscription answers 429 with `anthropic-ratelimit-unified-status:
