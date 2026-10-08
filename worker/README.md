@@ -86,22 +86,21 @@ insert into public.kb_agent_sites (site) values ('<site id>');  -- checks posts 
   (`checker-<version>`, `guardian-<proposal>-<round>`), so a piece of work runs
   once however many ticks see it. A failed run stays failed until retried from
   Admin > Runs.
-- **The Checker** (base model, `WORKER_MODEL_BASE`): links a post version to the
+- **The Checker** (base model, `AGENT_MODEL_BASE`): links a post version to the
   claims it relies on, opens a flag per conflict and closes the ones a newer
   version fixed, checks numbers and quotes against the pages the post links,
   and offers Remember on tenant facts no claim covers (`kb_checks.report`). It
   also re-reads posts after a claim they rely on changed (cleared, or open with
   a suggested fix) and drafts a person's contest into changes and an argument.
-- **The Guardian** (advanced model, `WORKER_MODEL_ADVANCED`): runs policy v1's
+- **The Guardian** (advanced model, `AGENT_MODEL_ADVANCED`): runs policy v1's
   checks on a proposal (a site's own `kb_policies` text wins over the bundled
   one) and the code decides the verdict (`verdict.ts`). It only ever writes
   through `kb_guardian_decide`.
 - **Chat's hand-off** (`POST /agents/checker`, below): the post by id, or the
   one whose title the task names, checked under the dispatcher's run id
   `checker-<version>`; `422` when no post matches.
-- Writes go through PostgREST at `SUPABASE_URL` with the service key
-  (`SERVICE_ROLE_KEY` on the box): the pg pool stays read-only. The gateway needs
-  a model provider key (`AI_GATEWAY_API_KEY`).
+- Writes go through the database's `kb_` functions with `rpc()` from
+  `backend.ts`; reads through the read-only pool (`src/kb/read.ts`).
 - `WORKER_FAKE_ANSWERS` (tests only) replaces every model call with canned
   answers by job name and logs nothing.
 
