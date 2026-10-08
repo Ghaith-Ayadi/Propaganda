@@ -13,7 +13,7 @@ fonts = [
 ]
 faces = []
 for fam, f, style, wght in fonts:
-    b = base64.b64encode((here / "fonts" / f"{f}.woff2").read_bytes()).decode()
+    b = base64.b64encode((here.parents[3] / "app" / "public" / "fonts" / "pg" / f"{f}.woff2").read_bytes()).decode()
     faces.append(f"@font-face{{font-family:'{fam}';src:url(data:font/woff2;base64,{b}) format('woff2');font-style:{style};font-weight:{wght};font-display:swap}}")
 font_css = "\n".join(faces)
 site = (here / "site.css").read_text(); engine = (here / "engine.js").read_text(); fix = (here / "fixtures.js").read_text()

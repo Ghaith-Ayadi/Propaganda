@@ -6,8 +6,8 @@ It is not part of the app build.
 
 ## Open it
 
-`dist/prototype.html` is self-contained (fonts and images included). Open it in any
-browser. Use the left column to pick a theme, a page, the content (sample, edge cases,
+Run `python3 build.py` first (`dist/` is not committed). `dist/prototype.html` is
+self-contained (fonts and images included). Open it in any browser. Use the left column to pick a theme, a page, the content (sample, edge cases,
 empty), a width, and the page options. Links inside the preview navigate between pages.
 
 ## Rebuild
@@ -16,7 +16,7 @@ empty), a width, and the page options. Links inside the preview navigate between
 python3 build.py          # writes dist/prototype.html and dist/embed.html
 ```
 
-`build.py` inlines `fonts/*.woff2` (OFL, subset to Latin; licences alongside),
+`build.py` inlines the app's `app/public/fonts/pg/*.woff2` (OFL, subset to Latin; licences alongside),
 `site.css`, `engine.js`, `fixtures.js` and `shell.html`.
 
 ## Run the harness
