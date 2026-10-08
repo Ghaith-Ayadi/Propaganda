@@ -13,6 +13,9 @@ import { startServer } from "./http.js";
 import { registerQueues } from "./workflows/agents.js";
 // Every workflow must be registered before launch, so recovery finds it.
 import "./workflows/demo.js";
+import "./agents/pitcher.js";
+import "./agents/writer.js";
+import "./agents/voice.js";
 
 async function main(): Promise<void> {
   DBOS.setConfig({
