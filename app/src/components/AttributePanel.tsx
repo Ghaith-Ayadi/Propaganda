@@ -28,6 +28,8 @@ import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { Button } from "@/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
 import { Tabs } from "@/components/application/tabs/tabs";
+import { ReviewPanel } from "@/components/pipeline/ReviewPanel";
+import { usePipelineItemForPost } from "@/lib/pipeline/store";
 
 interface Props {
   post: Post;
@@ -56,7 +58,9 @@ export function AttributePanel({ post }: Props) {
 
   const [diffFor, setDiffFor] = useState<PostVersion | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [tab, setTab] = useState<"details" | "brief" | "analytics">("details");
+  // A post waiting on review opens on its Review tab.
+  const pipelineItem = usePipelineItemForPost(post.id);
+  const [tab, setTab] = useState<TabKey>(pipelineItem?.stage === "in_review" ? "review" : "details");
 
   const { site } = useWorkspace();
   const publicUrl = postPublicUrl(site, collectionSlugOf(post.type, collectionRows), post.slug);
@@ -130,6 +134,7 @@ export function AttributePanel({ post }: Props) {
           <Tabs.Item id="details">Details</Tabs.Item>
           <Tabs.Item id="brief">Brief</Tabs.Item>
           <Tabs.Item id="analytics">Analytics</Tabs.Item>
+          <Tabs.Item id="review">Review</Tabs.Item>
         </Tabs.List>
 
         <Tabs.Panel id="brief">
@@ -137,6 +142,9 @@ export function AttributePanel({ post }: Props) {
         </Tabs.Panel>
         <Tabs.Panel id="analytics">
           <AnalyticsTab />
+        </Tabs.Panel>
+        <Tabs.Panel id="review">
+          <ReviewPanel postId={post.id} />
         </Tabs.Panel>
 
         <Tabs.Panel id="details" className="flex flex-col gap-5">
@@ -301,7 +309,7 @@ function FieldStack({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-type TabKey = "details" | "brief" | "analytics";
+type TabKey = "details" | "brief" | "analytics" | "review";
 
 function BriefTab({ post }: { post: Post }) {
   const [picking, setPicking] = useState(false);
