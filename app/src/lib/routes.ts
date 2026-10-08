@@ -28,6 +28,7 @@ import {
   Settings01,
   Target04,
 } from "@untitledui/icons";
+import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
 import { usePipelineCount } from "@/lib/pipeline/store";
 
 export type Icon = ComponentType<{ className?: string }>;
@@ -119,6 +120,8 @@ export const PAGES: PageRoute[] = [
     path: "knowledge",
     description: "What your tenant actually believes, claim by claim.",
     section: "main",
+    component: lazy(() => import("@/components/knowledge/KnowledgePage").then((m) => ({ default: m.KnowledgePage }))),
+    useBadge: useKnowledgeBadge,
   },
   {
     id: "goals",
