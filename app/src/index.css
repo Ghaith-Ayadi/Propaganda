@@ -1,5 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
 @import url("https://api.fontshare.com/v2/css?f[]=zodiak@400,500,600,700&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=rowan@300,400,500,600,700&display=swap");
 @import "./styles/globals.css";
 
 /* Roslindale Variable Display — used for editorial headings (post titles,
@@ -34,6 +35,18 @@
 
 html, body, #root {
   height: 100%;
+}
+
+/* Reserve the scrollbar's room so a page that starts or stops scrolling
+   doesn't shift sideways. */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* The app (/admin), not the public blogs: Rowan is the display face. The class
+   is set by EditorApp. */
+html.ppgd-app {
+  --font-title: "Rowan", "Zodiak", "Geist", -apple-system, "Segoe UI", sans-serif;
 }
 
 ::selection {
