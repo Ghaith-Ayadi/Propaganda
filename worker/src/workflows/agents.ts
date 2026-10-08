@@ -107,8 +107,6 @@ export async function dispatchAgent(name: AgentName, input: DispatchInput): Prom
   return handler(input);
 }
 
-/** Same, under a fixed workflow id: starting it again with the same id is a no-op (a daily run, say). */
-export function startForTenantWithId<Args extends unknown[], R>(
 /**
  * The same, under a run id derived from the work itself ("checker-<version>"):
  * starting it again returns the run that already exists, so the dispatcher can
@@ -122,3 +120,6 @@ export function startOnceForTenant<Args extends unknown[], R>(
 ): Promise<WorkflowHandle<R>> {
   return DBOS.startWorkflow(workflow, { workflowID, queueName: AGENT_QUEUE, workflowAttributes: { site } })(...args);
 }
+
+/** Same, for a fixed id the caller picks (the Scout's weekly run, say): starting it again is a no-op. */
+export const startForTenantWithId = startOnceForTenant;
