@@ -7,7 +7,8 @@
 // collection with its posts filling the bar (components/lite).
 
 import { hookKey } from "@/components/lite/pages";
-import { BarChart01, ChevronDown, Eye, Moon01, SearchLg, Sun, SwitchHorizontal01 } from "@untitledui/icons";
+import { BarChart01, ChevronDown, Eye, SearchLg, SwitchHorizontal01 } from "@untitledui/icons";
+import { Badge } from "@/components/base/badges/badges";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { useWorkspace } from "@/components/Workspace";
 import { SiteSwitcher } from "@/components/workspace/SiteSwitcher";
@@ -15,17 +16,15 @@ import { LiteCollections } from "@/components/lite/LiteCollections";
 import { usePages } from "@/components/lite/pages";
 import { useActiveCollection } from "@/lib/activeCollection";
 import { analyticsHref, pageHref, useRoute, type Route } from "@/lib/route";
-import type { NavNode, PageRoute } from "@/lib/routes";
+import { badgeOf, type NavNode, type PageRoute } from "@/lib/routes";
 import { sitePublicUrl } from "@/lib/siteUrl";
 import { setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
-import { toggleTheme, useTheme } from "@/lib/theme";
 import { cx } from "@/utils/cx";
 import { activePageOf, toggleFolded, useFolded } from "./nav";
 
 export function NavBar({ currentCollection }: { currentCollection?: string | null }) {
   const [route] = useRoute();
   const { site } = useWorkspace();
-  const [theme] = useTheme();
   const active = activePageOf(route);
   const pages = usePages();
   const plan = usePlan();
@@ -83,12 +82,6 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
             <PageItem key={hookKey(p)} page={p} active={active === p.id} route={route} />
           ))}
           <li>
-            <button type="button" onClick={toggleTheme} className={rowClass(false)}>
-              {theme === "dark" ? <Sun className="size-4 text-quaternary" /> : <Moon01 className="size-4 text-quaternary" />}
-              <span>{theme === "dark" ? "Light" : "Dark"}</span>
-            </button>
-          </li>
-          <li>
             <a href={sitePublicUrl(site)} target="_blank" rel="noreferrer" className={rowClass(false)}>
               <Eye className="size-4 text-quaternary" />
               <span>Preview site</span>
@@ -134,7 +127,7 @@ function PageItem({
   currentCollection?: string | null;
 }) {
   const Icon = page.icon;
-  const badge = page.useBadge?.() ?? null;
+  const badge = badgeOf(page.useBadge?.());
   const children = page.useChildren?.();
   const folded = useFolded();
   const open = !folded.has(page.id);
@@ -145,15 +138,10 @@ function PageItem({
         <a href={pageHref(page.path)} aria-current={active ? "page" : undefined} className={rowClass(active && !children)}>
           <Icon className="size-4 shrink-0 text-quaternary" />
           <span className="truncate">{page.label}</span>
-          {badge != null && badge > 0 && (
-            <span
-              className={cx(
-                "ml-auto rounded-full px-1.5 text-xs tabular-nums",
-                page.id === "inbox" ? "bg-(--color-fg-primary) font-medium text-(--color-bg-primary)" : "text-quaternary",
-              )}
-            >
-              {badge}
-            </span>
+          {badge && (
+            <Badge size="sm" color={badge.urgent ? "error" : "gray"} className={cx("ml-auto tabular-nums", children && "mr-6")}>
+              {badge.count}
+            </Badge>
           )}
         </a>
         {children && (

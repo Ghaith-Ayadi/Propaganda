@@ -6,6 +6,7 @@ import { Toaster } from "@/components/base/toast/toast";
 import { NavBar } from "@/components/shell/NavBar";
 import { PhoneTabs } from "@/components/shell/PhoneTabs";
 import { EmptyPage } from "@/components/shell/EmptyPage";
+import { ContentDrawer } from "@/components/pages/ContentDrawer";
 import { Editor } from "@/components/Editor";
 import { AttributePanel } from "@/components/AttributePanel";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -34,6 +35,9 @@ const OnboardingFlow = lazy(() =>
 // Errors and product analytics, editor only (lib/telemetry.ts).
 initTelemetry();
 import { exposeThemeConsole } from "@/lib/customThemes";
+
+// The app's display face (Rowan) instead of the blogs' (index.css).
+document.documentElement.classList.add("ppgd-app");
 
 // The service worker is the editor's offline shell, so only the editor
 // registers it: blog readers never download the whole app. The same call
@@ -152,13 +156,21 @@ function Shell() {
           )}
         </>
       ) : (
-        layout.sidebar && sidebar
+        layout.sidebar && (
+          <>
+            {sidebar}
+            {/* Writing a post: the blog's drawer stays beside it, as in 0.1. */}
+            {route.view === "post" && currentPost && (
+              <ContentDrawer channel="blog" activeCollection={currentPost.type || null} currentPostId={currentPost.id} />
+            )}
+          </>
+        )
       )}
       {route.view === "brief" ? (
         <BriefPage key={route.id} id={route.id} />
       ) : (
         <>
-          <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+          <main className="flex min-w-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
             {/* The editor has its own nav bar with the menu button. */}
             {isMobile && route.view !== "post" && <PhoneTabs />}
             {route.view === "page" && <PageOutlet id={route.page} />}
