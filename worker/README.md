@@ -14,7 +14,7 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
-| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
+| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`) and the knowledge base (`kb.ts`) |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
 | `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
 
@@ -90,17 +90,33 @@ and notes). `draftTop: 3` has the Writer draft the three strongest before
 anyone approves them (launch day one). Goals come from the run's input until
 the Goals tables exist (`goals.ts`, `readGoals()`).
 
-**Batches** (`pitcher:batch`, `batches.ts`). The plan's ideas (origin `plan`)
-always go out in batches, at the tenant's cadence (`agent_settings.batch_cadence`):
-`weekly` by default (equal weekly batches through the quarter's first two
-months, a double batch at the start; sizes come from what's left and the weeks
-left) or `flood` (everything at once). Plan ideas arriving start a batch run:
-flood sends them, weekly sends only the quarter's first batch. A schedule
-(`PITCHER_BATCH_CRON`, Mondays 07:00 UTC) sends each tenant's weekly batch,
-once a week at most. "Send me the next batch" in Chat sends it now. Other
-ideas (the Scout's and the Listener's) are bonus pitches: at most three
-undecided in the inbox at once, the rest stay ideas. A person's ask from Chat
-isn't capped.
+**Batches** (`pitcher:batch`, `batches.ts`). Every idea, from the plan, the
+Scout, the Listener or a person, waits for a batch and competes for its slots;
+every approved brief counts toward the quarter's target. A batch's quota
+counts **approved** briefs (`content_batches`): the Pitcher over-pitches (two
+pitches per slot, then the tenant's real approval rate after 6 decisions), a
+batch still short once every pitch is decided is topped up the next morning,
+and once approvals reach the target the open batches are cancelled. What's
+left is always target minus approved. The cadence (`agent_settings.batch_cadence`)
+sizes the batches: `weekly` by default (equal weekly batches through the
+quarter's first two months, a double first batch) or `flood` (everything at
+once). Without goals yet, the plan's size stands in for the target, and with
+no plan either a batch is 3. A schedule (`PITCHER_BATCH_CRON`, every day 07:00
+UTC) runs each tenant's top-ups and, once a week, its next batch. "Send me the
+next batch" in Chat sends it now; the plan arriving sends the quarter's first.
+A person's own ask in Chat is pitched now, outside the batches.
+
+**Taste** (`taste.ts`, the `taste_log` and `taste_profiles` tables). Every
+decision on a pitch or a draft is a row in the tenant's taste log, written by
+database triggers (a pitch approved, rejected or pushed; a reviewer's first
+edit after the Writer's version) and by the app (notes, "not now"). Before
+each batch the Pitcher rewrites a short taste summary from new decisions and
+reads it with the recent decisions and the tenant's own notes. Every idea is
+checked against everything ever pitched or published (`similarity()` on
+title keywords): a near-duplicate of a rejected pitch is dropped unless
+something material changed, and then the brief says what; one of a published
+post becomes an update suggestion. Each pitch carries one line of what it
+learned (`briefs.learned`).
 
 **The Writer** (`writer`) drafts an approved brief (`todo` or `in_progress`):
 - First job on a tenant with no voice guide: writes one (`writer:voice-guide`)
@@ -118,6 +134,10 @@ isn't capped.
   brief goes to `in_review`.
 - `writer:revise` turns review notes into a suggested version in the post's
   history. It never changes the post itself.
+- Reads how reviewers edited its recent drafts before writing (`edits.ts`),
+  and each morning `writer:voice-suggest` turns edits that repeat across two
+  or more drafts into a suggested change in `voice_guides.suggestion`. The
+  tenant applies it to the guide, or doesn't.
 
 **From Chat**: `pitcher` and `writer` are registered for `POST /agents/:name`.
 The Pitcher turns the request into ideas (origin team) and pitches them; the

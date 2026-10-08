@@ -53,6 +53,9 @@ do $$ begin
   exception when check_violation then null; end;
 end $$;
 
+-- A batch (worker, service role).
+insert into public.content_batches (site, quarter, number, quota, state, released_at) values ('sitetest0000001', '2026-Q4', 1, 4, 'in_review', now());
+
 -- The Writer's voice guide (service role), then a member edits it.
 insert into public.voice_guides (site, body, source, updated_by) values ('sitetest0000001', 'Agent guide', 'content', 'agent:writer');
 
@@ -68,6 +71,41 @@ end $$;
 update public.voice_guides set body = 'My guide', source = 'content' where site = 'sitetest0000001';
 do $$ begin
   if (select source from public.voice_guides where site = 'sitetest0000001') <> 'person' then raise exception 'FAIL: a member''s edit is not marked as theirs'; end if;
+end $$;
+-- Decisions land in the taste log, whoever makes them.
+update public.briefs set status = 'todo' where id = 'briefagent00001';
+insert into public.post_versions (site, post, version, content, created_by) values ('sitetest0000001', 'posttest0000001', 3, 'Edited', 'user');
+insert into public.post_versions (site, post, version, content, created_by) values ('sitetest0000001', 'posttest0000001', 4, 'Edited again', 'user');
+insert into public.taste_log (site, object_kind, object_id, decision, reason, actor) values ('sitetest0000001', 'pitch', 'briefagent00001', 'note', 'More customer stories', 'someone else');
+do $$ begin
+  if (select count(*) from public.taste_log where object_kind = 'pitch' and decision = 'approved' and actor = '11111111-1111-1111-1111-111111111111' and topic = 'Reliability') <> 1 then raise exception 'FAIL: the approval was not logged'; end if;
+  if (select count(*) from public.taste_log where object_kind = 'draft' and decision = 'edited') <> 1 then raise exception 'FAIL: only the first edit after the Writer''s version is logged'; end if;
+  if (select actor from public.taste_log where decision = 'note') <> '11111111-1111-1111-1111-111111111111' then raise exception 'FAIL: a member''s log row is not stamped with its author'; end if;
+  begin
+    update public.taste_log set reason = 'rewritten';
+    raise exception 'FAIL: the taste log was changed';
+  exception when insufficient_privilege then null; end;
+  begin
+    delete from public.taste_log;
+    raise exception 'FAIL: the taste log was deleted';
+  exception when insufficient_privilege then null; end;
+end $$;
+-- The tenant writes its own taste notes, never the Pitcher's summary.
+insert into public.taste_profiles (site, notes) values ('sitetest0000001', 'No listicles.');
+do $$ begin
+  begin
+    update public.taste_profiles set summary = 'mine' where site = 'sitetest0000001';
+    raise exception 'FAIL: a member wrote the Pitcher''s summary';
+  exception when insufficient_privilege then null; end;
+end $$;
+-- "That's enough": a member closes a batch, and can't change its quota.
+update public.content_batches set state = 'closed' where site = 'sitetest0000001' and number = 1;
+do $$ begin
+  if (select state from public.content_batches where site = 'sitetest0000001' and number = 1) <> 'closed' then raise exception 'FAIL: a member could not close a batch'; end if;
+  begin
+    update public.content_batches set quota = 40 where site = 'sitetest0000001';
+    raise exception 'FAIL: a member changed a quota';
+  exception when insufficient_privilege then null; end;
 end $$;
 -- The batch cadence: a member sets it; only weekly or flood.
 insert into public.agent_settings (site, batch_cadence) values ('sitetest0000001', 'flood');
@@ -85,6 +123,8 @@ do $$ begin
   if (select count(*) from public.agent_ideas) <> 0 then raise exception 'FAIL: ideas leaked across tenants'; end if;
   if (select count(*) from public.voice_guides) <> 0 then raise exception 'FAIL: voice guides leaked across tenants'; end if;
   if (select count(*) from public.agent_settings) <> 0 then raise exception 'FAIL: settings leaked across tenants'; end if;
+  if (select count(*) from public.taste_log) <> 0 then raise exception 'FAIL: the taste log leaked across tenants'; end if;
+  if (select count(*) from public.content_batches) <> 0 then raise exception 'FAIL: batches leaked across tenants'; end if;
 end $$;
 reset role;
 

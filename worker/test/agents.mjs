@@ -37,6 +37,9 @@ const db = {
   agent_ideas: [],
   voice_guides: [],
   agent_settings: [],
+  content_batches: [],
+  taste_log: [],
+  taste_profiles: [],
   model_calls: [],
 };
 const ESSAY = (n) =>
@@ -61,6 +64,7 @@ function matches(row, key, cond) {
   if (op === "like") return new RegExp(`^${arg.replace(/\*/g, ".*")}$`).test(String(v ?? ""));
   if (op === "lte") return String(v) <= arg;
   if (op === "gte") return String(v) >= arg;
+  if (op === "gt") return String(v) > arg;
   if (op === "not" && rest[0] === "is") return rest[1] === "null" ? v !== null && v !== undefined : String(v) !== rest[1];
   if (op === "in") return arg.slice(1, -1).split(",").includes(String(v));
   if (op === "not" && rest[0] === "in") return !rest.slice(1).join(".").slice(1, -1).split(",").includes(String(v));
@@ -70,8 +74,13 @@ function matches(row, key, cond) {
 function filterRows(table, params) {
   let rows = db[table];
   for (const [k, v] of params) {
-    if (["select", "order", "limit", "offset"].includes(k)) continue;
+    if (["select", "order", "limit", "offset", "on_conflict"].includes(k)) continue;
     rows = rows.filter((r) => matches(r, k, v));
+  }
+  const order = params.get("order");
+  if (order) {
+    const [col, dir] = order.split(".");
+    rows = [...rows].sort((a, b) => (String(a[col] ?? "") < String(b[col] ?? "") ? -1 : String(a[col] ?? "") > String(b[col] ?? "") ? 1 : 0) * (dir === "desc" ? -1 : 1));
   }
   const limit = Number(params.get("limit") ?? 1000);
   return rows.slice(0, limit);
@@ -108,6 +117,14 @@ const rest = createServer((req, res) => {
       // Rows are stamped on the tests' "today", so week and quarter checks don't depend on the real date.
       const row = { created: CLOCK, updated: CLOCK, ...JSON.parse(body) };
       if (path === "briefs" && !row.status) return out(400, { code: "23514", message: "status" });
+      if (url.searchParams.get("on_conflict")) {
+        const keys = url.searchParams.get("on_conflict").split(",");
+        const found = table.find((r) => keys.every((k) => String(r[k]) === String(row[k])));
+        if (found) {
+          Object.assign(found, row);
+          return out(201, [found]);
+        }
+      }
       table.push(row);
       return out(201, [row]);
     }
@@ -177,8 +194,10 @@ function answer(prompt) {
   }
   if (prompt.includes("Write the pitch")) {
     const url = /<(http:\/\/93\.184\.216\.34\/[^>]+)>/.exec(prompt)?.[1];
+    const idea = /Idea:\n\[[a-z0-9]{15}\] (.*)/.exec(prompt)?.[1] ?? "Why your batch jobs die at 3am";
     return JSON.stringify({
-      title: "Why your batch jobs die at 3am",
+      title: `${idea}: a field guide`,
+      learned: prompt.includes("No listicles") ? "Written after your note: no listicles." : "",
       why: "Customers keep asking.",
       angle: "Night failures are a scheduling problem more than an infrastructure one.",
       audience: "Platform engineers running nightly ETL.",
@@ -200,6 +219,8 @@ function answer(prompt) {
     return JSON.stringify({ ideas: [{ title: "Retries that don't page anyone", summary: "Durable steps." }, { title: "The cost of a 3am page", summary: "On-call math." }] });
   }
   if (prompt.includes("A reviewer left these notes")) return DRAFT_BODY.replace("## What to do about it", "## What to change tonight");
+  if (prompt.includes("Write the new summary.")) return "Rejects listicles. Approves customer stories.";
+  if (prompt.includes("Propose changes to the guide")) return JSON.stringify({ changes: [{ change: "End on the next step, never a summary.", from: ["Edited one", "Edited two"] }] });
   throw new Error(`stand-in model: no answer for ${prompt.slice(0, 80)}`);
 }
 const model = new MockLanguageModelV3({
@@ -331,48 +352,108 @@ try {
   const none = await t.dispatchAgent("writer", { site: SITE, task: "write about penguins", requestedBy: "11111111-1111-1111-1111-111111111111", conversation: "conv1", post: null });
   check(none === null, "Chat's writer hand-off finds nothing to write when no approved brief matches (422)");
 
-  console.log("bonus pitches are capped");
-  const openBonus = () => db.briefs.filter((b) => b.status === "pitched" && b.pitched_by === "agent:pitcher" && b.batch == null).length;
-  const before3 = openBonus();
+  console.log("ideas wait for a batch");
   const scoutIdeas = ["Retries explained", "Retry budgets", "Idempotent steps"].map((title, n) => ({
     title, summary: "Search demand for it.", origin: "search", evidence: [{ label: "Search", quote: title }], sourceAgent: "scout", key: `scout:${SITE}:cap${n}`,
   }));
   const sIds = await t.handOffIdeas(SITE, scoutIdeas, { pitchNow: false });
   const again = await t.handOffIdeas(SITE, scoutIdeas, { pitchNow: false });
   check(JSON.stringify(again) === JSON.stringify(sIds) && db.agent_ideas.filter((i) => sIds.includes(i.id)).length === 3, "the same key never adds a second idea");
-  const b1 = await (await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: sIds, goals, today: "2026-10-08" })).getResult();
-  check(openBonus() === Math.max(before3, 3) && b1.pitched.length === Math.max(3 - before3, 0), `at most ${3} bonus pitches open at once (${before3} open, ${b1.pitched.length} pitched)`);
   const judgeCalls = prompts.filter((x) => x.includes("Judge each idea")).length;
-  const b2 = await (await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: sIds, goals, today: "2026-10-08" })).getResult();
-  check(b2.pitched.length === 0 && b2.waiting.length === b1.waiting.length && prompts.filter((x) => x.includes("Judge each idea")).length === judgeCalls, "a full inbox leaves the rest as ideas, without a model call");
+  const b0 = await (await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: sIds, goals, today: "2026-10-08" })).getResult();
+  check(b0.pitched.length === 0 && b0.waiting.length === 3 && prompts.filter((x) => x.includes("Judge each idea")).length === judgeCalls, "outside a batch, the Scout's ideas wait for one, without a model call");
 
-  console.log("planned batches");
-  const weekly = (o) => t.batchSize({ cadence: "weekly", quarterStart: new Date("2026-10-01T00:00:00Z"), ...o });
-  check(weekly({ remaining: 20, released: 0, now: new Date("2026-10-01T07:00:00Z") }) === 4, "weekly: the first batch is double (20 planned, 9 weeks: 4)");
-  check(weekly({ remaining: 16, released: 1, now: new Date("2026-10-05T07:00:00Z") }) === 2, "weekly: then equal batches (16 left, 8 weeks: 2)");
-  check(weekly({ remaining: 7, released: 5, now: new Date("2026-12-07T07:00:00Z") }) === 7, "weekly: past the first two months, the rest at once");
-  check(t.batchSize({ cadence: "flood", remaining: 400, released: 0, quarterStart: new Date("2026-10-01T00:00:00Z"), now: new Date("2026-10-01T07:00:00Z") }) === 400, "flood: everything at once");
-  check(weekly({ remaining: 0, released: 2, now: new Date("2026-10-12T07:00:00Z") }) === 0, "nothing planned, nothing sent");
+  console.log("batch arithmetic");
+  const view = (o) => ({ target: 18, approved: 0, batches: [], planWaiting: 0, cadence: "weekly", quarterStart: new Date("2026-10-01T00:00:00Z"), now: new Date("2026-10-01T07:00:00Z"), ...o });
+  const open = (number, quota, approved) => ({ site: SITE, quarter: "2026-Q4", number, quota, state: "in_review", released_at: "2026-10-01T07:00:00Z", topups: 0, approved, undecided: 0 });
+  check(t.nextQuota(view()) === 4, "weekly: 18 posts start with a double batch of 4");
+  check(t.nextQuota(view({ approved: 4, batches: [{ ...open(1, 4, 4), state: "closed" }], now: new Date("2026-10-08T07:00:00Z") })) === 2, "then 2 a week");
+  check(t.unassigned(view({ approved: 10, batches: [open(5, 2, 0)] })) === 6, "what's left is target minus approved, minus open batches' shortfall");
+  check(t.nextQuota(view({ approved: 18 })) === 0, "nothing once the target is met");
+  check(t.nextQuota(view({ cadence: "flood", target: 400 })) === 400, "flood: everything at once");
+  check(t.nextQuota(view({ approved: 3, now: new Date("2026-12-07T07:00:00Z") })) === 15, "past the first two months, the rest at once");
+  check(t.nextQuota(view({ target: null, planWaiting: 0 })) === 3, "no goals and no plan: 3 a batch");
+  check(t.approvalRate([]) === 0.5 && t.pitchesFor(4, 0, 0.5) === 8, "two pitches per slot to start");
+  const decided = (a, r) => [...Array(a).fill({ status: "todo" }), ...Array(r).fill({ status: "rejected" })];
+  check(t.approvalRate(decided(6, 2)) === 0.75 && t.pitchesFor(3, 0, 0.75) === 4, "then the tenant's real approval rate");
+  check(t.approvalRate(decided(0, 10)) === 0.25, "never more than 4 pitches per slot");
+  check(t.pitchesFor(4, 3, 0.5) === 5, "undecided pitches count toward a batch");
 
-  const planIds = await t.handOffIdeas(
+  console.log("no repeats");
+  check(t.similarity("Why your batch jobs die at 3am", "Why batch jobs die at 3am") >= 0.5, "a reworded title is the same post");
+  check(t.similarity("Why your batch jobs die at 3am", "Pricing pages that convert") < 0.5, "a different post isn't");
+
+  console.log("batches by approvals");
+  const goals6 = (extra) => ({ ...goals, volume: { ...goals.volume, total: approvedNow() + extra } });
+  const approvedNow = () => db.briefs.filter((b) => ["todo", "in_progress", "in_review", "scheduled", "done"].includes(b.status)).length;
+  const runBatch = async (trigger, today, g) => (await t.DBOS.startWorkflow(t.pitchBatch)({ site: SITE, trigger, goals: g, today })).getResult();
+  const plan = await t.handOffIdeas(
     SITE,
-    [1, 2, 3, 4, 5, 6].map((n) => ({ title: `Planned post ${n}`, summary: "From the quarter's plan.", origin: "plan", evidence: [{ label: "Plan", quote: `post ${n}` }], sourceAgent: "strategist" })),
+    ["Durable steps explained", "Night shift for robots", "Retry storms", "Queue depth alarms", "Backoff that works", "Checkpoint everything", "Idempotency keys", "Dead letter queues"].map((title) => ({ title, summary: "From the plan.", origin: "plan", evidence: [{ label: "Plan", quote: title }], sourceAgent: "strategist" })),
     { pitchNow: false },
   );
-  const batchOf = async (trigger) => (await t.DBOS.startWorkflow(t.pitchBatch)({ site: SITE, trigger, goals, today: "2026-10-08" })).getResult();
-  const h1 = await batchOf("handoff");
-  check(h1.batch === null && h1.pitched.length === 0, "weekly: the plan arriving after the first batch waits for the weekly run");
-  const chatRun = await t.dispatchAgent("pitcher", { site: SITE, task: "Send me the next batch", requestedBy: "11111111-1111-1111-1111-111111111111", conversation: "conv2", post: null });
-  const c1 = await t.DBOS.retrieveWorkflow(chatRun).getResult();
-  check(c1.batch === 2 && c1.pitched.length === 1 && db.briefs.filter((b) => b.batch === 2).length === 1, `Chat's "next batch" sends batch 2, sized for the weeks left (${c1.pitched.length})`);
-  const s1 = await batchOf("schedule");
-  check(s1.batch === null, "the weekly run doesn't send a second batch the same week");
-  await (await t.DBOS.startWorkflow(t.weeklyBatches)(new Date("2026-10-12T07:00:00Z"))).getResult();
-  const wk = await t.DBOS.retrieveWorkflow(`pitcher-batch-${SITE}-2026-W42`).getResult();
-  check(wk && "batch" in wk, "the Monday schedule starts one batch run per tenant with plan ideas waiting");
-  db.agent_settings.push({ site: SITE, batch_cadence: "flood" });
-  const f1 = await batchOf("handoff");
-  check(f1.batch === 3 && f1.pitched.length === 5 && db.agent_ideas.filter((i) => planIds.includes(i.id) && i.status === "new").length === 0, `flood: the rest of the plan at once (${f1.pitched.length})`);
+  const g4 = goals6(4);
+  const q1 = await runBatch("handoff", "2026-10-08", g4);
+  const batch1 = db.content_batches.find((b) => b.number === q1.released);
+  check(q1.released !== null && batch1?.quota === 1 && batch1.state === "in_review", `the plan arriving sends the quarter's first batch (batch ${q1.released}, quota ${batch1?.quota})`);
+  check(q1.pitched.length === 2, `over-pitched: 2 pitches for 1 approval (${q1.pitched.length})`);
+  check(q1.pitched.every((x) => db.agent_ideas.find((i) => i.id === x.idea)?.status === "pitched"), "from the ideas waiting, whatever their source");
+  // A person approves one and rejects the other; the database logs both.
+  const [p1, p2] = q1.pitched.map((x) => db.briefs.find((b) => b.id === x.brief));
+  p1.status = "todo";
+  p2.status = "rejected";
+  p2.reject_reason = "No listicles, ever.";
+  db.taste_log.push(
+    { id: "taste0000000001", site: SITE, at: "2026-10-08T15:00:00.000Z", actor: "u1", object_kind: "pitch", object_id: p1.id, decision: "approved", reason: "", notes: null, title: p1.title, topic: "", angle: "", origin: "plan" },
+    { id: "taste0000000002", site: SITE, at: "2026-10-08T15:01:00.000Z", actor: "u1", object_kind: "pitch", object_id: p2.id, decision: "rejected", reason: "No listicles, ever.", notes: null, title: p2.title, topic: "", angle: "", origin: "plan" },
+  );
+  const q2 = await runBatch("asked", "2026-10-08", g4);
+  check(q2.closed.includes(q1.released), "a batch that reached its quota closes");
+  check(q2.released === q1.released + 1, `"next batch" sends one now (batch ${q2.released})`);
+  check(db.taste_profiles[0]?.summary.includes("Rejects listicles") && db.taste_profiles[0].summary_through === "2026-10-08T15:01:00.000Z", "the Pitcher rewrote the taste summary from the new decisions");
+  const pitchPrompt = prompts.filter((x) => x.includes("Write the pitch")).pop();
+  check(pitchPrompt.includes("No listicles, ever.") && pitchPrompt.includes("Rejects listicles"), "and read the decisions and the summary before pitching");
+  const learnedBrief = db.briefs.find((b) => b.id === q2.pitched[0]?.brief);
+  check(learnedBrief?.learned === "Written after your note: no listicles." && learnedBrief.body.includes("_Written after your note"), "each pitch says what it learned");
+  // Batch 2: both rejected. The next morning tops it up, the same week sends no new batch.
+  for (const x of q2.pitched) Object.assign(db.briefs.find((b) => b.id === x.brief), { status: "rejected", reject_reason: "Too generic." });
+  const q3 = await runBatch("schedule", "2026-10-09", g4);
+  const batch2 = db.content_batches.find((b) => b.number === q2.released);
+  check(q3.toppedUp.includes(q2.released) && batch2.state === "topping_up" && batch2.topups === 1 && q3.pitched.length >= 1, `a short batch is topped up the next morning (${q3.pitched.length} pitches)`);
+  check(prompts.filter((x) => x.includes("Write the pitch")).pop().includes("This is a top-up"), "the top-up is told why it's short");
+  check(q3.released === null, "and no second batch goes out the same week");
+  // No repeats: an idea close to the rejected pitch is dropped.
+  const [repeat] = await t.handOffIdeas(SITE, [{ title: p2.title.replace(": a field guide", ""), summary: "Again.", origin: "search", evidence: [{ label: "Search", quote: "again" }], sourceAgent: "scout" }], { pitchNow: false });
+  for (const x of q3.pitched) db.briefs.find((b) => b.id === x.brief).status = "todo";
+  const q4 = await runBatch("asked", "2026-10-09", goals6(2));
+  const rep = db.agent_ideas.find((i) => i.id === repeat);
+  check(rep.status === "rejected" && rep.reason.startsWith("Already rejected"), `a rejected pitch never comes back unchanged (${rep.reason.slice(0, 60)})`);
+  // Approvals reach the target: the open batches are cancelled, nothing more is pitched.
+  for (const b of db.briefs.filter((x) => x.status === "pitched")) b.status = "todo";
+  const before5 = db.briefs.length;
+  const q5 = await runBatch("schedule", "2026-10-12", goals6(0));
+  check(q5.released === null && db.briefs.length === before5, "once approvals reach the target, nothing more is pitched");
+  db.content_batches.push({ site: SITE, quarter: "2026-Q4", number: 9, quota: 3, state: "in_review", released_at: "2026-10-12T07:00:00.000Z", topups: 0 });
+  const q6 = await runBatch("schedule", "2026-10-13", goals6(0));
+  check(q6.cancelled.includes(9) && db.content_batches.find((b) => b.number === 9).state === "cancelled" && q6.pitched.length === 0, "a batch still short when the target is met is cancelled");
+  // The morning schedule.
+  await (await t.DBOS.startWorkflow(t.dailyBatches)(new Date("2026-10-13T07:00:00Z"))).getResult();
+  const day = await t.DBOS.retrieveWorkflow(`pitcher-batch-${SITE}-2026-10-13`).getResult();
+  check(day && "released" in day, "the morning schedule runs each tenant with ideas waiting or a batch open");
+
+  console.log("the Writer learns from edits");
+  const diff = t.diffDraft("Intro.\n\nIn conclusion, all good.", "Intro.\n\nTry it tonight.");
+  check(diff.removed[0] === "In conclusion, all good." && diff.added[0] === "Try it tonight.", "a reviewer's edit, paragraph by paragraph");
+  for (const [n, title] of ["Edited one", "Edited two"].entries()) {
+    const id = `editpost0000000${n}`;
+    db.posts.push({ id, site: SITE, title, subtitle: "", type: "Test", status: "draft", excerpt: "", slug: "", tags: [], content_md: "", published_at: null, word_count: 0 });
+    db.post_versions.push({ site: SITE, post: id, version: 1, created_by: "agent:writer", content: "Body.\n\nIn conclusion, it works." }, { site: SITE, post: id, version: 2, created_by: "user", content: "Body.\n\nTry it tonight." });
+    db.taste_log.push({ id: `tasteedit00000${n}`, site: SITE, at: `2026-10-10T0${n}:00:00.000Z`, actor: "u1", object_kind: "draft", object_id: id, decision: "edited", reason: "", notes: null, title, topic: "", angle: "", origin: "" });
+  }
+  const guideBefore = db.voice_guides[0].body;
+  const vs = await (await t.DBOS.startWorkflow(t.voiceSuggest)({ site: SITE })).getResult();
+  check(vs.status === "suggested" && db.voice_guides[0].suggestion.includes("End on the next step") && db.voice_guides[0].body === guideBefore, "repeated edits become a suggested voice change, never an edit to the guide");
+  check(prompts.filter((x) => x.includes("Propose changes to the guide")).pop().includes("cut: In conclusion, it works."), "from what the reviewers actually cut");
 
   console.log("cost log");
   const modelRows = db.model_calls.filter((c) => !String(c.model).startsWith("dataforseo/"));

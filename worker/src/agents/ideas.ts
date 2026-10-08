@@ -1,11 +1,12 @@
 // Ideas: what the Listener, the Scout, Chat and people hand the Pitcher. One
 // row each in agent_ideas, with the evidence that made it an idea. The
-// producers only insert (status "new"); the Pitcher settles every idea as
-// pitched (with its brief) or rejected (with a reason), and keeps both.
+// producers only insert (status "new"); the Pitcher fills each batch from the
+// best ideas waiting, whatever their source, and settles every idea it judges
+// as pitched (with its brief) or rejected (with a reason), keeping both.
 
 import { insertIdea, type IdeaRow } from "./store.js";
 import { startForTenant } from "../workflows/agents.js";
-import { pitchBatch, pitcher } from "./pitcher.js";
+import { pitchBatch } from "./pitcher.js";
 
 /** Same values as the pipeline UI's Origin (app/src/lib/pipeline/types.ts). */
 export type Origin = "calls" | "search" | "news" | "watched" | "team" | "plan";
@@ -43,12 +44,11 @@ export async function handOffIdeas(site: string, ideas: NewIdea[], opts: { pitch
     }, i.key);
     ids.push(row.id);
   }
-  if (opts.pitchNow !== false && ids.length) {
-    // The plan goes out in batches at the tenant's cadence; anything else is a bonus pitch.
-    const planned = ids.filter((_, n) => ideas[n].origin === "plan");
-    const bonus = ids.filter((_, n) => ideas[n].origin !== "plan");
-    if (planned.length) await startForTenant(site, pitchBatch, { site, trigger: "handoff" });
-    if (bonus.length) await startForTenant(site, pitcher, { site, ideaIds: bonus });
+  // Every idea competes for the next batch's slots. The plan arriving starts a
+  // batch run now (flood sends it; weekly sends the quarter's first batch);
+  // the rest wait for the morning run.
+  if (opts.pitchNow !== false && ideas.some((i) => i.origin === "plan")) {
+    await startForTenant(site, pitchBatch, { site, trigger: "handoff" });
   }
   return ids;
 }

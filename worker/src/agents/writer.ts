@@ -31,6 +31,7 @@ import { newId } from "./ids.js";
 import { claimsFor, renderClaims, type Claim } from "./kb.js";
 import { MODELS, askJson, askText, obj, str, strs } from "./model.js";
 import { voiceFor, voiceGuideWorkflow, voiceSourceFor } from "./voice.js";
+import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
 import { readPage, searchWeb, type Page } from "./web.js";
 import { HOUSE_RULES, contrastHits, unsourcedNumbers, wordCount } from "./writing.js";
@@ -200,6 +201,7 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
   }
   const voice = voiceFor(guide);
   const { pages, claims } = await research(site, brief);
+  const edits = await DBOS.runStep(() => reviewerEdits(site, null, 5), { name: "read reviewer edits" });
 
   const draft = await askJson(
     "write the draft",
@@ -218,7 +220,7 @@ ${renderClaims(claims)}
 
 Sources you read (cite them as Markdown links on the words they support; use no other URLs):
 ${pagesBlock(pages)}
-
+${edits.length ? `\nHow reviewers edited your recent drafts for this tenant (do what they did without being asked):\n${renderEdits(edits)}\n` : ""}
 Write the whole post in Markdown: no H1 (the title is separate), H2 subheads, links inline. Then list the facts about the tenant you needed and didn't have.
 
 Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or two sentences for listings", "markdown": "...", "missingFacts": ["..."]}`,

@@ -18,40 +18,47 @@ import {
   insertPitch,
   pipelineBriefs,
   publishedPosts,
-  reviewerFeedback,
+  everyBrief,
   settleIdea,
   batchCadence,
-  batchedBriefs,
-  planIdeas,
-  sitesWithPlanIdeas,
+  decidedPitches,
+  poolIdeas,
+  quarterBatches,
+  quarterBriefs,
+  saveBatch,
+  sitesWithBatchWork,
   type BriefRow,
   type IdeaRow,
 } from "./store.js";
 import { rate, type FitReason, type Judgement } from "./fit.js";
-import { batchSize } from "./batches.js";
+import { APPROVED, approvalRate, isOpen, nextQuota, pitchesFor, targetMet, type BatchCount, type QuarterView } from "./batches.js";
 import { isoWeek, quarterOf, readGoals, standing, type CountedPost, type Goals } from "./goals.js";
 import { claimsFor, renderClaims } from "./kb.js";
+import { nearest, readTaste, renderTaste, seenLine, type Seen } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
 import { searchWeb, type SearchHit } from "./web.js";
 import { AGENT_QUEUE, registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
 import { writer } from "./writer.js";
+import { voiceSuggest } from "./edits.js";
 
 export interface PitchInput {
   site: string;
   /** These ideas; otherwise every idea still "new", oldest first. */
   ideaIds?: string[];
-  /** Content batch these pitches belong to (null or absent: bonus posts outside the plan). */
+  /** Content batch these pitches belong to. Without one (and not asked by a person) the ideas wait for the next batch. */
   batch?: number | null;
-  /** Most pitches in this run: a batch is 3 to 5 (launch day one: up to 8). */
+  /** Most pitches in this run (the batch's slots, over-pitched). */
   max?: number;
+  /** A top-up: why the batch is short, for the pitch prompt. */
+  topUp?: string;
   /** Launch day one: draft the N strongest pitches right away (3). */
   draftTop?: number;
   /** The quarter's goals, until the Goals tables exist (goals.ts). */
   goals?: Goals | null;
   /** "Today", for tests and replays of a plan: YYYY-MM-DD. */
   today?: string;
-  /** A person asked for these (Chat): pitch them all, past the bonus cap. */
+  /** A person asked for these (Chat): pitch them now, outside the batches. */
   asked?: boolean;
 }
 
@@ -67,14 +74,14 @@ const MAX_IDEAS = 40;
 const MAX_BATCH = 500;
 /** Ideas judged per model call. */
 const JUDGE_CHUNK = 25;
-/** Bonus pitches (no batch) open in the inbox at once; the rest wait as ideas for a later run. */
-export const BONUS_OPEN = 3;
 
 // ---- the model's two jobs ----
 
 interface Judged extends Judgement {
   idea: string;
   searches: string[];
+  /** What materially changed since a close match was rejected or published ("" when nothing did). */
+  changed: string;
 }
 
 function parseJudgements(ids: string[]) {
@@ -93,6 +100,7 @@ function parseJudgements(ids: string[]) {
         duplicateOf: str(o.duplicateOf, "duplicateOf", { optional: true, max: 300 }),
         replacesFlagged: str(o.replacesFlagged, "replacesFlagged", { optional: true, max: 300 }),
         searches: strs(o.searches, `ideas[${i}].searches`, { optional: true }).slice(0, 2),
+        changed: str(o.changed, "changed", { optional: true, max: 600 }),
       };
     });
     const missing = ids.filter((id) => !out.some((j) => j.idea === id));
@@ -110,6 +118,8 @@ interface Written {
   collection: string;
   outline: string[];
   sources: { url: string; label: string }[];
+  /** One line: the feedback that shaped this pitch ("" when none applied). */
+  learned: string;
 }
 
 function parsePitch(allowedUrls: Set<string>, collectionNames: string[]) {
@@ -134,6 +144,7 @@ function parsePitch(allowedUrls: Set<string>, collectionNames: string[]) {
       collection,
       outline: outline.map((l) => l.slice(0, 400)),
       sources,
+      learned: str(o.learned, "learned", { optional: true, max: 400 }),
     };
   };
 }
@@ -192,36 +203,44 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     { name: "read ideas" },
   );
   if (pending.length === 0) return result;
+  // Outside a batch, only a person's ask is pitched now; other ideas wait for the next batch.
+  if (input.batch == null && !input.asked) {
+    result.waiting.push(...pending.map((i) => i.id));
+    return result;
+  }
 
   const ctx = await DBOS.runStep(
     async () => {
-      const [tenant, cols, briefs, published, feedback, goals] = await Promise.all([
+      const [tenant, cols, briefs, published, every, titles, goals] = await Promise.all([
         getSite(site),
         collections(site),
         pipelineBriefs(site),
         publishedPosts(site, 60),
-        reviewerFeedback(site),
+        everyBrief(site),
+        publishedPosts(site, 2000),
         input.goals !== undefined ? Promise.resolve(input.goals) : readGoals(site),
       ]);
-      return { tenant, cols, briefs, published, feedback, goals };
+      return { tenant, cols, briefs, published, every, titles: titles.map((p) => ({ title: p.title, at: p.published_at })), goals };
     },
     { name: "read goals and pipeline" },
   );
   const { goals } = ctx;
 
-  // Bonus pitches from the Scout and the Listener: at most BONUS_OPEN undecided
-  // in the inbox at once. Batches and a person's own ask aren't capped.
-  let cap = max;
-  if (input.batch == null && !input.asked) {
-    const open = ctx.briefs.filter((b) => b.status === "pitched" && b.pitched_by === "agent:pitcher" && b.batch == null).length;
-    cap = Math.min(max, Math.max(BONUS_OPEN - open, 0));
-    if (cap === 0) {
-      result.waiting.push(...pending.map((i) => i.id));
-      return result;
-    }
-  }
   const collectionNames = ctx.cols.filter((c) => !c.is_hidden).map((c) => c.name);
   const posts = counted(ctx.briefs, ctx.published, quarterOf(now).start);
+
+  // What the tenant decided before, and everything it has already been shown.
+  const taste = await readTaste(site);
+  const seen: Seen[] = [
+    ...ctx.every.map((b) => ({
+      title: b.title,
+      kind: (b.status === "rejected" || b.status === "cancelled" ? "rejected" : b.status === "backlog" ? "not_now" : "pipeline") as Seen["kind"],
+      date: b.created.slice(0, 10),
+      reason: b.reject_reason,
+    })),
+    ...ctx.titles.map((p) => ({ title: p.title, kind: "published" as const, date: (p.at ?? "").slice(0, 10), reason: "" })),
+  ];
+  const close = new Map(pending.map((i) => [i.id, nearest(i.title, seen)]));
 
   // 1. Judge every idea in one call: topics, timeliness, gaps, overlaps.
   const existing = [
@@ -248,7 +267,7 @@ Already published or in the pipeline:
 ${existing.join("\n") || "(nothing yet)"}
 
 Ideas:
-${chunk.map(ideaBlock).join("\n\n")}
+${chunk.map((i) => ideaBlock(i) + (close.get(i.id) ? `\n  close to something already ${seenLine(close.get(i.id)!)}` : "")).join("\n\n")}
 
 For each idea, answer:
 - topics: the one or two goal topics it belongs to (exact names from the goals; empty if none fit).
@@ -259,17 +278,41 @@ For each idea, answer:
 - duplicateOf: the title of a published or pipeline post it mostly repeats; else "".
 - replacesFlagged: the title of a flagged post it would replace; else "".
 - searches: one or two web searches that would find good sources for it.
+- changed: only for an idea marked "close to something already ...": one sentence on what materially changed since then (a new source, news, a new number), or "" if nothing did.
 
-Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": "", "timely": false, "expiresAt": "", "answersGap": "", "demand": "", "duplicateOf": "", "replacesFlagged": "", "searches": []}]}`,
+Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": "", "timely": false, "expiresAt": "", "answersGap": "", "demand": "", "duplicateOf": "", "replacesFlagged": "", "searches": [], "changed": ""}]}`,
       },
       parseJudgements(chunk.map((i) => i.id)),
     );
     judged.push(...part);
   }
 
-  // 2. Rate in code; the strongest go out in this batch, the rest wait.
+  // 2. No repeats: a near-duplicate of something already shown is dropped,
+  // unless something material changed since a rejection.
+  const fresh: IdeaRow[] = [];
+  for (const idea of pending) {
+    const near = close.get(idea.id);
+    const j = judged.find((x) => x.idea === idea.id)!;
+    const reason = !near
+      ? ""
+      : near.kind === "published"
+        ? `Update suggestion: this is close to "${near.title}", published on ${near.date}. Update that post instead of writing a new one.`
+        : near.kind === "pipeline"
+          ? `Already in the pipeline as "${near.title}".`
+          : j.changed
+            ? ""
+            : `Already ${seenLine(near)}. Nothing material has changed since.`;
+    if (!reason) {
+      fresh.push(idea);
+      continue;
+    }
+    await DBOS.runStep(() => settleIdea(site, idea.id, "rejected", reason, null), { name: `reject ${idea.id}` });
+    result.rejected.push({ idea: idea.id, reason });
+  }
+
+  // 3. Rate in code; the strongest go out in this batch, the rest wait.
   let st = standing(posts, goals?.perWeek ?? 0, now);
-  const ordered = pending
+  const ordered = fresh
     .map((idea) => ({ idea, j: judged.find((x) => x.idea === idea.id)! }))
     .map((x) => ({ ...x, r: rate(x.j, x.idea.origin, goals, st, st.emptyWeeks[0] ?? null) }));
 
@@ -285,19 +328,14 @@ Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": ""
     .filter((x) => x.r.pitch)
     .sort((a, b) => {
       const s = (x: typeof a) => x.r.reasons.reduce((n, r) => n + (r.kind === "duplicate" ? -1 : r.counts ? 1 : 0), 0);
-      return s(b) - s(a) || (a.idea.expires_at ?? "9").localeCompare(b.idea.expires_at ?? "9");
+      const planned = (x: typeof a) => (x.idea.origin === "plan" ? 1 : 0);
+      return s(b) - s(a) || planned(b) - planned(a) || (a.idea.expires_at ?? "9").localeCompare(b.idea.expires_at ?? "9");
     });
 
-  const feedback = ctx.feedback
-    .map((f) =>
-      f.status === "rejected"
-        ? `- Rejected "${f.title}": ${f.reject_reason || "no reason given"}`
-        : `- Approved "${f.title}" with notes: ${(f.notes ?? []).map((n) => n.text).join("; ")}`,
-    )
-    .join("\n");
+  const shown: Seen[] = [];
 
   for (const { idea, j } of candidates) {
-    if (result.pitched.length >= cap) {
+    if (result.pitched.length >= max) {
       result.waiting.push(idea.id);
       continue;
     }
@@ -309,7 +347,7 @@ Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": ""
       continue;
     }
 
-    // 3. Research: what's already out there, and what the tenant knows.
+    // 4. Research: what's already out there, and what the tenant knows.
     const hits: SearchHit[] = [];
     for (const [n, q] of j.searches.entries()) {
       hits.push(...(await DBOS.runStep(() => searchWeb(q, 6, { site, job: "pitcher:research" }), { name: `search ${idea.id} ${n + 1}` })));
@@ -318,7 +356,7 @@ Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": ""
     const evidenceUrls = (idea.evidence ?? []).filter((e) => e.url).map((e) => ({ url: e.url!, label: e.label }));
     const allowed = new Set([...evidenceUrls.map((e) => e.url), ...hits.map((h) => h.url)]);
 
-    // 4. The brief.
+    // 5. The brief.
     const written = await askJson(
       `pitch ${idea.id}`,
       {
@@ -343,14 +381,25 @@ ${hits.map((h) => `- ${h.title} <${h.url}>: ${h.snippet}`).join("\n") || "(no se
 
 Collections on this blog: ${collectionNames.join(", ") || "(none)"}.
 
-What reviewers said about recent pitches (learn from it):
-${feedback || "(nothing yet)"}
+What this tenant has decided before (learn from it; their own words win):
+${renderTaste(taste)}
+${input.topUp ? `\nThis is a top-up: ${input.topUp}\n` : ""}${j.changed ? `\nThis is close to something pitched before (${seenLine(close.get(idea.id)!)}). What changed since: ${j.changed} Make the brief about what changed.\n` : ""}
 
 Answer with JSON only:
-{"title": "a specific, slightly provocative title", "why": "one sentence: why this, why now", "angle": "the argument this post makes that the ranking pages don't", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}]}`,
+{"title": "a specific, slightly provocative title", "why": "one sentence: why this, why now", "angle": "the argument this post makes that the ranking pages don't", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the decision or note that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,
       },
       parsePitch(allowed, collectionNames),
     );
+
+    // The brief's own title can land on something already shown, or on a pitch from this run.
+    const again = j.changed ? null : nearest(written.title, [...seen, ...shown]);
+    if (again) {
+      const reason = `Came out as "${written.title}", too close to something already ${seenLine(again)}.`;
+      await DBOS.runStep(() => settleIdea(site, idea.id, "rejected", reason, null), { name: `reject ${idea.id} as written` });
+      result.rejected.push({ idea: idea.id, reason });
+      continue;
+    }
+    shown.push({ title: written.title, kind: "pipeline", date: now.toISOString().slice(0, 10), reason: "" });
 
     const publishBy = week ? thursdayOf(week) : "";
     const briefId = await DBOS.runStep(() => Promise.resolve(newId()), { name: `mint brief ${idea.id}` });
@@ -360,7 +409,7 @@ Answer with JSON only:
           id: briefId,
           site,
           title: written.title,
-          body: briefBody(written, r.reasons),
+          body: briefBody(written, r.reasons, j.changed),
           collection_name: written.collection,
           planned_date: publishBy,
           topics: j.topics,
@@ -374,6 +423,8 @@ Answer with JSON only:
           batch: input.batch ?? null,
           idea: idea.id,
           expires_at: j.timely && j.expiresAt ? j.expiresAt : null,
+          learned: written.learned,
+          changed: j.changed,
         }),
       { name: `save pitch ${idea.id}` },
     );
@@ -396,9 +447,11 @@ Answer with JSON only:
 }
 
 /** The brief as the editor's Brief tab shows it (briefs.body is Markdown). */
-export function briefBody(w: Written, reasons: FitReason[]): string {
+export function briefBody(w: Written, reasons: FitReason[], changed = ""): string {
   return [
+    w.learned ? `_${w.learned}_` : "",
     `**Why this, why now.** ${w.why}`,
+    changed ? `**What changed.** ${changed}` : "",
     `**Angle.** ${w.angle}`,
     `**Audience.** ${w.audience}`,
     `**Length.** ${w.length}`,
@@ -465,48 +518,157 @@ Answer with JSON only: {"ideas": [{"title": "...", "summary": "..."}]}`,
 
 export const pitchFromRequest = DBOS.registerWorkflow(pitchFromRequestRun, { name: "pitcher:request" });
 
-// ---- the plan's batches ----
+// ---- the batches ----
 
 export interface BatchInput {
   site: string;
   /**
-   * schedule: the weekly run (once a week at most). handoff: the plan just
-   * arrived (flood sends it all; weekly sends only the quarter's first, double
-   * batch). asked: a person wants the next batch now.
+   * schedule: the daily morning run: top-ups for short batches, and the
+   * week's batch (once a week at most; flood: whenever approvals are still
+   * needed). handoff: the plan just arrived (flood sends it; weekly sends only
+   * the quarter's first, double batch). asked: a person wants the next batch now.
    */
   trigger: "schedule" | "handoff" | "asked";
   goals?: Goals | null;
   today?: string;
 }
 
-/** Send the plan's next batch, sized by the tenant's cadence (batches.ts). */
-async function batchRun(input: BatchInput): Promise<PitchResult & { batch: number | null }> {
+export interface BatchResult {
+  /** The batch released by this run, if any. */
+  released: number | null;
+  toppedUp: number[];
+  closed: number[];
+  cancelled: number[];
+  pitched: PitchResult["pitched"];
+  rejected: PitchResult["rejected"];
+}
+
+/** Ideas judged for `n` pitches: some margin for the ones that get rejected. */
+const poolFor = (n: number) => Math.max(Math.ceil(n * 1.5), 15);
+
+async function batchRun(input: BatchInput): Promise<BatchResult> {
   const { site } = input;
   const now = input.today ? new Date(`${input.today}T12:00:00Z`) : new Date(await DBOS.now());
-  const { start } = quarterOf(now);
-  const state = await DBOS.runStep(
+  const today = now.toISOString().slice(0, 10);
+  const quarter = quarterOf(now);
+  const out: BatchResult = { released: null, toppedUp: [], closed: [], cancelled: [], pitched: [], rejected: [] };
+
+  const s = await DBOS.runStep(
     async () => {
-      const [cadence, waiting, sent] = await Promise.all([batchCadence(site), planIdeas(site, 10_000), batchedBriefs(site, start.toISOString())]);
-      return { cadence, waiting: waiting.map((i) => i.id), sent };
+      const [cadence, batches, briefs, decided, pool, goals] = await Promise.all([
+        batchCadence(site),
+        quarterBatches(site, quarter.label),
+        quarterBriefs(site, quarter.start.toISOString()),
+        decidedPitches(site),
+        poolIdeas(site, 1000),
+        input.goals !== undefined ? Promise.resolve(input.goals) : readGoals(site),
+      ]);
+      return { cadence, batches, briefs, decided, pool, goals };
     },
-    { name: "read the plan" },
+    { name: "read the quarter" },
   );
-  const none = { pitched: [], rejected: [], waiting: state.waiting, drafting: [], batch: null };
-  const released = state.sent.reduce((n, b) => Math.max(n, b.batch), 0);
-  if (input.trigger === "handoff" && state.cadence === "weekly" && released > 0) return none; // the weekly run sends it
-  if (input.trigger === "schedule" && state.sent.some((b) => isoWeek(new Date(b.created)) === isoWeek(now))) return none; // already sent this week
-  const size = batchSize({ remaining: state.waiting.length, released, cadence: state.cadence, quarterStart: start, now });
-  if (size === 0) return none;
-  const batch = released + 1;
-  const out = await pitchRun({
-    site,
-    ideaIds: state.waiting.slice(0, size),
-    batch,
-    max: size,
-    ...(input.goals !== undefined ? { goals: input.goals } : {}),
-    ...(input.today ? { today: input.today } : {}),
+  const approvedIn = (n: number | null) => s.briefs.filter((b) => (n === null || b.batch === n) && APPROVED.includes(b.status)).length;
+  const batches: BatchCount[] = s.batches.map((b) => ({
+    ...b,
+    approved: approvedIn(b.number),
+    undecided: s.briefs.filter((x) => x.batch === b.number && x.status === "pitched").length,
+  }));
+  const view = (): QuarterView => ({
+    target: s.goals?.volume.total ?? null,
+    approved: approvedIn(null),
+    batches,
+    planWaiting: s.pool.filter((i) => i.origin === "plan").length,
+    cadence: s.cadence,
+    quarterStart: quarter.start,
+    now,
   });
-  return { ...out, waiting: [...out.waiting, ...state.waiting.slice(size)], batch };
+  const rate = approvalRate(s.decided);
+  let pool = s.pool.map((i) => i.id);
+  const save = (b: BatchCount, why: string) =>
+    DBOS.runStep(() => saveBatch({ site, quarter: quarter.label, number: b.number, quota: b.quota, state: b.state, released_at: b.released_at, topups: b.topups }), {
+      name: `batch ${b.number} ${why}`,
+    });
+  const pitchInto = async (b: BatchCount, n: number, topUp?: string) => {
+    const r = await pitchRun({
+      site,
+      ideaIds: pool.slice(0, poolFor(n)),
+      batch: b.number,
+      max: n,
+      ...(topUp ? { topUp } : {}),
+      ...(input.goals !== undefined ? { goals: input.goals } : {}),
+      ...(input.today ? { today: input.today } : {}),
+    });
+    const used = new Set([...r.pitched.map((p) => p.idea), ...r.rejected.map((x) => x.idea)]);
+    pool = pool.filter((id) => !used.has(id));
+    out.pitched.push(...r.pitched);
+    out.rejected.push(...r.rejected);
+    b.undecided += r.pitched.length;
+  };
+
+  // 1. Batches that reached their quota close; once the quarter's target is
+  //    met, the rest are cancelled and nothing more is pitched.
+  for (const b of batches.filter(isOpen)) {
+    if (b.approved >= b.quota) {
+      b.state = "closed";
+      await save(b, "closed");
+      out.closed.push(b.number);
+    }
+  }
+  if (targetMet(view())) {
+    for (const b of batches.filter(isOpen)) {
+      b.state = "cancelled";
+      await save(b, "cancelled");
+      out.cancelled.push(b.number);
+    }
+    return out;
+  }
+
+  // 2. Top-ups: a batch released before today, every pitch decided, still short.
+  if (input.trigger !== "handoff") {
+    for (const b of batches.filter(isOpen)) {
+      const short = b.quota - b.approved;
+      if (short <= 0 || b.undecided > 0 || !b.released_at || b.released_at.slice(0, 10) >= today || pool.length === 0) continue;
+      const rejected = s.briefs.filter((x) => x.batch === b.number && x.status === "rejected").length;
+      b.state = "topping_up";
+      b.topups += 1;
+      await save(b, `top-up ${b.topups}`);
+      await pitchInto(
+        b,
+        pitchesFor(short, 0, rate),
+        `batch ${b.number} needs ${short} more approved (${b.approved} of ${b.quota}). ${rejected} of its pitches were rejected; their reasons are in the decisions above. Pitch what those reasons say they want instead.`,
+      );
+      out.toppedUp.push(b.number);
+    }
+  }
+
+  // 3. The next batch.
+  const released = batches.filter((b) => b.released_at);
+  const thisWeek = released.some((b) => isoWeek(new Date(b.released_at!)) === isoWeek(now));
+  const release =
+    input.trigger === "asked" ||
+    (s.cadence === "flood" && !batches.some(isOpen)) ||
+    (s.cadence === "weekly" && input.trigger === "schedule" && !thisWeek) ||
+    (s.cadence === "weekly" && input.trigger === "handoff" && released.length === 0);
+  const quota = release && pool.length ? nextQuota(view()) : 0;
+  if (quota > 0) {
+    const b: BatchCount = {
+      site,
+      quarter: quarter.label,
+      // After every batch number used this quarter, rows or not (a launch run numbers its own).
+      number: Math.max(...batches.map((x) => x.number), ...s.briefs.map((x) => x.batch ?? 0), 0) + 1,
+      quota,
+      state: "in_review",
+      released_at: now.toISOString(),
+      topups: 0,
+      approved: 0,
+      undecided: 0,
+    };
+    batches.push(b);
+    await save(b, "released");
+    await pitchInto(b, Math.min(pitchesFor(quota, 0, rate), MAX_BATCH));
+    out.released = b.number;
+  }
+  return out;
 }
 
 export const pitchBatch = DBOS.registerWorkflow(batchRun, { name: "pitcher:batch" });
@@ -523,24 +685,30 @@ registerAgent("pitcher", (input) =>
   NEXT_BATCH.test(input.task) ? startForDispatch("pitcher", batchFromRequest, input) : startForDispatch("pitcher", pitchFromRequest, input),
 );
 
-/** Every Monday: each tenant with planned ideas waiting gets its weekly batch. */
-async function weeklyBatchesRun(scheduled: Date): Promise<void> {
-  const week = isoWeek(scheduled);
-  const sites = await DBOS.runStep(() => sitesWithPlanIdeas(), { name: "tenants" });
+/** Every morning: each tenant with ideas waiting or a batch open gets its batch run. */
+async function dailyBatchesRun(scheduled: Date): Promise<void> {
+  const day = scheduled.toISOString().slice(0, 10);
+  const sites = await DBOS.runStep(() => sitesWithBatchWork(), { name: "tenants" });
   for (const site of sites) {
     await DBOS.startWorkflow(pitchBatch, {
-      workflowID: `pitcher-batch-${site}-${week}`,
+      workflowID: `pitcher-batch-${site}-${day}`,
       queueName: AGENT_QUEUE,
       workflowAttributes: { site },
     })({ site, trigger: "schedule" });
+    // The Writer's side of the morning: voice-guide changes from reviewers' edits.
+    await DBOS.startWorkflow(voiceSuggest, {
+      workflowID: `writer-voice-suggest-${site}-${day}`,
+      queueName: AGENT_QUEUE,
+      workflowAttributes: { site },
+    })({ site });
   }
 }
 
-export const weeklyBatches = DBOS.registerWorkflow(weeklyBatchesRun, { name: "pitcher:weekly-batches" });
+export const dailyBatches = DBOS.registerWorkflow(dailyBatchesRun, { name: "pitcher:daily-batches" });
 
-export const BATCH_CRON = process.env.PITCHER_BATCH_CRON ?? "0 7 * * 1";
+export const BATCH_CRON = process.env.PITCHER_BATCH_CRON ?? "0 7 * * *";
 
-/** Called once after launch: the weekly schedule, kept in DBOS's own tables. */
+/** Called once after launch: the morning schedule, kept in DBOS's own tables. */
 export async function schedulePitcher(): Promise<void> {
-  await DBOS.applySchedules([{ scheduleName: "pitcher-weekly-batches", workflowFn: weeklyBatches, schedule: BATCH_CRON, cronTimezone: "UTC" }]);
+  await DBOS.applySchedules([{ scheduleName: "pitcher-daily-batches", workflowFn: dailyBatches, schedule: BATCH_CRON, cronTimezone: "UTC" }]);
 }

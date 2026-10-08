@@ -7,7 +7,7 @@
 // Every write filters on the site as well as the id. Nothing here can touch a
 // post a person wrote (CLAUDE.md, the highest-priority rule).
 
-import { enc, insert, isMissing, patch, select } from "./backend.js";
+import { enc, insert, isMissing, patch, rest, select } from "./backend.js";
 import { newId, stableId } from "./ids.js";
 
 // ---- rows ----
@@ -62,6 +62,8 @@ export interface BriefRow {
   pitched_by: string;
   idea: string | null;
   expires_at: string | null;
+  learned?: string;
+  changed?: string;
 }
 
 export interface IdeaRow {
@@ -88,6 +90,8 @@ export interface VoiceGuideRow {
   source_site: string | null;
   updated_by: string;
   updated: string;
+  suggestion?: string;
+  suggestion_through?: string | null;
 }
 
 // ---- reads ----
@@ -272,21 +276,130 @@ export async function batchCadence(site: string): Promise<BatchCadence> {
   }
 }
 
-/** The plan's ideas still waiting for a batch, oldest first. */
-export async function planIdeas(site: string, limit: number): Promise<{ id: string }[]> {
-  return select<{ id: string }>("agent_ideas", `site=eq.${enc(site)}&status=eq.new&origin=eq.plan&select=id&order=created&limit=${limit}`);
+/** Ideas waiting for a batch: the plan's oldest first, then the rest newest first. */
+export async function poolIdeas(site: string, limit: number): Promise<{ id: string; origin: string }[]> {
+  const [plan, other] = await Promise.all([
+    select<{ id: string; origin: string }>("agent_ideas", `site=eq.${enc(site)}&status=eq.new&origin=eq.plan&select=id,origin&order=created&limit=${limit}`),
+    select<{ id: string; origin: string }>("agent_ideas", `site=eq.${enc(site)}&status=eq.new&origin=neq.plan&select=id,origin&order=created.desc&limit=${limit}`),
+  ]);
+  return [...plan, ...other].slice(0, limit);
 }
 
-/** Pitches that went out in a batch since `since` (this quarter): the batch number and when. */
-export async function batchedBriefs(site: string, since: string): Promise<{ batch: number; created: string }[]> {
-  return select<{ batch: number; created: string }>(
-    "briefs",
-    `site=eq.${enc(site)}&batch=not.is.null&created=gte.${enc(since)}&select=batch,created&limit=5000`,
-  );
+export interface BatchRow {
+  site: string;
+  quarter: string;
+  number: number;
+  quota: number;
+  state: "pending" | "in_review" | "topping_up" | "closed" | "cancelled";
+  released_at: string | null;
+  topups: number;
 }
 
-/** Tenants with planned ideas waiting for a batch. */
-export async function sitesWithPlanIdeas(): Promise<string[]> {
-  const rows = await select<{ site: string }>("agent_ideas", `status=eq.new&origin=eq.plan&select=site&limit=10000`);
-  return [...new Set(rows.map((r) => r.site))];
+export async function quarterBatches(site: string, quarter: string): Promise<BatchRow[]> {
+  return select<BatchRow>("content_batches", `site=eq.${enc(site)}&quarter=eq.${enc(quarter)}&select=*&order=number`);
+}
+
+/** Write a batch row; a replayed step writes the same one. */
+export async function saveBatch(row: BatchRow): Promise<void> {
+  const res = await rest(`/content_batches?on_conflict=site,quarter,number`, {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ ...row, updated: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(`content_batches write answered ${res.status}`);
+}
+
+/** Briefs created since the quarter started: what counts toward its target. */
+export async function quarterBriefs(site: string, since: string): Promise<{ id: string; status: string; batch: number | null; pitched_by: string; created: string }[]> {
+  return select("briefs", `site=eq.${enc(site)}&created=gte.${enc(since)}&select=id,status,batch,pitched_by,created&limit=10000`);
+}
+
+/** The Pitcher's pitches people decided, all time: for the approval rate. */
+export async function decidedPitches(site: string): Promise<{ status: string }[]> {
+  return select("briefs", `site=eq.${enc(site)}&pitched_by=eq.agent:pitcher&status=neq.pitched&select=status&limit=10000`);
+}
+
+/** Everything ever pitched or written for the tenant: the no-repeats check reads it. */
+export async function everyBrief(site: string): Promise<{ id: string; title: string; angle: string; status: string; reject_reason: string; created: string }[]> {
+  return select("briefs", `site=eq.${enc(site)}&select=id,title,angle,status,reject_reason,created&order=created.desc&limit=10000`);
+}
+
+/** Tenants with work for the daily batch run: ideas waiting, or a batch still open. */
+export async function sitesWithBatchWork(): Promise<string[]> {
+  const [ideas, open] = await Promise.all([
+    select<{ site: string }>("agent_ideas", `status=eq.new&select=site&limit=10000`),
+    select<{ site: string }>("content_batches", `state=in.(in_review,topping_up)&select=site&limit=10000`).catch((err) => {
+      if (isMissing(err)) return [];
+      throw err;
+    }),
+  ]);
+  return [...new Set([...ideas, ...open].map((r) => r.site))];
+}
+
+// ---- taste ----
+
+export interface TasteRow {
+  id: string;
+  at: string;
+  actor: string;
+  object_kind: "pitch" | "draft" | "plan";
+  object_id: string;
+  decision: string;
+  reason: string;
+  notes: { text?: string }[] | null;
+  title: string;
+  topic: string;
+  angle: string;
+  origin: string;
+}
+
+/** The tenant's decisions, newest first (none when the table isn't on the server yet). */
+export async function tasteLog(site: string, opts: { since?: string | null; kind?: TasteRow["object_kind"]; limit?: number } = {}): Promise<TasteRow[]> {
+  const filters = [`site=eq.${enc(site)}`];
+  if (opts.since) filters.push(`at=gt.${enc(opts.since)}`);
+  if (opts.kind) filters.push(`object_kind=eq.${opts.kind}`);
+  try {
+    return await select<TasteRow>("taste_log", `${filters.join("&")}&select=*&order=at.desc&limit=${opts.limit ?? 200}`);
+  } catch (err) {
+    if (isMissing(err)) return [];
+    throw err;
+  }
+}
+
+export interface TasteProfileRow {
+  site: string;
+  summary: string;
+  summary_through: string | null;
+  notes: string;
+}
+
+export async function tasteProfile(site: string): Promise<TasteProfileRow | null> {
+  try {
+    const [row] = await select<TasteProfileRow>("taste_profiles", `site=eq.${enc(site)}&select=site,summary,summary_through,notes`);
+    return row ?? null;
+  } catch (err) {
+    if (isMissing(err)) return null;
+    throw err;
+  }
+}
+
+/** The Pitcher's summary. Never touches the tenant's notes. */
+export async function saveTasteSummary(site: string, summary: string, through: string): Promise<void> {
+  const rows = await patch("taste_profiles", `site=eq.${enc(site)}`, { summary, summary_through: through });
+  if (rows.length === 0) await insert("taste_profiles", { site, summary, summary_through: through });
+}
+
+/** Posts whose drafts a reviewer edited after the Writer, newest first. */
+export async function editedDrafts(site: string, since: string | null, limit = 10): Promise<TasteRow[]> {
+  return (await tasteLog(site, { since, kind: "draft", limit: limit * 3 })).filter((r) => r.decision === "edited").slice(0, limit);
+}
+
+/** A post's versions with their text, oldest first. */
+export async function versionsOf(site: string, post: string): Promise<{ version: number; created_by: string; content: string }[]> {
+  return select("post_versions", `site=eq.${enc(site)}&post=eq.${enc(post)}&select=version,created_by,content&order=version`);
+}
+
+/** The Writer's proposed change to the voice guide. Never the guide itself. */
+export async function saveVoiceSuggestion(site: string, suggestion: string, through: string): Promise<void> {
+  await patch("voice_guides", `site=eq.${enc(site)}`, { suggestion, suggestion_through: through });
 }
