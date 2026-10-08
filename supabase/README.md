@@ -26,6 +26,12 @@ hooks (`pb/`) are in git history, its final data in R2
   Dexie database (drafts included) after the move.
 - **Empty values** stay `""` and `0`; empty dates are `NULL`.
 - **Rules** are row-level security keyed on `site` (`20261002000003_access.sql`).
+- **Every new table is open until its migration closes it.** Supabase's default
+  privileges give `anon`, `authenticated` and `service_role` all privileges on
+  each table a migration creates (it runs as `postgres`). The `revoke` in
+  `access.sql` covered only that day's tables. So a migration that adds a
+  table enables row-level security and revokes from `anon` and `authenticated`
+  before granting exactly what they need; `service_role` keeps its access.
 - **Hooks** are triggers (numbers, slugs, redirects, a version's site) and
   functions called through `rpc()`: `create_site`, `update_site`,
   `delete_site`, `increment_writing_activity`, `tls_check` (Caddy's on-demand
