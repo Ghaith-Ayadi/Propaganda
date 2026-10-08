@@ -3,6 +3,7 @@
 # the password "postgres"; the test makes and drops its own two databases.
 set -eu
 cd "$(dirname "$0")/.."
-npx tsc -p tsconfig.json
+npm run build
 node test/limits.mjs
+node test/shared.mjs
 node test/e2e.mjs

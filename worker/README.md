@@ -14,6 +14,8 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
+| `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them |
+| `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
 | `test/` | `npm test`: unit checks, then the worker end to end against a real Postgres |
 
 ## Where things live
@@ -50,10 +52,15 @@ export const scoutRun = DBOS.registerWorkflow(scout, { name: "scout" });
 
 - Import it in `src/main.ts` so it is registered before launch (recovery needs it).
 - Anything with a side effect is a step. A model call is a `modelStep`.
-- Model calls go through `callModel()` (`api/_ai/gateway.ts`), which logs the cost
-  with the DBOS workflow and step ids. The first agent wires the gateway into the
-  worker: `setWorkflowContext(() => ({ workflowId: DBOS.workflowID ?? null, stepId: DBOS.stepID ?? null }))`
-  once at start, and the Docker build context grows to include `api/_ai`.
+- Model calls go through `callModel()` (`api/_ai/gateway.ts`), usually as
+  `askText()`/`askJson()` from `src/agents/model.ts`; other paid APIs (DataForSEO)
+  through `callPaidApi()`. Both check the tenant's budget and log the cost with the
+  DBOS workflow and step ids (`main.ts` calls `wireGateway()` once at start). The
+  Docker build's context is the repo root, so it can bundle `api/_ai`;
+  `Dockerfile.dockerignore` keeps it to the worker and those files.
+- Writes to the app's data go through `src/agents/backend.ts` (PostgREST with
+  `SERVICE_ROLE_KEY`), never the read-only pool. Keep them narrow: new rows, or
+  rows an agent made, filtered on the site. Never a post a person wrote.
 - **Replays must match.** After a restart DBOS replays a run's code and skips the
   steps already done, in order. Changing what an existing workflow does (adding,
   removing or reordering steps) breaks runs still in flight: guard the change with

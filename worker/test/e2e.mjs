@@ -67,7 +67,7 @@ let worker;
 const DISPATCH = "dispatch-secret-for-the-test";
 const MEMBER = randomUUID();
 
-function startWorker(extra = { WORKER_DISPATCH_SECRET: DISPATCH, WORKER_TEST_AGENT: "__test" }) {
+function startWorker(extra = { WORKER_DISPATCH_SECRET: DISPATCH, WORKER_TEST_AGENT: "__test,__nobody" }) {
   worker = spawn(process.execPath, ["dist/main.js"], {
     env: {
       ...process.env,
@@ -214,8 +214,7 @@ async function main() {
   check((await api("/agents/__test", { method: "POST", body: handoff })).status === 401, "a superadmin token is not the dispatch secret");
   check((await api("/agents/__test", { method: "GET", headers: D })).status === 405, "GET: 405");
   check((await api("/agents/nobody", { method: "POST", body: handoff, headers: D })).status === 404, "unknown agent: 404");
-  check((await api("/agents/scout", { method: "POST", body: handoff, headers: D })).status === 404, "an agent nobody registered yet: 404 (Chat says not running yet)");
-  check((await api("/agents/checker", { method: "POST", body: handoff, headers: D })).status === 404, "the Checker isn't registered by the test: 404");
+  check((await api("/agents/__nobody", { method: "POST", body: handoff, headers: D })).status === 404, "an agent nobody registered yet: 404 (Chat says not running yet)");
   check((await api("/agents/__test", { method: "POST", body: { ...handoff, task: " " }, headers: D })).status === 400, "empty task: 400");
   check((await api("/agents/__test", { method: "POST", body: { ...handoff, requestedBy: "me" }, headers: D })).status === 400, "bad requestedBy: 400");
   check((await api("/agents/__test", { method: "POST", body: { ...handoff, site: "nosuchsite0000a" }, headers: D })).status === 422, "unknown tenant: 422");

@@ -8,6 +8,11 @@ function env(name: string, fallback?: string): string {
   return v;
 }
 
+// The model gateway and the agents reach the app's data through PostgREST
+// with the service role key, which the stack's .env calls SERVICE_ROLE_KEY.
+// SUPABASE_URL is set in the compose file (the public API host).
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= process.env.SERVICE_ROLE_KEY;
+
 const host = process.env.PGHOST ?? "propaganda-db";
 const port = process.env.PGPORT ?? "5432";
 const user = process.env.WORKER_PGUSER ?? "postgres";

@@ -7,6 +7,7 @@
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import pg from "pg";
+import { wireGateway } from "./agents/model.js";
 import { config } from "./config.js";
 import { startServer } from "./http.js";
 import { registerQueues } from "./workflows/agents.js";
@@ -21,6 +22,8 @@ async function main(): Promise<void> {
     // One process: the default executor id is what recovery keys on, keep it stable.
     executorID: "propaganda-worker",
   });
+  // Every model and paid-API call is then logged with its run and step.
+  wireGateway();
   await DBOS.launch();
   await registerQueues();
 

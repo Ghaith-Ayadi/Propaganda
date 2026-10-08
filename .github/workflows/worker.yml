@@ -4,10 +4,10 @@
 name: worker
 on:
   pull_request:
-    paths: ["worker/**", ".github/workflows/worker.yml"]
+    paths: ["worker/**", "api/_ai/**", ".github/workflows/worker.yml"]
   push:
     branches: [main]
-    paths: ["worker/**", ".github/workflows/worker.yml"]
+    paths: ["worker/**", "api/_ai/**", ".github/workflows/worker.yml"]
 jobs:
   worker:
     runs-on: ubuntu-latest

@@ -1,0 +1,10 @@
+# The build context is the repo root (see Dockerfile): send only what it copies.
+*
+!worker/package.json
+!worker/package-lock.json
+!worker/tsconfig.json
+!worker/build.mjs
+!worker/src
+!api/_ai/gateway.ts
+!api/_ai/cost.ts
+!api/_ai/errors.ts
