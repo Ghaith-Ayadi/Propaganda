@@ -2,10 +2,14 @@
 // opens it right after a tenant is created (sign-in and naming the tenant
 // happen there, components/workspace/). Replayable from the Site page.
 //
-//   1. Your blog     hosted here (address, optional own domain) or elsewhere
-//   2. Strategy      the Strategist's questions        (handoffs.ts)
-//   3. Sources       Connections                       (handoffs.ts)
-//   4. Ready         what happens next
+//   1. Your business  website, name, posts a month    (SetupStep.tsx)
+//   2. Strategy       the Strategist's questions       (handoffs.ts)
+//   3. Your blog      hosted here (address, optional own domain) or elsewhere
+//   4. Sources        Connections                      (handoffs.ts)
+//   5. Ready          what happens next
+//
+// Website comes first so the later answers can be pre-filled from the site
+// (not built yet).
 //
 // Progress is a setting of the site (onboarding.step), so it resumes where it
 // stopped, on any device. Finishing stamps onboarding.completed.
@@ -25,8 +29,21 @@ import { goPage } from "@/lib/route";
 import { track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
 import { HANDOFFS, type Handoff } from "./handoffs";
+import { SetupStep } from "./SetupStep";
+import { StrategyQuestions } from "./StrategyQuestions";
 
-const STEPS = ["Your blog", ...HANDOFFS.map((h) => h.label), "Ready"];
+const handoff = (id: Handoff["id"]) => HANDOFFS.find((h) => h.id === id)!;
+
+type Step = { id: "setup" | "blog" | "ready"; label: string } | { id: "handoff"; label: string; handoff: Handoff };
+
+const STEP_LIST: Step[] = [
+  { id: "setup", label: "Your business" },
+  { id: "handoff", label: handoff("strategist").label, handoff: handoff("strategist") },
+  { id: "blog", label: "Your blog" },
+  { id: "handoff", label: handoff("connections").label, handoff: handoff("connections") },
+  { id: "ready", label: "Ready" },
+];
+const STEPS = STEP_LIST.map((s) => s.label);
 const LAST = STEPS.length - 1;
 
 export function OnboardingFlow() {
@@ -54,7 +71,8 @@ export function OnboardingFlow() {
     goPage("home");
   }
 
-  const handoff: Handoff | undefined = step >= 1 && step <= HANDOFFS.length ? HANDOFFS[step - 1] : undefined;
+  const current = STEP_LIST[step];
+  const handoff = current.id === "handoff" ? current.handoff : undefined;
 
   return (
     <div className="h-dvh w-full overflow-y-auto bg-secondary">
@@ -90,9 +108,15 @@ export function OnboardingFlow() {
         </header>
 
         <section className="flex flex-1 flex-col gap-6 rounded-2xl bg-primary p-6 shadow-xs ring-1 ring-secondary ring-inset sm:p-8">
-          {step === 0 && <BlogStep />}
+          {current.id === "setup" && (
+            <div className="flex flex-col gap-5">
+              <StepHead title="Your business" lede="Three things to start. The rest of the setup builds on them." />
+              <SetupStep />
+            </div>
+          )}
           {handoff && <HandoffStep key={handoff.id} handoff={handoff} onDone={() => setStep(step + 1)} />}
-          {step === LAST && <ReadyStep />}
+          {current.id === "blog" && <BlogStep />}
+          {current.id === "ready" && <ReadyStep />}
 
           <footer className="mt-auto flex items-center justify-between gap-3 border-t border-secondary pt-5">
             <Button color="tertiary" iconLeading={ArrowLeft} isDisabled={step === 0} onClick={() => setStep(step - 1)}>
@@ -214,7 +238,8 @@ function Choice({ selected, onSelect, title, hint }: { selected: boolean; onSele
 }
 
 function HandoffStep({ handoff, onDone }: { handoff: Handoff; onDone: () => void }) {
-  const Step = handoff.component;
+  // The Strategist's own step when it lands; its questions, asked here, until then.
+  const Step = handoff.component ?? (handoff.id === "strategist" ? StrategyQuestions : null);
   return (
     <div className="flex flex-col gap-5">
       <StepHead title={handoff.title} lede={handoff.lede} />
