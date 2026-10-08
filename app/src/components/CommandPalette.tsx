@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } fr
 import { Command } from "cmdk";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowDown, ArrowLeft, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, HelpCircle, Moon01, Shield01, SearchLg, Star01, Sun, Tag01, Zap } from "@untitledui/icons";
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, HelpCircle, Moon01, Shield01, SearchLg, Star01, Sun, SwitchHorizontal01, Tag01, Zap } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import { search, subscribeSearch } from "@/lib/search";
 import { go, goPage } from "@/lib/route";
-import { PAGES } from "@/lib/routes";
+import { usePages } from "@/components/lite/pages";
+import { useWorkspace } from "@/components/Workspace";
+import { planOf, setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
 import { useLayout } from "@/lib/layout";
 import { collectionDisplay } from "@/lib/collections";
 import { createPost, duplicatePost, setPostStatus, toggleFavorite } from "@/lib/posts";
@@ -53,6 +55,11 @@ export function CommandPalette({ currentPostId }: Props) {
   const simOn = useSimMode();
   // Admin is offered when any account signed in on this browser is a superadmin.
   const superadmin = useSuperadminAccount();
+  // The pages of the open tenant's plan (Lite leaves the agent pages out).
+  const pages = usePages();
+  const { site: workspaceSite } = useWorkspace();
+  const plan = usePlan();
+  const canSwitchPlan = useCanSwitchPlan();
 
   const allPosts = useLiveQuery(
     () => db.posts.orderBy("updatedAt").reverse().toArray(),
@@ -276,7 +283,7 @@ export function CommandPalette({ currentPostId }: Props) {
         setOpen(false);
       },
     },
-    ...PAGES.map<CommandRow>((p) => ({
+    ...pages.map<CommandRow>((p) => ({
       key: `page-${p.id}`,
       label: `Go to ${p.label}`,
       icon: <p.icon className="size-4" />,
@@ -294,6 +301,21 @@ export function CommandPalette({ currentPostId }: Props) {
         setOpen(false);
       },
     },
+    ...(canSwitchPlan
+      ? [
+          {
+            key: "plan-view",
+            label: plan === "lite" ? "View as full plan" : "View as Lite",
+            icon: <SwitchHorizontal01 className="size-4" />,
+            onSelect: () => {
+              const own = planOf(workspaceSite.id);
+              const next = plan === "lite" ? "full" : "lite";
+              setPlanView(next === own ? null : next);
+              setOpen(false);
+            },
+          } satisfies CommandRow,
+        ]
+      : []),
     ...(superadmin
       ? [
           {
