@@ -28,7 +28,8 @@ import {
   Settings01,
   Target04,
 } from "@untitledui/icons";
-import { useContentTree } from "@/components/pages/contentTree";
+import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
+import { usePipelineCount } from "@/lib/pipeline/store";
 
 export type Icon = ComponentType<{ className?: string }>;
 
@@ -46,6 +47,15 @@ export interface NavNode {
   children?: NavNode[];
 }
 
+/** A nav count. `urgent` turns the chip the error color (Inbox: high-urgency flags). */
+export type BadgeValue = number | { count: number; urgent?: boolean } | null;
+
+export function badgeOf(v: BadgeValue | undefined): { count: number; urgent: boolean } | null {
+  if (v == null) return null;
+  const b = typeof v === "number" ? { count: v, urgent: false } : { count: v.count, urgent: !!v.urgent };
+  return b.count > 0 ? b : null;
+}
+
 export interface PageRoute {
   /** Stable key; also the default path. */
   id: string;
@@ -59,8 +69,8 @@ export interface PageRoute {
   section: "main" | "footer";
   /** The page. Absent: an empty state until a thread builds it. */
   component?: LazyExoticComponent<ComponentType>;
-  /** A count beside the label (Inbox). A hook: it may read Dexie or the server. */
-  useBadge?: () => number | null;
+  /** A count chip beside the label (Inbox). A hook: it may read Dexie or the server. */
+  useBadge?: () => BadgeValue;
   /** A tree under the label (Content). A hook, like useBadge. */
   useChildren?: () => NavNode[];
 }
@@ -91,8 +101,8 @@ export const PAGES: PageRoute[] = [
     path: "pipeline",
     description: "Every piece from pitch to published.",
     section: "main",
-    // The 0.1 planning board until the Pipeline thread lands.
-    component: lazy(() => import("@/components/plan/PlanPage").then((m) => ({ default: m.PlanPage }))),
+    useBadge: usePipelineCount,
+    component: lazy(() => import("@/components/pipeline/PipelinePage").then((m) => ({ default: m.PipelinePage }))),
   },
   {
     id: "content",
@@ -102,7 +112,6 @@ export const PAGES: PageRoute[] = [
     description: "Everything you publish, by channel.",
     section: "main",
     component: lazy(() => import("@/components/pages/ContentPage").then((m) => ({ default: m.ContentPage }))),
-    useChildren: useContentTree,
   },
   {
     id: "knowledge",
@@ -111,6 +120,8 @@ export const PAGES: PageRoute[] = [
     path: "knowledge",
     description: "What your tenant actually believes, claim by claim.",
     section: "main",
+    component: lazy(() => import("@/components/knowledge/KnowledgePage").then((m) => ({ default: m.KnowledgePage }))),
+    useBadge: useKnowledgeBadge,
   },
   {
     id: "goals",
@@ -119,6 +130,7 @@ export const PAGES: PageRoute[] = [
     path: "goals",
     description: "This quarter's five goals and how they are tracking.",
     section: "main",
+    component: lazy(() => import("@/components/goals/GoalsPage").then((m) => ({ default: m.GoalsPage }))),
   },
   {
     id: "site",
@@ -135,6 +147,7 @@ export const PAGES: PageRoute[] = [
     path: "chat",
     description: "Ask the agent anything about your content and knowledge base.",
     section: "main",
+    component: lazy(() => import("@/components/chat/ChatPage").then((m) => ({ default: m.ChatPage }))),
   },
   {
     id: "connections",
