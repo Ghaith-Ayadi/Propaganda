@@ -11,6 +11,7 @@ import {
 } from "react-aria-components";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { useWorkspace } from "@/components/Workspace";
+import { usePlan } from "@/lib/tenantPlan";
 import { cx } from "@/utils/cx";
 
 /**
@@ -80,6 +81,7 @@ export function SiteSwitcher() {
                         )}
                       />
                       <span className="truncate">{s.name}</span>
+                      <PlanTag siteId={s.id} />
                     </AriaMenuItem>
                   ))}
               </AriaMenuSection>,
@@ -128,4 +130,10 @@ export function SiteSwitcher() {
 function initialsOf(a: { name: string; email: string }): string {
   const src = a.name || a.email;
   return src.slice(0, 1).toUpperCase();
+}
+
+/** "Lite" beside a tenant on the free plan (lib/tenantPlan.ts). */
+function PlanTag({ siteId }: { siteId: string }) {
+  if (usePlan(siteId) !== "lite") return null;
+  return <span className="ml-auto shrink-0 rounded px-1.5 text-xs text-quaternary ring-1 ring-inset ring-secondary">Lite</span>;
 }
