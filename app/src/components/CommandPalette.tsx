@@ -5,7 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { ArrowDown, ArrowLeft, ArrowUp, BarChart01, Copy04, CornerDownLeft, Eye, EyeOff, FilePlus02, HelpCircle, Moon01, Shield01, SearchLg, Star01, Sun, Tag01, Zap } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import { search, subscribeSearch } from "@/lib/search";
-import { go } from "@/lib/route";
+import { go, goPage } from "@/lib/route";
+import { PAGES } from "@/lib/routes";
 import { useLayout } from "@/lib/layout";
 import { collectionDisplay } from "@/lib/collections";
 import { createPost, duplicatePost, setPostStatus, toggleFavorite } from "@/lib/posts";
@@ -275,6 +276,15 @@ export function CommandPalette({ currentPostId }: Props) {
         setOpen(false);
       },
     },
+    ...PAGES.map<CommandRow>((p) => ({
+      key: `page-${p.id}`,
+      label: `Go to ${p.label}`,
+      icon: <p.icon className="size-4" />,
+      onSelect: () => {
+        goPage(p.path);
+        setOpen(false);
+      },
+    })),
     {
       key: "analytics",
       label: "Open analytics",
