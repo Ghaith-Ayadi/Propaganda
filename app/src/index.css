@@ -1,6 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
 @import url("https://api.fontshare.com/v2/css?f[]=zodiak@400,500,600,700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap");
 @import "./styles/globals.css";
 
 /* Roslindale Variable Display — used for editorial headings (post titles,
@@ -46,7 +45,8 @@ html, body, #root {
 /* The app (/admin), not the public blogs (EditorApp sets the class), which
    keep their themes' fonts. The app is Inter, Geist Mono where mono is
    needed, and Source Serif 4 for content: the words that go in posts and the
-   knowledge base (`font-serif`). The scrollbar's room is reserved so a page
+   knowledge base (`font-serif`). EditorApp loads Inter and Source Serif 4, so
+   blogs never download them. The scrollbar's room is reserved so a page
    that starts or stops scrolling doesn't shift sideways. */
 html.ppgd-app {
   scrollbar-gutter: stable;
