@@ -1,6 +1,6 @@
 // What waits on the person, and the actions that close it. The Inbox page and
-// Home's "this week" line read through useInbox(); they never know where an
-// item came from.
+// Home's inbox button read through useInbox(); they never know where an item
+// came from.
 //
 // Sources today:
 //   reviews    LIVE: briefs in review (Dexie, synced), each linked to its post
@@ -33,7 +33,7 @@ export interface InboxObject {
   url?: string | null;
 }
 
-/** A quote with a bit of context before and after, linked to its original. */
+/** A quote inside its whole paragraph, linked to its original. */
 export interface Passage {
   before: string;
   quote: string;
@@ -68,7 +68,9 @@ export interface Flag {
   /** The question flags are grouped under: "Pricing tiers named two ways". */
   topic: string;
   raised: string;
-  /** 0 to 1, how sure the checker is. */
+  /** What leads: only "high" is called out (an Urgent chip, a colored count). */
+  urgency: "high" | "normal";
+  /** 0 to 1, how sure the checker is. Metadata, not the headline. */
   confidence: number;
   says: Passage;
   /** What it disagrees with: a knowledge base claim, or other content. */
@@ -131,6 +133,16 @@ export interface KnowledgeItem {
   choices: [string, string];
 }
 
+// ---- the Strategist's notes ----
+
+/** A drift note from the Strategist's weekly check, shown on the tab it concerns. */
+export interface StrategistNote {
+  id: string;
+  tab: "flags" | "pitches";
+  severity: "info" | "warning";
+  message: string;
+}
+
 // ---- reviews ----
 
 export interface Review {
@@ -149,6 +161,7 @@ export interface InboxSnapshot {
   flags: Flag[];
   batch: PitchBatch | null;
   knowledge: KnowledgeItem[];
+  notes: StrategistNote[];
 }
 
 export interface InboxSource {
@@ -170,6 +183,8 @@ export interface Inbox extends InboxSnapshot {
   /** Pitches in the batch still waiting on a decision. */
   pendingPitches: number;
   total: number;
+  /** Open flags marked high urgency. */
+  urgent: number;
   example: boolean;
   source: InboxSource;
 }
@@ -183,6 +198,7 @@ export function useInbox(): Inbox {
     reviews,
     pendingPitches,
     total: snap.flags.length + pendingPitches + snap.knowledge.length + reviews.length,
+    urgent: snap.flags.filter((f) => f.urgency === "high").length,
     example: inboxSource.example,
     source: inboxSource,
   };

@@ -7,7 +7,7 @@
 // written anywhere, and no real post is touched. Replace this file's import in
 // data.ts with the live source when the tables land.
 
-import type { Claim, Flag, FlagClose, InboxSnapshot, InboxSource, KnowledgeItem, PitchBatch } from "./data";
+import type { Claim, Flag, FlagClose, InboxSnapshot, InboxSource, KnowledgeItem, PitchBatch, StrategistNote } from "./data";
 import { toast } from "@/components/base/toast/toast";
 import { addDays, dayKey } from "@/components/shared/quarter";
 
@@ -47,11 +47,12 @@ const flags: Flag[] = [
     object: { kind: "blog", title: "Pricing that grows with your finance team", state: "published 2026-09-12", url: "#" },
     topic: "Pricing tiers named two ways",
     raised: "2026-10-01",
+    urgency: "high",
     confidence: 0.92,
     says: {
-      before: "Every team starts somewhere. ",
+      before: "Every team starts somewhere, and most start small: one controller, a part-time bookkeeper, a CFO who still signs every bill. ",
       quote: "Our Growth plan includes unlimited approvers,",
-      after: " so nobody waits on a bottleneck at month end.",
+      after: " so nobody waits on a bottleneck at month end, and adding the new hire from procurement doesn't mean a call with sales.",
       section: "Plans at a glance",
     },
     against: { kind: "claim", claim: scaleClaim },
@@ -64,20 +65,21 @@ const flags: Flag[] = [
     object: { kind: "blog", title: "The 3-day close is a process problem, not a tooling problem", state: "published 2026-09-28", url: "#" },
     topic: "How fast is the close?",
     raised: "2026-09-29",
+    urgency: "normal",
     confidence: 0.81,
     says: {
       before: "",
       quote: "Teams on Ledgerline close in 3 days.",
-      after: " Here's what the other teams are doing wrong.",
+      after: " Here's what the other teams are doing wrong: they buy a tool, keep the spreadsheet, and reconcile the two by hand on day 9.",
       section: "Opening line",
     },
     against: {
       kind: "content",
       object: { kind: "blog", title: "How Brightwater closed their books in 5 days", state: "published 2026-07-10", url: "#" },
       passage: {
-        before: "Six months in, ",
+        before: "Brightwater moved their AP and card spend onto Ledgerline in January. Six months in, ",
         quote: "Brightwater cut their close from 11 days to 5.",
-        after: " Their controller now leaves on time on day 5.",
+        after: " Their controller now leaves on time on day 5, and the board pack goes out a week earlier than it used to.",
         section: "Results",
       },
       note: "Neither is in the knowledge base yet, so one of them has to give.",
@@ -91,11 +93,12 @@ const flags: Flag[] = [
     object: { kind: "newsletter", title: "The Close, issue 14: audit season", state: "sent 2026-09-30" },
     topic: "Security claims ahead of the audit",
     raised: "2026-10-02",
+    urgency: "high",
     confidence: 0.95,
     says: {
-      before: "A quick one before quarter end: ",
+      before: "A quick one before quarter end, since audit season is coming for all of us: ",
       quote: "Ledgerline is SOC 2 Type II certified,",
-      after: " so your auditors can stop asking for screenshots.",
+      after: " so your auditors can stop asking for screenshots and start asking for the report.",
       section: "Second paragraph",
     },
     against: { kind: "claim", claim: soc2Claim },
@@ -108,11 +111,12 @@ const flags: Flag[] = [
     object: { kind: "blog", title: "What SOC 2 Type II means for your AP data", state: "published 2026-09-05", url: "#" },
     topic: "Security claims ahead of the audit",
     raised: "2026-10-02",
+    urgency: "high",
     confidence: 0.97,
     says: {
-      before: "Here is the short version: ",
+      before: "Your AP data is the most sensitive data you hand a vendor: bank details, salaries hiding in reimbursements, every supplier you pay. Here is the short version: ",
       quote: "we completed our SOC 2 Type II audit this summer.",
-      after: " The longer version is below.",
+      after: " The longer version, with what the controls cover and what they don't, is below.",
       section: "Introduction",
     },
     against: { kind: "claim", claim: soc2Claim },
@@ -125,11 +129,12 @@ const flags: Flag[] = [
     object: { kind: "linkedin", title: "Stripe payouts, reconciled the moment they land", state: "posted 2026-09-24", url: "#" },
     topic: "Integration count",
     raised: "2026-09-25",
+    urgency: "normal",
     confidence: 0.77,
     says: {
-      before: "Stripe, Brex, Ramp and ",
+      before: "Stripe payouts land, and the ledger already knows. Stripe, Brex, Ramp and ",
       quote: "60+ other integrations",
-      after: " feed one ledger. No exports, no CSVs.",
+      after: " feed one ledger. No exports, no CSVs, no Friday afternoon matching.",
     },
     against: { kind: "claim", claim: integrationsClaim },
     fix: { replacement: "40+ other integrations" },
@@ -141,6 +146,7 @@ const flags: Flag[] = [
     object: { kind: "x", title: "60+ integrations. One ledger. Zero CSVs.", state: "posted 2026-09-26", url: "#" },
     topic: "Integration count",
     raised: "2026-09-26",
+    urgency: "normal",
     confidence: 0.6,
     says: { before: "", quote: "60+ integrations.", after: " One ledger. Zero CSVs." },
     against: { kind: "claim", claim: integrationsClaim },
@@ -249,7 +255,23 @@ const knowledge: KnowledgeItem[] = [
   },
 ];
 
-let state: InboxSnapshot = { flags, batch, knowledge };
+// The Strategist's weekly check, shown on the tab each note concerns.
+const notes: StrategistNote[] = [
+  {
+    id: "note-volume",
+    tab: "pitches",
+    severity: "warning",
+    message: "Volume is behind the pace: 1 post published where the pace says 3. This batch has waited on review for 4 days.",
+  },
+  {
+    id: "note-consistency",
+    tab: "flags",
+    severity: "info",
+    message: "Two posts name the pricing tiers two ways. Fixing them lifts the content grade from C to B.",
+  },
+];
+
+let state: InboxSnapshot = { flags, batch, knowledge, notes };
 const listeners = new Set<() => void>();
 
 function set(next: InboxSnapshot) {

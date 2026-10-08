@@ -2,27 +2,27 @@
 // base claim, a list row, and a plain text area in the kit's input style.
 
 import type { ReactNode } from "react";
-import { LinkExternal01, Scales02 } from "@untitledui/icons";
+import { ArrowUpRight } from "@untitledui/icons";
 import { Badge } from "@/components/base/badges/badges";
 import { postHref } from "@/lib/route";
 import { ObjectIcon, objectLabel } from "@/components/shared/ObjectIcon";
 import { cx } from "@/utils/cx";
 import type { Claim, InboxObject, Passage } from "./data";
 
-/** "…before [quote] after…", with the quote marked. */
+/** The whole paragraph, with the quote marked. */
 export function PassageText({ passage, mark = "flag" }: { passage: Passage; mark?: "flag" | "plain" }) {
   return (
     <p className="text-md leading-7 text-secondary">
-      {passage.before && <>…{passage.before}</>}
+      {passage.before}
       <mark
         className={cx(
-          "rounded-sm bg-transparent px-0.5 text-primary",
-          mark === "flag" ? "ring-1 ring-[var(--color-border-error)] ring-inset [box-decoration-break:clone]" : "ring-1 ring-primary ring-inset",
+          "rounded-sm bg-transparent px-0.5 text-primary [box-decoration-break:clone]",
+          mark === "flag" ? "ring-1 ring-[var(--color-border-error)] ring-inset" : "ring-1 ring-primary ring-inset",
         )}
       >
         {passage.quote}
       </mark>
-      {passage.after && <>{passage.after}…</>}
+      {passage.after}
     </p>
   );
 }
@@ -33,64 +33,31 @@ export function originalHref(object: InboxObject): string | null {
   return object.url ?? null;
 }
 
-export function OpenOriginal({ object }: { object: InboxObject }) {
+/** A section label that links to the original: "Original text ↗". */
+export function OriginalLink({ object, label }: { object: InboxObject; label: string }) {
   const href = originalHref(object);
-  if (!href) return null;
+  if (!href) return <>{label}</>;
   return (
-    <a href={href} className="inline-flex shrink-0 items-center gap-1 text-sm text-secondary hover:text-primary">
-      Open the original <LinkExternal01 className="size-3.5" />
+    <a href={href} className="inline-flex items-center gap-1 hover:text-primary">
+      {label} <ArrowUpRight className="size-3.5" />
     </a>
   );
 }
 
-export function SourceBlock({
-  icon,
-  heading,
-  action,
-  children,
-  footer,
-}: {
-  icon: ReactNode;
-  heading: string;
-  action?: ReactNode;
-  children: ReactNode;
-  footer?: ReactNode;
-}) {
-  return (
-    <section className="min-w-0">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-sm text-secondary">
-          {icon}
-          {heading}
-        </span>
-        {action}
-      </div>
-      <div className="rounded-xl bg-secondary px-4 py-3">{children}</div>
-      {footer && <div className="mt-2 text-sm text-tertiary">{footer}</div>}
-    </section>
-  );
+/** A quoted paragraph or claim: a rule on the left, no box. */
+export function Quote({ children }: { children: ReactNode }) {
+  return <blockquote className="border-l-2 border-secondary pl-4">{children}</blockquote>;
 }
 
-export function ClaimBlock({ claim, heading, action }: { claim: Claim; heading: string; action?: ReactNode }) {
+export function ClaimText({ claim }: { claim: Claim }) {
   return (
-    <section className="min-w-0">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-sm text-secondary">
-          <Scales02 className="size-4 text-fg-quaternary" />
-          {heading}
-        </span>
-        {action ?? <ClaimStatus status={claim.status} />}
-      </div>
-      <div className="rounded-xl border border-secondary bg-primary px-4 py-3">
-        <p className="text-md leading-7 text-primary">{claim.text}</p>
-        <p className="mt-1 text-sm text-tertiary">
-          {claim.topic} · {claim.origin} · since {claim.since}
-        </p>
-      </div>
-      <div className="mt-2 text-sm text-tertiary">
-        {claim.evidence} piece{claim.evidence === 1 ? "" : "s"} of evidence
-      </div>
-    </section>
+    <Quote>
+      <p className="text-md leading-7 text-primary">{claim.text}</p>
+      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-tertiary">
+        <ClaimStatus status={claim.status} />
+        {claim.topic} · {claim.origin} · since {claim.since}
+      </p>
+    </Quote>
   );
 }
 
@@ -99,6 +66,14 @@ export function ClaimStatus({ status }: { status: Claim["status"] }) {
     <Badge type="pill-color" color="success" size="sm">Settled</Badge>
   ) : (
     <Badge type="pill-color" color="warning" size="sm">Contested</Badge>
+  );
+}
+
+export function UrgentChip() {
+  return (
+    <Badge type="pill-color" color="error" size="sm">
+      Urgent
+    </Badge>
   );
 }
 

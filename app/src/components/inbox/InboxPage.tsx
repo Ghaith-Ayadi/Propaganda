@@ -7,7 +7,7 @@
 // item take turns.
 
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowLeft, ArrowUpRight, Lightbulb02, Scales02, FileCheck02, SearchLg, Lock01 } from "@untitledui/icons";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, Flag01, InfoCircle, Lightbulb02, Scales02, FileCheck02, SearchLg, Lock01 } from "@untitledui/icons";
 import { Tabs } from "@/components/application/tabs/tabs";
 import { Badge } from "@/components/base/badges/badges";
 import { Input } from "@/components/base/input/input";
@@ -17,8 +17,8 @@ import { ObjectIcon } from "@/components/shared/ObjectIcon";
 import { parseDay, shortDate } from "@/components/shared/quarter";
 import { briefHref, goPage, postHref, usePageRest } from "@/lib/route";
 import { cx } from "@/utils/cx";
-import { EmptyState, ListRow } from "./bits";
-import { useInbox, type Flag, type KnowledgeItem, type Pitch, type Review } from "./data";
+import { EmptyState, ListRow, UrgentChip } from "./bits";
+import { useInbox, type Flag, type KnowledgeItem, type Pitch, type Review, type StrategistNote } from "./data";
 import { FlagDetail } from "./FlagDetail";
 import { KnowledgeDetail } from "./KnowledgeDetail";
 import { PitchDetail, fitBadge } from "./PitchDetail";
@@ -66,14 +66,23 @@ export function InboxPage() {
         }
       >
         <Tabs selectedKey={tab} onSelectionChange={(k) => open(k as Tab)}>
-          <Tabs.List type="button-border" size="sm" className="flex-wrap">
-            <Tabs.Item id="flags" icon={AlertTriangle} badge={inbox.flags.length || undefined}>Flags</Tabs.Item>
+          <Tabs.List type="underline" size="sm" className="flex-wrap">
+            <Tabs.Item id="flags" icon={Flag01}>
+              Flags
+              {inbox.flags.length > 0 && (
+                <Badge size="sm" type="pill-color" color={inbox.urgent > 0 ? "error" : "gray"} className="-my-px hidden md:flex">
+                  {inbox.flags.length}
+                </Badge>
+              )}
+            </Tabs.Item>
             <Tabs.Item id="pitches" icon={Lightbulb02} badge={inbox.pendingPitches || undefined}>Pitches</Tabs.Item>
             <Tabs.Item id="knowledge" icon={Scales02} badge={inbox.knowledge.length || undefined}>Knowledge</Tabs.Item>
             <Tabs.Item id="review" icon={FileCheck02} badge={inbox.reviews.length || undefined}>Review</Tabs.Item>
           </Tabs.List>
         </Tabs>
       </PageHeader>
+
+      <Notes notes={inbox.notes.filter((n) => n.tab === tab)} />
 
       {tab === "flags" && (
         <Split
@@ -163,13 +172,35 @@ function Split<T extends { id: string }>({
       <div className={cx("overflow-hidden rounded-xl border border-secondary bg-primary", explicit && "hidden lg:block")}>
         {items.map((i) => row(i, i.id === shown.id, () => onPick(i.id)))}
       </div>
-      <div className={cx("min-w-0 rounded-xl border border-secondary bg-primary p-5 md:p-7", !explicit && "hidden lg:block")}>
+      <div className={cx("min-w-0", !explicit && "hidden lg:block")}>
         <button type="button" onClick={onBack} className="mb-4 flex items-center gap-1.5 text-sm text-secondary lg:hidden">
           <ArrowLeft className="size-4" /> Back to the list
         </button>
         {detail(shown)}
       </div>
     </div>
+  );
+}
+
+/** The Strategist's notes on this tab (moved here from Home). */
+function Notes({ notes }: { notes: StrategistNote[] }) {
+  if (notes.length === 0) return null;
+  return (
+    <ul className="mb-4 flex flex-col gap-2">
+      {notes.map((n) => (
+        <li key={n.id} className="flex gap-2.5 rounded-lg border border-secondary bg-primary px-4 py-3 text-sm text-secondary">
+          {n.severity === "warning" ? (
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-fg-warning-secondary" aria-label="Warning" />
+          ) : (
+            <InfoCircle className="mt-0.5 size-4 shrink-0 text-fg-quaternary" aria-label="Note" />
+          )}
+          <span>
+            <span className="font-semibold text-primary">The Strategist: </span>
+            {n.message}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -181,7 +212,7 @@ function FlagRow({ flag, selected, onSelect }: { flag: Flag; selected: boolean; 
       icon={<ObjectIcon kind={flag.object.kind} />}
       title={flag.object.title}
       sub={flag.topic}
-      aside={`${Math.round(flag.confidence * 100)}%`}
+      aside={flag.urgency === "high" ? <UrgentChip /> : undefined}
       extra={
         flag.status === "rejected" ? (
           <Badge type="pill-color" color="error" size="sm">Guardian rejected</Badge>
