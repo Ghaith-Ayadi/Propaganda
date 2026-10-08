@@ -23,6 +23,7 @@ import {
 } from "@untitledui/icons";
 import { useContentTree } from "@/components/pages/contentTree";
 import { useInboxBadge } from "@/components/inbox/badge";
+import { usePipelineCount } from "@/lib/pipeline/store";
 
 export type Icon = ComponentType<{ className?: string }>;
 
@@ -86,8 +87,8 @@ export const PAGES: PageRoute[] = [
     path: "pipeline",
     description: "Every piece from pitch to published.",
     section: "main",
-    // The 0.1 planning board until the Pipeline thread lands.
-    component: lazy(() => import("@/components/plan/PlanPage").then((m) => ({ default: m.PlanPage }))),
+    useBadge: usePipelineCount,
+    component: lazy(() => import("@/components/pipeline/PipelinePage").then((m) => ({ default: m.PipelinePage }))),
   },
   {
     id: "content",
