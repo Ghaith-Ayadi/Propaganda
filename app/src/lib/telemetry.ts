@@ -17,9 +17,6 @@ import { causeDetails, codeOf, describe } from "@/lib/errors";
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
 
-/** The writing itself: replays show the editor's shape, never its text. */
-const PRIVATE_TEXT = ".bn-container";
-
 let enabled = false;
 let identifiedAs: string | null = null;
 
@@ -84,9 +81,10 @@ export function initTelemetry(): void {
     defaults: "2026-08-30",
     person_profiles: "identified_only",
     capture_exceptions: true,
-    // Clicks on controls only: a click inside the editor would carry its text.
-    autocapture: { element_allowlist: ["a", "button", "form", "input", "select", "textarea", "label"] },
-    session_recording: { maskTextSelector: PRIVATE_TEXT },
+    // Pre-GA, we watch everything: every click, and replays with nothing
+    // masked (the writing and inputs included). Revisit before GA.
+    autocapture: true,
+    session_recording: { maskAllInputs: false, maskTextSelector: null },
     before_send: exceptionBudget,
   });
   posthog.register({ app_env: DEPLOY_ENV, commit: COMMIT_SHA });

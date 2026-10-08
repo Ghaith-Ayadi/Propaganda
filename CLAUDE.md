@@ -100,8 +100,9 @@ analytics worker, never by PostHog.
   reported before the response goes out.
 - Free-plan budget: 100k exceptions a month. The client caps each distinct error at 3 per
   10 minutes and 100 per page load; keep that cap if you touch it.
-- The writing stays private: replays mask `.bn-container`, autocapture only records clicks
-  on controls. Never send post content as an event property.
+- Pre-GA, nothing is masked (Ayadi, 2026-10-08): replays record the writing and every input,
+  and autocapture records every click. Revisit before GA. Still don't send post content as
+  an event property: it bloats events and replays already show it.
 - Events go through `/ingest` on our own host (`vercel.json` rewrites, Vite proxy in dev).
   `VITE_POSTHOG_KEY` unset means telemetry is off.
 
