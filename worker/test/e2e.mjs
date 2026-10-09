@@ -233,6 +233,7 @@ async function main() {
   const trig = await api("/triggers");
   check(trig.status === 200 && trig.json.triggers.some((t) => t.id === "scout" && t.scope === "tenant"), "lists the triggers");
   check(trig.json.triggers.some((t) => t.id === "listener-granola" && t.scope === "all"), "a trigger for every tenant is marked so");
+  check(["strategist-proposal", "strategist-weekly-check"].every((id) => trig.json.triggers.some((t) => t.id === id && t.scope === "tenant")), "the Strategist's two triggers are listed");
   check(trig.json.tenants.some((t) => t.id === SITE && t.name === "Test tenant"), "lists the tenants for the picker");
   check((await api("/triggers/nope", { method: "POST", body: { site: SITE } })).status === 404, "unknown trigger: 404");
   check((await api("/triggers/scout", { method: "POST", body: {} })).status === 400, "a tenant trigger needs a tenant: 400");

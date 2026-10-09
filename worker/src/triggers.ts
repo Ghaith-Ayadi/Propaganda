@@ -13,6 +13,7 @@
 import { DBOS, type WorkflowHandle } from "@dbos-inc/dbos-sdk";
 import type { Pool } from "pg";
 import { HttpError } from "./auth.js";
+import { isMissing } from "./agents/backend.js";
 import { dispatchOnce } from "./agents/dispatch.js";
 import { voiceSuggest } from "./agents/edits.js";
 import { pitchBatch } from "./agents/pitcher.js";
@@ -22,6 +23,7 @@ import { meetPoll } from "./listener/sources/meet.js";
 import { teamsRenew } from "./listener/sources/teams.js";
 import { AGENT_QUEUE } from "./workflows/agents.js";
 import { scout } from "./workflows/scout.js";
+import { runStrategistNow, weeklyCheckNow } from "./workflows/strategist.js";
 
 export interface Trigger {
   id: string;
@@ -109,6 +111,22 @@ const TRIGGERS: (Trigger & { start: Start })[] = [
     },
   },
   {
+    id: "strategist-proposal",
+    agent: "Strategist",
+    label: "Proposal now",
+    detail: "Asks for a goals proposal: a revision of this quarter when the tenant has approved goals, the onboarding proposal when it has none. Reads the site, plan and keyword data (DataForSEO is paid per run), then sends a proposal to the Goals page. Changes no goals until someone approves.",
+    scope: "tenant",
+    start: async (site, who) => [await runStrategistNow(need(site), who.by)],
+  },
+  {
+    id: "strategist-weekly-check",
+    agent: "Strategist",
+    label: "Monday check now",
+    detail: "The Monday pace check for this tenant: compares the week against its goals and writes up to three drift notes. Calls no model.",
+    scope: "tenant",
+    start: async (site, who) => [await weeklyCheckNow(need(site), who.by)],
+  },
+  {
     id: "kb-agents",
     agent: "Checker and Guardian",
     label: "Look for work now",
@@ -163,7 +181,7 @@ export async function runTrigger(db: Pool, id: string, site: string | null, who:
     return await t.start(t.scope === "tenant" ? site : null, who);
   } catch (err) {
     // A table this agent reads isn't on this server yet (its migration hasn't landed).
-    if ((err as { code?: string }).code === "42P01") {
+    if ((err as { code?: string }).code === "42P01" || isMissing(err)) {
       throw new HttpError(409, `${t.agent}: the tables this run needs aren't on this server yet.`);
     }
     throw err;

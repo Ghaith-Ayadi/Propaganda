@@ -410,12 +410,12 @@ export async function runStrategistNow(site: string, by: string, note = "Run by 
 }
 
 /** Monday's check for one tenant, now (Admin's "Run now"). Its own run id, so the schedule's still runs. */
-export async function weeklyCheckNow(site: string): Promise<string> {
+export async function weeklyCheckNow(site: string, by?: string): Promise<string> {
   const day = dayOf(new Date());
   const handle = await DBOS.startWorkflow(strategistWeeklyCheck, {
     workflowID: `strategist-check-${site}-${day}-manual-${Date.now().toString(36)}`,
     queueName: AGENT_QUEUE,
-    workflowAttributes: { site, trigger: "manual" },
+    workflowAttributes: by ? { site, trigger: "manual", requestedBy: by } : { site, trigger: "manual" },
   })(site, day);
   return handle.workflowID;
 }
