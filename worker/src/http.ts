@@ -14,6 +14,7 @@
 //   POST /runs/scout             { id }        body { site, day? }: a Scout run now
 //   GET  /triggers               { triggers, tenants }: Admin's Run now (src/triggers.ts)
 //   POST /triggers/:id           { runs }      body { site? }
+//   GET  /arena/tenants          { tenants }   the tenants a round may read (ARENA_TENANTS)
 //   GET  /arena/sources?site=    { sources }   a tenant's latest calls, for a Listener round
 //   POST /arena                  ArenaRound    body { agent, site, models?, source?, transcript?, title? } (src/arena.ts)
 //   The Listener's routes (ingest URL, webhooks, OAuth, Connections): src/listener/routes.ts.
@@ -29,7 +30,7 @@ import { demo } from "./workflows/demo.js";
 import { scout } from "./workflows/scout.js";
 import { listenerRoute } from "./listener/index.js";
 import { listTenants, listTriggers, runTrigger } from "./triggers.js";
-import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, arenaSources, checkModels, runRound, type ArenaAgent } from "./arena.js";
+import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, ARENA_TENANTS, arenaSources, checkModels, runRound, type ArenaAgent } from "./arena.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
 const SITE_RE = /^[a-z0-9]{15}$/;
@@ -136,6 +137,10 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     return send(res, 200, { runs: await runTrigger(db, trig[1]!, site, { by: admin.sub }) });
   }
 
+  if (path === "/arena/tenants" && method === "GET") {
+    const { rows } = await db.query<{ id: string; name: string }>("select id, name from public.sites where id = any($1) order by name", [ARENA_TENANTS]);
+    return send(res, 200, { tenants: rows });
+  }
   if (path === "/arena/sources" && method === "GET") {
     const site = url.searchParams.get("site") ?? "";
     if (!SITE_RE.test(site)) throw new HttpError(400, "Bad site");

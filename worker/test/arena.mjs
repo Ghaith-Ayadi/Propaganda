@@ -73,6 +73,7 @@ await new Promise((r) => rest.listen(0, r));
 process.env.SUPABASE_URL = `http://127.0.0.1:${rest.address().port}`;
 process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
 // The worker's config wants database URLs at import; this test never connects.
+process.env.ARENA_TENANTS = SITE;
 process.env.APP_DATABASE_URL ??= "postgres://unused@127.0.0.1:1/postgres";
 process.env.DBOS_SYSTEM_DATABASE_URL ??= "postgres://unused@127.0.0.1:1/dbos";
 
@@ -174,6 +175,11 @@ await runRound(null, { agent: "pitcher", site: SITE, models: ["cheap/a", "nobody
   (err) => check(/no price for nobody\/x/.test(err.message), "a model the gateway doesn't list is refused"),
 );
 check(Math.abs(worstCase(3000, ["cheap/a"], new Map([["cheap/a", { input: 1e-6, output: 2e-6 }]])) - (1000 * 1e-6 + 6000 * 2e-6)) < 1e-12, "worst case is the whole prompt plus every output token");
+await runRound(null, { agent: "pitcher", site: "othersite000000", models: ["cheap/a", "cheap/b"] }).then(
+  () => check(false, "a customer's tenant is refused"),
+  (err) => check(err.status === 403, "a tenant outside ARENA_TENANTS is refused before any read"),
+);
+check(db.model_calls.filter((c) => c.job === "arena:pitcher").every((c) => c.background === true), "rounds run as background work");
 let threw = 0;
 for (const bad of [["a/b"], ["a/b", "a/b"], ["a/b", "c/d", "e/f", "g/h"], ["a/b", "NOT VALID"]]) {
   try {

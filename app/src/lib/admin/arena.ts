@@ -8,7 +8,7 @@
 import type { Client } from "@/lib/supabase";
 import { must } from "@/lib/supabase";
 import { withCode } from "@/lib/errors";
-import { call, listTriggers } from "./runs";
+import { call } from "./runs";
 
 export type ArenaAgent = "pitcher" | "listener";
 
@@ -54,8 +54,9 @@ export interface ArenaVote {
   created: string;
 }
 
+/** Ayadi's own tenants: the only ones a round may read (worker ARENA_TENANTS). */
 export async function arenaTenants(client: Client): Promise<{ id: string; name: string }[]> {
-  return (await listTriggers(client)).tenants;
+  return (await call<{ tenants: { id: string; name: string }[] }>(client, "ARENA-LOAD", "/arena/tenants")).tenants;
 }
 
 export function arenaSources(client: Client, site: string): Promise<{ sources: ArenaSource[]; defaultModels: string[] }> {

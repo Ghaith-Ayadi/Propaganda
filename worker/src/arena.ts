@@ -8,7 +8,8 @@
 // Every call goes through callModel (one model_calls row each, job
 // "arena:<agent>"), charged to ARENA_SITE, Ayadi's own tenant, so a benchmark
 // never shows up on a customer's cost meter and never runs on a customer's own
-// key. A round whose worst case (prompt in full plus every output token at list
+// key. Only Ayadi's own tenants (ARENA_TENANTS) can be picked, and a round
+// runs as background work, so Verbatim's budget stops it. A round whose worst case (prompt in full plus every output token at list
 // price) is over ARENA_ROUND_CAP_USD is refused before any call.
 
 import { randomInt } from "node:crypto";
@@ -35,6 +36,18 @@ const MAX_OUTPUT_TOKENS = 6000;
 /** The Pitcher judges this many ideas per call (pitcher.ts JUDGE_CHUNK). */
 const IDEAS_PER_ROUND = 25;
 const MODEL_RE = /^[a-z0-9-]+\/[a-z0-9.:-]+$/;
+/**
+ * The tenants a round may read: Ayadi's own (Verbatim, PPGD). A customer's
+ * ideas and calls never go to models it didn't agree to.
+ */
+export const ARENA_TENANTS = (process.env.ARENA_TENANTS ?? "verbatimsite000,ppgdsite0000000")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function checkTenant(site: string): void {
+  if (!ARENA_TENANTS.includes(site)) throw new HttpError(403, "The Arena runs only on your own tenants (Verbatim, PPGD).");
+}
 
 export interface ArenaEntry {
   model: string;
@@ -180,7 +193,8 @@ async function runOne(model: string, t: Task, agent: ArenaAgent): Promise<ArenaE
       site: ARENA_SITE,
       job: `arena:${agent}`,
       model,
-      background: false,
+      // Background: Verbatim's monthly budget is a hard stop for rounds.
+      background: true,
       system: t.system,
       prompt: t.prompt,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
@@ -215,6 +229,7 @@ export async function runRound(
   db: Pool,
   input: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string },
 ): Promise<ArenaRound> {
+  checkTenant(input.site);
   const t = input.agent === "pitcher" ? await pitcherTask(input.site) : await listenerTask(db, input.site, input);
   const worst = worstCase(t.system.length + t.prompt.length, input.models, await listPrices());
   if (worst > ROUND_CAP_USD) {
@@ -227,5 +242,6 @@ export async function runRound(
 
 /** The calls a superadmin can pick for a Listener round: the tenant's latest. */
 export async function arenaSources(site: string) {
+  checkTenant(site);
   return recentSources(site, 20);
 }
