@@ -1,6 +1,6 @@
 // For test/scout.mjs and test/arena.mjs: the Scout, the Arena and the gateway's test hooks from one
 // bundle, so the model the test swaps in is the one the workflow calls.
-export { setModelResolver, setWorkflowContext } from "../../api/_ai/gateway";
+export { setModelResolver, setWorkflowContext, THINKING_TOKENS } from "../../api/_ai/gateway";
 export { registerQueues } from "./workflows/agents.js";
 export { scout, scoutWeekly, weeklyRunId } from "./workflows/scout.js";
 export { closeScoutDb } from "./scout/store.js";

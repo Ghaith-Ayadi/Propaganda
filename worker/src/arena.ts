@@ -14,7 +14,7 @@
 
 import { randomInt } from "node:crypto";
 import type { Pool } from "pg";
-import { callModel, gatewayListPrices } from "../../api/_ai/gateway";
+import { callModel, gatewayListPrices, thinkingBudget } from "../../api/_ai/gateway";
 import { HttpError } from "./auth.js";
 import { judgePrompt, PITCHER_SYSTEM, parseJudgements } from "./agents/pitcher.js";
 import { everyBrief, getSite, ideas as readIdeas, pipelineBriefs, publishedPosts } from "./agents/store.js";
@@ -98,7 +98,8 @@ export function worstCase(promptChars: number, models: string[], byId: Map<strin
   for (const m of models) {
     const p = byId.get(m);
     if (!p) throw new HttpError(422, `The AI Gateway has no price for ${m}`);
-    total += inTokens * p.input + MAX_OUTPUT_TOKENS * p.output;
+    // The gateway lets a call think on top of its answer budget: count all of it.
+    total += inTokens * p.input + thinkingBudget(MAX_OUTPUT_TOKENS)! * p.output;
   }
   return total;
 }
