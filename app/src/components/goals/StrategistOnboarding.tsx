@@ -54,14 +54,42 @@ function reviewLine(v: string): string {
   return v === "16" || v === "16+" ? "16 or more posts a month" : `${v} posts a month`;
 }
 
+// What someone has typed and not saved yet, on this device: a reload, a
+// remount or a tenant switch never loses it. Cleared once the answers save.
+const draftKey = (siteId: string) => `propaganda:strategist-draft:${siteId}`;
+
+function readDraft(siteId: string): Partial<StrategyAnswers> {
+  try {
+    const v = JSON.parse(localStorage.getItem(draftKey(siteId)) ?? "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeDraft(siteId: string, draft: Partial<StrategyAnswers>) {
+  try {
+    if (Object.keys(draft).length) localStorage.setItem(draftKey(siteId), JSON.stringify(draft));
+    else localStorage.removeItem(draftKey(siteId));
+  } catch {
+    // Private window or full storage: the draft lives only in this tab.
+  }
+}
+
 export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
   const { site } = useWorkspace();
   const saved = useStrategyAnswers(site.id);
-  const [answers, setAnswers] = useState<StrategyAnswers>(saved);
+  const [draft] = useState(() => readDraft(site.id));
+  const [answers, setAnswers] = useState<StrategyAnswers>(() => ({ ...saved, ...draft }));
   // The goals store re-reads every 30 seconds and hands back a new object each
   // time. Take the saved answers only when their text changed, and never over
   // a field someone has typed in.
-  const typed = useRef(new Set<keyof StrategyAnswers>());
+  const typed = useRef(new Set<keyof StrategyAnswers>(Object.keys(draft) as (keyof StrategyAnswers)[]));
+  useEffect(() => {
+    const typedNow: Partial<StrategyAnswers> = {};
+    for (const id of typed.current) typedNow[id] = answers[id];
+    writeDraft(site.id, typedNow);
+  }, [site.id, answers]);
   const savedKey = JSON.stringify(saved);
   useEffect(() => {
     setAnswers((a) => {
@@ -80,6 +108,8 @@ export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
     setSaving(true);
     try {
       await goalsActions.saveStrategyAnswers(site.id, answers);
+      typed.current.clear();
+      writeDraft(site.id, {});
       await plan.save();
       // The first proposal: the worker picks the request up within a minute.
       if (!strategistState()) await goalsActions.askStrategist("onboarding");
