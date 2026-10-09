@@ -590,4 +590,46 @@ export const liveKb: KnowledgeBackend = {
         };
       })(),
     ),
+
+  postFindings: (postId) =>
+    withCode(
+      "KB-LOAD",
+      (async () => {
+        const [check, flags] = await Promise.all([
+          must(
+            sb.from("kb_checks").select("report, created").eq("site", siteId()).eq("post", postId).order("created", { ascending: false }).limit(1).maybeSingle(),
+          ) as Promise<Row | null>,
+          must(
+            sb
+              .from("kb_flags")
+              .select("id, kind, status, quote, claim, explanation, suggested_action, suggested_fix")
+              .eq("site", siteId())
+              .eq("post", postId)
+              .in("status", OPEN)
+              .order("created"),
+          ) as Promise<Row[] | null>,
+        ]);
+        const rows = flags ?? [];
+        const claimIds = [...new Set(rows.map((r) => r.claim))];
+        const texts = claimIds.length ? (((await must(sb.from("kb_claims").select("id, text").in("id", claimIds))) ?? []) as Row[]) : [];
+        const report = (check?.report ?? {}) as Row;
+        return {
+          checkedAt: check?.created ?? null,
+          sources: Array.isArray(report.sources)
+            ? report.sources.map((x: Row) => ({ quote: String(x.quote ?? ""), url: String(x.url ?? ""), verdict: x.verdict, note: String(x.note ?? "") }))
+            : [],
+          remember: Array.isArray(report.remember) ? report.remember.map((x: Row) => ({ text: String(x.text ?? ""), quote: String(x.quote ?? "") })) : [],
+          flags: rows.map((r) => ({
+            id: r.id,
+            kind: r.kind,
+            status: r.status,
+            quote: r.quote,
+            claim: texts.find((t) => t.id === r.claim)?.text ?? "",
+            explanation: r.explanation,
+            suggestedAction: r.suggested_action,
+            fix: r.suggested_fix || null,
+          })),
+        };
+      })(),
+    ),
 };

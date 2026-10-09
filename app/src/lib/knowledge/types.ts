@@ -330,3 +330,44 @@ export const BANDS: { letter: Letter; min: number }[] = [
 export function letterFor(share: number): Letter {
   return BANDS.find((b) => share >= b.min)!.letter;
 }
+
+// ---- one post's findings, for the editor's Review tab ----
+
+/** One line of the Checker's source check (kb_checks.report.sources). */
+export interface PostSourceCheck {
+  quote: string;
+  url: string;
+  verdict: "ok" | "mismatch" | "unsupported" | "unreachable";
+  note: string;
+  /** Replacement wording for the quote, when the check proposes one. */
+  fix?: string;
+}
+
+/** An open knowledge base flag on the post (kb_flags with post = this post). */
+export interface PostFlag {
+  id: string;
+  kind: FlagKind;
+  status: FlagStatus;
+  /** The words in the post the flag is about. */
+  quote: string;
+  /** The claim it contradicts or depends on. */
+  claim: string;
+  explanation: string;
+  suggestedAction: SuggestedAction;
+  /** Replacement for `quote`, when the Guardian drafted one. */
+  fix: string | null;
+}
+
+/** A sentence about the tenant the Checker offers for Remember (kb_checks.report.remember). */
+export interface PostRemember {
+  text: string;
+  quote: string;
+}
+
+export interface PostFindings {
+  /** When the Checker last read the post; null when it never has. */
+  checkedAt: string | null;
+  sources: PostSourceCheck[];
+  remember: PostRemember[];
+  flags: PostFlag[];
+}
