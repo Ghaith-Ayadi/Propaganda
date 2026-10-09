@@ -403,6 +403,27 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
 
 export const strategist = DBOS.registerWorkflow(strategistRun, { name: "strategist" });
 
+/**
+ * The exact model input an onboarding run for `site` would send today
+ * (system prompt and user message), for reading and for comparing models by
+ * hand. It runs the gather and the keyword pulls (the DataForSEO calls are
+ * logged like a run's) and asks no model.
+ */
+export async function strategistInput(site: string, now = new Date()): Promise<{ system: string; prompt: string; cap: number; thinAnswers: boolean }> {
+  const window = windowFor("onboarding", now);
+  const pack = await gather(site, "", now);
+  const m = await market(site, pack);
+  const hasHistory = pack.history.publishedLastQuarter > 0;
+  const cap = volumeCap({ weeks: window.covers.weeks, perMonth: pack.perMonth, lastQuarterPublished: hasHistory ? pack.history.publishedLastQuarter : null });
+  const launch = !hasHistory ? launchFor(now, window.join) : null;
+  return {
+    system: SYSTEM,
+    prompt: promptFor(pack, m, { kind: "onboarding", quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now) }),
+    cap,
+    thinAnswers: thinAnswers(pack.answers, pack.perMonthAnswered),
+  };
+}
+
 export function strategistRunId(proposalId: string): string {
   return `strategist-${proposalId}`;
 }

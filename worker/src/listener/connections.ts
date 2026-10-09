@@ -120,12 +120,22 @@ export async function connectionByToken(db: Pool, token: string): Promise<Connec
   return r.rows[0] ? row(r.rows[0]) : null;
 }
 
+/**
+ * The connections a scheduled poll works through. A database without the
+ * Listener's tables yet (a box behind on migrations, the worker's own tests)
+ * has none: the poll is then a no-op, not a failed run on the failure log.
+ */
 export async function activeConnections(db: Pool, provider: Provider): Promise<(Connection & { secret: string })[]> {
-  const r = await db.query(
-    `select ${COLS}, secret from private.listener_connections where provider = $1 and status in ('active', 'error')`,
-    [provider],
-  );
-  return r.rows.map((x) => ({ ...row(x), secret: x.secret as string }));
+  try {
+    const r = await db.query(
+      `select ${COLS}, secret from private.listener_connections where provider = $1 and status in ('active', 'error')`,
+      [provider],
+    );
+    return r.rows.map((x) => ({ ...row(x), secret: x.secret as string }));
+  } catch (err) {
+    if ((err as { code?: string }).code === "42P01") return [];
+    throw err;
+  }
 }
 
 // ---- writes (service_role functions) ----

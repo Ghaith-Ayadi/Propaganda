@@ -255,6 +255,14 @@ async function main() {
   check(detail.failures.length === 2 && detail.failures.every((f) => f.step === "finish" && /asked to fail/.test(f.error)), "each run's error and step are kept");
   const again = (await api("/failures/sweep", { method: "POST" })).json;
   check(again.added === 0 && again.filed === 0 && again.noted === 0, "a second sweep records and files nothing new");
+  // The Listener's 15-minute poll fires here too; without the Listener's tables it must end done, not as one more failure.
+  const poll = await api("/triggers/listener-meet", { method: "POST", body: {} });
+  check(poll.status === 200 && poll.json.runs.length === 1, "the Meet poll can be started with no Listener tables");
+  const polled = await until("poll ends", async () => {
+    const r = await run(poll.json.runs[0]);
+    return r && ["failed", "done"].includes(r.state) ? r : null;
+  });
+  check(polled.state === "done", `a Listener poll without its tables is a no-op, not a failure (${polled.state}: ${polled.error})`);
   const bad2 = (await api("/runs/demo", { method: "POST", body: { site: SITE, fail: true } })).json.id;
   await until("failed again", async () => (await run(bad2))?.state === "failed");
   issueState = "closed";
