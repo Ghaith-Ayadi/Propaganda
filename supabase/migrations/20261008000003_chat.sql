@@ -1,5 +1,5 @@
--- DRAFT: moves to supabase/migrations only on Ayadi's own go (repo rule). Not applied anywhere.
--- Needs the cost log (20261007000002) first. Tested on Postgres 16: own rows only, server-only writes, cascade, the stopped status, the price row.
+-- On Ayadi's go in the Chat thread (2026-10-08 21:41Z). Additive only.
+-- Needs the cost log (20261007000002) first; migrate.sh applies it by version, so it runs even though later numbers are already in.
 --
 -- Chat (Propaganda 0.2): conversations with the agents, and the cost log
 -- learning about replies stopped mid-stream. Additive only.
