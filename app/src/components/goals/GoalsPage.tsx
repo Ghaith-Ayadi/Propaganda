@@ -4,7 +4,7 @@
 // Data comes from lib/goals/useGoals.ts (a placeholder adapter until the
 // goal tables exist).
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowRight, CalendarDate } from "@untitledui/icons";
 import { PageBody, PageHeader, PageTabs } from "@/components/shell/PageHeader";
 import { NativeSelect } from "@/components/base/select/select-native";
@@ -12,7 +12,11 @@ import { Button } from "@/components/base/buttons/button";
 import { goPage, usePageRest } from "@/lib/route";
 import type { Proposal, QuarterKey } from "@/lib/goals/types";
 import { joinState, nextQuarterClock, quarterLabel, quarterOf, quarterStart, shiftQuarter, shortDate } from "@/lib/goals/quarter";
-import { useBatchPlan, useGoalsContext, useLaunch, useProposal, useQuarterGoals, useQuarters } from "@/lib/goals/useGoals";
+import { goalsActions, useBatchPlan, useGoalsArePlaceholder, useGoalsContext, useLaunch, useProposal, useQuarterGoals, useQuarters, useStrategistState } from "@/lib/goals/useGoals";
+import { useSuperadminAccount } from "@/lib/superadmin";
+import { userMessage } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
+import { toast } from "@/components/base/toast/toast";
 import { LAUNCH_WHY } from "@/lib/goals/copy";
 import { AuthorityExplainer, Card, PlaceholderBanner } from "./bits";
 import { ChangeHistory, GoalCards } from "./GoalCards";
@@ -243,22 +247,74 @@ function NextQuarterEmpty({ quarter, thisQuarter, onTab }: { quarter: QuarterKey
 
 // ── Strategist tab ──────────────────────────────────────────────────────────
 
+/**
+ * What the Strategist is doing (asked, writing, or failed), and for the
+ * superadmin a "Run the Strategist now" button: a manual run, for testing.
+ */
+function StrategistStatus({ quarter }: { quarter: QuarterKey }) {
+  const state = useStrategistState();
+  const sample = useGoalsArePlaceholder();
+  const admin = useSuperadminAccount();
+  const [asking, setAsking] = useState(false);
+  if (sample) return null;
+  const working = state && (state.status === "requested" || state.status === "running");
+  const failed = state?.status === "failed";
+  if (!working && !failed && !admin) return null;
+  const run = async () => {
+    setAsking(true);
+    try {
+      await goalsActions.askStrategist("revision", "Run by hand from the Goals page.", quarter);
+      toast.add({ type: "success", title: "The Strategist is on it", description: "The proposal shows here when it's done, usually within a few minutes." });
+    } catch (err) {
+      reportError("goals.runStrategist", err);
+      toast.add({ type: "error", title: "Couldn't start the Strategist", description: userMessage(err) });
+    } finally {
+      setAsking(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-3 rounded-xl bg-secondary px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
+      <p className="text-secondary">
+        {working
+          ? "The Strategist is writing a proposal. It shows here when it's done."
+          : failed
+            ? "The Strategist's last run didn't finish, so nothing changed. It's in Admin > Runs."
+            : "Admin: start a Strategist run for this tenant now."}
+      </p>
+      {admin && (
+        <Button size="sm" color="secondary" isLoading={asking} isDisabled={asking || !!working} onClick={() => void run()}>
+          Run the Strategist now
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function StrategistTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; thisQuarter: QuarterKey; onTab: (t: Tab, q?: QuarterKey) => void }) {
   const proposal = useProposal(quarter);
   const launch = useLaunch();
   if (!proposal) {
-    if (quarter > thisQuarter) return <NextQuarterEmpty quarter={quarter} thisQuarter={thisQuarter} onTab={onTab} />;
-    return <Card title="No proposal for this quarter" subtitle="These goals were set before the Strategist, or carried over." />;
+    return (
+      <div className="space-y-4">
+        <StrategistStatus quarter={quarter} />
+        {quarter > thisQuarter ? (
+          <NextQuarterEmpty quarter={quarter} thisQuarter={thisQuarter} onTab={onTab} />
+        ) : (
+          <Card title="No proposal for this quarter" subtitle="The Strategist proposes goals once you've answered its questions, and again two weeks before each quarter." />
+        )}
+      </div>
+    );
   }
   const preLaunch = proposal.kind === "onboarding" && proposal.status !== "approved" && !launch;
   return (
     <div className="space-y-4">
+      <StrategistStatus quarter={quarter} />
       {preLaunch && (
         <Card title="Your Launch starts when you approve" subtitle={LAUNCH_WHY}>
           <ul className="list-disc space-y-1 pl-5 text-sm text-secondary">
             <li>The morning after you approve: 5 to 8 briefs in your inbox, the 3 strongest already written.</li>
             <li>15 posts written in 20 days, in three batches (day 1, 8 and 15), published over 30 days.</li>
-            <li>One or two topics only, buying-intent posts first, a named person on every byline.</li>
+            <li>Up to four topics, buying-intent posts first, a named person on every byline.</li>
             <li>The first public post goes out once 3 are approved, unless you pick a date.</li>
           </ul>
           <div className="mt-4">

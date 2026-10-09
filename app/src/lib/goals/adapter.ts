@@ -1,11 +1,11 @@
 // The Goals data boundary. The pages talk to a GoalsAdapter through the hooks in
 // lib/goals/useGoals.ts and never know where the data lives.
 //
-// Today the only adapter is the PLACEHOLDER (lib/goals/placeholder.ts): sample
-// data in memory, nothing reaches the server. When the goal tables land
-// (goals, goal_topics, goal_searches, goal_scores, strategy_proposals,
-// content_batches, tenant_plan_files; draft schema in the PR that added this
-// file), a Supabase adapter implements this interface and replaces it here.
+// Two adapters: the LIVE one on the Strategist's tables (lib/goals/live.ts,
+// supabase/migrations/20261009000070_strategist.sql), and the PLACEHOLDER
+// (lib/goals/placeholder.ts: sample data in memory) while a server doesn't
+// have those tables yet. goalsAdapter below sends each call to the live one
+// as soon as the server answers that the tables exist.
 
 import type {
   BatchCadence,
@@ -21,6 +21,7 @@ import type {
   TenantGoalsContext,
 } from "./types";
 import { placeholderAdapter } from "./placeholder";
+import { liveAdapter, liveGoalsReady } from "./live";
 
 export interface GoalsAdapter {
   /** True while the data is sample data. The pages say so on screen. */
@@ -66,4 +67,48 @@ export interface GoalsAdapter {
   saveStrategyAnswers(siteId: string, answers: StrategyAnswers): Promise<void>;
 }
 
-export const goalsAdapter: GoalsAdapter = placeholderAdapter;
+/**
+ * The real tables once the server has them (lib/goals/live.ts), the
+ * placeholder until then: every call goes to whichever is active.
+ */
+const pick = (): GoalsAdapter => (liveGoalsReady() ? liveAdapter : placeholderAdapter);
+
+export const goalsAdapter: GoalsAdapter = {
+  get placeholder() {
+    return !liveGoalsReady();
+  },
+  subscribe(cb) {
+    const a = liveAdapter.subscribe(cb);
+    const b = placeholderAdapter.subscribe(cb);
+    return () => {
+      a();
+      b();
+    };
+  },
+  version: () => liveAdapter.version() * 1_000_000 + placeholderAdapter.version(),
+  context: () => pick().context(),
+  quarters: () => pick().quarters(),
+  quarterGoals: (q) => pick().quarterGoals(q),
+  proposal: (q) => pick().proposal(q),
+  launch: () => pick().launch(),
+  batchPlan: (q) => pick().batchPlan(q),
+  planDrop: () => pick().planDrop(),
+  approveProposal: (id, edited, edits) => pick().approveProposal(id, edited, edits),
+  requestChanges: (id, note) => pick().requestChanges(id, note),
+  savePlanDrop: (text, files) => pick().savePlanDrop(text, files),
+  removePlanFile: (id) => pick().removePlanFile(id),
+  setBatchCadence: (c) => pick().setBatchCadence(c),
+  requestNextBatch: (q) => pick().requestNextBatch(q),
+  strategyAnswers: (site) => pick().strategyAnswers(site),
+  saveStrategyAnswers: (site, answers) => pick().saveStrategyAnswers(site, answers),
+};
+
+/** Ask the Strategist for a proposal. A no-op on the placeholder (nothing to run). */
+export async function askStrategist(kind: "onboarding" | "quarterly" | "revision", note = "", quarter?: QuarterKey): Promise<string | null> {
+  return liveGoalsReady() ? liveAdapter.askStrategist(kind, note, quarter) : null;
+}
+
+/** The newest request's state while the tables are live: "requested", "running", "failed", ... */
+export function strategistState() {
+  return liveGoalsReady() ? liveAdapter.strategistState() : null;
+}

@@ -15,6 +15,7 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
 | `src/agents/` | What every agent shares: `model.ts` (`askText`/`askJson`, one `modelStep` per call through the gateway), `web.ts` (`searchWeb`, logged through `callPaidApi`, and `readPage`, public addresses only), `backend.ts` (PostgREST with the service key: `select`, `rpc`, `insert`, `patch`), `ids.ts`, and `testing.ts` (what tests import). Each agent's own files sit beside them: the Pitcher (`pitcher.ts`, `batches.ts`, `taste.ts`, `fit.ts`, `goals.ts`, `ideas.ts`), the Writer (`writer.ts`, `voice.ts`, `edits.ts`, `writing.ts`), their data (`store.ts`), the knowledge base (`kb.ts`), and the knowledge base agents: `checker.ts`, `guardian.ts` (+ `verdict.ts`, its rule set `guardian-policy-v1.md`), `dispatch.ts`, `text.ts` and `ai.ts` (`ask()`, with canned answers for tests) |
+| `src/workflows/strategist.ts` | The Strategist: proposals (gather, one model call, the validator), the poller that starts them, the quarterly run and Monday's check. Its rules and the weekly check's math are pure functions in `src/agents/strategy.ts`, its reads and writes in `src/agents/strategy-store.ts` |
 | `src/workflows/scout.ts`, `src/scout/` | The Scout: DataForSEO, watched pages, ranking facts, the model's triage, its database role |
 | `src/kb/` | `read.ts`: what the knowledge base agents read through the read-only pool |
 | `build.mjs` | esbuild: bundles `src/` and the gateway from `../api/_ai` into `dist/` (tsc only typechecks) |
@@ -154,6 +155,55 @@ tenant's own Anthropic key, see `DEFAULT_MODEL` and `BYOK_MODEL` in
 `api/_ai/gateway.ts`), `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` for web search (without
 them the agents work from what they were given), and optionally
 `AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `VOICE_FROM`, `PITCHER_BATCH_CRON`.
+## The Strategist
+
+Design: `agents/strategist.md` and `agents/strategist-cold-start-and-pacing.md`
+in the project files (approved by Ayadi, 2026-10-09). Schema:
+`supabase/migrations/20261009000070_strategist.sql`.
+
+**How a proposal starts.** Whatever wants one adds a `strategy_proposals` row
+in status `requested`: the app through `strategy_request()` (onboarding's
+"Save and continue", "Ask for changes", the superadmin's "Run the Strategist
+now" on the Goals page), Chat (`POST /agents/strategist`, a revision), and the
+quarterly schedule (`STRATEGIST_QUARTERLY_CRON`, 17 Mar, Jun, Sep and Dec:
+next quarter's proposal for every tenant with goals). A poller
+(`WORKER_DISPATCH_SECONDS`) starts one run per row, id `strategist-<row>`.
+From code, `runStrategistNow(site, by)` and `weeklyCheckNow(site)` start runs
+by hand (for Admin's "Run now").
+
+**A run** (`strategist`, the advanced model):
+1. gathers in code: the onboarding answers and the plan drop
+   (`tenant_profile`; Markdown, text and CSV files are read, other files are
+   listed by name), the website as text (home, /pricing, /about, /product),
+   last quarter's posts and pitch outcomes, the last approved proposal's edits,
+   the taste summary, keyword ideas and ranked keywords from DataForSEO Labs,
+   and who ranks for the tenant's own searches (at most 5 searches);
+2. sizes the window in code (`windowFor`: the join-week rule, weeks 9 to 13
+   plan next quarter), the volume cap (`volumeCap`: review capacity and 2 a
+   week on day one, last quarter +20% after) and, for a new tenant, the Launch
+   (`launchFor`: 15 posts, prorated after week 9);
+3. asks the model once for the proposal as JSON;
+4. checks it (`validate`): the cap, 1 to 4 topics with low ends inside the
+   volume, 5 to 10 winnable searches each in a topic, 3 to 8 watched sites,
+   no Readership target without 4 weeks of readers, at most 2 on page one and
+   no AI-mention target in a first quarter, at most 3 questions. A draft that
+   breaks a rule goes back once with the errors; a second failure fails the
+   row (`failed`, with the reasons) and never reaches the tenant;
+5. drops watched sites it can't read, adds the window, batches and Launch, and
+   sends it (`sent`; the quarter's older sent proposal is superseded).
+
+Approving is the app's: `strategy_approve()` writes the next `goal_versions`
+row and points the Scout at the approved searches and watched sites.
+`readGoals()` (`agents/goals.ts`) gives the Pitcher the newest version, with
+today's positions from the Scout's ranking facts.
+
+**Monday's check** (`strategist:weekly`, `STRATEGIST_WEEKLY_CRON`, 06:00
+UTC) is code only: per tenant with goals this quarter, pace = published ÷
+(target × share elapsed); behind under 0.85 with 3+ weeks left, out of reach
+when the rest needs twice the current pace (a Revise action), a topic with
+nothing past halfway, and page one going down two weeks running. At most 3
+notes, worst first, in `drift_notes`. It never changes a goal.
+
 ## The knowledge base agents
 
 Design: `docs/knowledge-base.md`. Both only work for tenants with a row in

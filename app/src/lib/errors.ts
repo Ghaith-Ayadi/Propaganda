@@ -41,6 +41,12 @@
 //   KB-CONTEST          contesting a flag, or sending the contest, failed
 //   KB-BULK             a bulk action on a re-check thread failed
 //   WAITLIST-LOAD       Admin couldn't load the waitlist
+//   GOALS-LOAD          the Goals page couldn't load proposals, goals or the plan
+//   GOALS-APPROVE       approving the Strategist's proposal failed
+//   GOALS-REQUEST       asking the Strategist for a proposal failed
+//   GOALS-PROFILE-SAVE  the onboarding answers couldn't be saved
+//   GOALS-PLAN-SAVE     the plan drop (text or files) couldn't be saved
+//   GOALS-CADENCE       changing the batching setting failed
 
 import { BackendError } from "@/lib/supabase";
 

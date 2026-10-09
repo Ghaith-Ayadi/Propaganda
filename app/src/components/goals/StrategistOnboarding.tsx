@@ -15,6 +15,7 @@ import { useSetting } from "@/lib/settings";
 import { reportError, track } from "@/lib/telemetry";
 import type { StrategyAnswers } from "@/lib/goals/types";
 import { goalsActions, useStrategyAnswers } from "@/lib/goals/useGoals";
+import { strategistState } from "@/lib/goals/adapter";
 import { PlanDropFields, usePlanDraft } from "./PlanDrop";
 
 const QUESTIONS: { id: keyof StrategyAnswers; label: string; hint: string; example: string; rows: number }[] = [
@@ -69,6 +70,8 @@ export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
     try {
       await goalsActions.saveStrategyAnswers(site.id, answers);
       await plan.save();
+      // The first proposal: the worker picks the request up within a minute.
+      if (!strategistState()) await goalsActions.askStrategist("onboarding");
       track("strategist_onboarding_saved", { answered, planText: !!plan.text.trim(), planFiles: plan.drop.files.length + plan.pending.length });
       onDone();
     } catch (err) {
