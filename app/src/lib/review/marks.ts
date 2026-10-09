@@ -97,7 +97,7 @@ function build(doc: PmNode, s: Omit<MarksState, "decorations" | "ranges">): Pick
     const cls = ["review-mark", `review-mark--${a.section}`];
     if (s.hover === a.id) cls.push("is-hover");
     if (s.active === a.id) cls.push("is-active");
-    decos.push(Decoration.inline(r.from, r.to, { class: cls.join(" "), "data-review-id": a.id }));
+    decos.push(Decoration.inline(r.from, r.to, { class: cls.join(" "), "data-review-id": a.id, title: a.title }));
   }
   return { ranges, decorations: DecorationSet.create(doc, decos) };
 }

@@ -16,6 +16,8 @@ export type ReviewSection = "pitch" | "sources" | "kb";
 export interface Anchor {
   id: string;
   section: ReviewSection;
+  /** The note's title: the highlight's tooltip and accessible name. */
+  title: string;
   /** The words to find in the post. */
   quote: string;
 }
@@ -78,11 +80,11 @@ export function reviewState(): ReviewState {
 export function setNotes(postId: string, notes: ReviewNote[], loading: boolean, checkedAt: string | null) {
   const anchors: Anchor[] = notes
     .filter((n) => n.quote && !n.resolved)
-    .map((n) => ({ id: n.id, section: n.section, quote: n.quote! }));
+    .map((n) => ({ id: n.id, section: n.section, title: n.title, quote: n.quote! }));
   const same =
     state.postId === postId &&
     state.anchors.length === anchors.length &&
-    state.anchors.every((a, i) => a.id === anchors[i].id && a.quote === anchors[i].quote && a.section === anchors[i].section);
+    state.anchors.every((a, i) => a.id === anchors[i].id && a.quote === anchors[i].quote && a.section === anchors[i].section && a.title === anchors[i].title);
   set({ postId, notes, loading, checkedAt, anchors: same ? state.anchors : anchors });
 }
 

@@ -194,8 +194,9 @@ export function useReviewNotes(postId: string, item: PipelineItem | undefined) {
     });
   };
   item?.review?.checks.forEach((c) => sourceNote(`src-${c.id}`, c));
+  // Keyed by the report and the words, so a dismissal never carries over to a new finding.
   f.sources.forEach((s, k) =>
-    sourceNote(`chk-${k}`, {
+    sourceNote(`chk-${keyOf(f.checkedAt, s.quote, k)}`, {
       quote: s.quote,
       status: s.verdict === "ok" ? "matches" : s.verdict === "unsupported" ? "unsourced" : s.verdict,
       detail: s.note,
@@ -287,7 +288,7 @@ export function useReviewNotes(postId: string, item: PipelineItem | undefined) {
     });
   });
   f.remember.forEach((r, k) => {
-    const id = `rem-${k}`;
+    const id = `rem-${keyOf(f.checkedAt, r.text, k)}`;
     const d = dismissible(id);
     notes.push({
       id,
@@ -341,4 +342,11 @@ export function useReviewPublisher(postId: string, item: PipelineItem | undefine
     setNotes(postId, notes, loading, checkedAt);
   });
   useEffect(() => () => clearNotes(postId), [postId]);
+}
+
+/** A short stable key for a finding of one Checker report. */
+function keyOf(checkedAt: string | null, text: string, k: number): string {
+  let h = 0;
+  for (const c of `${checkedAt ?? ""}|${text || k}`) h = (Math.imul(h, 31) + c.charCodeAt(0)) | 0;
+  return (h >>> 0).toString(36);
 }
