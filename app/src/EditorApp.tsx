@@ -13,7 +13,8 @@ import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
 import { AdminPage } from "@/components/admin/AdminPage";
 import { BriefPage } from "@/components/plan/BriefPage";
 import { db } from "@/lib/db";
-import { useRoute } from "@/lib/route";
+import { goPage, useRoute } from "@/lib/route";
+import { openFirstRunIfNeeded } from "@/lib/firstRun";
 import { findPlanPage } from "@/components/lite/pages";
 import { LockedPage } from "@/components/lite/LockedPage";
 import { usePlan } from "@/lib/tenantPlan";
@@ -86,6 +87,8 @@ function Shell() {
     // Anyone who has visited /admin once is considered "admin" for the
     // purpose of showing the back-to-admin strip on the public site.
     try { localStorage.setItem("verbatim:admin-known", "1"); } catch {}
+    // A tenant that was never set up opens on its first run.
+    void openFirstRunIfNeeded(() => goPage("welcome"));
     // Load app_settings (author bio, favicon, …) into the in-memory cache,
     // then start the Verbose recorder if enabled.
     void import("@/lib/settings")

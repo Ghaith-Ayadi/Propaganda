@@ -4,9 +4,9 @@
 //
 // Sources:
 //   reviews    briefs in review (Dexie, synced), each linked to its post
-//   flags, pitches, knowledge: empty until their live source is wired (the
-//              Pipeline and Knowledge base pages already read them). Example
-//              items exist in the UI preview only (placeholder.ts).
+//   pitches    the pipeline's pitches waiting on a decision (live.ts)
+//   flags, knowledge: on the Knowledge base pages for now, empty here.
+//   Example items exist in the UI preview only (placeholder.ts).
 
 import { useEffect, useSyncExternalStore } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -17,6 +17,7 @@ import type { ObjectKind } from "@/components/shared/ObjectIcon";
 import { UI_PREVIEW } from "@/lib/preview";
 import { isDemoBrief, seedBriefsIfEmpty } from "@/lib/plan/briefs";
 import { placeholderInbox } from "./placeholder";
+import { liveInbox } from "./live";
 
 // ---- the objects items are about ----
 
@@ -174,22 +175,7 @@ export interface InboxSource {
   rule(itemId: string, choice: 0 | 1): Promise<void>;
 }
 
-const EMPTY: InboxSnapshot = { flags: [], batch: null, knowledge: [], notes: [] };
-const nothing = async () => {};
-
-/** Outside the UI preview: no example items, ever. */
-const emptyInbox: InboxSource = {
-  example: false,
-  snapshot: () => EMPTY,
-  subscribe: () => () => {},
-  applyFix: nothing,
-  contest: nothing,
-  closeFlag: nothing,
-  decidePitch: nothing,
-  rule: nothing,
-};
-
-export const inboxSource: InboxSource = UI_PREVIEW ? placeholderInbox : emptyInbox;
+export const inboxSource: InboxSource = UI_PREVIEW ? placeholderInbox : liveInbox;
 
 export interface Inbox extends InboxSnapshot {
   reviews: Review[];
