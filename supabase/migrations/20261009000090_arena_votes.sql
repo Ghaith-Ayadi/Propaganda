@@ -1,4 +1,4 @@
--- Admin > Arena votes. Enters production only with Ayadi's typed yes in the "Model benchmarks per agent" thread.
+-- Admin > Arena votes. Approved by Ayadi ("yes", 2026-10-09 17:45Z, "Model benchmarks per agent" thread).
 --
 -- Admin > Arena (worker/src/arena.ts, app/src/components/admin/ArenaPage.tsx):
 -- Ayadi's blind votes between models on the same real agent task. One row per
