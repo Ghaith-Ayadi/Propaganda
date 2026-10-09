@@ -51,6 +51,9 @@
 //   ARENA-LOAD          Admin's Arena couldn't load tenants, calls or past votes
 //   ARENA-RUN           an Arena round couldn't be run
 //   ARENA-VOTE          an Arena vote couldn't be saved
+//   PIPELINE-LOAD       the pipeline couldn't load its pitches, batches or decisions
+//   PIPELINE-SAVE       a decision on a pitch or a draft couldn't be saved
+//   PIPELINE-AGENT      the Writer or the Pitcher couldn't be started from the pipeline
 
 import { BackendError } from "@/lib/supabase";
 

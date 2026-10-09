@@ -210,9 +210,17 @@ export function liveGoalsPending(): boolean {
   return state === null;
 }
 
+/** A tenant with nothing yet: what the pages show before the first load, or when it fails. */
+function emptyState(site: string): State {
+  return { site, proposals: [], versions: [], profile: null, cadence: "weekly", batches: [], briefs: [], published: new Map() };
+}
+
 function s(): State {
-  if (!state || state === "missing") throw new Error("goals not loaded");
-  return state;
+  ensure();
+  if (state && state !== "missing") return state;
+  // Outside the UI preview the pages never fall back to sample data: an empty
+  // tenant until the server answers.
+  return emptyState(siteOrNull() ?? "");
 }
 
 const today = (): Day => toDay(new Date());

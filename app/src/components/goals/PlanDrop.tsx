@@ -8,7 +8,7 @@ import { Button as AriaButton, DropZone, FileTrigger, Label, TextArea, TextField
 import { File04, Image01, Trash01, UploadCloud02 } from "@untitledui/icons";
 import type { PlanFile } from "@/lib/goals/types";
 import { goalsActions, useGoalsArePlaceholder, usePlanDrop } from "@/lib/goals/useGoals";
-import { kindOf } from "@/lib/goals/placeholder";
+import { kindOf } from "@/lib/goals/files";
 import { shortDate } from "@/lib/goals/quarter";
 import { Button } from "@/components/base/buttons/button";
 import { toast } from "@/components/base/toast/toast";

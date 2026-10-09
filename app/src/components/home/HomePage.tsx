@@ -31,7 +31,7 @@ export function HomePage() {
         }
       />
       <PageBody>
-      {home.campaign && <CampaignCard campaign={home.campaign} />}
+      {home.campaign && <CampaignCard campaign={{ ...home.campaign, example: home.example }} />}
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         {home.goals.map((g) => (
@@ -50,7 +50,7 @@ export function HomePage() {
   );
 }
 
-function CampaignCard({ campaign: c }: { campaign: NonNullable<Home["campaign"]> }) {
+function CampaignCard({ campaign: c }: { campaign: NonNullable<Home["campaign"]> & { example?: boolean } }) {
   return (
     <Card>
       <CardHeader
@@ -65,7 +65,7 @@ function CampaignCard({ campaign: c }: { campaign: NonNullable<Home["campaign"]>
         description={c.description}
         actions={
           <>
-            <ExampleBadge why="Campaigns read the Strategist's plan and the indexing check, which don't exist yet." />
+            {c.example && <ExampleBadge why="Example campaign (UI preview)." />}
             <Badge type="pill-color" color={c.onTrack ? "success" : "error"} size="sm">
               {c.onTrack ? "On track" : "Off track"}
             </Badge>

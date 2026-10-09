@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { GoalsAdapter } from "./adapter";
+import { kindOf } from "./files";
 import type {
   BatchBrief,
   BatchCadence,
@@ -902,15 +903,6 @@ export const placeholderAdapter: GoalsAdapter = {
   },
 };
 
-export function kindOf(f: { name: string; type: string }): PlanFileKind {
-  const n = f.name.toLowerCase();
-  if (f.type === "application/pdf" || n.endsWith(".pdf")) return "pdf";
-  if (f.type.startsWith("image/")) return "image";
-  if (/\.(docx?|odt|rtf|pages)$/.test(n)) return "doc";
-  if (/\.(md|markdown)$/.test(n)) return "markdown";
-  if (/\.(xlsx?|csv|ods|numbers)$/.test(n)) return "spreadsheet";
-  return "text";
-}
 
 /** Placeholder only: switch the sample tenant's situation. */
 export function placeholderScenario(): ScenarioId {
