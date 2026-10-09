@@ -177,7 +177,8 @@ export type Account = "private" | "axoniq";
 
 let accounts: Readonly<Record<string, Account>> = {
   verbatimsite000: "private", // Verbatim
-  // PPGD: "private" and Axoniq: "axoniq" go here once their sites exist.
+  ppgdsite0000000: "private", // PPGD (supabase/migrations/20261008000090_ppgd_site.sql)
+  // Axoniq: "axoniq" goes here once its site exists.
 };
 
 /** The Ayadi account a tenant runs on, or null when it brings its own key. */
