@@ -120,3 +120,6 @@ export function startOnceForTenant<Args extends unknown[], R>(
 ): Promise<WorkflowHandle<R>> {
   return DBOS.startWorkflow(workflow, { workflowID, queueName: AGENT_QUEUE, workflowAttributes: { site } })(...args);
 }
+
+/** Same, for a fixed id the caller picks (the Scout's weekly run, say): starting it again is a no-op. */
+export const startForTenantWithId = startOnceForTenant;

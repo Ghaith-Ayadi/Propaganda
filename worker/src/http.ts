@@ -11,6 +11,7 @@
 //   POST /runs/:id/retry         { id, how }   id is the new run's when forked
 //   POST /runs/:id/cancel        { ok: true }
 //   POST /runs/demo              { id }        body { stallSeconds?, fail?, site? }
+//   POST /runs/scout             { id }        body { site, day? }: a Scout run now
 //   The Listener's routes (ingest URL, webhooks, OAuth, Connections): src/listener/routes.ts.
 
 import { timingSafeEqual } from "node:crypto";
@@ -21,6 +22,7 @@ import { config } from "./config.js";
 import { cancelRun, getRun, listRuns, retryRun, type RunState } from "./runs.js";
 import { dispatchAgent, isAgentName, startForTenant, type DispatchInput } from "./workflows/agents.js";
 import { demo } from "./workflows/demo.js";
+import { scout } from "./workflows/scout.js";
 import { listenerRoute } from "./listener/index.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
@@ -140,6 +142,15 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     const stallSeconds = Math.min(Math.max(Number(body.stallSeconds ?? 0) || 0, 0), 3600);
     const site = typeof body.site === "string" && SITE_RE.test(body.site) ? body.site : DEMO_SITE;
     const handle = await startForTenant(site, demo, { startedAt: Date.now(), stallSeconds, fail: body.fail === true });
+    return send(res, 200, { id: handle.workflowID });
+  }
+
+  if (path === "/runs/scout" && method === "POST") {
+    const body = await readJson(req);
+    if (typeof body.site !== "string" || !SITE_RE.test(body.site)) throw new HttpError(400, "Bad site");
+    const today = new Date().toISOString().slice(0, 10);
+    const day = typeof body.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.day) ? body.day : today;
+    const handle = await startForTenant(body.site, scout, { site: body.site, day });
     return send(res, 200, { id: handle.workflowID });
   }
 
