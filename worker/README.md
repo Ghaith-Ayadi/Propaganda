@@ -287,6 +287,8 @@ Every route but `/health` needs a superadmin's Supabase access token.
 | `POST /runs/:id/cancel` | A queued, running or stalled run |
 | `POST /runs/demo` | `{ stallSeconds?, fail?, site? }`: a three-step run that spends nothing |
 | `POST /runs/scout` | `{ site, day?, checkAi? }`: a Scout run now |
+| `GET /triggers` | `{ triggers, tenants }`: what Admin's Run now can start (`src/triggers.ts`) |
+| `POST /triggers/:id` | `{ site? }` → `{ runs }`: start it now, through the agent's own workflow (same cost log and budgets as the schedule). A new scheduled agent run gets an entry in `src/triggers.ts` |
 
 ### Dispatch, from Chat
 

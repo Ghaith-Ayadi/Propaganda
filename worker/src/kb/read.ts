@@ -226,7 +226,8 @@ export interface Work {
  *   contest   a contest a person opened that has no drafted change yet
  *   guardian  an open proposal
  */
-export async function pendingWork(settleSeconds: number, limit = 20): Promise<Work[]> {
+/** `site`: only that tenant's work (Admin's Run now); null for every tenant. */
+export async function pendingWork(settleSeconds: number, limit = 20, site: string | null = null): Promise<Work[]> {
   const { rows } = await db().query<Work>(
     `(select 'check' as kind, v.site, v.id, 0 as round, v.created as at
         from public.kb_agent_sites a
@@ -234,17 +235,20 @@ export async function pendingWork(settleSeconds: number, limit = 20): Promise<Wo
         cross join lateral (select * from public.post_versions v where v.post = p.id order by v.version desc limit 1) v
        where a.checker and v.created >= a.since
          and v.created < now() - make_interval(secs => $1)
+         and ($3::text is null or a.site = $3)
          and not exists (select 1 from public.kb_checks k where k.post_version = v.id)
        order by v.created limit $2)
      union all
      (select 'recheck', f.site, f.id, 0, f.created
         from public.kb_flags f join public.kb_agent_sites a on a.site = f.site and a.checker
        where f.kind = 'recheck' and f.status in ('open', 'snoozed') and f.checked is null
+         and ($3::text is null or f.site = $3)
        order by f.created limit $2)
      union all
      (select 'contest', p.site, p.id, 0, p.created
         from public.kb_proposals p join public.kb_agent_sites a on a.site = p.site and a.checker
        where p.origin = 'contest' and p.status = 'draft' and p.flag is not null
+         and ($3::text is null or p.site = $3)
          and not exists (select 1 from public.kb_changes c where c.proposal = p.id)
        order by p.created limit $2)
      union all
@@ -252,9 +256,10 @@ export async function pendingWork(settleSeconds: number, limit = 20): Promise<Wo
              (select count(*)::int from public.kb_decisions d where d.proposal = p.id), p.updated
         from public.kb_proposals p join public.kb_agent_sites a on a.site = p.site and a.guardian
        where p.status = 'open'
+         and ($3::text is null or p.site = $3)
        order by p.updated limit $2)
      order by at`,
-    [settleSeconds, limit],
+    [settleSeconds, limit, site],
   );
   return rows.map(({ kind, site, id, round }) => ({ kind, site, id, round }));
 }

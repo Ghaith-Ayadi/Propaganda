@@ -131,3 +131,22 @@ export function cancelRun(client: Client, id: string): Promise<{ ok: true }> {
 export function startDemoRun(client: Client, opts: { stallSeconds?: number; fail?: boolean }): Promise<{ id: string }> {
   return call(client, "RUN-DEMO", "/runs/demo", { method: "POST", body: JSON.stringify(opts) });
 }
+
+/** What Admin's Run now can start (worker/src/triggers.ts). */
+export interface Trigger {
+  id: string;
+  agent: string;
+  label: string;
+  detail: string;
+  /** tenant: for the picked tenant. all: one run across every tenant with that connection. */
+  scope: "tenant" | "all";
+}
+
+export function listTriggers(client: Client): Promise<{ triggers: Trigger[]; tenants: { id: string; name: string }[] }> {
+  return call(client, "RUN-NOW", "/triggers");
+}
+
+/** Start a trigger now; returns the runs it started (none when there was nothing to do). */
+export function runTrigger(client: Client, id: string, site: string | null): Promise<{ runs: string[] }> {
+  return call(client, "RUN-NOW", `/triggers/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(site ? { site } : {}) });
+}
