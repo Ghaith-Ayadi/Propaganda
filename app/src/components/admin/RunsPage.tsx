@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminContext";
+import { RunNow } from "@/components/admin/RunNow";
 import {
   cancelRun, getRun, listRuns, retryRun, startDemoRun,
   type Cost, type RunDetail, type RunState, type RunSummary, type StepView,
@@ -73,6 +74,7 @@ export function RunsPage() {
   const [sites, setSites] = useState<Map<string, string>>(new Map());
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [runNowOpen, setRunNowOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -134,12 +136,23 @@ export function RunsPage() {
           ))}
         </div>
         <div className="flex items-center gap-2 text-sm">
+          {!runNowOpen && <RunNowButton onOpen={() => setRunNowOpen(true)} />}
           <DemoMenu onStart={demo} />
           <button type="button" onClick={() => void load()} className="rounded-lg border border-secondary px-3 py-1.5 text-secondary hover:bg-secondary">
             Refresh
           </button>
         </div>
       </div>
+
+      {runNowOpen && (
+        <RunNow
+          onClose={() => setRunNowOpen(false)}
+          onStarted={(id) => {
+            if (id) setSelected(id);
+            void load();
+          }}
+        />
+      )}
 
       {error && <p className="text-sm text-error-primary">{error}</p>}
 
@@ -379,6 +392,14 @@ function StepRow({ step, runError }: { step: StepView; runError: string | null }
         <pre className="ml-11 mt-1 whitespace-pre-wrap text-xs text-error-primary">{step.error}</pre>
       )}
     </li>
+  );
+}
+
+function RunNowButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button type="button" onClick={onOpen} className="rounded-lg border border-secondary bg-primary px-3 py-1.5 font-medium text-secondary hover:bg-secondary">
+      Run now…
+    </button>
   );
 }
 

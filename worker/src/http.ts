@@ -12,6 +12,8 @@
 //   POST /runs/:id/cancel        { ok: true }
 //   POST /runs/demo              { id }        body { stallSeconds?, fail?, site? }
 //   POST /runs/scout             { id }        body { site, day? }: a Scout run now
+//   GET  /triggers               { triggers, tenants }: Admin's Run now (src/triggers.ts)
+//   POST /triggers/:id           { runs }      body { site? }
 //   The Listener's routes (ingest URL, webhooks, OAuth, Connections): src/listener/routes.ts.
 
 import { timingSafeEqual } from "node:crypto";
@@ -24,6 +26,7 @@ import { dispatchAgent, isAgentName, startForTenant, type DispatchInput } from "
 import { demo } from "./workflows/demo.js";
 import { scout } from "./workflows/scout.js";
 import { listenerRoute } from "./listener/index.js";
+import { listTenants, listTriggers, runTrigger } from "./triggers.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
 const SITE_RE = /^[a-z0-9]{15}$/;
@@ -117,7 +120,18 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
   // The Listener's ingest URL, webhooks, OAuth callbacks and Connections routes check their own credentials.
   if (await listenerRoute(db, req, res, url)) return;
 
-  await requireSuperadmin(db, req.headers.authorization, config.jwtSecret());
+  const admin = await requireSuperadmin(db, req.headers.authorization, config.jwtSecret());
+
+  if (path === "/triggers" && method === "GET") {
+    return send(res, 200, { triggers: listTriggers(), tenants: await listTenants(db) });
+  }
+  const trig = /^\/triggers\/([a-z0-9-]+)$/.exec(path);
+  if (trig && method === "POST") {
+    const body = await readJson(req);
+    const site = typeof body.site === "string" && SITE_RE.test(body.site) ? body.site : null;
+    if (body.site !== undefined && body.site !== null && !site) throw new HttpError(400, "Bad site");
+    return send(res, 200, { runs: await runTrigger(db, trig[1]!, site, { by: admin.sub }) });
+  }
 
   if (path === "/runs" && method === "GET") {
     const state = url.searchParams.get("state") ?? undefined;
