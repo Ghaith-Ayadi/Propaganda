@@ -243,3 +243,61 @@ export async function llmMentions(w: Where, domain: string, platform: "google" |
     aiSearchVolume: Number(i.ai_search_volume) || 0,
   }));
 }
+
+// ---- keyword data (DataForSEO Labs), for the Strategist ----
+//
+// Live and cheap (a cent or two a request); the Strategist calls these a few
+// times per proposal, so they're charged to its own job in the cost log.
+
+export interface KeywordRow {
+  keyword: string;
+  /** Monthly Google searches. */
+  volume: number;
+  /** DataForSEO's 0 to 100; null when it has none. */
+  difficulty: number | null;
+  /** The domain's Google position, for ranked keywords; null otherwise. */
+  position: number | null;
+}
+
+function keywordOf(i: Record<string, unknown>): KeywordRow {
+  const data = (i.keyword_data as Record<string, unknown> | undefined) ?? i;
+  const info = (data.keyword_info as Record<string, unknown> | undefined) ?? {};
+  const props = (data.keyword_properties as Record<string, unknown> | undefined) ?? {};
+  const serp = ((i.ranked_serp_element as Record<string, unknown> | undefined)?.serp_item as Record<string, unknown> | undefined) ?? null;
+  const difficulty = Number(props.keyword_difficulty);
+  return {
+    keyword: str(data.keyword),
+    volume: Number(info.search_volume) || 0,
+    difficulty: Number.isFinite(difficulty) && props.keyword_difficulty !== null ? difficulty : null,
+    position: serp ? Number(serp.rank_group) || null : null,
+  };
+}
+
+/** Searches related to `seeds` (at most 20 seeds), with volume and difficulty. */
+export async function keywordIdeas(w: Where, job: string, seeds: string[], limit = 60): Promise<KeywordRow[]> {
+  if (!seeds.length) return [];
+  const result = await callPaidApi({ site: w.site, job, service: "dataforseo/keyword-ideas", background: true }, () =>
+    live("/v3/dataforseo_labs/google/keyword_ideas/live", {
+      keywords: seeds.slice(0, 20),
+      location_code: w.locationCode,
+      language_code: w.languageCode,
+      limit,
+      order_by: ["keyword_info.search_volume,desc"],
+    }),
+  );
+  return items(result).map(keywordOf).filter((k) => k.keyword);
+}
+
+/** Searches `domain` already ranks for (top 100), best first. */
+export async function rankedKeywords(w: Where, job: string, domain: string, limit = 50): Promise<KeywordRow[]> {
+  const result = await callPaidApi({ site: w.site, job, service: "dataforseo/ranked-keywords", background: true }, () =>
+    live("/v3/dataforseo_labs/google/ranked_keywords/live", {
+      target: domain,
+      location_code: w.locationCode,
+      language_code: w.languageCode,
+      limit,
+      order_by: ["keyword_data.keyword_info.search_volume,desc"],
+    }),
+  );
+  return items(result).map(keywordOf).filter((k) => k.keyword);
+}

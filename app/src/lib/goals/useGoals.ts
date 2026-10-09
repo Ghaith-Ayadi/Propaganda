@@ -3,7 +3,7 @@
 // touches one file.
 
 import { useMemo, useSyncExternalStore } from "react";
-import { goalsAdapter } from "./adapter";
+import { askStrategist, goalsAdapter, strategistState } from "./adapter";
 import type { BatchPlan, Launch, PlanDrop, Proposal, QuarterGoals, QuarterKey, StrategyAnswers, TenantGoalsContext } from "./types";
 
 function useVersion(): number {
@@ -58,6 +58,17 @@ export const goalsActions = {
   removePlanFile: goalsAdapter.removePlanFile,
   setBatchCadence: goalsAdapter.setBatchCadence,
   requestNextBatch: goalsAdapter.requestNextBatch,
+  askStrategist,
 };
 
-export const goalsArePlaceholder = goalsAdapter.placeholder;
+/** True while the page shows sample data (the server has no goal tables yet). */
+export function useGoalsArePlaceholder(): boolean {
+  useVersion();
+  return goalsAdapter.placeholder;
+}
+
+/** The Strategist's newest request ("requested", "running", "failed", ...), or null. */
+export function useStrategistState() {
+  const v = useVersion();
+  return useMemo(() => strategistState(), [v]);
+}

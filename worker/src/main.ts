@@ -21,6 +21,7 @@ import "./agents/writer.js";
 import "./agents/voice.js";
 import { schedulePitcher } from "./agents/pitcher.js";
 import { scheduleScout } from "./workflows/scout.js";
+import { scheduleStrategist, startStrategistPoller } from "./workflows/strategist.js";
 import "./agents/checker.js";
 import "./agents/guardian.js";
 import { setListenerPool, startListener } from "./listener/index.js";
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
   await registerQueues();
   await schedulePitcher();
   await scheduleScout();
+  await scheduleStrategist();
 
   // The app's database holds people's content: this pool can only read it.
   // Any write through it fails at the server, whatever code asks for one.
@@ -53,11 +55,13 @@ async function main(): Promise<void> {
   await startListener();
   const server = startServer(db, config.port);
   const stopDispatcher = startDispatcher();
+  const stopStrategist = startStrategistPoller();
   console.log(`worker ${config.appVersion} up, Runs API on :${config.port}`);
 
   const stop = async (signal: string) => {
     console.log(`${signal}: shutting down`);
     stopDispatcher();
+    stopStrategist();
     server.close();
     await DBOS.shutdown();
     await db.end();
