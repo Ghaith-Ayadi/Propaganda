@@ -61,6 +61,34 @@ html.ppgd-app {
   --track-sm: -0.006em;
   --track-md: -0.011em;
 }
+/* The accent is gold (Ayadi, 2026-10-09), for the product and the website.
+   It is the kit's brand scale, so every brand token (primary buttons, links,
+   toggles, checkboxes, focus rings, selected states) turns gold. 500 is the
+   accent itself; 600 is the solid fill, dark enough for white text (4.6:1).
+   App only: the blogs keep their themes. */
+html.ppgd-app {
+  --color-brand-25: #fffcf2;
+  --color-brand-50: #fdf8e7;
+  --color-brand-100: #faeec6;
+  --color-brand-200: #f4dd8e;
+  --color-brand-300: #ebc757;
+  --color-brand-400: #deb031;
+  --color-brand-500: #c9971a;
+  --color-brand-600: #94700f;
+  --color-brand-700: #78590c;
+  --color-brand-800: #5f470e;
+  --color-brand-900: #4d3a10;
+  --color-brand-950: #2c2007;
+}
+/* The kit's dark theme greys out brand text and icons; keep them gold. */
+html.ppgd-app.dark-mode {
+  --color-text-brand-secondary: var(--color-brand-300);
+  --color-text-brand-secondary_hover: var(--color-brand-200);
+  --color-text-brand-tertiary: var(--color-brand-400);
+  --color-text-brand-tertiary_alt: var(--color-brand-300);
+  --color-icon-fg-brand: var(--color-brand-400);
+  --color-fg-brand-primary_alt: var(--color-brand-400);
+}
 html.ppgd-app .bn-container {
   --bn-font-family: var(--font-serif);
 }
