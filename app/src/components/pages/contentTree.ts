@@ -1,7 +1,7 @@
-// Content's channels (the page's tabs) and sub-channels (its drawer). Blog's
-// sub-channels are the tenant's collections; the other channels come after 0.2.
-// useContentTree() builds the same as a nav tree, for a PageRoute's
-// useChildren; the nav doesn't use it since the drawer took over.
+// Content's channels (the page's tabs) and sub-channels (Blog's collection
+// row). Blog's sub-channels are the tenant's collections; the other channels
+// come after 0.2. useContentTree() builds the same as a nav tree, for a
+// PageRoute's useChildren; the nav doesn't use it.
 
 import { useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
