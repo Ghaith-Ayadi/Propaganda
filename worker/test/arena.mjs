@@ -93,7 +93,7 @@ globalThis.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
-const { setModelResolver, runRound, worstCase, checkModels, judgePrompt } = await import("../dist/testkit.js");
+const { setModelResolver, runRound, worstCase, checkModels, judgePrompt, THINKING_TOKENS } = await import("../dist/testkit.js");
 
 const prompts = [];
 const usage = { inputTokens: { total: 1000, noCache: 1000, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 200, text: 200, reasoning: 0 } };
@@ -174,7 +174,7 @@ await runRound(null, { agent: "pitcher", site: SITE, models: ["cheap/a", "nobody
   () => check(false, "an unknown model is refused"),
   (err) => check(/no price for nobody\/x/.test(err.message), "a model the gateway doesn't list is refused"),
 );
-check(Math.abs(worstCase(3000, ["cheap/a"], new Map([["cheap/a", { input: 1e-6, output: 2e-6 }]])) - (1000 * 1e-6 + 6000 * 2e-6)) < 1e-12, "worst case is the whole prompt plus every output token");
+check(Math.abs(worstCase(3000, ["cheap/a"], new Map([["cheap/a", { input: 1e-6, output: 2e-6 }]])) - (1000 * 1e-6 + (6000 + THINKING_TOKENS) * 2e-6)) < 1e-12, "worst case is the whole prompt plus every output token, thinking included");
 await runRound(null, { agent: "pitcher", site: "othersite000000", models: ["cheap/a", "cheap/b"] }).then(
   () => check(false, "a customer's tenant is refused"),
   (err) => check(err.status === 403, "a tenant outside ARENA_TENANTS is refused before any read"),
