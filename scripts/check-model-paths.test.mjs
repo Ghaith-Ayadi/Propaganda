@@ -1,4 +1,4 @@
-// node --test check-model-paths.test.mjs
+// node --test scripts/check-model-paths.test.mjs (or npm test in api/)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { scanSource } from "./check-model-paths.mjs";

@@ -1,6 +1,7 @@
 // Fails when code reaches a model provider by any path other than the cost-
 // logging gateway (api/_ai/gateway.ts). Run: npm run check:model-paths
-// (from api/). Scans the whole repo's source, not just api/.
+// (from api/). Scans the whole repo's source, not just api/. It lives outside
+// api/ because every file there is deployed as a Vercel function.
 //
 // Blocked everywhere outside the gateway: provider hosts, provider packages
 // (@ai-sdk/anthropic, openai, ...) and model-call functions (generateText,
@@ -14,7 +15,7 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const GATEWAY = "api/_ai/gateway.ts";
-const ALLOWED = new Set([GATEWAY, "api/check-model-paths.mjs", "api/check-model-paths.test.mjs"]);
+const ALLOWED = new Set([GATEWAY, "scripts/check-model-paths.mjs", "scripts/check-model-paths.test.mjs"]);
 const SKIP = new Set(["node_modules", ".git", "dist", ".claude", "docs", "scripts"]);
 
 const HOSTS = [

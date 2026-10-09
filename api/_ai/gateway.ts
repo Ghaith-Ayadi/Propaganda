@@ -1,7 +1,7 @@
 // The one path to a model. Every call to a language model in this repo goes
 // through callModel(): it checks the budget rules, runs the call with the
 // Vercel AI SDK, and writes one row to public.model_calls (tenant, job, model,
-// tokens, cost at API prices). api/check-model-paths.mjs fails when anything
+// tokens, cost at API prices). scripts/check-model-paths.mjs fails when anything
 // else reaches a provider. Schema and rules: supabase draft cost_log.sql, and
 // cost.ts for the arithmetic.
 //
