@@ -40,6 +40,7 @@
 //   KB-FIX              applying a flag's fix failed
 //   KB-CONTEST          contesting a flag, or sending the contest, failed
 //   KB-BULK             a bulk action on a re-check thread failed
+//   WAITLIST-LOAD       Admin couldn't load the waitlist
 
 import { BackendError } from "@/lib/supabase";
 

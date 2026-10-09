@@ -100,7 +100,7 @@ function Progress({ label, value, detail, strong }: { label: string; value: numb
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className="h-full rounded-full bg-fg-brand-primary" style={{ width: `${Math.min(100, value * 100)}%` }} />
+        <div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(100, value * 100)}%` }} />
       </div>
     </div>
   );
