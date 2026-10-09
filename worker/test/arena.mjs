@@ -80,7 +80,7 @@ process.env.DBOS_SYSTEM_DATABASE_URL ??= "postgres://unused@127.0.0.1:1/dbos";
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
-  if (String(input) === "https://ai-gateway.vercel.sh/v1/models") {
+  if (String(input).endsWith("/v1/models")) {
     return Response.json({
       data: [
         { id: "cheap/a", pricing: { input: "0.0000005", output: "0.000002" } },

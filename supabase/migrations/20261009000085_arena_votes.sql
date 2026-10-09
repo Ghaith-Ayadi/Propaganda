@@ -1,4 +1,4 @@
--- DRAFT: moves to supabase/migrations only after Ayadi's own yes in the thread.
+-- Approved by Ayadi in the "Model benchmarks per agent" thread, 2026-10-09 17:33Z.
 --
 -- Admin > Arena (worker/src/arena.ts, app/src/components/admin/ArenaPage.tsx):
 -- Ayadi's blind votes between models on the same real agent task. One row per

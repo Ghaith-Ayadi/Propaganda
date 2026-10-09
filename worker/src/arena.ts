@@ -13,7 +13,7 @@
 
 import { randomInt } from "node:crypto";
 import type { Pool } from "pg";
-import { callModel } from "../../api/_ai/gateway";
+import { callModel, gatewayListPrices } from "../../api/_ai/gateway";
 import { HttpError } from "./auth.js";
 import { judgePrompt, PITCHER_SYSTEM, parseJudgements } from "./agents/pitcher.js";
 import { everyBrief, getSite, ideas as readIdeas, pipelineBriefs, publishedPosts } from "./agents/store.js";
@@ -68,13 +68,11 @@ let prices: { at: number; byId: Map<string, { input: number; output: number }> }
 /** The AI Gateway's list prices per token, cached for an hour. */
 async function listPrices(): Promise<Map<string, { input: number; output: number }>> {
   if (prices && Date.now() - prices.at < 3_600_000) return prices.byId;
-  const res = await fetch("https://ai-gateway.vercel.sh/v1/models");
-  if (!res.ok) throw new HttpError(502, `The AI Gateway's model list answered ${res.status}`);
-  const body = (await res.json()) as { data?: { id: string; pricing?: { input?: string; output?: string } }[] };
-  const byId = new Map<string, { input: number; output: number }>();
-  for (const m of body.data ?? []) {
-    const input = Number(m.pricing?.input), output = Number(m.pricing?.output);
-    if (Number.isFinite(input) && Number.isFinite(output)) byId.set(m.id, { input, output });
+  let byId: Map<string, { input: number; output: number }>;
+  try {
+    byId = await gatewayListPrices();
+  } catch (err) {
+    throw new HttpError(502, (err as Error).message);
   }
   prices = { at: Date.now(), byId };
   return byId;
