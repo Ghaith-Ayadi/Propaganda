@@ -24,6 +24,7 @@ import type {
   Grades,
   HandClose,
   PendingProposal,
+  PostFindings,
   RecheckThread,
   RecheckThreadSummary,
   RememberInput,
@@ -59,6 +60,9 @@ export interface KnowledgeBackend {
   bulk(flagIds: string[], action: BulkAction): Promise<void>;
 
   grades(): Promise<Grades>;
+
+  /** What the Checker and the Guardian said about one post: the editor's Review tab. */
+  postFindings(postId: string): Promise<PostFindings>;
 }
 
 const KB_BACKEND: "placeholder" | "live" = "placeholder";

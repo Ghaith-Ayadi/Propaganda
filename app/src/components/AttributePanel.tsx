@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Copy04, Link01, LinkExternal01, Plus, Star01, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
@@ -30,6 +30,7 @@ import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/but
 import { Tabs } from "@/components/application/tabs/tabs";
 import { ReviewPanel } from "@/components/pipeline/ReviewPanel";
 import { usePipelineItemForPost } from "@/lib/pipeline/store";
+import { useReviewState } from "@/lib/review/store";
 
 interface Props {
   post: Post;
@@ -61,6 +62,11 @@ export function AttributePanel({ post }: Props) {
   // A post waiting on review opens on its Review tab.
   const pipelineItem = usePipelineItemForPost(post.id);
   const [tab, setTab] = useState<TabKey>(pipelineItem?.stage === "in_review" ? "review" : "details");
+  // A highlight clicked in the text opens its card.
+  const { seq, activeFrom } = useReviewState();
+  useEffect(() => {
+    if (activeFrom === "editor") setTab("review");
+  }, [seq, activeFrom]);
 
   const { site } = useWorkspace();
   const publicUrl = postPublicUrl(site, collectionSlugOf(post.type, collectionRows), post.slug);
@@ -89,7 +95,7 @@ export function AttributePanel({ post }: Props) {
   const status: PostStatus = post.status ?? "draft";
 
   return (
-    <aside className="flex h-full w-[300px] max-w-full flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm">
+    <aside className={`flex h-full ${tab === "review" ? "w-[360px]" : "w-[300px]"} max-w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm`}>
       <div className="flex items-center gap-1">
         <ButtonUtility
           size="sm"

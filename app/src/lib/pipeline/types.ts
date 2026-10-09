@@ -5,6 +5,8 @@
 // reviewer and batch. None of those columns exist yet, so the data comes from
 // the placeholder adapter (lib/pipeline/adapter.ts) until they do.
 
+import type { PostFlag } from "@/lib/knowledge/types";
+
 /** Board stages. Ideas are not here: the agent triages them and nobody sees them. */
 export type Stage = "pitched" | "writing" | "in_review" | "scheduled" | "published" | "rejected" | "not_now";
 
@@ -81,6 +83,8 @@ export interface Source {
 export interface PitchNote {
   lineId: string | null;
   text: string;
+  /** Words in the draft the note is about, when it was left on a passage; otherwise the outline line's text anchors it. */
+  quote?: string;
   /** Set by the review step when the draft addressed it. */
   done?: boolean;
 }
@@ -94,6 +98,10 @@ export interface SourceCheck {
   detail: string;
   /** Where the agent looked, e.g. "Haldane call, Oct 2, 14:20". */
   where?: string;
+  /** The source's link, when it has one. */
+  url?: string;
+  /** Wording that would match the source, replacing `quote`. */
+  fix?: string;
 }
 
 /** A sentence about the tenant's own product, offered for Remember. */
@@ -108,6 +116,8 @@ export interface DraftForReview {
   paragraphs: string[];
   checks: SourceCheck[];
   ownClaims: OwnClaim[];
+  /** Knowledge base flags on the draft (placeholder for kb_flags on this post). */
+  flags?: PostFlag[];
 }
 
 export interface PipelineItem {

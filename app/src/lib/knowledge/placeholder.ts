@@ -1167,5 +1167,10 @@ export const placeholderKb: KnowledgeBackend = {
       },
     };
   },
-};
 
+  // The sample tenant's posts aren't posts in this browser: nothing to show
+  // in the editor. The pipeline's example draft carries its own findings.
+  async postFindings() {
+    return { checkedAt: null, sources: [], remember: [], flags: [] };
+  },
+};
