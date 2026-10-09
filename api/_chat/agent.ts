@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   BudgetError,
   CostLogUnavailableError,
+  DEFAULT_MODEL,
   KeysUnavailableError,
   TenantKeyError,
   UsageLimitError,
@@ -22,10 +23,10 @@ import { searchKnowledge, searchPosts, siteName } from "./lookups";
 import type { AgentName, ChatEvent, ChatUIMessage, Handoff, QuickAction } from "./types";
 
 /**
- * Sonnet, per agents.md. The id is the AI Gateway's (on a tenant's own key the
- * gateway asks Anthropic for claude-sonnet-5-5); CHAT_MODEL overrides it.
+ * The gateway's DEFAULT_MODEL (on a tenant's own key, BYOK_MODEL: Sonnet);
+ * CHAT_MODEL overrides it.
  */
-export const CHAT_MODEL = process.env.CHAT_MODEL || "anthropic/claude-sonnet-5.5";
+export const CHAT_MODEL = process.env.CHAT_MODEL || DEFAULT_MODEL;
 
 export interface ChatTurn {
   site: string;
@@ -110,8 +111,6 @@ export function failureMessage(err: unknown): string {
   if (err instanceof TenantKeyError) {
     // The provider's own words stay in the cost log, not in the conversation.
     if (err.retryAt) return "The Anthropic key hit its rate limit. Try again in a minute.";
-    if (/none is saved/.test(err.message)) return "This tenant runs on its own Anthropic key, and none is saved. An owner can add one in Settings.";
-    if (/ANTHROPIC_KEY_/.test(err.message)) return "The server has no Anthropic key set for this tenant's account.";
     return "Anthropic refused this tenant's key, or its account is out of credit. An owner can fix it in Settings.";
   }
   if (err instanceof KeysUnavailableError) return "This tenant's own Anthropic key can't be read on this server right now.";

@@ -4,7 +4,9 @@ The Listener reads a tenant's calls and Slack threads. From each one it pulls
 out three things:
 
 1. **Ideas** for the Pitcher: objections, questions, weak answers, claims with
-   nothing behind them, and points people disagreed on.
+   nothing behind them, and points people disagreed on. They go into its inbox
+   (`agent_ideas`, origin `calls` or `team`) and compete for the next batch's
+   slots with the plan; the Listener never starts the Pitcher.
 2. **Candidate facts** for the Guardian: one `kb_proposals` row per source,
    with one `kb_changes` row per fact, each quoting the exact span it came from.
 3. **Who said what**: speakers with an email or a Slack id become `kb_people`.
@@ -131,6 +133,4 @@ A provider whose keys are unset is simply not offered.
 1. A Slack reply that arrives after its thread was read is not read.
 2. A source that arrives while the tenant's agents are off stays `pending`,
    and nothing re-reads it when they're turned on.
-3. Ideas stay in the run's output until the Pitcher's `handOffIdeas` lands
-   (`worker/src/listener/ideas.ts`).
-4. Nearby claims use keyword search: the KB has no embeddings yet.
+3. Nearby claims use keyword search: the KB has no embeddings yet.

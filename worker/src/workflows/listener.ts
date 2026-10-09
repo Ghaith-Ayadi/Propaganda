@@ -34,7 +34,7 @@ import {
 } from "../listener/store.js";
 import { sideOf, type Origin, type Participant, type Side } from "../listener/transcript.js";
 
-/** The base tier, Sonnet (reviews/agents.md). */
+/** The base tier (MODELS.base). */
 const MODEL = () => process.env.LISTENER_MODEL || MODELS.base;
 /** A source with more than this many facts is cut: past it, it's a document, not a call. */
 const MAX_FACTS = 40;

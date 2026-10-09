@@ -312,89 +312,71 @@ test("a refused key fails the stream with the tenant's error and never falls bac
   assert.equal(keyMarks[0].status, "failed");
 });
 
-// ---- which account a tenant runs on ----
+// ---- a tenant with no key runs on our AI Gateway ----
 
-const privateSite = "siteppppppppppp";
-const axoniqSite = "siteaxaxaxaxaxa";
-const ownSite = "siteccccccccccc";
-const AXONIQ = "sk-ant-api03-axoniqaxoniqaxoniqaxoniq";
-const PRIVATE = "sk-ant-api03-privateprivateprivateprivat";
+const noKeySite = "siteccccccccccc";
 
-test("a tenant on the Axoniq account runs on its key, logged with it, and our budget applies", async () => {
-  g.setAccounts({ [privateSite]: "private", [axoniqSite]: "axoniq" });
-  process.env.ANTHROPIC_KEY_AXONIQ = AXONIQ;
-  gate = open; calls.length = 0;
-  let used = "", ours = 0;
-  setModelResolver(() => { ours++; return ok; });
-  g.setTenantModelResolver((k) => { used = k; return ok; });
-  await callModel({ ...opts, site: axoniqSite, model: "anthropic/claude-sonnet-5.5" });
-  assert.equal(used, AXONIQ);
-  assert.equal(ours, 0);
-  assert.equal(calls[0].credential, "axoniq");
-  assert.equal(calls[0].paid_by, undefined);
-
-  gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 };
-  await assert.rejects(callModel({ ...opts, site: axoniqSite, model: "anthropic/claude-sonnet-5.5" }), BudgetError);
-});
-
-test("a listed tenant ignores a saved key, and a missing account key stops the call without falling back", async () => {
-  const { encryptKey } = await import("./modelKeys");
-  keyRows[axoniqSite] = { secret: encryptKey(axoniqSite, KEY), last4: "1234", status: "ok", error: "", checked: "x" };
-  gate = open;
-  let used = "";
-  g.setTenantModelResolver((k) => { used = k; return ok; });
-  await callModel({ ...opts, site: axoniqSite, model: "anthropic/claude-sonnet-5.5" });
-  assert.equal(used, AXONIQ);
-
-  delete process.env.ANTHROPIC_KEY_AXONIQ; calls.length = 0;
-  let ours = 0;
-  setModelResolver(() => { ours++; return ok; });
-  await assert.rejects(
-    callModel({ ...opts, site: axoniqSite, model: "anthropic/claude-sonnet-5.5" }),
-    (e: Error) => e instanceof g.TenantKeyError && /ANTHROPIC_KEY_AXONIQ/.test(e.message),
-  );
-  assert.equal(ours, 0);
-  assert.equal(calls.length, 0);
-  delete keyRows[axoniqSite];
-});
-
-test("the private account: ANTHROPIC_KEY_PRIVATE when set, else the AI Gateway", async () => {
-  gate = open; calls.length = 0;
-  let used = "", ours = 0;
-  setModelResolver(() => { ours++; return ok; });
-  g.setTenantModelResolver((k) => { used = k; return ok; });
-  await callModel({ ...opts, site: privateSite, model: "anthropic/claude-sonnet-5.5" });
-  assert.equal(ours, 1);
-  process.env.ANTHROPIC_KEY_PRIVATE = PRIVATE;
-  calls.length = 0;
-  await callModel({ ...opts, site: privateSite, model: "anthropic/claude-sonnet-5.5" });
-  assert.equal(used, PRIVATE);
-  assert.equal(calls[0].credential, undefined);
-  delete process.env.ANTHROPIC_KEY_PRIVATE;
-});
-
-test("a tenant off the list with no key saved stops, and never runs on an Ayadi account", async () => {
-  process.env.ANTHROPIC_KEY_PRIVATE = PRIVATE;
+test("no key saved: Anthropic calls run on our AI Gateway, paid by us, inside our budget", async () => {
   gate = open; calls.length = 0;
   let ours = 0, used = "";
   setModelResolver(() => { ours++; return ok; });
   g.setTenantModelResolver((k) => { used = k; return ok; });
-  await assert.rejects(
-    callModel({ ...opts, site: ownSite, model: "anthropic/claude-sonnet-5.5" }),
-    (e: Error) => e instanceof g.TenantKeyError && /none is saved/.test(e.message),
-  );
-  assert.equal(ours, 0);
+  await callModel({ ...opts, site: noKeySite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(ours, 1);
   assert.equal(used, "");
-  assert.equal(calls.length, 0);
-  delete process.env.ANTHROPIC_KEY_PRIVATE;
+  assert.equal(calls[0].paid_by, undefined);
+  assert.equal(calls[0].credential, undefined);
+
+  gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 };
+  await assert.rejects(callModel({ ...opts, site: noKeySite, model: "anthropic/claude-sonnet-5.5" }), BudgetError);
 });
 
-test("only listed site ids are on an Ayadi account", async () => {
-  const { accountOf, setAccounts } = await import("./modelKeys");
-  setAccounts({ verbatimsite000: "private" });
-  assert.equal(accountOf("verbatimsite000"), "private");
-  assert.equal(accountOf("kontra000000000"), null);
-  assert.equal(accountOf("constructor"), null);
+test("removing a key moves the tenant back to our AI Gateway", async () => {
+  await withKey();
+  gate = open;
+  let ours = 0, used = "";
+  setModelResolver(() => { ours++; return ok; });
+  g.setTenantModelResolver((k) => { used = k; return ok; });
+  await callModel({ ...opts, site: tenantSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(used, KEY);
+  delete keyRows[tenantSite];
+  await callModel({ ...opts, site: tenantSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(ours, 1);
+});
+
+// ---- the default model ----
+
+test("DEFAULT_MODEL runs on our gateway with no key, and as BYOK_MODEL on a tenant's key", async () => {
+  gate = open; calls.length = 0;
+  let ours = "", keyed = "";
+  setModelResolver((id) => { ours = id; return ok; });
+  g.setTenantModelResolver((_k, id) => { keyed = id; return ok; });
+  await callModel({ ...opts, site: noKeySite, model: g.DEFAULT_MODEL });
+  assert.equal(g.DEFAULT_MODEL, "deepseek/deepseek-v4-pro");
+  assert.equal(ours, g.DEFAULT_MODEL);
+  assert.equal(calls[0].model, g.DEFAULT_MODEL);
+  assert.equal(calls[0].paid_by, undefined);
+
+  await withKey(); calls.length = 0;
+  await callModel({ ...opts, site: tenantSite, model: g.DEFAULT_MODEL });
+  assert.equal(keyed, g.BYOK_MODEL);
+  assert.equal(calls[0].model, g.BYOK_MODEL);
+  assert.equal(calls[0].paid_by, "tenant");
+
+  // A model asked for by name (the editor's Gemini) stays ours even with a key.
+  calls.length = 0; ours = "";
+  await callModel({ ...opts, site: tenantSite, model: "google/gemini-2.5-flash-lite" });
+  assert.equal(ours, "google/gemini-2.5-flash-lite");
+  assert.equal(calls[0].paid_by, undefined);
+  delete keyRows[tenantSite];
+});
+
+test("the gateway's reported cost prices a call whose model has no price row", () => {
+  assert.equal(g.gatewayCost({ gateway: { cost: "0.0012345678" } }), 0.001235);
+  assert.equal(g.gatewayCost({ gateway: { cost: 0.5 } }), 0.5);
+  assert.equal(g.gatewayCost({ gateway: {} }), null);
+  assert.equal(g.gatewayCost(undefined), null);
+  assert.equal(g.gatewayCost({ gateway: { cost: "nope" } }), null);
 });
 
 test.after(() => server.close());

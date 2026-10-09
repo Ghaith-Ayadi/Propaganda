@@ -94,9 +94,10 @@ const dataforseo = await listen((req, res, body) => {
       const id = `task-${nextId++}`;
       seo.push({ path: req.url, ...t });
       queue.set(id, { kind: post[1], task: t, looks: 0 });
-      return { id, status_code: 20100, status_message: "Task Created.", cost: 0.0006 };
+      return { id, status_code: 20100, status_message: "Task Created.", cost: 0.0006, data: t };
     });
-    return json(res, { status_code: 20000, status_message: "Ok.", cost: Number((0.0006 * tasks.length).toFixed(4)), tasks: out });
+    // Answered in reverse: the Scout matches each task on its tag, not its place.
+    return json(res, { status_code: 20000, status_message: "Ok.", cost: Number((0.0006 * tasks.length).toFixed(4)), tasks: out.reverse() });
   }
   const get = /^\/v3\/serp\/google\/(organic|news)\/task_get\/advanced\/(.+)$/.exec(req.url);
   if (get && req.method === "GET") {
@@ -195,8 +196,6 @@ const ideasOf = (origin) => [...stored.values()].filter((i) => i.site === SITE &
 const kit = await import("../dist/testkit.js");
 const { DBOS } = await import("@dbos-inc/dbos-sdk");
 kit.setModelResolver(() => model);
-// The test tenant runs on our own account (BYOK, api/_ai/modelKeys.ts), so no key is needed.
-kit.setAccounts({ [SITE]: "private" });
 kit.setWorkflowContext(() => ({ workflowId: DBOS.workflowID ?? null, stepId: DBOS.stepID ?? null }));
 DBOS.setConfig({ name: "propaganda-scout-test", systemDatabaseUrl: `${PGURL}/${SYS}`, applicationVersion: "test" });
 await DBOS.launch();
@@ -319,12 +318,12 @@ check(ideasOf("search").length === 1, `a search gap is one idea a quarter, not o
 
 console.log("schedule");
 await app.query("insert into public.sites (id, name, slug) values ('emptysite000000', 'Empty', 'empty')");
-const weekly = await DBOS.startWorkflow(kit.scoutWeekly, { workflowID: "scout-weekly-test" })(new Date("2026-10-26T06:00:00Z"), null);
+const weekly = await DBOS.startWorkflow(kit.scoutWeekly, { workflowID: "scout-weekly-test" })(new Date("2026-10-25T06:00:00Z"), null);
 await weekly.getResult();
-const child = DBOS.retrieveWorkflow(kit.weeklyRunId(SITE, "2026-10-26"));
+const child = DBOS.retrieveWorkflow(kit.weeklyRunId(SITE, "2026-10-25"));
 const s3 = await child.getResult();
 check(s3.searches === 2, "the weekly run started the tenant's Scout under its id for the day");
-const empty = await DBOS.getWorkflowStatus(kit.weeklyRunId("emptysite000000", "2026-10-26"));
+const empty = await DBOS.getWorkflowStatus(kit.weeklyRunId("emptysite000000", "2026-10-25"));
 check(empty === null, "a tenant with nothing to follow isn't scouted");
 
 // ---- Chat's hand-off: a run for today ----

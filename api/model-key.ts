@@ -6,12 +6,10 @@
 // (_ai/modelKeys.ts) and only after one tiny real call with it succeeds.
 // Members see its status and may re-test it; only owners set or remove it.
 //
-// GET    /api/model-key?site=<id>             -> { key: KeyInfo | null, managed: boolean }
-//        managed: the tenant runs on an account Propaganda holds for it (the
-//        hardcoded list in _ai/modelKeys.ts), so a key saved here would not be used.
+// GET    /api/model-key?site=<id>             -> { key: KeyInfo | null }
 // POST   /api/model-key { site, key }          -> test, and save when green: { ok, error?, key }
 // POST   /api/model-key { site, action: "test" } -> re-test the saved key: { ok, error?, key }
-// DELETE /api/model-key?site=<id>             -> { key: null } (Claude work waits for a new key)
+// DELETE /api/model-key?site=<id>             -> { key: null } (back to our AI Gateway)
 
 import { requireMember, requireOwner } from "./_auth";
 import { withTelemetry } from "./_telemetry";
@@ -43,7 +41,7 @@ async function get(request: Request): Promise<Response> {
   return (
     (await member(request, site)) ??
     guarded(async () => {
-      return json({ key: await tenantKeys.info(site), managed: tenantKeys.managed(site) });
+      return json({ key: await tenantKeys.info(site) });
     })
   );
 }
@@ -68,9 +66,6 @@ async function post(request: Request): Promise<Response> {
       return json({ ...result, key: await tenantKeys.info(site) });
     }
 
-    if (tenantKeys.managed(site)) {
-      return json({ ok: false, error: "Propaganda manages this tenant's Anthropic key, so a key saved here would not be used." }, 409);
-    }
     const key = typeof body.key === "string" ? body.key.trim() : "";
     if (!looksLikeKey(key)) {
       return json({ ok: false, error: "That doesn't look like an Anthropic API key. It starts with sk-ant-." }, 400);
