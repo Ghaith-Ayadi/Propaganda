@@ -36,9 +36,6 @@ import {
   readKeyInfo,
   readTenantKey,
   removeTenantKey,
-  accountKey,
-  accountOf,
-  type Account,
   saveTenantKey,
   scrub,
   TenantKeyError,
@@ -46,7 +43,7 @@ import {
 } from "./modelKeys";
 
 export { BudgetError, CostLogUnavailableError, UsageLimitError } from "./errors";
-export { KeysUnavailableError, TenantKeyError, setAccounts } from "./modelKeys";
+export { KeysUnavailableError, TenantKeyError } from "./modelKeys";
 // Tool definitions and the UI message stream are plain data, not model calls:
 // callers (Chat) use these instead of importing the SDK, which
 // check-model-paths.mjs allows only in this file.
@@ -229,36 +226,25 @@ export interface Route {
   /** True when the call goes straight to Anthropic with one key: its failures are the key's, and never retried on another. */
   keyed: boolean;
   /** Extra cost-log columns, sent only when not the default, so the log works before migration 20261008000050. */
-  logged: { paid_by?: "tenant"; credential?: Account | "own" };
+  /** credential 'own' marks the tenant's key; the column's default ('private') is our account. */
+  logged: { paid_by?: "tenant"; credential?: "own" };
   /** Our budget limits don't apply (the tenant pays); the kill switch still does. */
   budgetFree: boolean;
 }
 
 /**
  * How a call for `site` reaches `model`. Every path to a model goes through
- * this (callModel here, and streamModel for Chat). Only Anthropic models are
- * routed; other providers (Gemini for the editor) stay ours.
- *  - A tenant on Ayadi's list (modelKeys.ts, accountOf) runs on that account:
- *    'private' on ANTHROPIC_KEY_PRIVATE (the AI Gateway while it is unset),
- *    'axoniq' on ANTHROPIC_KEY_AXONIQ, and stops when that key isn't set.
- *  - Every other tenant runs on its saved key, paid by the tenant, and stops
- *    when it has none. No tenant ever falls back to another account.
+ * this (callModel here, and streamModel for Chat). A tenant that saved its own
+ * Anthropic key runs every `anthropic/` call on it, paid by the tenant and
+ * outside our budgets, and never on ours, even when the key fails. Every other
+ * call (a tenant with no key, or another provider) runs on our AI Gateway,
+ * paid by us and inside our budgets.
  */
 export async function routeModel(site: string, model: string): Promise<Route> {
   const ours = (): Route => ({ model: resolveModel(model), tenant: null, keyed: false, logged: {}, budgetFree: false });
   if (!model.startsWith("anthropic/")) return ours();
-
-  const account = accountOf(site);
-  if (account) {
-    const key = accountKey(account);
-    const logged = account === "private" ? {} : { credential: account };
-    if (key) return { model: tenantResolve(key, model), tenant: null, keyed: true, logged, budgetFree: false };
-    if (account === "private") return ours();
-    throw new TenantKeyError(`The server has no ANTHROPIC_KEY_${account.toUpperCase()} for this tenant's account.`);
-  }
-
   const tenant = await readTenantKey(rest, site);
-  if (!tenant) throw new TenantKeyError("This tenant runs on its own Anthropic key, and none is saved. An owner can add one in Settings.");
+  if (!tenant) return ours();
   return {
     model: tenantResolve(tenant.apiKey, model),
     tenant,
@@ -486,8 +472,6 @@ export const tenantKeys = {
   save: (site: string, apiKey: string) => saveTenantKey(rest, site, apiKey),
   mark: (site: string, ok: boolean, error = "") => markTenantKey(rest, site, ok ? "ok" : "failed", error),
   remove: (site: string) => removeTenantKey(rest, site),
-  /** True when the tenant runs on one of Ayadi's accounts, so a saved key would not be used. */
-  managed: (site: string) => accountOf(site) !== null,
 };
 
 // ---- the streaming call (Chat) ----
