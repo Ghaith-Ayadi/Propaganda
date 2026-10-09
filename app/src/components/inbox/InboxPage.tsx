@@ -21,6 +21,7 @@ import { useInbox, type Flag, type KnowledgeItem, type Pitch, type Review, type 
 import { FlagDetail } from "./FlagDetail";
 import { KnowledgeDetail } from "./KnowledgeDetail";
 import { PitchDetail, fitBadge } from "./PitchDetail";
+import { ProposalBanner } from "@/components/goals/ProposalBanner";
 
 type Tab = "flags" | "pitches" | "knowledge" | "review";
 const TABS: Tab[] = ["flags", "pitches", "knowledge", "review"];
@@ -98,6 +99,11 @@ export function InboxPage() {
         }
       />
       <PageBody>
+      {inbox.proposal && (
+        <div className="mb-4">
+          <ProposalBanner proposal={inbox.proposal} />
+        </div>
+      )}
       <Notes notes={inbox.notes.filter((n) => n.tab === tab)} />
 
       {tab === "flags" && (

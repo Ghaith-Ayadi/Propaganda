@@ -6,6 +6,7 @@
 //   reviews    briefs in review (Dexie, synced), each linked to its post
 //   pitches    the pipeline's pitches waiting on a decision (live.ts)
 //   flags, knowledge: on the Knowledge base pages for now, empty here.
+//   proposal   the Strategist's proposal waiting on approval (lib/goals)
 //   Example items exist in the UI preview only (placeholder.ts).
 
 import { useEffect, useSyncExternalStore } from "react";
@@ -18,6 +19,8 @@ import { UI_PREVIEW } from "@/lib/preview";
 import { isDemoBrief, seedBriefsIfEmpty } from "@/lib/plan/briefs";
 import { placeholderInbox } from "./placeholder";
 import { liveInbox } from "./live";
+import { useWaitingProposal } from "@/lib/goals/useGoals";
+import type { Proposal } from "@/lib/goals/types";
 
 // ---- the objects items are about ----
 
@@ -179,6 +182,8 @@ export const inboxSource: InboxSource = UI_PREVIEW ? placeholderInbox : liveInbo
 
 export interface Inbox extends InboxSnapshot {
   reviews: Review[];
+  /** The Strategist's proposal waiting on approval (approved on Goals). */
+  proposal: Proposal | null;
   /** Pitches in the batch still waiting on a decision. */
   pendingPitches: number;
   total: number;
@@ -193,12 +198,14 @@ export function useInbox(): Inbox {
   // Clears the demo briefs an earlier build seeded into this browser.
   useEffect(() => void seedBriefsIfEmpty(), []);
   const reviews = useLiveQuery(loadReviews, [], [] as Review[]);
+  const proposal = useWaitingProposal();
   const pendingPitches = snap.batch?.pitches.filter((p) => !p.decision).length ?? 0;
   return {
     ...snap,
     reviews,
+    proposal,
     pendingPitches,
-    total: snap.flags.length + pendingPitches + snap.knowledge.length + reviews.length,
+    total: snap.flags.length + pendingPitches + snap.knowledge.length + reviews.length + (proposal ? 1 : 0),
     urgent: snap.flags.filter((f) => f.urgency === "high").length,
     example: inboxSource.example,
     source: inboxSource,

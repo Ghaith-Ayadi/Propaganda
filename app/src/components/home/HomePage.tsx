@@ -1,7 +1,8 @@
 // Home: where the tenant stands. The campaign running now (the Launch first),
 // the four goals as small cards with the quarter's goal under each, the
 // month's model spend, and their own recent writing. What waits on them is the
-// Inbox's job; the button in the header goes there.
+// Inbox's job; the button in the header goes there. A proposal from the
+// Strategist waiting on approval also gets a banner on top.
 
 import { ArrowDown, ArrowRight, ArrowUp } from "@untitledui/icons";
 import { Badge } from "@/components/base/badges/badges";
@@ -13,11 +14,14 @@ import { ExampleBadge } from "@/components/shared/ExampleBadge";
 import { MiniChart } from "@/components/shared/MiniChart";
 import { pageHref } from "@/lib/route";
 import { cx } from "@/utils/cx";
+import { ProposalBanner } from "@/components/goals/ProposalBanner";
+import { useWaitingProposal } from "@/lib/goals/useGoals";
 import { useHome, type Goal, type Home } from "./data";
 import { RecentWriting } from "./RecentWriting";
 
 export function HomePage() {
   const home = useHome();
+  const proposal = useWaitingProposal();
 
   return (
     <>
@@ -31,6 +35,11 @@ export function HomePage() {
         }
       />
       <PageBody>
+      {proposal && (
+        <div className="mb-6">
+          <ProposalBanner proposal={proposal} />
+        </div>
+      )}
       {home.campaign && <CampaignCard campaign={{ ...home.campaign, example: home.example }} />}
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
