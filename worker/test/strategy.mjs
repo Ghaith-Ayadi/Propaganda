@@ -235,6 +235,9 @@ try {
   check(t.winnable({ keyword: "ai assistant", volume: 301000, difficulty: 25, position: null }), "but is with history");
   check(t.looksLikeSource("https://www.airops.com/") && t.looksLikeSource("https://example.com/blog"), "a site or a blog index is a source");
   check(!t.looksLikeSource("https://buffer.com/resources/ai-social-media-content-creation/") && !t.looksLikeSource("https://x.com/a/b.pdf"), "an article or a file is not");
+  check(t.pickHost("AirOps", ["instagram.com", "www.airops.com", "g2.com"], "propaganda.pub") === "www.airops.com", "a bare competitor name picks the host that carries it, not the first result");
+  check(t.pickHost("Acme Corp", ["instagram.com", "linkedin.com", "acme-tools.io"], "propaganda.pub") === "acme-tools.io", "profile sites never stand in for a company");
+  check(t.pickHost("Propaganda", ["propaganda.pub", "instagram.com"], "propaganda.pub") === "", "our own domain and nothing else resolves to nothing");
   check(t.thinAnswers({ offer: "We sell content software", searches: "AI CMS", watch: "AirOps", upcoming: "Beta" }, true), "a 4-word offer is thin");
   check(t.thinAnswers(db.tenant_profile[0].answers, false), "capacity not answered is thin");
   check(!t.thinAnswers(db.tenant_profile[0].answers, true), "Kontra's answers are not");
