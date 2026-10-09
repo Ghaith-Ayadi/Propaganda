@@ -14,7 +14,8 @@
     "typescript": "^5.7.2"
   },
   "scripts": {
-    "test": "tsx --test _ai/cost.test.ts _ai/gateway.test.ts _chat/chat.test.ts _chat/http.test.ts ../scripts/check-model-paths.test.mjs",
-    "check:model-paths": "node ../scripts/check-model-paths.mjs"
+    "test": "tsx --test _ai/cost.test.ts _ai/gateway.test.ts _chat/chat.test.ts _chat/http.test.ts ../scripts/check-model-paths.test.mjs ../scripts/check-function-count.test.mjs",
+    "check:model-paths": "node ../scripts/check-model-paths.mjs",
+    "check:functions": "node ../scripts/check-function-count.mjs"
   }
 }
