@@ -4,8 +4,8 @@
 // instead of failing it (src/limits.ts).
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { callModel, DEFAULT_MODEL, setWorkflowContext } from "../../../api/_ai/gateway";
-import { modelStep } from "../limits.js";
+import { callModel, DEFAULT_MODEL, setWorkflowContext, type Reasoning } from "../../../api/_ai/gateway";
+import { emptyAnswerOf, modelStep } from "../limits.js";
 
 let wired = false;
 
@@ -32,7 +32,10 @@ export interface Ask {
   model: string;
   system: string;
   prompt: string;
+  /** Tokens for the answer; the gateway adds room for thinking on top. */
   maxOutputTokens?: number;
+  /** How hard the model thinks first; unset is the provider's default. */
+  reasoning?: Reasoning;
 }
 
 /** One model call as one step. Background work: it stops at the tenant's budget. */
@@ -43,24 +46,38 @@ export async function askText(step: string, ask: Ask): Promise<string> {
 /**
  * One model call that must answer with JSON, checked by `parse` (which throws
  * with a sentence the model can act on). A bad answer is retried once with the
- * problem attached, as its own step.
+ * problem attached, as its own step. An answer that never came (the model
+ * thought until its budget ran out) is asked again with less thinking.
  */
 export async function askJson<T>(step: string, ask: Ask, parse: (value: unknown) => T): Promise<T> {
-  const first = await askText(step, ask);
+  let problem: string;
+  let again = ask;
+  let first: string | null = null;
   try {
-    return parse(extractJson(first));
+    first = await askText(step, ask);
   } catch (err) {
-    const retry = await askText(`${step} (again)`, {
-      ...ask,
-      prompt: `${ask.prompt}\n\nYour previous answer could not be used: ${(err as Error).message}\nAnswer again with the JSON only.`,
-    });
-    return parse(extractJson(retry));
+    if (!emptyAnswerOf(err)) throw err;
+    problem = "you spent your whole budget thinking and wrote nothing. Think briefly, then answer";
+    again = { ...ask, reasoning: "low" };
   }
+  if (first !== null) {
+    try {
+      return parse(extractJson(first));
+    } catch (err) {
+      problem = (err as Error).message;
+    }
+  }
+  const retry = await askText(`${step} (again)`, {
+    ...again,
+    prompt: `${ask.prompt}\n\nYour previous answer could not be used: ${problem!}\nAnswer again with the JSON only.`,
+  });
+  return parse(extractJson(retry));
 }
 
 /** The JSON value in a model's answer, ignoring fences and any prose around it. */
 export function extractJson(text: string): unknown {
   const cleaned = text.replace(/```(?:json)?/g, "").trim();
+  if (!cleaned) throw new Error("The answer was empty.");
   try {
     return JSON.parse(cleaned);
   } catch {

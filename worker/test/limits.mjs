@@ -1,6 +1,6 @@
 // usageLimitOf against every shape a usage limit can arrive in.
 import assert from "node:assert/strict";
-import { UsageLimitError, refusedOf, tenantKeyOf, usageLimitOf } from "../dist/limits.js";
+import { UsageLimitError, emptyAnswerOf, refusedOf, tenantKeyOf, usageLimitOf } from "../dist/limits.js";
 
 const at = 1_791_410_433_000;
 // The gateway's own error (api/_ai/gateway.ts): a different class, same shape.
@@ -49,4 +49,8 @@ assert.equal(refusedOf(Object.assign(new Error("slow down"), { statusCode: 429 }
 assert.equal(refusedOf(Object.assign(new Error("timeout"), { statusCode: 408 })), false);
 assert.equal(refusedOf(Object.assign(new Error("boom"), { statusCode: 500 })), false);
 assert.equal(refusedOf(new Error("no status")), false);
+// The model thought until its budget ran out: not retried as is (askJson asks again with less thinking).
+assert.equal(emptyAnswerOf(Object.assign(new Error("NO-ANSWER The model used all 6000 output tokens thinking and wrote no answer."), { name: "EmptyAnswerError" })), true);
+assert.equal(emptyAnswerOf({ message: "Step propose has exceeded its maximum of 3 retries.", errors: [{ message: "NO-ANSWER The model used all 6000 output tokens" }] }), true);
+assert.equal(emptyAnswerOf(new Error("The answer had no JSON in it.")), false);
 console.log("limits: all passed");

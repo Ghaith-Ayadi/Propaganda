@@ -9,8 +9,8 @@
 //   and no error text (even normalized, it can carry a tenant's words). The
 //   rest stays in Admin and Slack. GITHUB_ISSUES_TOKEN may write issues.
 // - slack: the whole agent report, posted to SLACK_WEBHOOK_URL (an incoming
-//   webhook on Ayadi's private workspace), new and repeats alike. Replying
-//   "fix" on it sends it to Claude.
+//   webhook on Ayadi's private workspace), new and repeats alike. Mentioning
+//   @Claude on it (Claude in Slack) hands it to Claude to fix.
 //
 // FAILURE_TICKETS picks ("github", "slack", "notion", comma-separated); unset,
 // every destination with a token is used. A repeat adds a note to the ticket
@@ -212,7 +212,7 @@ function slackText(r: BugReport, headline: string): string {
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return [
     `*${esc(headline)}* (${r.environment}) · ${esc(r.workflow)}${r.step ? ` › ${esc(r.step)}` : ""}`,
-    `Reply *fix* in this thread to send it to Claude. <${r.adminUrl}|Admin> · fingerprint \`${r.fingerprint}\``,
+    `Mention @Claude in this thread to have it fixed. <${r.adminUrl}|Admin> · fingerprint \`${r.fingerprint}\``,
     "```",
     esc(report),
     "```",

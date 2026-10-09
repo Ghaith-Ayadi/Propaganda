@@ -102,6 +102,28 @@ test("a call the gateway refuses (no access to the model) is logged at a known $
   setModelResolver(() => ok);
 });
 
+test("a model that thinks gets room on top of the answer budget, and an answer that never came is an error, still logged", async () => {
+  gate = open; calls.length = 0;
+  let asked: number | undefined;
+  let reasoning: unknown;
+  setModelResolver(() => new MockLanguageModelV3({
+    doGenerate: async (o) => {
+      asked = o.maxOutputTokens; reasoning = o.reasoning;
+      return { content: [], finishReason: { unified: "length", raw: "length" }, usage: { ...usage, outputTokens: { total: 6000, text: 0, reasoning: 6000 } }, warnings: [] };
+    },
+  }));
+  await assert.rejects(callModel({ ...opts, maxOutputTokens: 6000 }), (e: Error) => e.name === "EmptyAnswerError" && e.message.startsWith("NO-ANSWER "));
+  assert.equal(asked, 6000 + g.THINKING_TOKENS);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].status, "ok");
+  assert.equal(calls[0].output_tokens, 6000);
+  await assert.rejects(callModel({ ...opts, maxOutputTokens: 500, reasoning: "none" }));
+  assert.equal(asked, 500);
+  assert.equal(reasoning, "none");
+  assert.equal(g.thinkingBudget(undefined), undefined);
+  setModelResolver(() => ok);
+});
+
 test("a paid API call is logged with the provider's cost and refused at the budget", async () => {
   gate = open; calls.length = 0;
   setWorkflowContext(() => ({ workflowId: "wf2", stepId: 1 }));

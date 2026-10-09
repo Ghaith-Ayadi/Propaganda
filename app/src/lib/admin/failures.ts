@@ -7,7 +7,7 @@
 import type { Client } from "@/lib/supabase";
 import { call } from "@/lib/admin/runs";
 
-export type TicketKind = "notion" | "github";
+export type TicketKind = "notion" | "github" | "slack";
 
 export interface Ticket {
   kind: TicketKind;
@@ -37,8 +37,21 @@ export interface FailureGroup {
   processError: string | null;
 }
 
+export interface StepTrail {
+  id: number;
+  name: string;
+  ms: number | null;
+  error: string | null;
+}
+
 export interface FailureView {
   runId: string;
+  stack: string | null;
+  input: string | null;
+  steps: StepTrail[];
+  requestIds: string[];
+  commit: string | null;
+  environment: string | null;
   step: string | null;
   stepId: number | null;
   site: string | null;
@@ -57,7 +70,8 @@ export function listFailures(
   return call(client, "FAILURES-LOAD", `/failures${status ? `?status=${status}` : ""}`);
 }
 
-export function getFailure(client: Client, fingerprint: string): Promise<{ group: FailureGroup; failures: FailureView[] }> {
+/** A group, its latest runs, and the bug report written for an agent (what Slack gets). */
+export function getFailure(client: Client, fingerprint: string): Promise<{ group: FailureGroup; failures: FailureView[]; report: string }> {
   return call(client, "FAILURES-LOAD", `/failures/${encodeURIComponent(fingerprint)}`);
 }
 

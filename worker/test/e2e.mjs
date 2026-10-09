@@ -248,7 +248,7 @@ async function main() {
   check(!/asked to fail/i.test(issueText), "the public GitHub issue carries no error text");
   check(/demo/.test(tickets.issues[0].body.title) && /finish/.test(tickets.issues[0].body.title) && issueText.includes(demoGroup.fingerprint), "the issue names the workflow, the step and the fingerprint");
   const slack = tickets.slack[0]?.text ?? "";
-  check(/asked to fail/.test(slack) && slack.includes(demoGroup.fingerprint) && /Reply \*fix\*/.test(slack), "Slack gets the error, the fingerprint and how to send it to Claude");
+  check(/asked to fail/.test(slack) && slack.includes(demoGroup.fingerprint) && /Mention @Claude/.test(slack), "Slack gets the error, the fingerprint and how to send it to Claude");
   check(/## Stack/.test(slack) && /## Steps/.test(slack) && /## Input/.test(slack), "the Slack report carries the stack, the steps and the input");
   check(tickets.issues[0].body.labels.includes("dev"), "the issue says it came from dev");
   const detail = (await api(`/failures/${demoGroup.fingerprint}`)).json;

@@ -39,15 +39,25 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
   `WORKER_DISPATCH_SECRET` (same file, and the same value in Vercel for Chat)
   guards the dispatch route.
 - **Failed runs** are recorded by `src/failures.ts` in DBOS's database too, schema
-  `ops` (`failure_groups`, `failures`), which the worker creates on start. A sweep
-  every minute (`WORKER_FAILURE_SWEEP_SECONDS`) records new ones and files new
-  groups. Tickets go where a token is set in the stack's `.env`:
+  `ops` (`failure_groups`, `failures`), which the worker creates on start, with the
+  error, stack, input, the step trail, provider request ids and the commit
+  (`WORKER_COMMIT`, else the image's `COMMIT` file). A sweep every minute
+  (`WORKER_FAILURE_SWEEP_SECONDS`) records new ones and files new groups. Each
+  group gets one bug report written for an agent (`agentReport()`; "Copy report"
+  in Admin > Failures). It goes where a token is set in the stack's `.env`:
+  `SLACK_WEBHOOK_URL` (the whole report; mention @Claude on it to have it fixed),
   `GITHUB_ISSUES_TOKEN` (issues on `GITHUB_ISSUES_REPO`, default
-  Ghaith-Ayadi/Propaganda; that repository is public, so an issue carries no
-  tenant and no raw error) and `NOTION_TOKEN` (the Propaganda Tasks board);
-  `FAILURE_TICKETS` picks one when both are set. With neither, failures are
-  recorded and listed, and filed once one is set. Demo runs are never filed
+  Ghaith-Ayadi/Propaganda; that repository is public, so an issue carries only the
+  workflow, step, error class, counts, fingerprint and Admin link: no tenant and no
+  error text) and `NOTION_TOKEN` (the Propaganda Tasks board). `FAILURE_TICKETS`
+  picks some when several are set. With none, failures are recorded and listed,
+  and filed once one is set. Repeats are noted at most hourly
+  (`WORKER_FAILURE_RENOTE_SECONDS`). Demo runs are never filed
   (`WORKER_FAILURE_NEVER_FILED`).
+- **Thinking models**: an `Ask`'s `maxOutputTokens` is the answer's budget; the
+  gateway adds `MODEL_THINKING_TOKENS` (16,000) for the model's reasoning. A model
+  that still thinks until the budget runs out throws `EmptyAnswerError` (logged,
+  not retried as is); `askJson` asks once more with `reasoning: "low"`.
 - **Every run belongs to a tenant**: start it with `startForTenant(site, workflow, ...args)`,
   which records the workflow attribute `site` and queues it on `agents`
   (three at a time).

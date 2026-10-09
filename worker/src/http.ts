@@ -18,7 +18,7 @@
 //   GET  /arena/sources?site=    { sources }   a tenant's latest calls, for a Listener round
 //   POST /arena                  ArenaRound    body { agent, site, models?, source?, transcript?, title? } (src/arena.ts)
 //   GET  /failures?status=       { groups, sinks, environment }: failed runs grouped by fingerprint (src/failures.ts)
-//   GET  /failures/:fp           { group, failures }
+//   GET  /failures/:fp           { group, failures, report }: report is the agent-ready bug report
 //   POST /failures/sweep         { added, filed, noted }: record new failures and process them now
 //   POST /failures/:fp/file      { filed, noted, group }: file or note this group's ticket now
 //   POST /failures/:fp/ignore    { group }   body { ignored }: never file it (or undo)
@@ -35,7 +35,7 @@ import { demo } from "./workflows/demo.js";
 import { scout } from "./workflows/scout.js";
 import { listenerRoute } from "./listener/index.js";
 import { listTenants, listTriggers, runTrigger } from "./triggers.js";
-import { getFailureGroup, listFailureGroups, processFailures, setIgnored, sweepFailures, environmentOf, type FailureGroup } from "./failures.js";
+import { getFailureGroup, listFailureGroups, processFailures, reportOf, setIgnored, sweepFailures, environmentOf, type FailureGroup } from "./failures.js";
 import { ticketSinks } from "./tickets.js";
 import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, ARENA_TENANTS, arenaSources, checkModels, runRound, type ArenaAgent } from "./arena.js";
 
@@ -184,7 +184,9 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     if (!fail[2] && method === "GET") {
       const found = await getFailureGroup(fp);
       if (!found) throw new HttpError(404, "No such failure");
-      return send(res, 200, found);
+      // The same report Slack gets, for "Copy report" in Admin.
+      const report = (await reportOf(db, found.group)).agentReport;
+      return send(res, 200, { ...found, report });
     }
     if (fail[2] === "file" && method === "POST") {
       if (!(await getFailureGroup(fp))) throw new HttpError(404, "No such failure");

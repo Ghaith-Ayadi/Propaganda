@@ -24,3 +24,15 @@ export class CostLogUnavailableError extends Error {
     this.name = "CostLogUnavailableError";
   }
 }
+
+/**
+ * The model spent its whole output budget thinking and wrote no answer. The
+ * call was logged (it was billed). The message starts with NO-ANSWER so the
+ * worker recognises it after DBOS has stored and reloaded it.
+ */
+export class EmptyAnswerError extends Error {
+  constructor(public readonly outputTokens: number) {
+    super(`NO-ANSWER The model used all ${outputTokens} output tokens thinking and wrote no answer.`);
+    this.name = "EmptyAnswerError";
+  }
+}

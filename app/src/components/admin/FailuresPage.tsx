@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminContext";
+import { toast } from "@/components/base/toast/toast";
 import {
   fileFailure, getFailure, ignoreFailure, listFailures, sweepFailures,
   type FailureGroup, type FailureStatus, type FailureView, type TicketKind,
@@ -23,7 +24,7 @@ const FILTERS: { id: FailureStatus | "all"; label: string }[] = [
   { id: "ignored", label: "Ignored" },
 ];
 
-const SINK_NAMES: Record<TicketKind, string> = { notion: "Notion", github: "GitHub" };
+const SINK_NAMES: Record<TicketKind, string> = { notion: "Notion", github: "GitHub", slack: "Slack" };
 
 function clock(ms: number): string {
   const d = new Date(ms);
@@ -213,6 +214,7 @@ function GroupDetail({
 }) {
   const { client } = useAdmin();
   const [failures, setFailures] = useState<FailureView[] | null>(null);
+  const [report, setReport] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const group = summary;
@@ -221,6 +223,7 @@ function GroupDetail({
     getFailure(client, fingerprint).then(
       (r) => {
         setFailures(r.failures);
+        setReport(r.report ?? "");
         setError(null);
       },
       (err) => {
@@ -244,6 +247,16 @@ function GroupDetail({
     }
   };
 
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(report);
+      toast.add({ type: "success", title: "Report copied", description: "Paste it to Claude to have it fixed." });
+    } catch (err) {
+      reportError("FailuresPage.copy", err);
+    }
+  };
+
+  const latest = failures?.[0];
   const cost = (failures ?? []).reduce((s, f) => s + f.cost, 0);
   const unpriced = (failures ?? []).reduce((s, f) => s + f.unpriced, 0);
 
@@ -267,16 +280,30 @@ function GroupDetail({
             <>
               <dt className="text-quaternary">Tickets</dt>
               <dd className="flex flex-wrap gap-3 text-secondary">
-                {group.tickets.map((t) => (
-                  <a key={t.kind} href={t.url} target="_blank" rel="noreferrer" className="underline hover:text-primary">
-                    {SINK_NAMES[t.kind]}{t.kind === "github" ? ` #${t.ref}` : ""}
-                  </a>
-                ))}
+                {group.tickets.map((t) =>
+                  t.url ? (
+                    <a key={t.kind} href={t.url} target="_blank" rel="noreferrer" className="underline hover:text-primary">
+                      {SINK_NAMES[t.kind]}{t.kind === "github" ? ` #${t.ref}` : ""}
+                    </a>
+                  ) : (
+                    <span key={t.kind}>{SINK_NAMES[t.kind]}</span>
+                  ),
+                )}
               </dd>
             </>
           )}
         </dl>
         <div className="flex gap-2 text-sm">
+          {report && (
+            <button
+              type="button"
+              onClick={() => void copyReport()}
+              title="The bug report written for an agent: error, stack, steps, input and how to reproduce"
+              className="rounded-lg border border-secondary bg-primary px-3 py-1.5 font-medium text-secondary hover:bg-secondary"
+            >
+              Copy report
+            </button>
+          )}
           {group.status !== "ignored" && canFile && (
             <button
               type="button"
@@ -304,6 +331,12 @@ function GroupDetail({
       {error && <p className="text-sm text-error-primary">{error}</p>}
 
       <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-error-primary px-3 py-2 text-xs text-error-primary">{group.latestError}</pre>
+      {latest?.stack && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-tertiary">Stack{latest.commit ? ` (commit ${latest.commit.slice(0, 7)})` : ""}</summary>
+          <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-secondary px-3 py-2 font-mono text-secondary">{latest.stack}</pre>
+        </details>
+      )}
 
       {!failures && !error && <p className="text-sm text-tertiary">Loading…</p>}
       {failures && (
