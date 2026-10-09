@@ -23,6 +23,6 @@ export { nextQuota, approvalRate, pitchesFor, unassigned } from "./batches.js";
 export { similarity, nearest } from "./taste.js";
 export { voiceSuggest, diffDraft } from "./edits.js";
 // The Strategist.
-export { windowFor, launchFor, volumeCap, validate, parseDraft, finish, weeklyNotes, winnable, batchCount } from "./strategy.js";
+export { windowFor, launchFor, volumeCap, validate, parseDraft, finish, weeklyNotes, winnable, batchCount, looksLikeSource, thinAnswers } from "./strategy.js";
 export { strategist, dispatchStrategist, strategistWeeklyCheck } from "../workflows/strategist.js";
 export { readGoals } from "./goals.js";
