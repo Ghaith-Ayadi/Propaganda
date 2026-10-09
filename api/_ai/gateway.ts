@@ -380,6 +380,21 @@ export function gatewayCost(meta: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 1e6) / 1e6 : null;
 }
 
+/** The AI Gateway's public model list (no key, no model call): list prices per token. */
+export const GATEWAY_MODELS_URL = "https://ai-gateway.vercel.sh/v1/models";
+
+export async function gatewayListPrices(): Promise<Map<string, { input: number; output: number }>> {
+  const res = await fetch(GATEWAY_MODELS_URL);
+  if (!res.ok) throw new Error(`The AI Gateway's model list answered ${res.status}`);
+  const body = (await res.json()) as { data?: { id: string; pricing?: { input?: string; output?: string } }[] };
+  const byId = new Map<string, { input: number; output: number }>();
+  for (const m of body.data ?? []) {
+    const input = Number(m.pricing?.input), output = Number(m.pricing?.output);
+    if (Number.isFinite(input) && Number.isFinite(output)) byId.set(m.id, { input, output });
+  }
+  return byId;
+}
+
 /**
  * A call's cost: at our price row for the model, else what the AI Gateway
  * reported (so a model with no row yet is still counted), else unpriced.

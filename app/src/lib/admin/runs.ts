@@ -78,7 +78,8 @@ export class WorkerError extends Error {
   }
 }
 
-async function call<T>(client: Client, code: string, path: string, init: RequestInit = {}): Promise<T> {
+/** One request to the worker as this Admin account; failures carry `code`. */
+export async function call<T>(client: Client, code: string, path: string, init: RequestInit = {}): Promise<T> {
   const token = (await client.auth.getSession()).data.session?.access_token;
   if (!token) throw new AppError(code, "This Admin account is signed out. Sign in again.");
   let res: Response;

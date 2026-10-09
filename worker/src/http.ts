@@ -14,6 +14,9 @@
 //   POST /runs/scout             { id }        body { site, day? }: a Scout run now
 //   GET  /triggers               { triggers, tenants }: Admin's Run now (src/triggers.ts)
 //   POST /triggers/:id           { runs }      body { site? }
+//   GET  /arena/tenants          { tenants }   the tenants a round may read (ARENA_TENANTS)
+//   GET  /arena/sources?site=    { sources }   a tenant's latest calls, for a Listener round
+//   POST /arena                  ArenaRound    body { agent, site, models?, source?, transcript?, title? } (src/arena.ts)
 //   The Listener's routes (ingest URL, webhooks, OAuth, Connections): src/listener/routes.ts.
 
 import { timingSafeEqual } from "node:crypto";
@@ -27,6 +30,7 @@ import { demo } from "./workflows/demo.js";
 import { scout } from "./workflows/scout.js";
 import { listenerRoute } from "./listener/index.js";
 import { listTenants, listTriggers, runTrigger } from "./triggers.js";
+import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, ARENA_TENANTS, arenaSources, checkModels, runRound, type ArenaAgent } from "./arena.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
 const SITE_RE = /^[a-z0-9]{15}$/;
@@ -44,11 +48,11 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(text);
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readJson(req: IncomingMessage, maxChars = 65_536): Promise<Record<string, unknown>> {
   let raw = "";
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > 65_536) throw new HttpError(413, "Body too large");
+    if (raw.length > maxChars) throw new HttpError(413, "Body too large");
   }
   if (!raw) return {};
   try {
@@ -131,6 +135,29 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     const site = typeof body.site === "string" && SITE_RE.test(body.site) ? body.site : null;
     if (body.site !== undefined && body.site !== null && !site) throw new HttpError(400, "Bad site");
     return send(res, 200, { runs: await runTrigger(db, trig[1]!, site, { by: admin.sub }) });
+  }
+
+  if (path === "/arena/tenants" && method === "GET") {
+    const { rows } = await db.query<{ id: string; name: string }>("select id, name from public.sites where id = any($1) order by name", [ARENA_TENANTS]);
+    return send(res, 200, { tenants: rows });
+  }
+  if (path === "/arena/sources" && method === "GET") {
+    const site = url.searchParams.get("site") ?? "";
+    if (!SITE_RE.test(site)) throw new HttpError(400, "Bad site");
+    return send(res, 200, { sources: await arenaSources(site), defaultModels: ARENA_DEFAULT_MODELS });
+  }
+  if (path === "/arena" && method === "POST") {
+    // A pasted transcript: up to the Listener's one read (CHUNK_CHARS) and some.
+    const body = await readJson(req, 200_000);
+    const agent = body.agent as ArenaAgent;
+    if (!ARENA_AGENTS.includes(agent)) throw new HttpError(400, "Unknown agent");
+    if (typeof body.site !== "string" || !SITE_RE.test(body.site)) throw new HttpError(400, "Bad site");
+    const found = await db.query("select 1 from public.sites where id = $1", [body.site]);
+    if (!found.rowCount) throw new HttpError(422, "No such tenant");
+    const source = typeof body.source === "string" && SITE_RE.test(body.source) ? body.source : undefined;
+    const transcript = typeof body.transcript === "string" ? body.transcript : undefined;
+    const title = typeof body.title === "string" ? body.title.slice(0, 300) : undefined;
+    return send(res, 200, await runRound(db, { agent, site: body.site, models: checkModels(body.models), source, transcript, title }));
   }
 
   if (path === "/runs" && method === "GET") {
