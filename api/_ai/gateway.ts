@@ -356,7 +356,7 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
     if (route.keyed) {
       const failed = await tenantKeyFailed(opts.site, route, err);
       if (failed) {
-        await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+        await writeCall({ ...base, status: "error", priced: refused(err) }).catch(() => {});
         throw failed;
       }
     } else {
@@ -365,9 +365,21 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
     }
     // A failed call may still have been billed upstream, for an amount we don't know:
     // keep the trace at zero tokens and mark it unpriced so Consumption counts the gap.
-    await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+    // A refused one never ran, so it is a known $0.
+    await writeCall({ ...base, status: "error", priced: refused(err) }).catch(() => {});
     throw err;
   }
+}
+
+/**
+ * True when the provider turned the request down before running it (a 4xx
+ * other than a timeout, conflict or rate limit: no access to the model, a bad
+ * request, a refused key). Nothing ran, so nothing was billed, and asking
+ * again gets the same answer.
+ */
+export function refused(err: unknown): boolean {
+  const status = (err as { statusCode?: unknown } | null)?.statusCode;
+  return typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429;
 }
 
 /**
@@ -677,12 +689,12 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
           const keyErr = await tenantKeyFailed(opts.site, route, failed);
           // Never usageLimit, never a retry on another account.
           if (keyErr) thrown = keyErr;
-          await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+          await writeCall({ ...base, status: "error", priced: !started && refused(failed) }).catch(() => {});
         } else {
           const limit = usageLimit(failed);
           if (limit) thrown = limit; // cost nothing: not logged
-          // As callModel: billed upstream for an amount we don't know.
-          else await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+          // As callModel: billed upstream for an amount we don't know, unless refused before it ran.
+          else await writeCall({ ...base, status: "error", priced: !started && refused(failed) }).catch(() => {});
         }
       } else {
         if (open || (!started && opts.abortSignal?.aborted)) {

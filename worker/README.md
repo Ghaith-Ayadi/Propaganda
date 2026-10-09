@@ -11,6 +11,7 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/config.ts` | Settings, all from the environment |
 | `src/limits.ts` | The Claude Max usage limit: `modelStep()` waits it out instead of failing |
 | `src/runs.ts` | Runs, steps, cost, retry and cancel, from DBOS's management API and the cost log |
+| `src/failures.ts`, `src/tickets.ts` | The failure log: every failed run recorded once (error, run and step, tenant, model, cost), grouped by fingerprint, shown in Admin > Failures, and filed as one ticket per group (GitHub issues and/or the Notion Tasks board); repeats add a note and reopen a closed ticket |
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
@@ -37,6 +38,16 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
   with `POSTGRES_PASSWORD` from the stack's `.env`; `JWT_SECRET` checks tokens;
   `WORKER_DISPATCH_SECRET` (same file, and the same value in Vercel for Chat)
   guards the dispatch route.
+- **Failed runs** are recorded by `src/failures.ts` in DBOS's database too, schema
+  `ops` (`failure_groups`, `failures`), which the worker creates on start. A sweep
+  every minute (`WORKER_FAILURE_SWEEP_SECONDS`) records new ones and files new
+  groups. Tickets go where a token is set in the stack's `.env`:
+  `GITHUB_ISSUES_TOKEN` (issues on `GITHUB_ISSUES_REPO`, default
+  Ghaith-Ayadi/Propaganda; that repository is public, so an issue carries no
+  tenant and no raw error) and `NOTION_TOKEN` (the Propaganda Tasks board);
+  `FAILURE_TICKETS` picks one when both are set. With neither, failures are
+  recorded and listed, and filed once one is set. Demo runs are never filed
+  (`WORKER_FAILURE_NEVER_FILED`).
 - **Every run belongs to a tenant**: start it with `startForTenant(site, workflow, ...args)`,
   which records the workflow attribute `site` and queues it on `agents`
   (three at a time).

@@ -88,6 +88,20 @@ test("subscription 5-hour limit throws UsageLimitError and logs nothing", async 
   assert.equal(calls.length, 0);
 });
 
+test("a call the gateway refuses (no access to the model) is logged at a known $0; one that broke midway stays unpriced", async () => {
+  gate = open; calls.length = 0;
+  setModelResolver(() => failing(403, "Free tier users do not have access to this model."));
+  await assert.rejects(callModel(opts), /Free tier/);
+  assert.equal(calls[0].status, "error");
+  assert.equal(calls[0].priced, true);
+  assert.equal(calls[0].cost_usd, undefined); // the column's default, 0
+  calls.length = 0;
+  setModelResolver(() => failing(500, "upstream died"));
+  await assert.rejects(callModel(opts));
+  assert.equal(calls[0].priced, false);
+  setModelResolver(() => ok);
+});
+
 test("a paid API call is logged with the provider's cost and refused at the budget", async () => {
   gate = open; calls.length = 0;
   setWorkflowContext(() => ({ workflowId: "wf2", stepId: 1 }));

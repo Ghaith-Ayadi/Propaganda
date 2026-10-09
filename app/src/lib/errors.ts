@@ -31,6 +31,8 @@
 //   RUN-CANCEL          cancelling a run failed
 //   RUN-DEMO            starting a demo run failed
 //   RUN-NOW             Admin's Run now couldn't list or start an agent run
+//   FAILURES-LOAD       Admin couldn't load or refresh the failed runs from the worker
+//   FAILURE-FILE        filing, ignoring or un-ignoring a failure's ticket failed
 //   MODEL-KEY-LOAD      the tenant's own Anthropic key status couldn't be loaded
 //   MODEL-KEY-SAVE      testing a new Anthropic key failed on our side (not a red test)
 //   MODEL-KEY-TEST      re-testing the saved Anthropic key failed on our side

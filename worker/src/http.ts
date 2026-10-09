@@ -17,6 +17,11 @@
 //   GET  /arena/tenants          { tenants }   the tenants a round may read (ARENA_TENANTS)
 //   GET  /arena/sources?site=    { sources }   a tenant's latest calls, for a Listener round
 //   POST /arena                  ArenaRound    body { agent, site, models?, source?, transcript?, title? } (src/arena.ts)
+//   GET  /failures?status=       { groups, sinks, environment }: failed runs grouped by fingerprint (src/failures.ts)
+//   GET  /failures/:fp           { group, failures }
+//   POST /failures/sweep         { added, filed, noted }: record new failures and process them now
+//   POST /failures/:fp/file      { filed, noted, group }: file or note this group's ticket now
+//   POST /failures/:fp/ignore    { group }   body { ignored }: never file it (or undo)
 //   The Listener's routes (ingest URL, webhooks, OAuth, Connections): src/listener/routes.ts.
 
 import { timingSafeEqual } from "node:crypto";
@@ -30,10 +35,13 @@ import { demo } from "./workflows/demo.js";
 import { scout } from "./workflows/scout.js";
 import { listenerRoute } from "./listener/index.js";
 import { listTenants, listTriggers, runTrigger } from "./triggers.js";
+import { getFailureGroup, listFailureGroups, processFailures, setIgnored, sweepFailures, environmentOf, type FailureGroup } from "./failures.js";
+import { ticketSinks } from "./tickets.js";
 import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, ARENA_TENANTS, arenaSources, checkModels, runRound, type ArenaAgent } from "./arena.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
 const SITE_RE = /^[a-z0-9]{15}$/;
+const FAILURE_STATUSES = new Set(["new", "filed", "ignored"]);
 /** The demo needs a tenant to belong to; Verbatim's is the one every box has. */
 const DEMO_SITE = "verbatimsite000";
 
@@ -158,6 +166,37 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     const transcript = typeof body.transcript === "string" ? body.transcript : undefined;
     const title = typeof body.title === "string" ? body.title.slice(0, 300) : undefined;
     return send(res, 200, await runRound(db, { agent, site: body.site, models: checkModels(body.models), source, transcript, title }));
+  }
+
+  if (path === "/failures" && method === "GET") {
+    const status = url.searchParams.get("status") ?? undefined;
+    if (status && !FAILURE_STATUSES.has(status)) throw new HttpError(400, "Unknown status");
+    const groups = await listFailureGroups({ status: status as FailureGroup["status"] | undefined, limit: Number(url.searchParams.get("limit") ?? 100) || 100 });
+    return send(res, 200, { groups, sinks: ticketSinks(), environment: environmentOf() });
+  }
+  if (path === "/failures/sweep" && method === "POST") {
+    const added = await sweepFailures(db);
+    return send(res, 200, { added, ...(await processFailures(db)) });
+  }
+  const fail = /^\/failures\/([0-9a-f]{16})(?:\/(file|ignore))?$/.exec(path);
+  if (fail) {
+    const fp = fail[1]!;
+    if (!fail[2] && method === "GET") {
+      const found = await getFailureGroup(fp);
+      if (!found) throw new HttpError(404, "No such failure");
+      return send(res, 200, found);
+    }
+    if (fail[2] === "file" && method === "POST") {
+      if (!(await getFailureGroup(fp))) throw new HttpError(404, "No such failure");
+      if (!ticketSinks().length) throw new HttpError(409, "No ticket destination is set up on this box");
+      const done = await processFailures(db, fp);
+      return send(res, 200, { ...done, group: (await getFailureGroup(fp))!.group });
+    }
+    if (fail[2] === "ignore" && method === "POST") {
+      const body = await readJson(req);
+      if (!(await setIgnored(fp, body.ignored !== false))) throw new HttpError(404, "No such failure");
+      return send(res, 200, { group: (await getFailureGroup(fp))!.group });
+    }
   }
 
   if (path === "/runs" && method === "GET") {

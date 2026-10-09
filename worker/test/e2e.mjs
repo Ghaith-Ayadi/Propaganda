@@ -5,6 +5,7 @@
 // worker_test_app and worker_test_dbos.
 
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import { createHmac, randomUUID } from "node:crypto";
 import pg from "pg";
 
@@ -63,6 +64,30 @@ async function until(what, fn, timeoutMs = 30000) {
   }
 }
 
+// A fake Notion and GitHub: what the worker files lands here.
+const tickets = { pages: [], appended: [], issues: [], comments: [], patches: [] };
+let issueState = "open";
+const ticketServer = createServer((req, res) => {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const body = raw ? JSON.parse(raw) : null;
+    const reply = (v) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(v)); };
+    const u = req.url ?? "";
+    if (u === "/v1/pages" && req.method === "POST") { tickets.pages.push({ auth: req.headers.authorization, body }); return reply({ id: "page-1", url: "https://notion.so/page-1" }); }
+    if (u === "/v1/pages/page-1" && req.method === "GET") return reply({ properties: { Status: { status: { name: "Done" } } } });
+    if (u === "/v1/pages/page-1" && req.method === "PATCH") { tickets.patches.push(body); return reply({}); }
+    if (u === "/v1/blocks/page-1/children") { tickets.appended.push(body); return reply({}); }
+    if (u.endsWith("/issues") && req.method === "POST") { tickets.issues.push({ url: u, body }); return reply({ number: 7, html_url: "https://github.com/x/issues/7" }); }
+    if (u.endsWith("/issues/7") && req.method === "GET") return reply({ state: issueState });
+    if (u.endsWith("/issues/7") && req.method === "PATCH") { tickets.patches.push(body); issueState = body.state; return reply({}); }
+    if (u.endsWith("/issues/7/comments")) { tickets.comments.push(body); return reply({}); }
+    res.statusCode = 404; reply({});
+  });
+});
+await new Promise((r) => ticketServer.listen(0, r));
+const TICKETS = `http://127.0.0.1:${ticketServer.address().port}`;
+
 let worker;
 const DISPATCH = "dispatch-secret-for-the-test";
 const MEMBER = randomUUID();
@@ -77,6 +102,15 @@ function startWorker(extra = { WORKER_DISPATCH_SECRET: DISPATCH, WORKER_TEST_AGE
       JWT_SECRET: SECRET,
       WORKER_PORT: String(PORT),
       WORKER_STALL_SLACK_MS: "500",
+      // Failures: swept on request, filed to the fake ticket APIs below, every repeat noted.
+      WORKER_FAILURE_SWEEP_SECONDS: "0",
+      WORKER_FAILURE_RENOTE_SECONDS: "0",
+      WORKER_FAILURE_NEVER_FILED: "",
+      NOTION_TOKEN: "notion-test",
+      NOTION_API_URL: TICKETS,
+      GITHUB_ISSUES_TOKEN: "github-test",
+      GITHUB_API_URL: TICKETS,
+      SITE_URL: "https://app.dev.propaganda.pub",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -193,6 +227,39 @@ async function main() {
   const planOutputs = forked.steps.filter((s) => s.name === "plan");
   check(planOutputs.length === 1, "steps before the failure carried over, not redone");
 
+  console.log("failures: recorded, grouped, filed once, repeats noted");
+  check((await api("/failures", { headers: { Authorization: `Bearer ${jwt(stranger)}` } })).status === 403, "failures: not a superadmin: 403");
+  const swept = (await api("/failures/sweep", { method: "POST" })).json;
+  check(swept.added >= 2, `the failed run and its failed fork are recorded (${swept.added})`);
+  const groups = (await api("/failures")).json;
+  const demoGroup = groups.groups.find((g) => g.workflow === "demo" && g.step === "finish");
+  check(!!demoGroup && demoGroup.occurrences === 2, `both land in one group (${demoGroup?.occurrences})`);
+  check(demoGroup?.sites.includes(SITE), "the group knows the tenant");
+  check(groups.sinks.includes("notion") && groups.sinks.includes("github") && groups.environment === "dev", "both destinations set up, on dev");
+  check(demoGroup?.status === "filed" && demoGroup.tickets.length === 2, "filed as a Notion task and a GitHub issue");
+  check(tickets.pages.length === 1 && tickets.issues.length === 1, "one of each, not one per run");
+  check(tickets.pages[0].auth === "Bearer notion-test", "Notion is called with its token");
+  check(tickets.pages[0].body.properties.Label.multi_select[0].name === "bug", "the Notion task is labelled bug");
+  check(JSON.stringify(tickets.pages[0].body.children).includes("Test tenant"), "the Notion report names the tenant");
+  const issueText = JSON.stringify(tickets.issues[0].body);
+  check(!issueText.includes(SITE) && !issueText.includes("Test tenant"), "the public GitHub issue names no tenant");
+  check(tickets.issues[0].body.labels.includes("dev"), "the issue says it came from dev");
+  const detail = (await api(`/failures/${demoGroup.fingerprint}`)).json;
+  check(detail.failures.length === 2 && detail.failures.every((f) => f.step === "finish" && /asked to fail/.test(f.error)), "each run's error and step are kept");
+  const again = (await api("/failures/sweep", { method: "POST" })).json;
+  check(again.added === 0 && again.filed === 0 && again.noted === 0, "a second sweep records and files nothing new");
+  const bad2 = (await api("/runs/demo", { method: "POST", body: { site: SITE, fail: true } })).json.id;
+  await until("failed again", async () => (await run(bad2))?.state === "failed");
+  issueState = "closed";
+  const third = (await api("/failures/sweep", { method: "POST" })).json;
+  check(third.added === 1 && third.noted === 2 && third.filed === 0, `a repeat is a note on both tickets, not a new one (${JSON.stringify(third)})`);
+  check(tickets.appended.length === 1 && tickets.comments.length === 1, "the note is on the Notion task and the issue");
+  check(tickets.patches.some((p) => p.state === "open") && tickets.patches.some((p) => p.properties?.Status?.status?.name === "Backlog"), "closed tickets are reopened");
+  const ignored = (await api(`/failures/${demoGroup.fingerprint}/ignore`, { method: "POST", body: { ignored: true } })).json;
+  check(ignored.group.status === "ignored", "a group can be ignored");
+  check((await api(`/failures/${demoGroup.fingerprint}/ignore`, { method: "POST", body: { ignored: false } })).json.group.status === "filed", "and un-ignored");
+  check((await api("/failures/0000000000000000")).status === 404, "unknown failure: 404");
+
   console.log("cancel, then resume");
   const long = (await api("/runs/demo", { method: "POST", body: { site: SITE, stallSeconds: 120 } })).json.id;
   await until("stalled", async () => (await run(long))?.state === "stalled");
@@ -257,6 +324,7 @@ async function main() {
 
   await stopWorker();
   await app.end();
+  ticketServer.close();
   console.log(failures ? `\n${failures} FAILED` : "\nALL PASSED");
   process.exit(failures ? 1 : 0);
 }

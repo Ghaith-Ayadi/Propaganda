@@ -16,7 +16,8 @@ export type Route =
   | { view: "plan" }
   | { view: "brief"; id: string }
   | { view: "analytics" }
-  | { view: "admin"; section: string | null };
+  /** `item`: a run or a failure group, for #/admin/runs/<id> and #/admin/failures/<fingerprint>. */
+  | { view: "admin"; section: string | null; item?: string | null };
 
 function parse(): Route {
   const h = window.location.hash;
@@ -28,8 +29,8 @@ function parse(): Route {
   if (mb) return { view: "brief", id: decodeURIComponent(mb[1]) };
   if (h === "#/plan") return { view: "page", page: "pipeline", rest: null };
   if (h === "#/analytics") return { view: "analytics" };
-  const ma = h.match(/^#\/admin(?:\/([a-z-]+))?$/);
-  if (ma) return { view: "admin", section: ma[1] ?? null };
+  const ma = h.match(/^#\/admin(?:\/([a-z-]+)(?:\/([^/]+))?)?$/);
+  if (ma) return { view: "admin", section: ma[1] ?? null, item: ma[2] ? decodeURIComponent(ma[2]) : null };
   const mp = h.match(/^#\/([a-z][a-z0-9-]*)(?:\/(.+))?$/);
   if (mp) return { view: "page", page: mp[1], rest: mp[2] ?? null };
   return { view: "page", page: "home", rest: null };
@@ -41,7 +42,7 @@ function toHash(r: Route): string {
   if (r.view === "plan") return "#/pipeline";
   if (r.view === "brief") return `#/brief/${encodeURIComponent(r.id)}`;
   if (r.view === "analytics") return "#/analytics";
-  if (r.view === "admin") return r.section ? `#/admin/${r.section}` : "#/admin";
+  if (r.view === "admin") return r.section ? `#/admin/${r.section}${r.item ? `/${encodeURIComponent(r.item)}` : ""}` : "#/admin";
   return `#/post/${r.id}`;
 }
 

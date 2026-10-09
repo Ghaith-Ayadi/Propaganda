@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminContext";
+import { useRoute } from "@/lib/route";
 import { RunNow } from "@/components/admin/RunNow";
 import {
   cancelRun, getRun, listRuns, retryRun, startDemoRun,
@@ -72,7 +73,13 @@ export function RunsPage() {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [costLog, setCostLog] = useState(true);
   const [sites, setSites] = useState<Map<string, string>>(new Map());
-  const [selected, setSelected] = useState<string | null>(null);
+  // #/admin/runs/<id> (a link from Admin > Failures or a ticket) opens that run.
+  const [route] = useRoute();
+  const linked = route.view === "admin" ? (route.item ?? null) : null;
+  const [selected, setSelected] = useState<string | null>(linked);
+  useEffect(() => {
+    if (linked) setSelected(linked);
+  }, [linked]);
   const [error, setError] = useState<string | null>(null);
   const [runNowOpen, setRunNowOpen] = useState(false);
 
@@ -170,6 +177,12 @@ export function RunsPage() {
 
       {!runs && !error && <p className="text-sm text-tertiary">Loading…</p>}
 
+      {runs && selected && !runs.some((r) => r.id === selected) && (
+        <div className="rounded-xl border border-secondary px-4 py-4">
+          <RunDetailView id={selected} onChanged={(next) => { if (next) setSelected(next); void load(); }} />
+        </div>
+      )}
+
       {runs && (
         <div className="overflow-x-auto rounded-xl border border-secondary">
           <table className="w-full text-sm">
@@ -245,7 +258,7 @@ function RunRow({
   );
 }
 
-function RunDetailView({ id, summary, onChanged }: { id: string; summary: RunSummary; onChanged: (selectId?: string) => void }) {
+function RunDetailView({ id, summary, onChanged }: { id: string; summary?: RunSummary; onChanged: (selectId?: string) => void }) {
   const { client } = useAdmin();
   const [run, setRun] = useState<RunDetail | null>(null);
   const [busy, setBusy] = useState(false);
@@ -263,7 +276,7 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary: RunSum
         setError(userMessage(err));
       },
     );
-  }, [client, id, summary.status, summary.updatedAt, summary.stall?.until]);
+  }, [client, id, summary?.status, summary?.updatedAt, summary?.stall?.until]);
 
   const act = async (what: "retry" | "cancel") => {
     setBusy(true);

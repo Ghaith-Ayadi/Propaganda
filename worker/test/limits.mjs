@@ -1,6 +1,6 @@
 // usageLimitOf against every shape a usage limit can arrive in.
 import assert from "node:assert/strict";
-import { UsageLimitError, tenantKeyOf, usageLimitOf } from "../dist/limits.js";
+import { UsageLimitError, refusedOf, tenantKeyOf, usageLimitOf } from "../dist/limits.js";
 
 const at = 1_791_410_433_000;
 // The gateway's own error (api/_ai/gateway.ts): a different class, same shape.
@@ -42,4 +42,11 @@ assert.equal(tenantKeyOf({ name: "DBOSMaxStepRetriesError", errors: [new TenantK
 assert.equal(usageLimitOf(new TenantKeyError("x")), null);
 assert.equal(tenantKeyOf(new UsageLimitError(at)), null);
 assert.equal(tenantKeyOf(new Error("boom")), null);
+// Refused before it ran (the AI Gateway's free tier, a bad request): never retried.
+assert.equal(refusedOf(Object.assign(new Error("Free tier users do not have access to this model."), { statusCode: 403 })), true);
+assert.equal(refusedOf(Object.assign(new Error("bad"), { statusCode: 400 })), true);
+assert.equal(refusedOf(Object.assign(new Error("slow down"), { statusCode: 429 })), false);
+assert.equal(refusedOf(Object.assign(new Error("timeout"), { statusCode: 408 })), false);
+assert.equal(refusedOf(Object.assign(new Error("boom"), { statusCode: 500 })), false);
+assert.equal(refusedOf(new Error("no status")), false);
 console.log("limits: all passed");
