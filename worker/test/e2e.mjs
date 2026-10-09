@@ -64,8 +64,8 @@ async function until(what, fn, timeoutMs = 30000) {
   }
 }
 
-// A fake Notion and GitHub: what the worker files lands here.
-const tickets = { pages: [], appended: [], issues: [], comments: [], patches: [] };
+// A fake Notion, GitHub and Slack webhook: what the worker files lands here.
+const tickets = { pages: [], appended: [], issues: [], comments: [], patches: [], slack: [] };
 let issueState = "open";
 const ticketServer = createServer((req, res) => {
   let raw = "";
@@ -82,6 +82,7 @@ const ticketServer = createServer((req, res) => {
     if (u.endsWith("/issues/7") && req.method === "GET") return reply({ state: issueState });
     if (u.endsWith("/issues/7") && req.method === "PATCH") { tickets.patches.push(body); issueState = body.state; return reply({}); }
     if (u.endsWith("/issues/7/comments")) { tickets.comments.push(body); return reply({}); }
+    if (u === "/slack/hook") { tickets.slack.push(body); res.end("ok"); return; }
     res.statusCode = 404; reply({});
   });
 });
@@ -110,6 +111,7 @@ function startWorker(extra = { WORKER_DISPATCH_SECRET: DISPATCH, WORKER_TEST_AGE
       NOTION_API_URL: TICKETS,
       GITHUB_ISSUES_TOKEN: "github-test",
       GITHUB_API_URL: TICKETS,
+      SLACK_WEBHOOK_URL: `${TICKETS}/slack/hook`,
       SITE_URL: "https://app.dev.propaganda.pub",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -235,14 +237,19 @@ async function main() {
   const demoGroup = groups.groups.find((g) => g.workflow === "demo" && g.step === "finish");
   check(!!demoGroup && demoGroup.occurrences === 2, `both land in one group (${demoGroup?.occurrences})`);
   check(demoGroup?.sites.includes(SITE), "the group knows the tenant");
-  check(groups.sinks.includes("notion") && groups.sinks.includes("github") && groups.environment === "dev", "both destinations set up, on dev");
-  check(demoGroup?.status === "filed" && demoGroup.tickets.length === 2, "filed as a Notion task and a GitHub issue");
-  check(tickets.pages.length === 1 && tickets.issues.length === 1, "one of each, not one per run");
+  check(["notion", "github", "slack"].every((k) => groups.sinks.includes(k)) && groups.environment === "dev", "three destinations set up, on dev");
+  check(demoGroup?.status === "filed" && demoGroup.tickets.length === 3, "filed as a Notion task, a GitHub issue and a Slack message");
+  check(tickets.pages.length === 1 && tickets.issues.length === 1 && tickets.slack.length === 1, "one of each, not one per run");
   check(tickets.pages[0].auth === "Bearer notion-test", "Notion is called with its token");
   check(tickets.pages[0].body.properties.Label.multi_select[0].name === "bug", "the Notion task is labelled bug");
   check(JSON.stringify(tickets.pages[0].body.children).includes("Test tenant"), "the Notion report names the tenant");
   const issueText = JSON.stringify(tickets.issues[0].body);
   check(!issueText.includes(SITE) && !issueText.includes("Test tenant"), "the public GitHub issue names no tenant");
+  check(!/asked to fail/i.test(issueText), "the public GitHub issue carries no error text");
+  check(/demo/.test(tickets.issues[0].body.title) && /finish/.test(tickets.issues[0].body.title) && issueText.includes(demoGroup.fingerprint), "the issue names the workflow, the step and the fingerprint");
+  const slack = tickets.slack[0]?.text ?? "";
+  check(/asked to fail/.test(slack) && slack.includes(demoGroup.fingerprint) && /Reply \*fix\*/.test(slack), "Slack gets the error, the fingerprint and how to send it to Claude");
+  check(/## Stack/.test(slack) && /## Steps/.test(slack) && /## Input/.test(slack), "the Slack report carries the stack, the steps and the input");
   check(tickets.issues[0].body.labels.includes("dev"), "the issue says it came from dev");
   const detail = (await api(`/failures/${demoGroup.fingerprint}`)).json;
   check(detail.failures.length === 2 && detail.failures.every((f) => f.step === "finish" && /asked to fail/.test(f.error)), "each run's error and step are kept");
@@ -252,8 +259,9 @@ async function main() {
   await until("failed again", async () => (await run(bad2))?.state === "failed");
   issueState = "closed";
   const third = (await api("/failures/sweep", { method: "POST" })).json;
-  check(third.added === 1 && third.noted === 2 && third.filed === 0, `a repeat is a note on both tickets, not a new one (${JSON.stringify(third)})`);
-  check(tickets.appended.length === 1 && tickets.comments.length === 1, "the note is on the Notion task and the issue");
+  check(third.added === 1 && third.noted === 3 && third.filed === 0, `a repeat is a note on every ticket, not a new one (${JSON.stringify(third)})`);
+  check(tickets.appended.length === 1 && tickets.comments.length === 1 && tickets.slack.length === 2, "the note is on the Notion task, the issue and Slack");
+  check(!/asked to fail/i.test(JSON.stringify(tickets.comments)), "the issue comment carries no error text");
   check(tickets.patches.some((p) => p.state === "open") && tickets.patches.some((p) => p.properties?.Status?.status?.name === "Backlog"), "closed tickets are reopened");
   const ignored = (await api(`/failures/${demoGroup.fingerprint}/ignore`, { method: "POST", body: { ignored: true } })).json;
   check(ignored.group.status === "ignored", "a group can be ignored");

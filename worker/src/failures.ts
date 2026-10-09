@@ -16,6 +16,7 @@
 // nothing a person wrote, and stays out of supabase/migrations.
 
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { DBOS, type WorkflowStatus } from "@dbos-inc/dbos-sdk";
 import pg, { type Pool } from "pg";
 import { tenantKeyOf, usageLimitOf } from "./limits.js";
@@ -65,6 +66,13 @@ create table if not exists ops.failures (
   recorded_at timestamptz not null default now()
 );
 create index if not exists failures_by_group on ops.failures (fingerprint, failed_at desc);
+alter table ops.failures
+  add column if not exists stack text,
+  add column if not exists input text,
+  add column if not exists steps jsonb not null default '[]',
+  add column if not exists request_ids text[] not null default '{}',
+  add column if not exists commit text,
+  add column if not exists environment text;
 `;
 
 let store: Pool | null = null;
@@ -143,6 +151,48 @@ export function scrub(text: string): string {
     .replace(/((?:api[_-]?key|token|secret|password)["']?\s*[:=]\s*["']?)[^\s"',}]+/gi, "$1[redacted]");
 }
 
+/** The commit this worker was built from (Dockerfile writes COMMIT), or WORKER_COMMIT. */
+let commitCache: string | null | undefined;
+export function commitOf(): string | null {
+  if (commitCache !== undefined) return commitCache;
+  let c = process.env.WORKER_COMMIT ?? null;
+  if (!c) {
+    try {
+      c = readFileSync(new URL("../COMMIT", import.meta.url), "utf8").trim().replace(/^ref: refs\/heads\//, "") || null;
+    } catch {
+      c = null;
+    }
+  }
+  return (commitCache = c);
+}
+
+/** The AI Gateway's request ids ("[gen_...]") and the like, for looking a call up with its provider. */
+export function requestIdsOf(...texts: (string | null | undefined)[]): string[] {
+  const ids = new Set<string>();
+  for (const t of texts) for (const m of (t ?? "").matchAll(/\[((?:gen|req|msg)_[A-Za-z0-9]{8,})\]|\b((?:gen|req)_[A-Za-z0-9]{16,})\b/g)) ids.add((m[1] ?? m[2])!);
+  return [...ids].slice(0, 10);
+}
+
+function stackOf(err: unknown): string | null {
+  const st = (err as { stack?: unknown } | null)?.stack;
+  return typeof st === "string" && st ? scrub(st).slice(0, 6000) : null;
+}
+
+/**
+ * The error's class, for the public issue: the name before "Name: message"
+ * (the innermost of DBOS's retry wrapper), or "HTTP 403" when only a status
+ * is known, else "Error". Never any of the message itself.
+ */
+export function errorClassOf(message: string): string {
+  const retries = /exceeded its maximum of \d+ retries\. Previous errors: ([\s\S]*)$/.exec(message);
+  const inner = retries ? (retries[1]!.split(/Error \d+: /).filter((x) => x.trim()).pop() ?? "") : message;
+  const named = /^\s*([A-Z][A-Za-z0-9]*(?:Error|Exception))\b/.exec(inner);
+  if (named) return named[1]!;
+  const status = /\b(?:status(?:Code)?|answered|HTTP)\D{0,3}([45]\d\d)\b/i.exec(inner);
+  if (status) return `HTTP ${status[1]}`;
+  return retries ? "Error (after retries)" : "Error";
+}
+
 const titleOf = (workflow: string, step: string | null, signature: string) =>
   `${workflow}${step ? ` › ${stepKey(step)}` : ""}: ${signature.slice(0, 90)}${signature.length > 90 ? "…" : ""}`;
 
@@ -195,6 +245,17 @@ async function record(appDb: Pool, w: WorkflowStatus): Promise<boolean> {
   const steps = (await DBOS.listWorkflowSteps(w.workflowID)) ?? [];
   const step = failedStep(steps);
   const error = scrub(messageOf(step?.error ?? w.error) ?? "The run failed without an error message.").slice(0, 8000);
+  const stack = stackOf(step?.error ?? w.error);
+  // What the run was started with, for a reproduction (loaded only here: inputs can be large).
+  const [full] = await DBOS.listWorkflows({ workflowIDs: [w.workflowID], loadInput: true, loadOutput: false });
+  const input = full?.input === undefined ? null : scrub(JSON.stringify(full.input) ?? "").slice(0, 4000);
+  const trail = steps.map((s) => ({
+    id: s.functionID,
+    name: s.name,
+    ms: s.startedAtEpochMs && s.completedAtEpochMs ? s.completedAtEpochMs - s.startedAtEpochMs : null,
+    error: s.error ? scrub(messageOf(s.error) ?? "").slice(0, 400) : null,
+  }));
+  const requestIds = requestIdsOf(error, stack);
   const site = w.attributes && typeof w.attributes.site === "string" ? w.attributes.site : null;
   const spend = await spendOf(appDb, w.workflowID, step?.functionID ?? null);
   const stepName = step ? stepKey(step.name) : null;
@@ -230,9 +291,11 @@ async function record(appDb: Pool, w: WorkflowStatus): Promise<boolean> {
       ],
     );
     await client.query(
-      `insert into ops.failures (workflow_id, fingerprint, workflow, step, step_id, site, error, models, cost_usd, calls, unpriced, failed_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [w.workflowID, fingerprint, w.workflowName, stepName, step?.functionID ?? null, site, error, spend.models, spend.cost, spend.calls, spend.unpriced, at],
+      `insert into ops.failures (workflow_id, fingerprint, workflow, step, step_id, site, error, models, cost_usd, calls, unpriced, failed_at,
+                                 stack, input, steps, request_ids, commit, environment)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+      [w.workflowID, fingerprint, w.workflowName, stepName, step?.functionID ?? null, site, error, spend.models, spend.cost, spend.calls, spend.unpriced, at,
+       stack, input, JSON.stringify(trail), requestIds, commitOf(), environmentOf()],
     );
     await client.query("commit");
     return true;
@@ -292,8 +355,21 @@ export interface FailureGroup {
   processError: string | null;
 }
 
+export interface StepTrail {
+  id: number;
+  name: string;
+  ms: number | null;
+  error: string | null;
+}
+
 export interface FailureView {
   runId: string;
+  stack: string | null;
+  input: string | null;
+  steps: StepTrail[];
+  requestIds: string[];
+  commit: string | null;
+  environment: string | null;
   step: string | null;
   stepId: number | null;
   site: string | null;
@@ -347,11 +423,18 @@ export async function getFailureGroup(fingerprint: string): Promise<{ group: Fai
   const f = await db().query<{
     workflow_id: string; step: string | null; step_id: number | null; site: string | null; error: string;
     models: string[]; cost_usd: string; calls: number; unpriced: number; failed_at: Date;
+    stack: string | null; input: string | null; steps: StepTrail[]; request_ids: string[]; commit: string | null; environment: string | null;
   }>("select * from ops.failures where fingerprint = $1 order by failed_at desc limit 50", [fingerprint]);
   return {
     group: groupOf(g.rows[0]),
     failures: f.rows.map((r) => ({
       runId: r.workflow_id,
+      stack: r.stack,
+      input: r.input,
+      steps: r.steps ?? [],
+      requestIds: r.request_ids ?? [],
+      commit: r.commit,
+      environment: r.environment,
       step: r.step,
       stepId: r.step_id,
       site: r.site,
@@ -407,6 +490,7 @@ export async function reportOf(appDb: Pool, group: FailureGroup): Promise<BugRep
     workflow: group.workflow,
     step: group.step,
     signature: group.signature,
+    errorClass: errorClassOf(group.latestError),
     occurrences: group.occurrences,
     firstSeen: group.firstSeen,
     lastSeen: group.lastSeen,
@@ -418,7 +502,53 @@ export async function reportOf(appDb: Pool, group: FailureGroup): Promise<BugRep
     runs: failures.slice(0, 5).map((f) => ({ id: f.runId, at: f.failedAt, site: f.site })),
     adminUrl: `${appUrl()}/admin#/admin/failures/${group.fingerprint}`,
     runUrl: (id: string) => `${appUrl()}/admin#/admin/runs/${encodeURIComponent(id)}`,
+    agentReport: agentReport(group, failures, names),
   };
+}
+
+const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
+
+/**
+ * The report an agent fixes from: everything the worker knows about the
+ * latest failure of the group, in Markdown. Private: it names the tenant and
+ * quotes the run's input, so it goes to Admin, Slack and Notion, never to the
+ * public GitHub issue.
+ */
+export function agentReport(group: FailureGroup, failures: FailureView[], names: Map<string, string> = new Map()): string {
+  const f = failures[0];
+  const tenant = (id: string | null) => (id ? `${names.get(id) ?? id} (${id})` : "none");
+  const lines = [
+    `# Run failure: ${group.workflow}${group.step ? ` › ${group.step}` : ""}`,
+    "",
+    `- Fingerprint: ${group.fingerprint} (seen ${group.occurrences}×, first ${iso(group.firstSeen)}, last ${iso(group.lastSeen)})`,
+    `- Environment: ${f?.environment ?? environmentOf()}; commit ${f?.commit ?? commitOf() ?? "unknown"}`,
+    `- Tenants: ${group.sites.map((s) => tenant(s)).join(", ") || "none"}`,
+    `- Models: ${group.models.join(", ") || "none"}`,
+  ];
+  if (f) {
+    lines.push(
+      `- Latest run: ${f.runId}, step ${f.stepId ?? "?"} "${f.step ?? ""}", ${iso(f.failedAt)}, tenant ${tenant(f.site)}`,
+      `- Spent by that run: $${f.cost.toFixed(4)} over ${f.calls} logged call${f.calls === 1 ? "" : "s"}${f.unpriced ? `, ${f.unpriced} unpriced` : ""}`,
+    );
+    if (f.requestIds.length) lines.push(`- Provider request ids: ${f.requestIds.join(", ")}`);
+  }
+  lines.push("", "## Error", "```", f?.error ?? group.latestError, "```");
+  if (f?.stack) lines.push("", "## Stack", "```", f.stack, "```");
+  if (f?.steps.length) {
+    lines.push("", "## Steps");
+    for (const st of f.steps) lines.push(`${st.id}. ${st.name}${st.ms !== null ? ` (${Math.round(st.ms / 100) / 10}s)` : ""}${st.error ? `: FAILED ${st.error}` : ""}`);
+  }
+  if (f?.input) lines.push("", "## Input", "```json", f.input, "```");
+  lines.push(
+    "",
+    "## Reproduce",
+    `- Retry the run from the failed step: Admin > Runs > ${f?.runId ?? group.latestRun} > "Retry from the failed step" (keeps the steps before it), or POST /worker/v1/runs/${f?.runId ?? group.latestRun}/retry.`,
+    `- Or start it fresh with the same input: Admin > Runs > Run now, agent "${group.workflow}", tenant ${tenant(f?.site ?? group.sites[0] ?? null)}.`,
+    `- Code: worker/src (workflow "${group.workflow}"); model calls go through api/_ai/gateway.ts; the cost log is public.model_calls (workflow_id = the run id).`,
+    "",
+    `Admin: ${appUrl()}/admin#/admin/failures/${group.fingerprint}`,
+  );
+  return lines.join("\n");
 }
 
 /**

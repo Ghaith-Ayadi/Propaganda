@@ -9,6 +9,9 @@ RUN npm ci --no-audit --no-fund
 COPY api/_ai/gateway.ts api/_ai/cost.ts api/_ai/errors.ts api/_ai/modelKeys.ts /src/api/_ai/
 COPY worker/tsconfig.json worker/build.mjs ./
 COPY worker/src ./src
+# The commit this was built from (the box checks it out detached, so HEAD is the
+# sha): failure reports name it (src/failures.ts).
+COPY .git/HEAD ./COMMIT
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22.22.0-alpine
@@ -17,6 +20,7 @@ ENV NODE_ENV=production
 COPY --from=build /src/worker/package.json ./
 COPY --from=build /src/worker/node_modules ./node_modules
 COPY --from=build /src/worker/dist ./dist
+COPY --from=build /src/worker/COMMIT ./COMMIT
 USER node
 EXPOSE 3010
 HEALTHCHECK --interval=15s --timeout=5s --retries=10 \

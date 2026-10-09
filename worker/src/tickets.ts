@@ -4,15 +4,19 @@
 //   with the whole report. NOTION_TOKEN is an internal integration the board
 //   is shared with; NOTION_TASKS_DATA_SOURCE overrides the board.
 // - github: an issue on GITHUB_ISSUES_REPO (Ghaith-Ayadi/Propaganda). That
-//   repository is public, so the issue says what failed and where, never
-//   which tenant or the raw error (which can quote a tenant's text): those
-//   stay in Admin, linked from the issue. GITHUB_ISSUES_TOKEN may write issues.
+//   repository is public, so the issue carries only the workflow, the step,
+//   the error's class, counts, the fingerprint and the Admin link: no tenant
+//   and no error text (even normalized, it can carry a tenant's words). The
+//   rest stays in Admin and Slack. GITHUB_ISSUES_TOKEN may write issues.
+// - slack: the whole agent report, posted to SLACK_WEBHOOK_URL (an incoming
+//   webhook on Ayadi's private workspace), new and repeats alike. Replying
+//   "fix" on it sends it to Claude.
 //
-// FAILURE_TICKETS picks ("notion", "github" or "notion,github"); unset, every
-// destination with a token is used. A repeat adds a note to the ticket and
-// reopens it when it was closed.
+// FAILURE_TICKETS picks ("github", "slack", "notion", comma-separated); unset,
+// every destination with a token is used. A repeat adds a note to the ticket
+// and reopens it when it was closed.
 
-export type TicketKind = "notion" | "github";
+export type TicketKind = "notion" | "github" | "slack";
 
 export interface Ticket {
   kind: TicketKind;
@@ -28,6 +32,8 @@ export interface BugReport {
   workflow: string;
   step: string | null;
   signature: string;
+  /** The error's class ("GatewayForbiddenError", "Error"): all a public issue says about it. */
+  errorClass: string;
   occurrences: number;
   firstSeen: number;
   lastSeen: number;
@@ -39,6 +45,8 @@ export interface BugReport {
   runs: { id: string; at: number; site: string | null }[];
   adminUrl: string;
   runUrl: (id: string) => string;
+  /** Everything an agent needs to fix it (failures.ts agentReport): private, never on GitHub. */
+  agentReport: string;
 }
 
 const NOTION_VERSION = "2025-09-03";
@@ -47,14 +55,15 @@ const NOTION_TASKS = "36c73ad5-6c72-80bd-aaa6-000ba6df98f2";
 const notionToken = () => process.env.NOTION_TOKEN ?? "";
 const githubToken = () => process.env.GITHUB_ISSUES_TOKEN ?? "";
 const githubRepo = () => process.env.GITHUB_ISSUES_REPO ?? "Ghaith-Ayadi/Propaganda";
+const slackWebhook = () => process.env.SLACK_WEBHOOK_URL ?? "";
 
 /** The destinations in use on this box. */
 export function ticketSinks(): TicketKind[] {
   const want = process.env.FAILURE_TICKETS;
-  const ready: Record<TicketKind, boolean> = { notion: !!notionToken(), github: !!githubToken() };
+  const ready: Record<TicketKind, boolean> = { notion: !!notionToken(), github: !!githubToken(), slack: !!slackWebhook() };
   const kinds: TicketKind[] = want
-    ? want.split(",").map((s) => s.trim()).filter((s): s is TicketKind => s === "notion" || s === "github")
-    : ["notion", "github"];
+    ? want.split(",").map((s) => s.trim()).filter((s): s is TicketKind => s in ready)
+    : ["github", "slack", "notion"];
   return kinds.filter((k) => ready[k]);
 }
 
@@ -93,25 +102,16 @@ const heading = (content: string) => ({ object: "block", type: "heading_3", head
 const bullet = (content: string) => ({ object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: [text(content)] } });
 function code(content: string) {
   const parts: ReturnType<typeof text>[] = [];
-  for (let i = 0; i < Math.min(content.length, 6000); i += 2000) parts.push(text(content.slice(i, i + 2000)));
+  // Notion caps a block at 100 pieces of 2000 characters; reports stay far below.
+  for (let i = 0; i < Math.min(content.length, 40_000); i += 2000) parts.push(text(content.slice(i, i + 2000)));
   return { object: "block", type: "code", code: { language: "plain text", rich_text: parts } };
 }
 
 function notionBody(r: BugReport) {
-  const tenants = r.tenants.map((t) => t.name).join(", ") || "none recorded";
   return [
     para(`Filed by the worker from a run failure (${r.environment}). One task per failure; repeats are added below.`),
-    heading("What failed"),
-    bullet(`Agent run: ${r.workflow}${r.step ? `, step "${r.step}"` : ""}`),
-    bullet(`Seen ${r.occurrences} time${r.occurrences === 1 ? "" : "s"}, first ${when(r.firstSeen)}, last ${when(r.lastSeen)}`),
-    bullet(`Tenants: ${tenants}`),
-    bullet(`Models: ${r.models.join(", ") || "none"}`),
-    bullet(`Spent by these runs: $${r.cost.toFixed(4)}${r.unpriced ? ` plus ${r.unpriced} unpriced call${r.unpriced === 1 ? "" : "s"}` : ""}`),
-    heading("Latest error"),
-    code(r.latestError),
-    heading("Runs"),
-    ...r.runs.map((x) => bullet(`${x.id} at ${when(x.at)}: ${r.runUrl(x.id)}`)),
-    para(`All of this group in Admin > Failures: ${r.adminUrl}`),
+    heading("Report"),
+    code(r.agentReport),
     para(`Fingerprint ${r.fingerprint}`),
   ];
 }
@@ -142,7 +142,7 @@ async function recurNotion(t: Ticket, r: BugReport, more: number): Promise<void>
       heading(`Happened again (${when(r.lastSeen)})`),
       para(`${more} more time${more === 1 ? "" : "s"}, ${r.occurrences} in all.${reopened ? ` It was ${status}, so it is back in Backlog.` : ""}`),
       ...(latest ? [para(`Latest run ${latest.id}: ${r.runUrl(latest.id)}`)] : []),
-      code(r.latestError),
+      code(r.agentReport),
     ],
   });
 }
@@ -163,23 +163,21 @@ function github<T>(path: string, method: string, body?: unknown): Promise<T> {
   });
 }
 
-/** Public repository: what failed and where, no tenant and no raw error. */
+/** The public name of a group: workflow, step and error class, never the error text. */
+const publicTitle = (r: BugReport) => `${r.workflow}${r.step ? ` › ${r.step}` : ""}: ${r.errorClass}`;
+
+/** Public repository: what failed and where, no tenant and no error text. */
 function githubBody(r: BugReport): string {
   return [
     `A run failure the worker recorded on **${r.environment}**. One issue per failure; repeats are added as comments.`,
     "",
     `- Agent run: \`${r.workflow}\`${r.step ? `, step \`${r.step}\`` : ""}`,
+    `- Error class: \`${r.errorClass}\``,
     `- Seen ${r.occurrences} time${r.occurrences === 1 ? "" : "s"}, first ${when(r.firstSeen)}, last ${when(r.lastSeen)}`,
     `- Tenants affected: ${r.tenants.length}`,
-    `- Models: ${r.models.map((m) => `\`${m}\``).join(", ") || "none"}`,
+    `- Fingerprint: \`${r.fingerprint}\``,
     "",
-    "Error, with ids and numbers taken out:",
-    "",
-    "```",
-    r.signature,
-    "```",
-    "",
-    `The full error, the tenants and the runs are in [Admin > Failures](${r.adminUrl}) (superadmins only).`,
+    `The error, stack, input and runs are in [Admin > Failures](${r.adminUrl}) (superadmins only) and in the Slack report.`,
     "",
     `<!-- failure-fingerprint: ${r.fingerprint} -->`,
   ].join("\n");
@@ -187,7 +185,7 @@ function githubBody(r: BugReport): string {
 
 async function fileGithub(r: BugReport): Promise<Ticket> {
   const issue = await github<{ number: number; html_url: string }>("/issues", "POST", {
-    title: `${r.environment === "prod" ? "" : `[${r.environment}] `}Run failure: ${r.title}`.slice(0, 250),
+    title: `${r.environment === "prod" ? "" : `[${r.environment}] `}Run failure: ${publicTitle(r)}`.slice(0, 250),
     body: githubBody(r),
     labels: ["bug", "run-failure", r.environment],
   });
@@ -203,10 +201,46 @@ async function recurGithub(t: Ticket, r: BugReport, more: number): Promise<void>
   });
 }
 
+// ---- Slack ----
+
+/** Slack's limit for a message is 40,000 characters; keep well under it. */
+const SLACK_MAX = 12_000;
+
+function slackText(r: BugReport, headline: string): string {
+  const report = r.agentReport.length > SLACK_MAX ? `${r.agentReport.slice(0, SLACK_MAX)}\n… (cut; the rest is in Admin)` : r.agentReport;
+  // Slack's own escapes, so the report shows as written.
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return [
+    `*${esc(headline)}* (${r.environment}) · ${esc(r.workflow)}${r.step ? ` › ${esc(r.step)}` : ""}`,
+    `Reply *fix* in this thread to send it to Claude. <${r.adminUrl}|Admin> · fingerprint \`${r.fingerprint}\``,
+    "```",
+    esc(report),
+    "```",
+  ].join("\n");
+}
+
+async function postSlack(text: string): Promise<void> {
+  const res = await fetch(slackWebhook(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, unfurl_links: false }),
+  });
+  if (!res.ok) throw new Error(`Slack answered ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
+}
+
+async function fileSlack(r: BugReport): Promise<Ticket> {
+  await postSlack(slackText(r, "New run failure"));
+  return { kind: "slack", ref: r.fingerprint, url: "" };
+}
+
+async function recurSlack(r: BugReport, more: number): Promise<void> {
+  await postSlack(slackText(r, `Run failure again: ${more} more, ${r.occurrences} in all`));
+}
+
 export function fileTicket(kind: TicketKind, r: BugReport): Promise<Ticket> {
-  return kind === "notion" ? fileNotion(r) : fileGithub(r);
+  return kind === "notion" ? fileNotion(r) : kind === "github" ? fileGithub(r) : fileSlack(r);
 }
 
 export function recurTicket(t: Ticket, r: BugReport, more: number): Promise<void> {
-  return t.kind === "notion" ? recurNotion(t, r, more) : recurGithub(t, r, more);
+  return t.kind === "notion" ? recurNotion(t, r, more) : t.kind === "github" ? recurGithub(t, r, more) : recurSlack(r, more);
 }
