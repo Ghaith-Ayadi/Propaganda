@@ -79,9 +79,18 @@ html.ppgd-app {
   --color-brand-800: #5f470e;
   --color-brand-900: #4d3a10;
   --color-brand-950: #2c2007;
+  /* Focus rings and brand borders at 600: 500 is 2.65:1 on white. */
+  --color-border-brand: var(--color-brand-600);
+  --color-focus-ring: var(--color-brand-600);
 }
-/* The kit's dark theme greys out brand text and icons; keep them gold. */
+/* The kit's dark theme greys out brand text and icons; keep them gold. Its
+   solid fill and hover (600, 500) are too light for the white label; 700 and
+   800 keep it at 6.5:1 and up. Focus rings go back to 500 on the dark page. */
 html.ppgd-app.dark-mode {
+  --color-bg-brand-solid: var(--color-brand-700);
+  --color-bg-brand-solid_hover: var(--color-brand-800);
+  --color-border-brand: var(--color-brand-400);
+  --color-focus-ring: var(--color-brand-500);
   --color-text-brand-secondary: var(--color-brand-300);
   --color-text-brand-secondary_hover: var(--color-brand-200);
   --color-text-brand-tertiary: var(--color-brand-400);
