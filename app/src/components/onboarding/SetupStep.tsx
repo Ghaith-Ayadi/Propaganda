@@ -51,7 +51,9 @@ export function SetupStep() {
       <Input
         label="Your business's website"
         type="url"
-        placeholder="https://kontra.run"
+        placeholder="https://example.com"
+        // Settings arrive after the first render: show the saved address once it's here.
+        key={website}
         defaultValue={website}
         hint="The site your customers know you by."
         onBlur={(e) => void setSetting("tenant.website", (e.target as HTMLInputElement).value.trim())}
