@@ -5,7 +5,7 @@
 // never asked again. There's no consultant review: the Strategist's proposal
 // goes straight to the tenant's Goals page.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Label, TextArea, TextField } from "react-aria-components";
 import { ArrowRight } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
@@ -58,7 +58,18 @@ export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
   const { site } = useWorkspace();
   const saved = useStrategyAnswers(site.id);
   const [answers, setAnswers] = useState<StrategyAnswers>(saved);
-  useEffect(() => setAnswers(saved), [saved]);
+  // The goals store re-reads every 30 seconds and hands back a new object each
+  // time. Take the saved answers only when their text changed, and never over
+  // a field someone has typed in.
+  const typed = useRef(new Set<keyof StrategyAnswers>());
+  const savedKey = JSON.stringify(saved);
+  useEffect(() => {
+    setAnswers((a) => {
+      const next = { ...a };
+      for (const q of QUESTIONS) if (!typed.current.has(q.id)) next[q.id] = saved[q.id];
+      return next;
+    });
+  }, [savedKey]);
   const review = useSetting<string>("strategist.reviewPerMonth", "8") ?? "8";
   const plan = usePlanDraft();
   const [saving, setSaving] = useState(false);
@@ -92,7 +103,10 @@ export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
         <TextField
           key={q.id}
           value={answers[q.id]}
-          onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
+          onChange={(v) => {
+            typed.current.add(q.id);
+            setAnswers((a) => ({ ...a, [q.id]: v }));
+          }}
           className="flex flex-col gap-1.5"
         >
           <Label className="text-sm font-medium text-secondary">
