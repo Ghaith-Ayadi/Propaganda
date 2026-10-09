@@ -12,7 +12,7 @@ import { useConversation, useConversations } from "@/lib/chat/useChat";
 import type { Conversation } from "@/lib/chat/types";
 import { activeSite } from "@/lib/scope";
 import { goPage, usePageRest } from "@/lib/route";
-import { CONTAINER, PageHeader } from "@/components/shell/PageHeader";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { useIsMobile } from "@/lib/mobile";
 import { cx } from "@/utils/cx";
 import type { ChatStatus } from "ai";
@@ -89,23 +89,22 @@ export function ChatPage() {
         }
       />
 
-      {/* The shared container, stretched to the window so the composer stays put. */}
-      <div className={cx(CONTAINER, "flex min-h-0 flex-1 flex-col pt-6 pb-4 md:pt-8 md:pb-6")}>
-        <div className="relative flex min-h-[420px] flex-1 overflow-hidden rounded-2xl bg-primary shadow-xs ring-1 ring-secondary">
-          {!isMobile && <aside className="flex w-60 shrink-0 flex-col border-r border-secondary bg-secondary_alt">{list}</aside>}
-          {isMobile && listOpen && (
-            <aside className="absolute inset-y-0 left-0 z-10 flex w-72 max-w-[85%] flex-col border-r border-secondary bg-primary shadow-lg">{list}</aside>
+      {/* The chat is the page body: the conversation centered in the space
+          left of the list, the list of chats against the right edge. */}
+      <div className="relative flex min-h-0 flex-1">
+        <section className="flex min-w-0 flex-1 flex-col">
+          {messages.length > 0 || (activeId && loading) ? (
+            <Thread messages={messages} status={status} onRemember={remember} onRetry={retry} />
+          ) : (
+            <Welcome onPick={ask} />
           )}
+          <Composer streaming={busy} onSend={ask} onStop={() => void stop()} />
+        </section>
 
-          <section className="flex min-w-0 flex-1 flex-col">
-            {messages.length > 0 || (activeId && loading) ? (
-              <Thread messages={messages} status={status} onRemember={remember} onRetry={retry} />
-            ) : (
-              <Welcome onPick={ask} />
-            )}
-            <Composer streaming={busy} onSend={ask} onStop={() => void stop()} />
-          </section>
-        </div>
+        {!isMobile && <aside className="flex w-64 shrink-0 flex-col border-l border-secondary">{list}</aside>}
+        {isMobile && listOpen && (
+          <aside className="absolute inset-y-0 right-0 z-10 flex w-72 max-w-[85%] flex-col border-l border-secondary bg-primary shadow-lg">{list}</aside>
+        )}
       </div>
     </div>
   );
@@ -130,7 +129,7 @@ function ConversationList({
         onClick={onNew}
         className={cx(
           "flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-primary_hover",
-          !activeId ? "bg-primary font-medium text-primary shadow-xs ring-1 ring-secondary" : "text-secondary",
+          !activeId ? "bg-primary_hover font-medium text-primary" : "text-secondary",
         )}
       >
         <Plus className="size-4 text-fg-quaternary" />
@@ -142,7 +141,7 @@ function ConversationList({
           key={c.id}
           className={cx(
             "group flex items-center gap-1 rounded-md transition hover:bg-primary_hover",
-            c.id === activeId && "bg-primary shadow-xs ring-1 ring-secondary hover:bg-primary",
+            c.id === activeId && "bg-primary_hover",
           )}
         >
           <button
@@ -228,7 +227,7 @@ function Thread({
       }}
       className="min-h-0 flex-1 overflow-y-auto"
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
         {messages.map((m) => (
           <Message
             key={m.id}
@@ -275,7 +274,7 @@ function Composer({ streaming, onSend, onStop }: { streaming: boolean; onSend: (
   };
 
   return (
-    <div className="border-t border-secondary px-3 py-3 md:px-5">
+    <div className="px-4 pt-2 pb-4 md:px-8 md:pb-6">
       <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl bg-primary p-1.5 pl-3.5 shadow-xs ring-1 ring-primary ring-inset transition focus-within:ring-brand">
         <textarea
           ref={ref}
