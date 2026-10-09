@@ -61,35 +61,6 @@ html.ppgd-app {
   --track-sm: -0.006em;
   --track-md: -0.011em;
 }
-/* Controls are black, gold is a sparse accent (Ayadi, 2026-10-09: "Buttons
-   should be black. Gold is accent! use very sparcely", "Gold is not a color.
-   You have to use a gradient"). The kit's brand scale is already neutral; the
-   app only makes its solid fill black, inverted to near white in dark mode.
-   Primary buttons, toggles, checkboxes, radios and selected days use it. */
-html.ppgd-app {
-  --color-bg-brand-solid: var(--color-brand-950);
-  --color-bg-brand-solid_hover: var(--color-brand-700);
-  /* Gold, only through the bg-gold utility below, never on controls. */
-  --gold-gradient: linear-gradient(135deg, #f6e3a1 0%, #deb031 38%, #c9971a 64%, #a87a12 100%);
-  --gold-solid: #c9971a;
-}
-html.ppgd-app.dark-mode {
-  --color-bg-brand-solid: var(--color-brand-50);
-  --color-bg-brand-solid_hover: var(--color-brand-200);
-  --color-focus-ring: var(--color-brand-300);
-}
-/* On the inverted fill, the kit's white labels and marks turn black. */
-html.ppgd-app.dark-mode
-  :is(.bg-brand-solid, .bg-brand-solid_hover, .hover\:bg-brand-solid_hover:hover, .focus\:bg-brand-solid:focus) {
-  color: var(--color-brand-950);
-}
-html.ppgd-app.dark-mode :is(.bg-brand-solid, .bg-brand-solid_hover) :is(.text-fg-white, [data-icon]) {
-  color: var(--color-brand-950);
-}
-html.ppgd-app.dark-mode :is(.bg-brand-solid, .bg-brand-solid_hover) .bg-fg-white {
-  background-color: var(--color-brand-950);
-}
-
 html.ppgd-app .bn-container {
   --bn-font-family: var(--font-serif);
 }
@@ -239,11 +210,4 @@ a {
   .bn-side-menu {
     display: none !important;
   }
-}
-
-/* The gold accent: a fill for the few moments that earn it (the Launch's
-   overall progress on Home). Never on buttons or controls, and never for text. */
-@utility bg-gold {
-  background-color: var(--gold-solid, #c9971a);
-  background-image: var(--gold-gradient, linear-gradient(135deg, #f6e3a1 0%, #deb031 38%, #c9971a 64%, #a87a12 100%));
 }

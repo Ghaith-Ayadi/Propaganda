@@ -105,8 +105,8 @@ left is always target minus approved. The cadence (`agent_settings.batch_cadence
 sizes the batches: `weekly` by default (equal weekly batches through the
 quarter's first two months, a double first batch) or `flood` (everything at
 once). Without goals yet, the plan's size stands in for the target, and with
-no plan either a batch is 3. A schedule (`PITCHER_BATCH_CRON`, every day 07:00
-UTC) runs each tenant's top-ups and, once a week, its next batch. "Send me the
+no plan either a batch is 3. A schedule (`PITCHER_BATCH_CRON`, every day 10:00
+UTC, after DeepSeek's weekday peak-price hours) runs each tenant's top-ups and, once a week, its next batch. "Send me the
 next batch" in Chat sends it now; the plan arriving sends the quarter's first.
 A person's own ask in Chat is pitched now, outside the batches.
 
@@ -220,7 +220,7 @@ only spends for tenants in `kb_agent_sites`.
 ## The Scout
 
 Once a week (Sundays 06:00 UTC, `SCOUT_CRON`, so its ideas are in before the
-Pitcher's Monday 07:00 run) the `scout-weekly` schedule
+Pitcher's Monday 10:00 run) the `scout-weekly` schedule
 starts one run per tenant that has something to follow, under the id
 `scout-<site>-<day>`, so a week is never scouted twice. A run:
 
