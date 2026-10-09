@@ -23,6 +23,7 @@ import { ChangeHistory, GoalCards } from "./GoalCards";
 import { LaunchCard } from "./LaunchCard";
 import { BatchesView, batchSummary } from "./BatchesView";
 import { ProposalView } from "./ProposalView";
+import { ProposalBanner } from "./ProposalBanner";
 import { PlanDrop } from "./PlanDrop";
 
 type Tab = "goals" | "strategist" | "batches" | "plan";
@@ -135,22 +136,6 @@ function GoalsTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; thisQu
       )}
 
       {quarter === thisQuarter && <NextQuarterCard quarter={quarter} onTab={onTab} />}
-    </div>
-  );
-}
-
-function ProposalBanner({ proposal, onOpen }: { proposal: Proposal; onOpen: () => void }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-xl bg-brand-primary_alt p-5 ring-1 ring-brand ring-inset md:flex-row md:items-center md:justify-between">
-      <div>
-        <p className="font-medium text-brand-secondary">
-          {proposal.status === "changes_requested" ? "The Strategist is revising" : `The Strategist proposed ${quarterLabel(proposal.quarter)}'s goals`}
-        </p>
-        <p className="mt-0.5 text-sm text-secondary">{proposal.summary}</p>
-      </div>
-      <Button size="sm" color="primary" iconTrailing={ArrowRight} onClick={onOpen}>
-        {proposal.status === "changes_requested" ? "See it" : "Review and approve"}
-      </Button>
     </div>
   );
 }
@@ -309,6 +294,8 @@ function StrategistTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; t
   return (
     <div className="space-y-4">
       <StrategistStatus quarter={quarter} />
+      {/* The proposal first: it is what waits on them (Ayadi, 2026-10-09). */}
+      <ProposalView key={proposal.id + proposal.status} proposal={proposal} />
       {preLaunch && (
         <Card title="Your Launch starts when you approve" subtitle={LAUNCH_WHY}>
           <ul className="list-disc space-y-1 pl-5 text-sm text-secondary">
@@ -322,7 +309,6 @@ function StrategistTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; t
           </div>
         </Card>
       )}
-      <ProposalView key={proposal.id + proposal.status} proposal={proposal} />
       <p className="text-center text-sm text-tertiary">
         Have a plan of your own?{" "}
         <button type="button" className="font-medium text-brand-secondary hover:underline" onClick={() => onTab("plan")}>

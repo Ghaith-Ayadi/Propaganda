@@ -30,6 +30,21 @@ export function useProposal(quarter: QuarterKey): Proposal | null {
   return useMemo(() => goalsAdapter.proposal(quarter), [v, quarter]);
 }
 
+/**
+ * The Strategist's proposal waiting on the tenant (sent, not yet approved), in
+ * any quarter the app shows, or null. Home's banner and the Inbox read it.
+ */
+export function useWaitingProposal(): Proposal | null {
+  const v = useVersion();
+  return useMemo(() => {
+    for (const q of goalsAdapter.quarters()) {
+      const p = goalsAdapter.proposal(q);
+      if (p?.status === "sent") return p;
+    }
+    return null;
+  }, [v]);
+}
+
 export function useLaunch(): Launch | null {
   const v = useVersion();
   return useMemo(() => goalsAdapter.launch(), [v]);
