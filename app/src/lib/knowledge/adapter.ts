@@ -8,8 +8,9 @@
 //     draft migration (project files, kb-data-model/). It works only once that
 //     migration is applied.
 //
-// PLACEHOLDER: `KB_BACKEND` stays "placeholder" until Ayadi applies the draft.
-// Flipping it is the only change the pages need.
+// Every real build uses live.ts (the kb_ tables are on the server since
+// 20261008000010); a tenant with no knowledge yet sees empty pages. The
+// placeholder serves the UI preview (VITE_UI_PREVIEW) only.
 
 import type {
   BulkAction,
@@ -32,6 +33,7 @@ import type {
 } from "./types";
 import { placeholderKb } from "./placeholder";
 import { liveKb } from "./live";
+import { UI_PREVIEW } from "@/lib/preview";
 
 export interface KnowledgeBackend {
   /** True when the data on screen is sample data. The pages say so. */
@@ -65,8 +67,6 @@ export interface KnowledgeBackend {
   postFindings(postId: string): Promise<PostFindings>;
 }
 
-const KB_BACKEND: "placeholder" | "live" = "placeholder";
-
 export function kb(): KnowledgeBackend {
-  return KB_BACKEND === "live" ? liveKb : placeholderKb;
+  return UI_PREVIEW ? placeholderKb : liveKb;
 }

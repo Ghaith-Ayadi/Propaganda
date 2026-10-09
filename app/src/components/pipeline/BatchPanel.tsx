@@ -11,9 +11,10 @@ import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { toast } from "@/components/base/toast/toast";
 import { shortDate } from "@/lib/pipeline/dates";
-import { closeBatch, currentBatch, nextBatch, runBatch, usePipeline } from "@/lib/pipeline/store";
-import type { Batch, BatchState, PipelineItem } from "@/lib/pipeline/types";
-import { track } from "@/lib/telemetry";
+import { userMessage } from "@/lib/errors";
+import { closeBatch, currentBatch, nextBatch, requestNextBatch, runBatch, usePipeline } from "@/lib/pipeline/store";
+import type { Batch, BatchState, Batching, PipelineItem } from "@/lib/pipeline/types";
+import { reportError, track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
 
 const STATE: Record<BatchState, { label: string; color: "gray" | "brand" | "warning" | "success" }> = {
@@ -24,11 +25,50 @@ const STATE: Record<BatchState, { label: string; color: "gray" | "brand" | "warn
   cancelled: { label: "Cancelled", color: "gray" },
 };
 
+const HOW: Record<Batching, string> = { weekly: "weekly", flood: "all at once", live: "each pitch as it's written" };
+
+/**
+ * Live: ask the Pitcher for pitches now. It pitches the best ideas waiting;
+ * with none waiting it has nothing to send.
+ */
+export async function askForPitches(): Promise<void> {
+  track("batch_run_now", { batch: "next" });
+  try {
+    const why = await requestNextBatch();
+    toast.add(
+      why
+        ? { type: "error", title: "The Pitcher didn't start", description: `The worker says ${why}.` }
+        : { type: "success", title: "The Pitcher is on it.", description: "Its pitches show up here as it writes them." },
+    );
+  } catch (err) {
+    reportError("pipeline.requestNextBatch", err);
+    toast.add({ type: "error", title: "Couldn't ask the Pitcher", description: userMessage(err) });
+  }
+}
+
 export function BatchButton() {
-  const { batches } = usePipeline();
+  const { batches, placeholder, loading } = usePipeline();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const now = currentBatch(batches);
-  if (!batches.length) return null;
+  if (loading) return null;
+  if (!batches.length) {
+    if (placeholder) return null;
+    return (
+      <Button
+        size="sm"
+        color="secondary"
+        iconLeading={Layers}
+        isLoading={busy}
+        onClick={() => {
+          setBusy(true);
+          void askForPitches().finally(() => setBusy(false));
+        }}
+      >
+        Ask for pitches
+      </Button>
+    );
+  }
   return (
     <>
       <Button size="sm" color="secondary" iconLeading={Layers} onClick={() => setOpen(true)}>
@@ -51,8 +91,9 @@ function tally(items: PipelineItem[], n: number) {
 }
 
 function BatchPanel({ onClose }: { onClose: () => void }) {
-  const { batches, items, settings } = usePipeline();
+  const { batches, items, settings, placeholder } = usePipeline();
   const next = nextBatch(batches);
+  const [busy, setBusy] = useState(false);
 
   const run = (b: Batch) => {
     runBatch(b.number);
@@ -85,8 +126,8 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
             <div>
               <h2 className="type-title text-primary">Batches</h2>
               <p className="mt-1 text-sm text-tertiary">
-                {settings.quarter}, {settings.batching === "weekly" ? "weekly" : "all at once"}. What you approve, reject and note in a
-                batch shapes the next one.
+                {settings.quarter}, {HOW[settings.batching]}. What you approve, reject and note in a batch shapes the next one.
+                Change it in Goals.
               </p>
             </div>
             <CloseButton size="md" label="Close" onPress={onClose} className="-mt-1 -mr-2" />
@@ -156,6 +197,26 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
               );
             })}
           </ol>
+          {!placeholder && (
+            <div className="mt-auto flex flex-col gap-2 border-t border-secondary px-6 py-5">
+              <Button
+                size="sm"
+                color="secondary"
+                className="self-start"
+                isLoading={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void askForPitches().finally(() => {
+                    setBusy(false);
+                    onClose();
+                  });
+                }}
+              >
+                Send the next batch now
+              </Button>
+              <p className="text-sm text-tertiary">The Pitcher pitches the best ideas waiting, without waiting for the next batch's day.</p>
+            </div>
+          )}
         </Dialog>
       </Modal>
     </ModalOverlay>

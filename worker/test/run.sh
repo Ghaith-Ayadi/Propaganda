@@ -12,5 +12,6 @@ node test/e2e.mjs
 node test/strategy.mjs
 node test/scout.mjs
 node test/listener.mjs
+node test/arena.mjs
 # Needs PostgREST (POSTGREST_BIN) and pgvector on the server; skips without PostgREST.
 node test/listener-e2e.mjs

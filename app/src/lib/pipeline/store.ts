@@ -1,25 +1,34 @@
-// The pipeline's typed data hook and actions. Reads and writes go through the
-// adapter (placeholder today, lib/pipeline/adapter.ts); the pitch-to-draft
-// handoff is real: approving a pitch creates a draft post and a brief linked
-// to it, so the writer lands in the existing editor with the brief beside it.
+// The pipeline's typed data hook and actions.
+//
+// Two sources. Live (every real build, localhost included): the tenant's
+// briefs, batches and decisions on the server (lib/pipeline/live.ts); a new
+// tenant sees an empty board. Placeholder (the UI preview only, VITE_UI_PREVIEW):
+// example data for a fictional tenant kept in this browser (adapter.ts).
+// Either way approving a pitch gives the writer a draft post with its brief.
 
 import { useSyncExternalStore } from "react";
+import { toast } from "@/components/base/toast/toast";
 import { db } from "@/lib/db";
+import { userMessage } from "@/lib/errors";
 import { createPost } from "@/lib/posts";
 import { createBrief } from "@/lib/plan/briefs";
 import { createCollection } from "@/lib/collections";
-import { onScopeReset } from "@/lib/scope";
+import { UI_PREVIEW } from "@/lib/preview";
+import { onScopeReset, siteId } from "@/lib/scope";
+import { reportError } from "@/lib/telemetry";
 import { placeholderAdapter, type PipelineAdapter } from "./adapter";
 import { addDays, shortDate, ymd } from "./dates";
+import { live, loadLive, meOf } from "./live";
 import type { Batch, PipelineItem, PipelineSnapshot, PitchNote, Person, Stage, TasteEntry } from "./types";
 
 const adapter: PipelineAdapter = placeholderAdapter;
+const LIVE = !UI_PREVIEW;
 
 /**
- * Where approved drafts go while the adapter is the placeholder. Example pitches
+ * Where approved drafts go while the data is the placeholder's. Example pitches
  * name collections a real tenant can have (Guides, Product), so every approval
- * lands in Test, never next to real articles. When the adapter reads real
- * briefs, approvals go to the pitch's own collection.
+ * lands in Test, never next to real articles. Live, approvals go to the
+ * pitch's own collection.
  */
 export const FALLBACK_COLLECTION = "Test";
 
@@ -36,8 +45,26 @@ async function ensureCollection(name: string): Promise<void> {
 let snapshot: PipelineSnapshot | null = null;
 const listeners = new Set<() => void>();
 
+/** What a live board shows before its first load: nothing, and loading. */
+function emptySnapshot(): PipelineSnapshot {
+  const me = meOf();
+  const now = new Date();
+  return {
+    items: [],
+    batches: [],
+    tasteLog: [],
+    people: [me],
+    settings: { cadence: 0, slotDays: [], publishTime: "09:00", meId: me.id, batching: "weekly", quarter: `Q${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()}` },
+    placeholder: false,
+    loading: true,
+  };
+}
+
 function current(): PipelineSnapshot {
-  if (!snapshot) snapshot = adapter.load();
+  if (!snapshot) {
+    snapshot = LIVE ? emptySnapshot() : adapter.load();
+    if (LIVE) void refresh();
+  }
   return snapshot;
 }
 
@@ -45,9 +72,43 @@ function emit() {
   for (const l of listeners) l();
 }
 
+function siteOrNull(): string | null {
+  try {
+    return siteId();
+  } catch {
+    return null;
+  }
+}
+
+let loading: Promise<void> | null = null;
+
+/** Re-read the tenant's pipeline (live only). Safe to call any time. */
+export function refresh(): Promise<void> {
+  if (!LIVE || !siteOrNull()) return Promise.resolve();
+  if (loading) return loading;
+  loading = loadLive()
+    .then((d) => {
+      if (d.site !== siteOrNull()) return; // switched site while loading
+      snapshot = { items: d.items, batches: d.batches, tasteLog: d.tasteLog, people: d.people, settings: d.settings, placeholder: false, loading: false };
+      emit();
+    })
+    .catch((err) => {
+      reportError("pipeline.load", err);
+      if (snapshot?.loading) {
+        snapshot = { ...snapshot, loading: false };
+        emit();
+      }
+    })
+    .finally(() => {
+      loading = null;
+    });
+  return loading;
+}
+
+/** Local change: saved in this browser for the placeholder, held until the next read live. */
 function commit(next: Partial<Pick<PipelineSnapshot, "items" | "batches" | "tasteLog">>) {
   snapshot = { ...current(), ...next };
-  adapter.save({ items: snapshot.items, batches: snapshot.batches, tasteLog: snapshot.tasteLog });
+  if (!LIVE) adapter.save({ items: snapshot.items, batches: snapshot.batches, tasteLog: snapshot.tasteLog });
   emit();
 }
 
@@ -55,14 +116,43 @@ function setItems(items: PipelineItem[]) {
   commit({ items });
 }
 
+/** A live write after the board already shows it: re-read either way, and say so when it failed. */
+function persist(write: Promise<unknown>) {
+  void write
+    .catch((err) => {
+      reportError("pipeline.save", err);
+      toast.add({ type: "error", title: "Couldn't save that", description: userMessage(err) });
+    })
+    .finally(() => void refresh());
+}
+
 onScopeReset(() => {
   snapshot = null;
   emit();
 });
 
+// Pitches arrive while the page is open (the Pitcher runs on the worker):
+// read again every minute while someone is looking, and on coming back.
+const POLL_MS = 60_000;
+let timer: ReturnType<typeof setInterval> | null = null;
+const onFocus = () => {
+  if (document.visibilityState === "visible") void refresh();
+};
+
 function subscribe(fn: () => void) {
   listeners.add(fn);
-  return () => listeners.delete(fn);
+  if (LIVE && !timer) {
+    timer = setInterval(onFocus, POLL_MS);
+    document.addEventListener("visibilitychange", onFocus);
+  }
+  return () => {
+    listeners.delete(fn);
+    if (!listeners.size && timer) {
+      clearInterval(timer);
+      timer = null;
+      document.removeEventListener("visibilitychange", onFocus);
+    }
+  };
 }
 
 export function usePipeline(): PipelineSnapshot {
@@ -90,7 +180,17 @@ export function nextBatch(batches: Batch[]): Batch | null {
   return batches.find((b) => b.state === "pending") ?? null;
 }
 
-/** Release a batch now instead of on its date. Its pitches show on the board. */
+/**
+ * Live: ask the Pitcher for the next batch now. Resolves to why it didn't
+ * start, or null when it did (its pitches arrive as they're written).
+ */
+export async function requestNextBatch(): Promise<string | null> {
+  const why = await live.nextBatch();
+  void refresh();
+  return why;
+}
+
+/** Placeholder: release a batch now instead of on its date. Its pitches show on the board. */
 export function runBatch(number: number) {
   const today = ymd(new Date());
   const { batches } = current();
@@ -108,6 +208,8 @@ export function runBatch(number: number) {
 
 /** "That's enough": a member closes a batch that's out. Its open pitches stay on the board. */
 export function closeBatch(number: number) {
+  const b = current().batches.find((x) => x.number === number);
+  if (LIVE && b) persist(live.closeBatch(b.quarter, number));
   commit({
     batches: current().batches.map((b) =>
       b.number === number && (b.state === "in_review" || b.state === "topping_up") ? { ...b, state: "closed" } : b,
@@ -120,6 +222,7 @@ export function closeBatch(number: number) {
  * the status change; the app adds what a status can't say (a "not now", a note).
  */
 function logTaste(item: PipelineItem, fields: Pick<TasteEntry, "decision"> & Partial<TasteEntry>) {
+  if (LIVE) return; // the server logs decisions from the brief's status (live.ts)
   const entry: TasteEntry = {
     id: `taste-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     at: Date.now(),
@@ -154,6 +257,7 @@ export function personById(people: Person[], id: string): Person | undefined {
 }
 
 export function updateItem(id: string, patch: Partial<PipelineItem>) {
+  if (LIVE && patch.notes) persist(live.saveNotes(id, patch.notes));
   setItems(current().items.map((i) => (i.id === id ? { ...i, ...patch, updatedAt: Date.now() } : i)));
 }
 
@@ -190,6 +294,16 @@ export async function approvePitch(
   if (!item || item.stage !== "pitched") return null;
   const approved: PipelineItem = { ...item, ...decision, stage: "writing" };
 
+  if (LIVE) {
+    const { postId, agentNote } = await live.approve(item, decision);
+    updateItem(id, { ...decision, stage: "writing", postId, notes: item.notes });
+    void refresh();
+    if (agentNote) {
+      toast.add({ title: "The Writer didn't start", description: `The worker says ${agentNote}. Write it yourself, or ask Chat to write it later.` });
+    }
+    return postId;
+  }
+
   const collection = draftCollection(item);
   await ensureCollection(collection);
   const post = await createPost(collection, { title: item.title });
@@ -214,6 +328,7 @@ export async function approvePitch(
 export function rejectPitch(id: string, reason: string) {
   const item = getItem(id);
   if (!item) return;
+  if (LIVE) persist(live.reject(id, reason.trim()));
   updateItem(id, { stage: "rejected", rejectReason: reason.trim() });
   logTaste(item, { decision: "rejected", reason: reason.trim() });
 }
@@ -222,18 +337,21 @@ export function rejectPitch(id: string, reason: string) {
 export function notNowPitch(id: string, reason: string) {
   const item = getItem(id);
   if (!item) return;
+  if (LIVE) persist(live.notNow(id, reason.trim()));
   updateItem(id, { stage: "not_now" });
   logTaste(item, { decision: "not_now", reason: reason.trim() });
 }
 
 /** The writer's handoff to review. */
 export function sendForReview(id: string) {
+  if (LIVE) persist(live.sendForReview(id));
   updateItem(id, { stage: "in_review", sentBackNote: undefined });
 }
 
 export function sendBack(id: string, note: string) {
   const item = getItem(id);
   if (!item) return;
+  if (LIVE) persist(live.sendBack(item, note.trim()));
   updateItem(id, { stage: "writing", sentBackNote: note.trim() });
   logTaste(item, { decision: "sent_back", objectKind: "draft", objectId: item.postId ?? item.id, reason: note.trim() });
 }
@@ -247,6 +365,7 @@ export function approveAndSchedule(id: string): string | null {
   const item = getItem(id);
   if (!item) return null;
   const time = current().settings.publishTime;
+  if (LIVE) persist(live.schedule(id, item.publishBy, time));
   updateItem(id, { stage: "scheduled", scheduledFor: { date: item.publishBy, time } });
   return `${shortDate(item.publishBy)}, ${time}`;
 }
@@ -297,6 +416,13 @@ function newItem(fields: Partial<PipelineItem> & Pick<PipelineItem, "id" | "titl
  */
 export async function addToColumn(stage: Stage, title: string, collection: string | null): Promise<PipelineItem | null> {
   const name = title.trim() || "Untitled";
+  if (LIVE) {
+    const { id, postId } = await live.add(stage, name, collection);
+    const item = newItem({ id, title: name, stage, collection: collection ?? "", postId, briefId: id });
+    setItems([...current().items, item]);
+    void refresh();
+    return item;
+  }
   if (stage === "pitched") {
     const item = newItem({ id: `own-${Date.now().toString(36)}`, title: name, stage, collection: collection || FALLBACK_COLLECTION });
     setItems([...current().items, item]);
@@ -317,12 +443,17 @@ function reviewMarkdown(item: PipelineItem): string {
 }
 
 /**
- * The post behind an item, created on first open for example items that have
- * none yet (in Test while the adapter is the placeholder). Returns its id.
+ * The post behind an item, created on first open when it has none yet (in
+ * Test while the data is the placeholder's). Returns its id.
  */
 export async function ensureDraft(id: string): Promise<string | null> {
   const item = getItem(id);
   if (!item) return null;
+  if (LIVE) {
+    const postId = await live.ensureDraft(item);
+    if (postId && postId !== item.postId) updateItem(id, { postId });
+    return postId;
+  }
   if (item.postId && (await db.posts.get(item.postId))) return item.postId;
   const collection = draftCollection(item);
   await ensureCollection(collection);
@@ -338,8 +469,9 @@ export function usePipelineItemForPost(postId: string | null | undefined): Pipel
   return postId ? items.find((i) => i.postId === postId) : undefined;
 }
 
-/** Start over with the example data. */
+/** Start over with the example data (UI preview only). */
 export function resetPipeline() {
+  if (LIVE) return;
   adapter.reset();
   snapshot = null;
   emit();

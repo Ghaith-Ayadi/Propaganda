@@ -5,7 +5,8 @@
 // private.require_superadmin(), so the server checks the flag on every request.
 
 import type { ComponentType } from "react";
-import { Activity, File05, Rows01, Users01 } from "@untitledui/icons";
+import { Activity, File05, Rows01, Scales02, Users01 } from "@untitledui/icons";
+import { ArenaPage } from "@/components/admin/ArenaPage";
 import { ComingSoon } from "@/components/admin/ComingSoon";
 import { ConsumptionPage } from "@/components/admin/ConsumptionPage";
 import { RunsPage } from "@/components/admin/RunsPage";
@@ -33,6 +34,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: "Model spend per tenant against budgets, at API prices.",
     icon: File05,
     component: ConsumptionPage,
+  },
+  {
+    id: "arena",
+    title: "Arena",
+    description: "The same real agent task on two or three models, answers shown blind. Pick the best; votes and costs add up below.",
+    icon: Scales02,
+    component: ArenaPage,
   },
   {
     id: "waitlist",

@@ -7,6 +7,7 @@ import { scheduleSync } from "@/lib/sync";
 import { onScopeReset } from "@/lib/scope";
 import type { Brief, BriefChecks, BriefStatus } from "@/lib/plan/types";
 import { mockBriefs } from "@/lib/plan/mock";
+import { UI_PREVIEW } from "@/lib/preview";
 
 /** A `briefs` row. Relations are ids or null. */
 export interface BriefRecord {
@@ -124,14 +125,33 @@ let seeded = false;
 onScopeReset(() => {
   seeded = false;
 });
+
 /**
- * First run only: seed the demo briefs locally so the planner isn't empty.
- * Seeded rows are not dirty, so they stay local; any edits afterwards sync
- * normally.
+ * The demo briefs' own ids (lib/plan/mock.ts: "br-1" to "br-13"). The server
+ * mints 15-character ids, so no real brief ever matches.
+ */
+const DEMO_ID = /^br-\d{1,2}$/;
+export const isDemoBrief = (id: string) => DEMO_ID.test(id);
+
+/**
+ * Earlier builds seeded the demo briefs into every new browser database. They
+ * never reached the server (the server refuses their ids). Drop the untouched
+ * ones; one somebody edited stays, so nothing typed is lost.
+ */
+async function dropDemoBriefs(): Promise<void> {
+  const demo = await db.briefs.filter((b) => isDemoBrief(b.id) && !b.dirty).primaryKeys();
+  if (demo.length) await db.briefs.bulkDelete(demo);
+}
+
+/**
+ * The UI preview only: seed the demo briefs locally so the planner isn't
+ * empty. Seeded rows are not dirty, so they stay local. Everywhere else this
+ * clears any demo briefs an earlier build left behind.
  */
 export async function seedBriefsIfEmpty(): Promise<void> {
   if (seeded) return;
   seeded = true;
+  if (!UI_PREVIEW) return dropDemoBriefs();
   if ((await db.briefs.count()) > 0) return;
   const now = Date.now();
   const demo = mockBriefs().map((b) => ({ ...b, syncedAt: now, dirty: false }));

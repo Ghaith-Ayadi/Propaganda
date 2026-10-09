@@ -122,6 +122,13 @@ export async function getSource(site: string, id: string): Promise<SourceRow | n
   return rows[0] ?? null;
 }
 
+/** The tenant's latest calls and Slack threads, without their text (Admin's Arena picks one). */
+export async function recentSources(site: string, limit: number): Promise<{ id: string; kind: string; title: string; occurred: string | null; created: string }[]> {
+  return (await rest(
+    `/kb_sources?site=eq.${enc(site)}&kind=in.(call,slack)&select=id,kind,title,occurred,created&order=created.desc&limit=${limit}`,
+  )) as { id: string; kind: string; title: string; occurred: string | null; created: string }[];
+}
+
 export async function setSourceStatus(site: string, id: string, status: SourceRow["status"]): Promise<void> {
   await rest(`/kb_sources?site=eq.${enc(site)}&id=eq.${enc(id)}`, {
     method: "PATCH",

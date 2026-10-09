@@ -12,7 +12,7 @@ import { reportError } from "@/lib/telemetry";
 /**
  * Where clicking an item goes: a pitch opens its brief; anything being written
  * or reviewed opens its post (review is a tab there), creating the draft first
- * for an example item that has none; a scheduled post opens its post if any.
+ * when it has none; a scheduled post opens its post if any.
  */
 export async function openItem(item: PipelineItem) {
   if (item.stage === "pitched") return goPage("pipeline", `pitch/${item.id}`);
@@ -26,7 +26,7 @@ export async function openItem(item: PipelineItem) {
     return toast.add({ type: "error", title: "Couldn't open the draft", description: "Try again in a moment." });
   }
   if (item.postId) return go({ view: "post", id: item.postId });
-  toast.add({ title: "Example post", description: "This one has no draft behind it." });
+  toast.add({ title: "No draft yet", description: "This one has no post behind it." });
 }
 
 /** Live titles: once a draft exists, its title in the editor wins over the pitch's. */

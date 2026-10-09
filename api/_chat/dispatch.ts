@@ -6,7 +6,7 @@
 //
 //   POST {WORKER_DISPATCH_URL}/agents/{agent}
 //   Authorization: Bearer {WORKER_DISPATCH_SECRET}
-//   { site, task, requestedBy, conversation }  ->  202 { runId }
+//   { site, task, requestedBy, conversation, post? }  ->  202 { runId }
 //   404 the agent isn't registered yet, 422 no tenant or nothing to work on,
 //   503 the worker has no secret set
 
@@ -20,7 +20,7 @@ export type DispatchResult = { started: true; runId: string } | { started: false
 
 export async function dispatch(
   agent: Dispatchable,
-  req: { site: string; task: string; requestedBy: string; conversation: string },
+  req: { site: string; task: string; requestedBy: string; conversation: string; post?: string | null },
 ): Promise<DispatchResult> {
   const base = process.env.WORKER_DISPATCH_URL;
   const secret = process.env.WORKER_DISPATCH_SECRET;

@@ -198,6 +198,43 @@ function localApiPlugin(serverEnv: Record<string, string>): Plugin {
   };
 }
 
+// ── Sample data ships in the UI preview only ─────────────────────────────────
+// The placeholder adapters hold fictional tenants (Ledgerline, Tidewell, a
+// scripted Chat). Outside VITE_UI_PREVIEW=1 the app never reads them
+// (lib/preview.ts), so they must not be in the bundle at all: this marks them
+// free of side effects (dead branches drop them), then fails the build if one
+// is still in a chunk, or if any chunk still carries a sample tenant's words.
+const SAMPLE_MODULES = [
+  "src/lib/pipeline/adapter.ts",
+  "src/lib/goals/placeholder.ts",
+  "src/lib/knowledge/placeholder.ts",
+  "src/components/home/placeholder.ts",
+  "src/components/inbox/placeholder.ts",
+];
+const SAMPLE_WORDS = ["Ledgerline", "Tidewell", "Maya Okafor", "Brightwater", "This is a placeholder answer", "a typographer's desk"];
+
+function samplesOnlyInPreview(preview: boolean): Plugin {
+  const isSample = (id: string) => SAMPLE_MODULES.some((m) => id.split(path.sep).join("/").endsWith(m));
+  return {
+    name: "samples-only-in-preview",
+    apply: "build",
+    transform(code, id) {
+      if (!preview && isSample(id)) return { code, map: null, moduleSideEffects: false };
+      return null;
+    },
+    generateBundle(_options, bundle) {
+      if (preview) return;
+      const leaks: string[] = [];
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== "chunk") continue;
+        for (const id of Object.keys(chunk.modules)) if (isSample(id) && chunk.modules[id].renderedLength > 0) leaks.push(`${chunk.fileName}: ${id}`);
+        for (const w of SAMPLE_WORDS) if (chunk.code.includes(w)) leaks.push(`${chunk.fileName}: "${w}"`);
+      }
+      if (leaks.length) this.error(`Sample data in a production bundle (only VITE_UI_PREVIEW=1 may ship it):\n  ${leaks.join("\n  ")}`);
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // Local dev: hoist VITE_* from the monorepo root .env files (one place for app + scripts).
   // CI / Vercel: those vars come from process.env — merge them so they aren't lost.
@@ -214,6 +251,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      samplesOnlyInPreview(env.VITE_UI_PREVIEW === "1"),
       localApiPlugin(serverEnv),
       react(),
       tailwindcss(),

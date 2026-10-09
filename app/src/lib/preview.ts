@@ -1,10 +1,12 @@
 // UI preview mode: the whole 0.2 UI on example data, with no server.
 //
-// LOCAL / PREVIEW ONLY. Off unless the build sets VITE_UI_PREVIEW=1 (or it is
-// the ui-assembly branch's own Vercel preview, see vite.config.ts). It seeds
-// one fake account and tenant into this browser and tells the app it is
+// LOCAL ONLY. Off unless the build sets VITE_UI_PREVIEW=1 (`npm run dev:ui`).
+// Only then do the pages fall back to their placeholder adapters; everywhere
+// else every page reads the tenant's own data and shows an empty state when
+// there is none: a tenant never sees sample content. In preview this also
+// seeds one fake account and tenant into this browser and tells the app it is
 // offline, so the Workspace opens straight into the shell, sync never runs and
-// nothing reaches a server. Pages keep their own placeholder data.
+// nothing reaches a server.
 
 export const UI_PREVIEW = import.meta.env.VITE_UI_PREVIEW === "1";
 

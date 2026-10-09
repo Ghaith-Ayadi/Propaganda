@@ -1,13 +1,14 @@
 // What Home shows: the running campaign (the Launch first), and the four goal
 // cards with their numbers, a small line each and the quarter's goal.
 //
-// Sources today:
-//   Volume line     LIVE: published posts this quarter, from the local posts table
-//   Readership line LIVE when the analytics worker is configured (pageviews a day)
+// Sources:
+//   Volume line     published posts this quarter, from the local posts table
+//   Readership line pageviews a day when the analytics worker is configured
 //   Inbox count     from useInbox() (components/inbox/data.ts)
-//   Everything else PLACEHOLDER (placeholder.ts): goal targets (goals,
-//                   goal_topics), stored scores (goal_scores), campaigns
-//                   (the Launch), grades (kb_grade views)
+//   Targets, topics, grades, rankings and the Launch: the Strategist's goals
+//                   (lib/goals, goal_versions and friends). A tenant without
+//                   goals sees each card say so, never example numbers.
+//   The UI preview (VITE_UI_PREVIEW) alone fills the gaps from placeholder.ts.
 //
 // Coverage is not on Home (Ayadi, 2026-10-08); the Strategist's drift notes
 // moved to the Inbox tab they concern.
@@ -25,6 +26,9 @@ import type { DayPoint } from "@/lib/analytics/types";
 import type { Post } from "@/types";
 import { useInbox } from "@/components/inbox/data";
 import { dayKey, quarterDays, quarterOf, shortDate, weekOfQuarter, type Quarter } from "@/components/shared/quarter";
+import { useLaunch, useQuarterGoals } from "@/lib/goals/useGoals";
+import { quarterOf as goalQuarterOf, toDay } from "@/lib/goals/quarter";
+import { UI_PREVIEW } from "@/lib/preview";
 import { placeholderHome } from "./placeholder";
 
 export type GoalKey = "volume" | "consistency" | "readership" | "ranking";
@@ -115,7 +119,11 @@ export function useHome(): Home {
   const quarter = useMemo(() => quarterOf(new Date()), []);
   const days = useMemo(() => quarterDays(quarter), [quarter]);
   const inbox = useInbox();
-  const p = placeholderHome;
+  const p = UI_PREVIEW ? placeholderHome : null;
+  const key = useMemo(() => goalQuarterOf(toDay(new Date())), []);
+  const goalsNow = useQuarterGoals(key);
+  const launch = useLaunch();
+  const targets = goalsNow.current?.targets ?? null;
 
   const posts = useLiveQuery(() => db.posts.where("status").equals("published").toArray(), [], [] as Post[]);
   const views = useSiteViews("90d");
@@ -131,36 +139,98 @@ export function useHome(): Home {
     }
     let running = 0;
     const volume = days.map((day) => ({ day, value: (running += perDay.get(day) ?? 0) }));
+    const last = (s: DayPoint[]) => s[s.length - 1]?.value ?? 0;
+    const flat = days.map((day) => ({ day, value: 0 }));
+    const scored = (s: { day: string; value: number }[] | undefined) => (s && s.length ? s : flat);
 
     const viewsByDay = new Map((views?.series ?? []).map((d) => [d.day, d.value]));
-    const readership = views ? days.map((day) => ({ day, value: viewsByDay.get(day) ?? 0 })) : p.readership(days);
+    const readership = views ? days.map((day) => ({ day, value: viewsByDay.get(day) ?? 0 })) : p ? p.readership(days) : flat;
     const readTotal = readership.reduce((s, d) => s + d.value, 0);
 
-    const consistency = p.consistency(days);
-    const ranking = p.ranking(days);
-    const last = (s: DayPoint[]) => s[s.length - 1]?.value ?? 0;
+    if (p) {
+      const consistency = p.consistency(days);
+      const ranking = p.ranking(days);
+      return [
+        {
+          key: "volume",
+          name: "Volume",
+          question: "Are we publishing enough, on the right topics?",
+          headline: `${last(volume)} of ${p.volumeTarget}`,
+          change: weekChange(volume, (n) => `${n} ${Math.abs(n) === 1 ? "post" : "posts"}`),
+          points: volume,
+          goal: `Quarter goal: ${p.volumeTarget} posts published by ${end}.`,
+          topics: p.volumeTopics,
+          example: "The count is your published posts. The target and the topics are examples.",
+        },
+        {
+          key: "consistency",
+          name: "Consistency",
+          question: "Is what we publish true and aligned?",
+          headline: `${p.grades.content} · ${p.grades.kb}`,
+          change: weekChange(consistency, (n) => `${n}% clean`),
+          points: consistency,
+          goal: `Quarter goal: content ${p.grades.contentTarget}, knowledge base ${p.grades.kbTarget}.`,
+          example: "Example grades.",
+        },
+        {
+          key: "readership",
+          name: "Readership",
+          question: "Is anyone reading?",
+          headline: count(readTotal),
+          change: viewsChange(readership),
+          points: readership,
+          goal: "No target this quarter: views are tracked, not graded.",
+          example: views ? undefined : "Example line.",
+        },
+        {
+          key: "ranking",
+          name: "Ranking",
+          question: "Do we show up where it counts?",
+          headline: `${last(ranking)} of ${p.rankingTargets}`,
+          change: weekChange(ranking, (n) => `${n} on page one`),
+          points: ranking,
+          goal: `Quarter goal: ${p.rankingGoal} of ${p.rankingTargets} target searches on page one by ${end}.`,
+          example: "Example line.",
+        },
+      ];
+    }
 
+    // The tenant's own goals, or an honest "no goals yet".
+    const noGoals = "No goals yet: the Strategist proposes them in Goals.";
+    const now = goalsNow.now;
+    const topics = targets?.volume.topics.map((t) => ({
+      name: t.name,
+      published: now.volume.byTopic[t.name] ?? 0,
+      pitched: now.volume.pitchedByTopic[t.name] ?? 0,
+      target: t.low,
+    }));
+    const consistency = scored(goalsNow.scores.consistency);
+    const grade = (g: string | null) => g ?? "–";
+    const searches = targets?.ranking.searches ?? [];
+    const onPageOne = searches.filter((q) => {
+      const pos = now.ranking.positions[q.query] ?? q.position;
+      return pos != null && pos <= 10;
+    }).length;
+    const ranking = scored(goalsNow.scores.ranking);
     return [
       {
         key: "volume",
         name: "Volume",
         question: "Are we publishing enough, on the right topics?",
-        headline: `${last(volume)} of ${p.volumeTarget}`,
+        headline: targets ? `${last(volume)} of ${targets.volume.total}` : `${last(volume)}`,
         change: weekChange(volume, (n) => `${n} ${Math.abs(n) === 1 ? "post" : "posts"}`),
         points: volume,
-        goal: `Quarter goal: ${p.volumeTarget} posts published by ${end}.`,
-        topics: p.volumeTopics,
-        example: "The count is your published posts. The target and the topics are examples until the Strategist's goals are stored.",
+        goal: targets ? `Quarter goal: ${targets.volume.total} posts published by ${end}.` : noGoals,
+        topics: topics?.length ? topics : undefined,
       },
       {
         key: "consistency",
         name: "Consistency",
         question: "Is what we publish true and aligned?",
-        headline: `${p.grades.content} · ${p.grades.kb}`,
-        change: weekChange(consistency, (n) => `${n}% clean`),
+        headline: now.consistency.contentGrade || now.consistency.kbGrade ? `${grade(now.consistency.contentGrade)} · ${grade(now.consistency.kbGrade)}` : "–",
+        change: goalsNow.scores.consistency?.length ? weekChange(consistency, (n) => `${n}% clean`) : null,
         points: consistency,
-        goal: `Quarter goal: content ${p.grades.contentTarget}, knowledge base ${p.grades.kbTarget}.`,
-        example: "Grades come from the knowledge base views, which aren't on the server yet.",
+        goal: now.consistency.contentGrade || now.consistency.kbGrade ? "Quarter goal: content and knowledge base at A." : "Nothing to check yet: grades start with your first posts and facts.",
       },
       {
         key: "readership",
@@ -170,29 +240,49 @@ export function useHome(): Home {
         change: viewsChange(readership),
         points: readership,
         goal: "No target this quarter: views are tracked, not graded.",
-        example: views ? undefined : "The analytics worker isn't configured here, so this is an example line.",
       },
       {
         key: "ranking",
         name: "Ranking",
         question: "Do we show up where it counts?",
-        headline: `${last(ranking)} of ${p.rankingTargets}`,
-        change: weekChange(ranking, (n) => `${n} on page one`),
+        headline: searches.length ? `${onPageOne} of ${searches.length}` : "–",
+        change: goalsNow.scores.ranking?.length ? weekChange(ranking, (n) => `${n} on page one`) : null,
         points: ranking,
-        goal: `Quarter goal: ${p.rankingGoal} of ${p.rankingTargets} target searches on page one by ${end}.`,
-        example: "Rankings need the Scout's search checks; example line until then.",
+        goal: searches.length
+          ? `Quarter goal: ${targets!.ranking.pageOneTarget} of ${searches.length} target searches on page one by ${end}.`
+          : targets
+            ? "No target searches this quarter."
+            : noGoals,
       },
     ];
-  }, [posts, views, days, quarter, p]);
+  }, [posts, views, days, quarter, p, goalsNow, targets]);
 
   const campaign = useMemo(() => {
-    const c = p.campaigns[0];
-    if (!c) return null;
-    const main = c.objectives[0];
-    const progress = main ? main.value / main.target : 0;
-    // On track while the main objective is at or ahead of the days gone.
+    if (p) {
+      const c = p.campaigns[0];
+      if (!c) return null;
+      const main = c.objectives[0];
+      const progress = main ? main.value / main.target : 0;
+      // On track while the main objective is at or ahead of the days gone.
+      return { ...c, progress, onTrack: progress >= c.day / c.days };
+    }
+    if (!launch || launch.day > 30) return null;
+    const c: Campaign = {
+      id: "launch",
+      name: "Launch",
+      description: `${launch.target} posts over the first 30 days`,
+      day: launch.day,
+      days: 30,
+      objectives: [
+        { label: "Posts produced", value: launch.produced, target: launch.target },
+        { label: "Posts live", value: launch.live, target: launch.target },
+        ...launch.clusters.map((k) => ({ label: k.name, value: k.live, target: Math.max(k.planned, 1) })),
+      ],
+      why: "A new blog has no authority yet. The first month builds a library in a few topics so Google and readers can tell what you're about.",
+    };
+    const progress = launch.target ? launch.produced / launch.target : 0;
     return { ...c, progress, onTrack: progress >= c.day / c.days };
-  }, [p]);
+  }, [p, launch]);
 
   return {
     tenant: activeSite()?.name ?? "Your tenant",
@@ -201,6 +291,6 @@ export function useHome(): Home {
     goals,
     campaign,
     inboxTotal: inbox.total,
-    example: true,
+    example: !!p,
   };
 }
