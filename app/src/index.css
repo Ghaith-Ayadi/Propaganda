@@ -241,8 +241,8 @@ a {
   }
 }
 
-/* The gold accent: a fill for the few moments that earn it (goal progress on
-   Home). Never on buttons or controls, and never for text. */
+/* The gold accent: a fill for the few moments that earn it (the Launch's
+   overall progress on Home). Never on buttons or controls, and never for text. */
 @utility bg-gold {
   background-color: var(--gold-solid, #c9971a);
   background-image: var(--gold-gradient, linear-gradient(135deg, #f6e3a1 0%, #deb031 38%, #c9971a 64%, #a87a12 100%));
