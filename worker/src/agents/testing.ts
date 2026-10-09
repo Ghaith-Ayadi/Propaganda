@@ -26,3 +26,6 @@ export { voiceSuggest, diffDraft } from "./edits.js";
 export { windowFor, launchFor, volumeCap, validate, parseDraft, finish, weeklyNotes, winnable, batchCount, looksLikeSource, thinAnswers, pickHost } from "./strategy.js";
 export { strategist, dispatchStrategist, strategistWeeklyCheck, strategistInput } from "../workflows/strategist.js";
 export { readGoals } from "./goals.js";
+// Dev-box capture only (never merged): the gateway call and the model table.
+export { callModel } from "../../../api/_ai/gateway";
+export { MODELS } from "./model.js";
