@@ -19,13 +19,13 @@
 //   SITE-SEED           a new site's first settings and collections failed
 //   SITE-SWITCH         switching account or site failed
 //   UPLOAD              an image upload failed
+//   COST-USAGE          the tenant's model usage for the month couldn't be loaded
+//   COST-ADMIN          the Admin consumption figures or limits couldn't be loaded or saved
 //   DOMAIN-CHECK        the live check of a custom domain couldn't run
 //   DOMAIN-CONNECT      connecting a custom domain failed
 //   DOMAIN-REMOVE       removing a custom domain failed
 //   (the server's own, from api/domains.ts: DOMAIN-INVALID, DOMAIN-OFF,
 //    DOMAIN-TAKEN, DOMAIN-DNS, DOMAIN-SAVE, DOMAIN-OWNER)
-//   COST-USAGE          the tenant's model usage for the month couldn't be loaded
-//   COST-ADMIN          the Admin consumption figures or limits couldn't be loaded or saved
 //   RUNS-LOAD           Admin couldn't load agent runs from the worker
 //   RUN-RETRY           retrying a run failed
 //   RUN-CANCEL          cancelling a run failed

@@ -17,6 +17,7 @@ import { useWorkspace } from "@/components/Workspace";
 import { db } from "@/lib/db";
 import { setSetting, useSetting } from "@/lib/settings";
 import { sitePublicUrl } from "@/lib/siteUrl";
+import { UI_PREVIEW } from "@/lib/preview";
 import { collectionSlugOf, hasAddress, postPath } from "@/lib/slug";
 import { THEMES, THEME_IDS, DEFAULT_THEME } from "@/blog/theme/themes";
 import { SCHEMA, baseOf, enumValues, resolveDesign, type DesignOverrides, type OptionValue, type Template } from "@/blog/theme/schema";
@@ -135,12 +136,25 @@ export function DesignStudio({ onClose }: { onClose: () => void }) {
     return "/";
   };
   const origin = sitePublicUrl(site).replace(/\/$/, "");
-  const [src] = useState(() => `${origin}/?pg-preview=draft`);
+  // UI preview mode (lib/preview.ts) has no blog server: the frame shows the
+  // themes' harness page with its sample fixtures instead (same origin, dev builds).
+  const [src] = useState(() => (UI_PREVIEW ? "/_pg/harness" : `${origin}/?pg-preview=draft`));
   const targetOrigin = new URL(origin).origin;
+  const harness = (p: Page, tries = 20) => {
+    const w = frameRef.current?.contentWindow as (Window & typeof globalThis) | null | undefined;
+    const api = w?.PPGD;
+    if (!api) {
+      if (tries > 0) setTimeout(() => harness(p, tries - 1), 150);
+      return;
+    }
+    api.registerThemes(Object.values(custom));
+    api.render({ theme: draft.theme, fixture: "sample", route: { tpl: p }, overrides: draft.overrides });
+  };
 
   // Every change reaches the preview at once, and the stored draft shortly after.
   const post = (msg: unknown) => frameRef.current?.contentWindow?.postMessage(msg, targetOrigin);
-  const pushDesign = () => post({ type: "pg-preview", design: draft, theme: custom[draft.theme] ?? undefined });
+  const pushDesign = () =>
+    UI_PREVIEW ? harness(page) : post({ type: "pg-preview", design: draft, theme: custom[draft.theme] ?? undefined });
   useEffect(() => {
     pushDesign();
     const t = setTimeout(() => {
@@ -171,7 +185,8 @@ export function DesignStudio({ onClose }: { onClose: () => void }) {
 
   const goPage = (p: Page) => {
     setPage(p);
-    post({ type: "pg-preview-go", path: pathOf(p) });
+    if (UI_PREVIEW) harness(p);
+    else post({ type: "pg-preview-go", path: pathOf(p) });
   };
 
   const setOption = (tpl: Template, sec: string, k: string, v: OptionValue) => {

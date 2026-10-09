@@ -106,3 +106,7 @@ export function useTheme(): [Theme, (t: Theme) => void] {
 export function useThemePreference(): [ThemePreference, (p: ThemePreference) => void] {
   return [useStore(getThemePreference), setThemePreference];
 }
+
+// UI assembly (#37): Settings > Appearance (#29) was written against these names.
+export type ThemePref = ThemePreference;
+export const useThemePref = useThemePreference;

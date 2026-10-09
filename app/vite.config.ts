@@ -299,6 +299,11 @@ export default defineConfig(({ mode }) => {
       ...Object.fromEntries(
         Object.entries(env).map(([k, v]) => [`import.meta.env.${k}`, JSON.stringify(v)]),
       ),
+      // Local-only UI preview (src/lib/preview.ts): VITE_UI_PREVIEW=1 (npm run
+      // dev:ui). Off everywhere else.
+      "import.meta.env.VITE_UI_PREVIEW": JSON.stringify(
+        env.VITE_UI_PREVIEW || "",
+      ),
       // Build/deploy metadata for the /version panel (see lib/version.ts).
       "import.meta.env.VITE_BUILD_TIME": JSON.stringify(new Date().toISOString()),
       "import.meta.env.VITE_COMMIT_SHA": JSON.stringify(gitSha()),

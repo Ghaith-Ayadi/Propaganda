@@ -56,7 +56,8 @@ export function PageHeader({
 }
 
 /** The page's content, in the shared container (or full width). */
-export function PageBody({ children, contained = true, className }: { children: ReactNode; contained?: boolean; className?: string }) {
+// UI assembly (#37): `wide` is the old prop, still passed by pages not yet on the shared container; it is ignored.
+export function PageBody({ children, contained = true, className }: { children: ReactNode; contained?: boolean; className?: string; wide?: boolean }) {
   return <div className={cx(contained ? CONTAINER : FULL, "pt-6 pb-16 md:pt-8", className)}>{children}</div>;
 }
 

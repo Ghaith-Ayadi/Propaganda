@@ -29,8 +29,8 @@ import {
   Target04,
 } from "@untitledui/icons";
 import { useInboxBadge } from "@/components/inbox/badge";
-import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
 import { usePipelineCount } from "@/lib/pipeline/store";
+import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
 
 export type Icon = ComponentType<{ className?: string }>;
 
