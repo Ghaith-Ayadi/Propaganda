@@ -27,6 +27,7 @@ import {
 } from "@/lib/scope";
 import { SignIn } from "@/components/workspace/SignIn";
 import { Onboarding } from "@/components/workspace/Onboarding";
+import { TenantPicker } from "@/components/workspace/TenantPicker";
 import { coded } from "@/lib/errors";
 import { reportError } from "@/lib/telemetry";
 
@@ -35,6 +36,7 @@ import { reportError } from "@/lib/telemetry";
  *
  *   loading     restoring the saved accounts
  *   signin      no usable account (or "add account" was chosen)
+ *   pick        just signed in: the account's tenants and "Add tenant"
  *   onboarding  the account has no site yet (or "new site" was chosen)
  *   switching   the old site's tree is unmounted; draining its writes
  *   ready       a scope is active; children render, keyed by scope
@@ -48,7 +50,8 @@ import { reportError } from "@/lib/telemetry";
 type Phase =
   | { kind: "loading" }
   | { kind: "signin"; reason?: string; cancellable: boolean }
-  | { kind: "onboarding"; account: Account; cancellable: boolean }
+  | { kind: "pick"; account: Account; sites: SiteRef[] }
+  | { kind: "onboarding"; account: Account; cancellable: boolean; picked?: SiteRef[] }
   | { kind: "switching"; account: Account; site: SiteRef }
   | { kind: "ready"; key: string };
 
@@ -256,9 +259,21 @@ export function Workspace({ children }: { children: React.ReactNode }) {
               return cachedSites(account.userId);
             });
             if (!sites.length) setPhase({ kind: "onboarding", account, cancellable: false });
-            else leaveThen(account, sites[0]);
+            else setPhase({ kind: "pick", account, sites });
           })();
         }}
+      />
+    );
+  }
+
+  if (phase.kind === "pick") {
+    const { account, sites } = phase;
+    return (
+      <TenantPicker
+        account={account}
+        sites={sites}
+        onPick={(site) => leaveThen(account, site)}
+        onAdd={() => setPhase({ kind: "onboarding", account, cancellable: true, picked: sites })}
       />
     );
   }
@@ -268,7 +283,13 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     return (
       <Onboarding
         account={account}
-        onCancel={phase.cancellable ? cancel : undefined}
+        onCancel={
+          phase.picked
+            ? () => setPhase({ kind: "pick", account, sites: phase.picked! })
+            : phase.cancellable
+              ? cancel
+              : undefined
+        }
         onSignOut={() => {
           const open = currentScope();
           signOut(account.userId);

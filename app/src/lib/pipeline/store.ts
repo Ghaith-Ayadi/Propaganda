@@ -155,6 +155,10 @@ function subscribe(fn: () => void) {
   };
 }
 
+/** For other stores built on the pipeline (the Inbox's pitches). */
+export const subscribePipeline = subscribe;
+export const pipelineSnapshot = (): PipelineSnapshot => current();
+
 export function usePipeline(): PipelineSnapshot {
   return useSyncExternalStore(subscribe, current, current);
 }
