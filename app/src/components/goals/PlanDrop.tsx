@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { Button as AriaButton, DropZone, FileTrigger, Label, TextArea, TextField } from "react-aria-components";
 import { File04, Image01, Trash01, UploadCloud02 } from "@untitledui/icons";
 import type { PlanFile } from "@/lib/goals/types";
-import { goalsActions, goalsArePlaceholder, usePlanDrop } from "@/lib/goals/useGoals";
+import { goalsActions, useGoalsArePlaceholder, usePlanDrop } from "@/lib/goals/useGoals";
 import { kindOf } from "@/lib/goals/placeholder";
 import { shortDate } from "@/lib/goals/quarter";
 import { Button } from "@/components/base/buttons/button";
@@ -123,6 +123,7 @@ export function PlanDrop({ compact = false }: { compact?: boolean }) {
   const draft = usePlanDraft();
   const { drop, dirty } = draft;
   const [saving, setSaving] = useState(false);
+  const sample = useGoalsArePlaceholder();
 
   const save = async () => {
     setSaving(true);
@@ -147,7 +148,7 @@ export function PlanDrop({ compact = false }: { compact?: boolean }) {
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-quaternary">
           {drop.readAt ? `The Strategist read this on ${shortDate(drop.readAt)}.` : drop.text || drop.files.length ? "Saved. The Strategist reads it in the next proposal." : ""}
-          {goalsArePlaceholder && " Sample data: files stay in this browser tab."}
+          {sample && " Sample data: files stay in this browser tab."}
         </p>
         <Button size="sm" color="primary" isDisabled={!dirty || saving} isLoading={saving} onClick={() => void save()}>
           Give it to the Strategist

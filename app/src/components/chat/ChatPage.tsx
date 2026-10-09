@@ -129,7 +129,7 @@ function ConversationList({
         onClick={onNew}
         className={cx(
           "flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-primary_hover",
-          !activeId ? "bg-primary_hover font-medium text-primary" : "text-secondary",
+          !activeId ? "bg-primary_hover font-medium text-primary ring-1 ring-secondary ring-inset" : "text-secondary",
         )}
       >
         <Plus className="size-4 text-fg-quaternary" />
@@ -141,7 +141,7 @@ function ConversationList({
           key={c.id}
           className={cx(
             "group flex items-center gap-1 rounded-md transition hover:bg-primary_hover",
-            c.id === activeId && "bg-primary_hover",
+            c.id === activeId && "bg-primary_hover ring-1 ring-secondary ring-inset",
           )}
         >
           <button

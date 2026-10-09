@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { InfoCircle } from "@untitledui/icons";
 import { NativeSelect } from "@/components/base/select/select-native";
 import { AUTHORITY_EXPLAINER } from "@/lib/goals/copy";
-import { goalsArePlaceholder } from "@/lib/goals/useGoals";
+import { useGoalsArePlaceholder } from "@/lib/goals/useGoals";
 import { SCENARIOS, placeholderScenario, setPlaceholderScenario, type ScenarioId } from "@/lib/goals/placeholder";
 import type { PlanOrigin } from "@/lib/goals/types";
 import { Badge } from "@/components/base/badges/badges";
@@ -104,7 +104,7 @@ export function AuthorityExplainer({ compact = false }: { compact?: boolean }) {
 
 /** Says the page shows sample data, and lets you switch the sample tenant's situation. */
 export function PlaceholderBanner() {
-  if (!goalsArePlaceholder) return null;
+  if (!useGoalsArePlaceholder()) return null;
   return (
     <div className="mb-6 flex flex-col gap-3 rounded-xl bg-warning-primary p-3 text-sm ring-1 ring-secondary ring-inset md:flex-row md:items-center md:justify-between">
       <p className="text-warning-primary">

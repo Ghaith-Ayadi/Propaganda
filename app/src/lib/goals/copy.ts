@@ -28,7 +28,7 @@ export const AUTHORITY_EXPLAINER: ExplainerLine[] = [
 ];
 
 export const LAUNCH_WHY =
-  "A new blog has no authority yet. The first month builds a library in one or two topics so Google and readers can tell what you're about. Rankings come in months 3 to 6.";
+  "A new blog has no authority yet. The first month builds a library in up to four topics so Google and readers can tell what you're about. Rankings come in months 3 to 6.";
 
 export const ZERO_OPPORTUNISTIC =
   "Everything in the quarter is planned. Posts from news and calls are a bonus on top; when one deserves a slot, a planned post moves to next quarter.";

@@ -125,6 +125,9 @@ worker's Runs API (`/worker/v1/`, superadmins only). Read `worker/README.md` bef
 a workflow: changing one that has runs in flight needs `DBOS.patch()`. The knowledge base
 agents (Checker, Guardian) live in `worker/src/agents/`; the KB itself is described in
 `docs/knowledge-base.md`. Only the Guardian changes claims, through `kb_guardian_decide`.
+The Strategist (`worker/src/workflows/strategist.ts`) proposes each tenant's quarterly goals
+from `strategy_proposals` requests; only a member's `strategy_approve()` writes goals
+(`goal_versions`), and the Pitcher reads them through `readGoals()`.
 The Listener (`worker/src/listener/`, `docs/listener.md`) turns call transcripts and Slack
 threads into ideas and Guardian proposals; transcripts are `kb_sources` rows, private to
 their tenant, and connectors never read calls from before they were connected.

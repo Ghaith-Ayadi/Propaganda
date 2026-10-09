@@ -4,6 +4,8 @@
 // Pitcher still has the reasons that don't need targets (timeliness, a gap in
 // what the tenant has said, search demand, an empty week).
 
+import { latestGoals, latestPositions, settings } from "./strategy-store.js";
+
 export interface TopicGoal {
   name: string;
   /** The range for the quarter; `low` is what counts as on target. */
@@ -34,12 +36,26 @@ export interface Standing {
 }
 
 /**
- * The tenant's approved goals for this quarter, or null. A seam: the Goals
- * build (Goals and Strategist thread, PR #34) owns the tables; this reads them
- * once they exist.
+ * The tenant's approved goals for this quarter (the newest goal_versions row,
+ * written when they approve a Strategist proposal), or null. Coverage is no
+ * longer a goal (2026-10-08): it reads as zero, which moves nothing in fit.ts.
  */
-export async function readGoals(_site: string): Promise<Goals | null> {
-  return null;
+export async function readGoals(site: string, now = new Date()): Promise<Goals | null> {
+  const { label } = quarterOf(now);
+  const row = await latestGoals(site, label);
+  if (!row) return null;
+  const t = row.targets;
+  const [positions, set] = await Promise.all([latestPositions(site), settings(site, ["strategist.reviewPerMonth"])]);
+  return {
+    quarter: label,
+    volume: {
+      total: Number(t.volume?.total) || 0,
+      topics: (t.volume?.topics ?? []).map((x) => ({ name: x.name, low: Number(x.low) || 0, high: Number(x.high) || 0 })),
+    },
+    coverage: { internal: 0, external: 0 },
+    searches: (t.ranking?.searches ?? []).map((s) => ({ query: s.query, position: positions.get(s.query.toLowerCase()) ?? null })),
+    perWeek: Math.max(1, Math.round((parseInt(String(set["strategist.reviewPerMonth"] ?? ""), 10) || 8) / 4.33)),
+  };
 }
 
 export const INTERNAL_ORIGINS = new Set(["calls", "team", "plan"]);
