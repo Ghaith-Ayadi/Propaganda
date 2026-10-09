@@ -114,6 +114,31 @@ export function tenantKeyOf(err: unknown, depth = 0): { retryAt: number | null; 
   return tenantKeyOf(e.cause, depth + 1);
 }
 
+/**
+ * True when the provider turned the call down before running it: a 4xx other
+ * than a timeout, conflict or rate limit (no access to the model, a bad
+ * request). Asking again gets the same answer, so the step fails at once.
+ * The gateway's refused() is the same test; this file doesn't import it.
+ */
+export function refusedOf(err: unknown): boolean {
+  const status = (err as { statusCode?: unknown } | null)?.statusCode;
+  return typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429;
+}
+
+/**
+ * The gateway's EmptyAnswerError (api/_ai/errors.ts), by shape, also after
+ * DBOS has stored and reloaded it: the model thought until the budget ran out
+ * and answered nothing. The same ask gets the same result, so it isn't retried
+ * as is; askJson asks again with less thinking.
+ */
+export function emptyAnswerOf(err: unknown, depth = 0): boolean {
+  if (!err || typeof err !== "object" || depth > 5) return false;
+  const e = err as Record<string, unknown>;
+  if (e.name === "EmptyAnswerError" || String(e.message ?? "").startsWith("NO-ANSWER ")) return true;
+  if (Array.isArray(e.errors) && e.errors.some((inner) => emptyAnswerOf(inner, depth + 1))) return true;
+  return emptyAnswerOf(e.cause, depth + 1);
+}
+
 // Once one call has hit the limit, every other step in this process knows
 // until when, and stalls without spending a request to find out.
 let limitedUntil = 0;
@@ -159,7 +184,7 @@ export async function modelStep<T>(name: string, fn: () => Promise<T>, opts: Mod
           retriesAllowed: true,
           maxAttempts: opts.maxAttempts ?? 3,
           intervalSeconds: opts.intervalSeconds ?? 5,
-          shouldRetry: (err) => usageLimitOf(err) === null && tenantKeyOf(err) === null,
+          shouldRetry: (err) => usageLimitOf(err) === null && tenantKeyOf(err) === null && !refusedOf(err) && !emptyAnswerOf(err),
         },
       );
     } catch (err) {

@@ -11,6 +11,7 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/config.ts` | Settings, all from the environment |
 | `src/limits.ts` | The Claude Max usage limit: `modelStep()` waits it out instead of failing |
 | `src/runs.ts` | Runs, steps, cost, retry and cancel, from DBOS's management API and the cost log |
+| `src/failures.ts`, `src/tickets.ts` | The failure log: every failed run recorded once (error, run and step, tenant, model, cost), grouped by fingerprint, shown in Admin > Failures, and filed as one ticket per group (GitHub issues and/or the Notion Tasks board); repeats add a note and reopen a closed ticket |
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
 | `src/workflows/` | The workflows. `agents.ts` starts one for a tenant; `demo.ts` is a run that spends nothing |
@@ -37,6 +38,26 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
   with `POSTGRES_PASSWORD` from the stack's `.env`; `JWT_SECRET` checks tokens;
   `WORKER_DISPATCH_SECRET` (same file, and the same value in Vercel for Chat)
   guards the dispatch route.
+- **Failed runs** are recorded by `src/failures.ts` in DBOS's database too, schema
+  `ops` (`failure_groups`, `failures`), which the worker creates on start, with the
+  error, stack, input, the step trail, provider request ids and the commit
+  (`WORKER_COMMIT`, else the image's `COMMIT` file). A sweep every minute
+  (`WORKER_FAILURE_SWEEP_SECONDS`) records new ones and files new groups. Each
+  group gets one bug report written for an agent (`agentReport()`; "Copy report"
+  in Admin > Failures). It goes where a token is set in the stack's `.env`:
+  `SLACK_WEBHOOK_URL` (the whole report; mention @Claude on it to have it fixed),
+  `GITHUB_ISSUES_TOKEN` (issues on `GITHUB_ISSUES_REPO`, default
+  Ghaith-Ayadi/Propaganda; that repository is public, so an issue carries only the
+  workflow, step, error class, counts, fingerprint and Admin link: no tenant and no
+  error text) and `NOTION_TOKEN` (the Propaganda Tasks board). `FAILURE_TICKETS`
+  picks some when several are set. With none, failures are recorded and listed,
+  and filed once one is set. Repeats are noted at most hourly
+  (`WORKER_FAILURE_RENOTE_SECONDS`). Demo runs are never filed
+  (`WORKER_FAILURE_NEVER_FILED`).
+- **Thinking models**: an `Ask`'s `maxOutputTokens` is the answer's budget; the
+  gateway adds `MODEL_THINKING_TOKENS` (16,000) for the model's reasoning. A model
+  that still thinks until the budget runs out throws `EmptyAnswerError` (logged,
+  not retried as is); `askJson` asks once more with `reasoning: "low"`.
 - **Every run belongs to a tenant**: start it with `startForTenant(site, workflow, ...args)`,
   which records the workflow attribute `site` and queues it on `agents`
   (three at a time).

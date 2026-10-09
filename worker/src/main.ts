@@ -25,6 +25,7 @@ import { scheduleStrategist, startStrategistPoller } from "./workflows/strategis
 import "./agents/checker.js";
 import "./agents/guardian.js";
 import { setListenerPool, startListener } from "./listener/index.js";
+import { closeFailureStore, openFailureStore, startFailureSweeper } from "./failures.js";
 
 async function main(): Promise<void> {
   DBOS.setConfig({
@@ -53,6 +54,9 @@ async function main(): Promise<void> {
   setAppDb(db);
   setListenerPool(db);
   await startListener();
+  // Every failed run, recorded in DBOS's database and filed as a ticket (src/failures.ts).
+  await openFailureStore(config.systemDatabaseUrl);
+  const stopFailures = startFailureSweeper(db);
   const server = startServer(db, config.port);
   const stopDispatcher = startDispatcher();
   const stopStrategist = startStrategistPoller();
@@ -62,10 +66,12 @@ async function main(): Promise<void> {
     console.log(`${signal}: shutting down`);
     stopDispatcher();
     stopStrategist();
+    stopFailures();
     server.close();
     await DBOS.shutdown();
     await db.end();
     await closeScoutDb();
+    await closeFailureStore();
     process.exit(0);
   };
   process.on("SIGTERM", () => void stop("SIGTERM"));

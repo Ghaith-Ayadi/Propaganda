@@ -30,7 +30,7 @@ import {
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { costUsd, decide, type Gate, type Price, type Usage } from "./cost";
-import { BudgetError, CostLogUnavailableError, UsageLimitError } from "./errors";
+import { BudgetError, CostLogUnavailableError, EmptyAnswerError, UsageLimitError } from "./errors";
 import {
   markTenantKey,
   readKeyInfo,
@@ -42,7 +42,7 @@ import {
   type TenantKey,
 } from "./modelKeys";
 
-export { BudgetError, CostLogUnavailableError, UsageLimitError } from "./errors";
+export { BudgetError, CostLogUnavailableError, EmptyAnswerError, UsageLimitError } from "./errors";
 export { KeysUnavailableError, TenantKeyError } from "./modelKeys";
 // Tool definitions and the UI message stream are plain data, not model calls:
 // callers (Chat) use these instead of importing the SDK, which
@@ -78,12 +78,36 @@ export interface CallOptions {
   background: boolean;
   system?: string;
   prompt: string;
+  /**
+   * Tokens for the answer itself. A model that thinks first (DeepSeek V4 Pro)
+   * spends its reasoning from the same budget, so the call gets THINKING_TOKENS
+   * more on top (thinkingBudget()).
+   */
   maxOutputTokens?: number;
+  /** How hard the model thinks first; "none" turns it off. Unset: the provider's default. */
+  reasoning?: Reasoning;
   abortSignal?: AbortSignal;
+}
+
+export type Reasoning = "provider-default" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+/**
+ * Room for thinking on top of a call's answer budget (MODEL_THINKING_TOKENS,
+ * default 16,000). Without it, a model that reasons can spend the whole budget
+ * thinking and answer with nothing (the Strategist, 2026-10-09: 6,000 of 6,000).
+ * Only a cap: a call pays for the tokens it uses.
+ */
+export const THINKING_TOKENS = Number(process.env.MODEL_THINKING_TOKENS ?? 16_000);
+
+export function thinkingBudget(answerTokens: number | undefined, reasoning?: Reasoning): number | undefined {
+  if (answerTokens === undefined) return undefined;
+  return reasoning === "none" ? answerTokens : answerTokens + THINKING_TOKENS;
 }
 
 export interface CallResult {
   text: string;
+  /** Why the model stopped: "stop", or "length" when it hit maxOutputTokens. */
+  finishReason: string;
   usage: Usage;
   costUsd: number;
   /** True when the tenant is past the warn ratio of its monthly budget. */
@@ -332,7 +356,9 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
   const result = await run(base, route, opts);
 
   const { usage, cost } = await logDone(base, route.id, result.totalUsage, gatewayCost(result.providerMetadata));
-  return { text: result.text, usage, costUsd: cost, budgetWarning: verdict.warn };
+  // Logged and paid for, but nothing to use: say so instead of handing back "".
+  if (!result.text.trim() && result.finishReason === "length") throw new EmptyAnswerError(usage.outputTokens);
+  return { text: result.text, finishReason: result.finishReason, usage, costUsd: cost, budgetWarning: verdict.warn };
 }
 
 type Logged = Record<string, unknown>;
@@ -345,7 +371,8 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
       model: route.model,
       system: opts.system,
       prompt: opts.prompt,
-      maxOutputTokens: opts.maxOutputTokens,
+      maxOutputTokens: thinkingBudget(opts.maxOutputTokens, opts.reasoning),
+      ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
       abortSignal: opts.abortSignal,
       // A refused key is refused again: no point in the SDK's own retries.
       ...(route.keyed ? { maxRetries: 0 } : {}),
@@ -356,7 +383,7 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
     if (route.keyed) {
       const failed = await tenantKeyFailed(opts.site, route, err);
       if (failed) {
-        await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+        await writeCall({ ...base, status: "error", priced: refused(err) }).catch(() => {});
         throw failed;
       }
     } else {
@@ -365,9 +392,21 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
     }
     // A failed call may still have been billed upstream, for an amount we don't know:
     // keep the trace at zero tokens and mark it unpriced so Consumption counts the gap.
-    await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+    // A refused one never ran, so it is a known $0.
+    await writeCall({ ...base, status: "error", priced: refused(err) }).catch(() => {});
     throw err;
   }
+}
+
+/**
+ * True when the provider turned the request down before running it (a 4xx
+ * other than a timeout, conflict or rate limit: no access to the model, a bad
+ * request, a refused key). Nothing ran, so nothing was billed, and asking
+ * again gets the same answer.
+ */
+export function refused(err: unknown): boolean {
+  const status = (err as { statusCode?: unknown } | null)?.statusCode;
+  return typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429;
 }
 
 /**
@@ -624,7 +663,8 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
     messages: opts.messages,
     tools: opts.tools,
     stopWhen: stepCountIs(opts.maxSteps ?? 6),
-    maxOutputTokens: opts.maxOutputTokens,
+    maxOutputTokens: thinkingBudget(opts.maxOutputTokens, opts.reasoning),
+    ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
     abortSignal: opts.abortSignal,
     // A refused key is refused again: no point in the SDK's own retries.
     ...(route.keyed ? { maxRetries: 0 } : {}),
@@ -677,12 +717,12 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
           const keyErr = await tenantKeyFailed(opts.site, route, failed);
           // Never usageLimit, never a retry on another account.
           if (keyErr) thrown = keyErr;
-          await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+          await writeCall({ ...base, status: "error", priced: !started && refused(failed) }).catch(() => {});
         } else {
           const limit = usageLimit(failed);
           if (limit) thrown = limit; // cost nothing: not logged
-          // As callModel: billed upstream for an amount we don't know.
-          else await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+          // As callModel: billed upstream for an amount we don't know, unless refused before it ran.
+          else await writeCall({ ...base, status: "error", priced: !started && refused(failed) }).catch(() => {});
         }
       } else {
         if (open || (!started && opts.abortSignal?.aborted)) {
