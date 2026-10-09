@@ -2,22 +2,20 @@
 // Home's inbox button read through useInbox(); they never know where an item
 // came from.
 //
-// Sources today:
-//   reviews    LIVE: briefs in review (Dexie, synced), each linked to its post
-//   flags      PLACEHOLDER: kb_flags + kb_claims (draft schema, not applied)
-//   pitches    PLACEHOLDER: briefs with status 'pitched' + content_batches (proposed)
-//   knowledge  PLACEHOLDER: kb_flags kind 'kb_conflict' + escalated kb_proposals
-//
-// The swap is one file: placeholder.ts implements InboxSource in memory; the
-// live one calls kb_close_flag / kb_contest / kb_owner_rule and the briefs
-// table, and this file imports it instead.
+// Sources:
+//   reviews    briefs in review (Dexie, synced), each linked to its post
+//   flags, pitches, knowledge: empty until their live source is wired (the
+//              Pipeline and Knowledge base pages already read them). Example
+//              items exist in the UI preview only (placeholder.ts).
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import type { Brief } from "@/lib/plan/types";
 import type { Post } from "@/types";
 import type { ObjectKind } from "@/components/shared/ObjectIcon";
+import { UI_PREVIEW } from "@/lib/preview";
+import { isDemoBrief, seedBriefsIfEmpty } from "@/lib/plan/briefs";
 import { placeholderInbox } from "./placeholder";
 
 // ---- the objects items are about ----
@@ -176,7 +174,22 @@ export interface InboxSource {
   rule(itemId: string, choice: 0 | 1): Promise<void>;
 }
 
-export const inboxSource: InboxSource = placeholderInbox;
+const EMPTY: InboxSnapshot = { flags: [], batch: null, knowledge: [], notes: [] };
+const nothing = async () => {};
+
+/** Outside the UI preview: no example items, ever. */
+const emptyInbox: InboxSource = {
+  example: false,
+  snapshot: () => EMPTY,
+  subscribe: () => () => {},
+  applyFix: nothing,
+  contest: nothing,
+  closeFlag: nothing,
+  decidePitch: nothing,
+  rule: nothing,
+};
+
+export const inboxSource: InboxSource = UI_PREVIEW ? placeholderInbox : emptyInbox;
 
 export interface Inbox extends InboxSnapshot {
   reviews: Review[];
@@ -191,6 +204,8 @@ export interface Inbox extends InboxSnapshot {
 
 export function useInbox(): Inbox {
   const snap = useSyncExternalStore(inboxSource.subscribe, inboxSource.snapshot);
+  // Clears the demo briefs an earlier build seeded into this browser.
+  useEffect(() => void seedBriefsIfEmpty(), []);
   const reviews = useLiveQuery(loadReviews, [], [] as Review[]);
   const pendingPitches = snap.batch?.pitches.filter((p) => !p.decision).length ?? 0;
   return {
@@ -206,7 +221,7 @@ export function useInbox(): Inbox {
 
 // Briefs in review are the drafts someone has to read before they ship.
 async function loadReviews(): Promise<Review[]> {
-  const briefs: Brief[] = await db.briefs.where("status").equals("in_review").toArray();
+  const briefs: Brief[] = (await db.briefs.where("status").equals("in_review").toArray()).filter((b) => UI_PREVIEW || !isDemoBrief(b.id));
   const postIds = briefs.map((b) => b.postId).filter((id): id is string => !!id);
   const posts = new Map((await db.posts.bulkGet(postIds)).filter((p): p is Post => !!p).map((p) => [p.id, p]));
   return briefs

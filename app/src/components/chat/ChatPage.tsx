@@ -20,10 +20,10 @@ import type { ChatUIMessage } from "@/lib/chat/types";
 import { Message, ReplyError, ReplyRow, Thinking } from "./Message";
 
 const SUGGESTIONS = [
-  "Why is the SOC 2 pitch rated a strong fit?",
-  "Why was the pricing flag raised?",
-  "We're launching in November. Reposition us for it.",
-  "What do we say about onboarding?",
+  "What should we write about this month?",
+  "Pitch me three posts on what our customers ask most.",
+  "What does the knowledge base say about our pricing?",
+  "Which of our posts need updating?",
 ];
 
 export function ChatPage() {

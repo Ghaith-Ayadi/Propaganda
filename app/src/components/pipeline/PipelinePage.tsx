@@ -13,7 +13,7 @@ import { Plus } from "@untitledui/icons";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { toast } from "@/components/base/toast/toast";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { go, goPage, usePageRest } from "@/lib/route";
+import { go, goPage, pageHref, usePageRest } from "@/lib/route";
 import { getActiveCollection } from "@/lib/activeCollection";
 import { byFitThenDate } from "@/lib/pipeline/fit";
 import { shortDate } from "@/lib/pipeline/dates";
@@ -48,7 +48,7 @@ const ADD_PLACEHOLDER: Partial<Record<Stage, string>> = {
 
 export function PipelinePage() {
   const rest = usePageRest();
-  const { items, people, settings, batches } = usePipeline();
+  const { items, people, settings, batches, loading, placeholder } = usePipeline();
   const titles = usePostTitles(items);
   const pitchId = rest?.match(/^pitch\/(.+)$/)?.[1];
 
@@ -83,6 +83,18 @@ export function PipelinePage() {
 
       <div className="flex flex-col xl:min-h-0 xl:flex-1 xl:flex-row">
         <section className="min-w-0 flex-1 xl:overflow-y-auto">
+          {!loading && !placeholder && BOARD_STAGES.every((st) => columns[st].length === 0) && (
+            <div className="mx-4 mt-6 rounded-xl p-4 ring-1 ring-secondary ring-inset md:mx-8">
+              <p className="type-heading text-primary">Nothing in the pipeline yet</p>
+              <p className="mt-1 text-sm text-tertiary">
+                Pitches come from your goals and your sources: approve the Strategist's plan in{" "}
+                <a href={pageHref("goals")} className="font-medium text-brand-secondary hover:underline">
+                  Goals
+                </a>{" "}
+                and the Pitcher sends the first ones. Pitch an idea of your own with the + on Pitched.
+              </p>
+            </div>
+          )}
           <div className="overflow-x-auto px-4 pt-6 pb-10 md:px-8">
             <div className="grid min-w-[1040px] grid-cols-4 gap-4 xl:min-w-[880px]">
               {BOARD_STAGES.map((stage) => (

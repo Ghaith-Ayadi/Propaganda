@@ -22,6 +22,7 @@ import type {
 } from "./types";
 import { placeholderAdapter } from "./placeholder";
 import { liveAdapter, liveGoalsReady } from "./live";
+import { UI_PREVIEW } from "@/lib/preview";
 
 export interface GoalsAdapter {
   /** True while the data is sample data. The pages say so on screen. */
@@ -68,24 +69,25 @@ export interface GoalsAdapter {
 }
 
 /**
- * The real tables once the server has them (lib/goals/live.ts), the
- * placeholder until then: every call goes to whichever is active.
+ * The real tables, always, outside the UI preview: a tenant with no goals sees
+ * an empty page, never samples. In the UI preview (no server), the placeholder.
  */
-const pick = (): GoalsAdapter => (liveGoalsReady() ? liveAdapter : placeholderAdapter);
+const sample = () => UI_PREVIEW && !liveGoalsReady();
+const pick = (): GoalsAdapter => (sample() ? placeholderAdapter : liveAdapter);
 
 export const goalsAdapter: GoalsAdapter = {
   get placeholder() {
-    return !liveGoalsReady();
+    return sample();
   },
   subscribe(cb) {
     const a = liveAdapter.subscribe(cb);
-    const b = placeholderAdapter.subscribe(cb);
+    const b = UI_PREVIEW ? placeholderAdapter.subscribe(cb) : () => {};
     return () => {
       a();
       b();
     };
   },
-  version: () => liveAdapter.version() * 1_000_000 + placeholderAdapter.version(),
+  version: () => liveAdapter.version() * 1_000_000 + (UI_PREVIEW ? placeholderAdapter.version() : 0),
   context: () => pick().context(),
   quarters: () => pick().quarters(),
   quarterGoals: (q) => pick().quarterGoals(q),
@@ -105,10 +107,10 @@ export const goalsAdapter: GoalsAdapter = {
 
 /** Ask the Strategist for a proposal. A no-op on the placeholder (nothing to run). */
 export async function askStrategist(kind: "onboarding" | "quarterly" | "revision", note = "", quarter?: QuarterKey): Promise<string | null> {
-  return liveGoalsReady() ? liveAdapter.askStrategist(kind, note, quarter) : null;
+  return sample() ? null : liveAdapter.askStrategist(kind, note, quarter);
 }
 
 /** The newest request's state while the tables are live: "requested", "running", "failed", ... */
 export function strategistState() {
-  return liveGoalsReady() ? liveAdapter.strategistState() : null;
+  return sample() ? null : liveAdapter.strategistState();
 }

@@ -5,6 +5,7 @@ import { InfoCircle } from "@untitledui/icons";
 import { NativeSelect } from "@/components/base/select/select-native";
 import { AUTHORITY_EXPLAINER } from "@/lib/goals/copy";
 import { useGoalsArePlaceholder } from "@/lib/goals/useGoals";
+import { UI_PREVIEW } from "@/lib/preview";
 import { SCENARIOS, placeholderScenario, setPlaceholderScenario, type ScenarioId } from "@/lib/goals/placeholder";
 import type { PlanOrigin } from "@/lib/goals/types";
 import { Badge } from "@/components/base/badges/badges";
@@ -102,8 +103,11 @@ export function AuthorityExplainer({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/** Says the page shows sample data, and lets you switch the sample tenant's situation. */
-export function PlaceholderBanner() {
+/** Says the page shows sample data (UI preview only). Nothing at all in a real build. */
+export const PlaceholderBanner = UI_PREVIEW ? PreviewBanner : () => null;
+
+/** Lets you switch the sample tenant's situation. */
+function PreviewBanner() {
   if (!useGoalsArePlaceholder()) return null;
   return (
     <div className="mb-6 flex flex-col gap-3 rounded-xl bg-warning-primary p-3 text-sm ring-1 ring-secondary ring-inset md:flex-row md:items-center md:justify-between">
