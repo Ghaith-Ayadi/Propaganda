@@ -706,7 +706,11 @@ async function dailyBatchesRun(scheduled: Date): Promise<void> {
 
 export const dailyBatches = DBOS.registerWorkflow(dailyBatchesRun, { name: "pitcher:daily-batches" });
 
-export const BATCH_CRON = process.env.PITCHER_BATCH_CRON ?? "0 7 * * *";
+/**
+ * Every day 10:00 UTC: after DeepSeek's weekday peak on the AI Gateway (2x
+ * price 01:00-04:00 and 06:00-10:00 UTC), and still morning in Europe.
+ */
+export const BATCH_CRON = process.env.PITCHER_BATCH_CRON ?? "0 10 * * *";
 
 /** Called once after launch: the morning schedule, kept in DBOS's own tables. */
 export async function schedulePitcher(): Promise<void> {

@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { BookOpen01, Check, MessagePlusSquare, Minus } from "@untitledui/icons";
+import { Check, LinkExternal01, MessagePlusSquare, Minus } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { NativeSelect } from "@/components/base/select/select-native";
@@ -15,7 +15,8 @@ import { approvePitch, notNowPitch, personById, rejectPitch, usePipeline } from 
 import { GOAL_LABEL, ORIGIN_LABEL, STAGE_LABEL, type GoalKey, type PipelineItem, type PitchNote, type ReasonKind } from "@/lib/pipeline/types";
 import { reportError, track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
-import { Eyebrow, FitBadge, TextArea, TopicBadge } from "./bits";
+import { Card, CardBody, CardHeader } from "@/components/shell/Card";
+import { FitBadge, TextArea } from "./bits";
 
 const REASON_LABEL: Record<ReasonKind, string> = {
   demand: "Demand",
@@ -47,9 +48,9 @@ export function PitchDrawer({ id }: { id: string }) {
       isOpen
       isDismissable
       onOpenChange={(open) => !open && close()}
-      className="fixed inset-0 z-50 bg-overlay/60 backdrop-blur-[2px] duration-150 entering:animate-in entering:fade-in exiting:animate-out exiting:fade-out"
+      className="fixed inset-0 z-50 bg-overlay/40 duration-150 entering:animate-in entering:fade-in exiting:animate-out exiting:fade-out"
     >
-      <Modal className="fixed inset-y-0 right-0 flex w-full max-w-[720px] duration-200 entering:animate-in entering:slide-in-from-right exiting:animate-out exiting:slide-out-to-right">
+      <Modal className="fixed inset-y-0 right-0 flex w-full max-w-[640px] duration-200 entering:animate-in entering:slide-in-from-right exiting:animate-out exiting:slide-out-to-right">
         <Dialog aria-label={item.title} className="flex h-full w-full flex-col bg-primary shadow-xl outline-hidden">
           <PitchBody key={item.id} item={item} people={people} meId={settings.meId} onClose={close} />
         </Dialog>
@@ -90,7 +91,6 @@ function PitchBody({
   ];
 
   const writerName = personById(people, writerId)?.name ?? "Unassigned";
-  const reviewerName = reviewerId === meId ? "you review" : `${personById(people, reviewerId)?.name ?? "nobody"} reviews`;
   const options = people.map((p) => ({ label: p.id === meId ? "You" : p.agent ? "Writer agent" : p.name, value: p.id }));
 
   const approve = async () => {
@@ -128,245 +128,242 @@ function PitchBody({
     onClose();
   };
 
+  const nameOf = (id: string) => options.find((o) => o.value === id)?.label ?? "Unassigned";
+
   return (
     <>
-      {/* header */}
-      <div className="border-b border-secondary px-5 pt-5 pb-5 md:px-8">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="type-eyebrow text-tertiary">Pitch</span>
-            <FitBadge reasons={item.reasons} />
-            {item.topics.map((t) => (
-              <TopicBadge key={t}>{t}</TopicBadge>
-            ))}
-            <span className="text-sm text-tertiary">{ORIGIN_LABEL[item.origin]}</span>
-            {item.batch && <span className="text-sm text-quaternary">· batch {item.batch}</span>}
+      {/* header: what it is, in one look */}
+      <header className="border-b border-secondary px-6 pt-5 pb-6 md:px-8">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 text-sm text-tertiary">
+            {item.reasons.length > 0 && <FitBadge reasons={item.reasons} />}
+            <span className="truncate">
+              {item.batch ? `Batch ${item.batch}` : "Bonus pitch"} · {ORIGIN_LABEL[item.origin]}
+            </span>
           </div>
-          <CloseButton size="md" onPress={onClose} label="Close" className="-mt-1 -mr-2 shrink-0" />
+          <CloseButton size="md" onPress={onClose} label="Close" className="-mr-2 shrink-0" />
         </div>
-        <h2 className="mt-3 type-title text-primary">{item.title}</h2>
-        <p className="mt-2 text-sm text-tertiary">{item.why}</p>
+        <h2 className="mt-4 type-title text-primary">{item.title}</h2>
+        {item.why && <p className="mt-2 text-sm text-secondary">{item.why}</p>}
         {item.learned && <p className="mt-2 text-sm text-tertiary italic">{item.learned}</p>}
-        {item.changed && (
-          <p className="mt-3 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary">
-            <span className="font-medium text-primary">Pitched before, with a change.</span> {item.changed}
-          </p>
-        )}
         {!decidable && (
-          <p className="mt-3 text-sm font-medium text-secondary">
+          <p className="mt-4 text-sm font-medium text-primary">
             {STAGE_LABEL[item.stage]}
             {item.rejectReason ? `: ${item.rejectReason}` : ""}
           </p>
         )}
-      </div>
+      </header>
 
-      {/* body */}
-      <div className="flex-1 overflow-y-auto px-5 py-6 md:px-8">
-        <h3 className="type-heading text-primary">Why this, why now</h3>
-        <dl className="mt-3 flex flex-col gap-1.5">
-          {item.reasons.map((r, n) => (
-            <div key={n} className="grid grid-cols-[110px_1fr] gap-3 rounded-lg bg-secondary px-4 py-3 text-sm">
-              <dt className="text-secondary">{REASON_LABEL[r.kind]}</dt>
-              <dd className={r.counts ? "text-primary" : "text-tertiary"}>{r.text}</dd>
-            </div>
-          ))}
-          {item.reasons.length === 0 && <p className="text-sm text-tertiary">No reasons recorded.</p>}
-        </dl>
+      {/* body: one column, one rhythm */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="flex flex-col gap-8 px-6 py-6 md:px-8">
+          {item.changed && (
+            <p className="border-l-2 border-secondary pl-3 text-sm text-secondary">
+              <span className="font-medium text-primary">Pitched before. </span>
+              {item.changed}
+            </p>
+          )}
 
-        <h3 className="mt-7 type-heading text-primary">Against your goals</h3>
-        <ul className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
-          {GOALS.map((g) => {
-            const e = item.goals.find((x) => x.goal === g);
-            return (
-              <li key={g} className="flex gap-2 text-sm">
-                {e?.moves ? (
-                  <Check className="mt-0.5 size-4 shrink-0 text-fg-success-primary" aria-label="Moves it" />
-                ) : (
-                  <Minus className="mt-0.5 size-4 shrink-0 text-fg-quaternary" aria-label="Doesn't move it" />
-                )}
-                <span>
-                  <span className={e?.moves ? "font-medium text-primary" : "text-tertiary"}>{GOAL_LABEL[g]}</span>
-                  {e?.note && <span className="text-tertiary">. {e.note}</span>}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="mt-7 grid gap-4 sm:grid-cols-3">
-          <NativeSelect label="Writer" size="md" options={options} value={writerId} disabled={!decidable} onChange={(e) => setWriterId(e.target.value)} />
-          <NativeSelect label="Reviewer" size="md" options={options} value={reviewerId} disabled={!decidable} onChange={(e) => setReviewerId(e.target.value)} />
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-secondary">Publish by</span>
-            <input
-              type="date"
-              value={publishBy}
-              disabled={!decidable}
-              onChange={(e) => e.target.value && setPublishBy(e.target.value)}
-              className="rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset focus:ring-2 focus:ring-brand disabled:opacity-60"
+          <Block title="The post">
+            <Fields
+              rows={[
+                ["Angle", item.angle],
+                ["Who it's for", item.audience],
+                [item.topics.length > 1 ? "Topics" : "Topic", [item.topics.join(", "), item.topicProgress].filter(Boolean).join(" · ")],
+                ["Format", [`Blog post in ${item.collection}`, item.length].filter(Boolean).join(", ")],
+              ]}
             />
-          </label>
-        </div>
+          </Block>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-3">
-          <div>
-            <Eyebrow>Format</Eyebrow>
-            <div className="mt-1.5 flex items-center gap-1.5 text-sm text-secondary">
-              <BookOpen01 className="size-4" /> Blog post · {item.collection}
-            </div>
-          </div>
-          <div>
-            <Eyebrow>{item.topics.length > 1 ? "Topics" : "Topic"}</Eyebrow>
-            <div className="mt-1.5 text-sm text-primary">{item.topics.join(", ")}</div>
-            {item.topicProgress && <div className="text-sm text-tertiary">{item.topicProgress}</div>}
-          </div>
-          <div>
-            <Eyebrow>Length</Eyebrow>
-            <div className="mt-1.5 text-sm text-primary">{item.length}</div>
-          </div>
-        </div>
+          <Block title="Why now">
+            {item.reasons.length ? (
+              <Fields rows={item.reasons.map((r) => [REASON_LABEL[r.kind], r.text, !r.counts] as const)} />
+            ) : (
+              <p className="text-sm text-tertiary">Your idea: no reasons from the Pitcher.</p>
+            )}
+          </Block>
 
-        <Section title="Angle">{item.angle}</Section>
-        <Section title="Who it's for">{item.audience}</Section>
-
-        {item.outline.length > 0 && (
-          <div className="mt-7">
-            <h3 className="type-heading text-primary">Outline</h3>
-            {decidable && <p className="text-sm text-tertiary">Leave a note on any line.</p>}
-            <ol className="mt-3 flex flex-col gap-1">
-              {item.outline.map((l, n) => {
-                const note = lineNotes[l.id];
-                const showNote = note !== undefined || openNote === l.id;
+          <Block title="Goals it moves">
+            <ul className="flex flex-col divide-y divide-secondary">
+              {GOALS.map((g) => {
+                const e = item.goals.find((x) => x.goal === g);
                 return (
-                  <li key={l.id} className={cx("group rounded-lg px-3 py-2", showNote && "bg-secondary")}>
-                    <div className="flex items-start gap-3">
-                      <span className="w-5 shrink-0 text-right text-sm text-quaternary">{n + 1}.</span>
-                      <span className="flex-1 text-sm text-primary">{l.text}</span>
-                      {decidable && !showNote && (
-                        <button
-                          type="button"
-                          onClick={() => setOpenNote(l.id)}
-                          aria-label={`Add a note on line ${n + 1}`}
-                          className="rounded-md p-1 text-fg-quaternary opacity-100 transition hover:bg-primary_hover hover:text-fg-secondary md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-                        >
-                          <MessagePlusSquare className="size-4" />
-                        </button>
-                      )}
-                    </div>
-                    {showNote && (
-                      <TextArea
-                        autoFocus={openNote === l.id && note === undefined}
-                        rows={2}
-                        disabled={!decidable}
-                        className="mt-2 ml-8 w-[calc(100%-2rem)] bg-warning-primary"
-                        placeholder="Your note on this line"
-                        value={note ?? ""}
-                        onChange={(e) => setLineNotes((m) => ({ ...m, [l.id]: e.target.value }))}
-                        onBlur={() => {
-                          if (!lineNotes[l.id]?.trim()) {
-                            setLineNotes(({ [l.id]: _, ...rest }) => rest);
-                            setOpenNote(null);
-                          }
-                        }}
-                      />
+                  <li key={g} className="flex gap-3 py-2.5 text-sm first:pt-0 last:pb-0">
+                    {e?.moves ? (
+                      <Check className="mt-0.5 size-4 shrink-0 text-fg-primary" aria-label="Moves it" />
+                    ) : (
+                      <Minus className="mt-0.5 size-4 shrink-0 text-fg-quaternary" aria-label="Doesn't move it" />
                     )}
+                    <span className={cx("w-28 shrink-0", e?.moves ? "font-medium text-primary" : "text-tertiary")}>{GOAL_LABEL[g]}</span>
+                    <span className="text-tertiary">{e?.note}</span>
                   </li>
                 );
               })}
-            </ol>
-          </div>
-        )}
-
-        {item.sources.length > 0 && (
-          <div className="mt-7">
-            <h3 className="type-heading text-primary">Sources</h3>
-            <ul className="mt-2 flex flex-col gap-1">
-              {item.sources.map((s) => (
-                <li key={s.url}>
-                  <a href={s.url} target="_blank" rel="noreferrer" className="text-sm text-brand-secondary underline underline-offset-4">
-                    {s.label}
-                  </a>
-                </li>
-              ))}
             </ul>
-          </div>
-        )}
+          </Block>
 
-        {decidable && (
-          <label className="mt-7 block">
-            <span className="type-heading text-primary">A note for the writer</span>
-            <span className="ml-2 text-sm text-tertiary">optional</span>
-            <TextArea
-              rows={2}
-              className="mt-2"
-              placeholder="Anything to keep in mind while writing it"
-              value={generalNote}
-              onChange={(e) => setGeneralNote(e.target.value)}
+          {item.outline.length > 0 && (
+            <Block title="Outline" hint={decidable ? "Hover a line to leave a note on it." : undefined}>
+              <ol className="flex flex-col">
+                {item.outline.map((l, n) => {
+                  const note = lineNotes[l.id];
+                  const showNote = note !== undefined || openNote === l.id;
+                  return (
+                    <li key={l.id} className="group -mx-2 rounded-lg px-2 py-1.5 hover:bg-primary_hover">
+                      <div className="flex items-start gap-3">
+                        <span className="w-4 shrink-0 text-right text-sm text-quaternary tabular-nums">{n + 1}</span>
+                        <span className="flex-1 text-sm text-primary">{l.text}</span>
+                        {decidable && !showNote && (
+                          <button
+                            type="button"
+                            onClick={() => setOpenNote(l.id)}
+                            aria-label={`Add a note on line ${n + 1}`}
+                            className="rounded-md p-0.5 text-fg-quaternary transition hover:text-fg-secondary md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                          >
+                            <MessagePlusSquare className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                      {showNote && (
+                        <TextArea
+                          autoFocus={openNote === l.id && note === undefined}
+                          rows={2}
+                          disabled={!decidable}
+                          className="mt-2 ml-7 w-[calc(100%-1.75rem)]"
+                          placeholder="Your note on this line"
+                          value={note ?? ""}
+                          onChange={(e) => setLineNotes((m) => ({ ...m, [l.id]: e.target.value }))}
+                          onBlur={() => {
+                            if (!lineNotes[l.id]?.trim()) {
+                              setLineNotes(({ [l.id]: _, ...rest }) => rest);
+                              setOpenNote(null);
+                            }
+                          }}
+                        />
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </Block>
+          )}
+
+          {item.sources.length > 0 && (
+            <Block title="Sources">
+              <ul className="flex flex-col gap-1.5">
+                {item.sources.map((s) => (
+                  <li key={s.url} className="flex items-center gap-2 text-sm">
+                    <LinkExternal01 className="size-4 shrink-0 text-fg-quaternary" />
+                    <a href={s.url} target="_blank" rel="noreferrer" className="text-secondary underline decoration-border-primary underline-offset-4 hover:text-primary">
+                      {s.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </Block>
+          )}
+
+          <Card>
+            <CardHeader
+              title="Hand-off"
+              description={decidable ? "Who writes it, who reviews it, and by when." : `${nameOf(writerId)} writes, ${nameOf(reviewerId)} reviews.`}
             />
-          </label>
-        )}
+            <CardBody className="flex flex-col gap-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <NativeSelect label="Writer" size="md" options={options} value={writerId} disabled={!decidable} onChange={(e) => setWriterId(e.target.value)} />
+                <NativeSelect label="Reviewer" size="md" options={options} value={reviewerId} disabled={!decidable} onChange={(e) => setReviewerId(e.target.value)} />
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-secondary">Publish by</span>
+                  <input
+                    type="date"
+                    value={publishBy}
+                    disabled={!decidable}
+                    onChange={(e) => e.target.value && setPublishBy(e.target.value)}
+                    className="rounded-lg bg-primary px-3 py-2 text-md text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset focus:ring-2 focus:ring-brand disabled:opacity-60"
+                  />
+                </label>
+              </div>
+              {decidable && (
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-secondary">
+                    Note for the writer <span className="font-normal text-tertiary">(optional)</span>
+                  </span>
+                  <TextArea rows={2} placeholder="Anything to keep in mind while writing it" value={generalNote} onChange={(e) => setGeneralNote(e.target.value)} />
+                </label>
+              )}
+            </CardBody>
+          </Card>
+        </div>
       </div>
 
-      {/* footer */}
+      {/* footer: the decision */}
       {decidable &&
         (rejecting ? (
-          <div className="border-t border-secondary p-4 md:px-8">
-            <div className="rounded-xl bg-error-primary p-4">
-              <label htmlFor="reject-reason" className="type-eyebrow text-error-primary">
-                Why reject it? Required.
-              </label>
-              <TextArea
-                id="reject-reason"
-                autoFocus
-                rows={2}
-                className="mt-2"
-                placeholder="For example: we don't write about competitors' ERPs this quarter."
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-              <p className="mt-2 text-sm text-tertiary">
-                Your reasons teach Propaganda your strategy and taste, so the next pitches fit better.
-              </p>
-              <div className="mt-3 flex items-center justify-between">
-                <Button size="sm" color="tertiary" onClick={() => setRejecting(false)}>
-                  Cancel
-                </Button>
-                <Button size="sm" color="secondary-destructive" isDisabled={!reason.trim()} onClick={reject}>
-                  Reject pitch
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-secondary px-5 py-4 md:px-8">
-            <div className="flex gap-2">
-              <Button size="md" color="secondary-destructive" onClick={() => setRejecting(true)}>
-                Reject…
+          <footer className="flex flex-col gap-3 border-t border-secondary px-6 py-4 md:px-8">
+            <label htmlFor="reject-reason" className="text-sm font-medium text-primary">
+              Why reject it? <span className="font-normal text-tertiary">The Pitcher learns from your reason.</span>
+            </label>
+            <TextArea
+              id="reject-reason"
+              autoFocus
+              rows={2}
+              placeholder="For example: we don't write about competitors' ERPs this quarter."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <Button size="md" color="tertiary" onClick={() => setRejecting(false)}>
+                Cancel
               </Button>
-              <Button size="md" color="secondary" onClick={notNow}>
+              <Button size="md" color="primary-destructive" isDisabled={!reason.trim()} onClick={reject}>
+                Reject pitch
+              </Button>
+            </div>
+          </footer>
+        ) : (
+          <footer className="flex items-center justify-between gap-3 border-t border-secondary px-6 py-4 md:px-8">
+            <div className="flex gap-1">
+              <Button size="md" color="tertiary" onClick={() => setRejecting(true)}>
+                Reject
+              </Button>
+              <Button size="md" color="tertiary" onClick={notNow}>
                 Not now
               </Button>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <span className="text-sm text-tertiary">
-                {writerName} · {reviewerName} · by {shortDate(publishBy)}
-              </span>
-              <Button size="md" color="primary" isLoading={busy} onClick={() => void approve()}>
-                {notes.length ? "Approve with notes" : "Approve"}
-              </Button>
-            </div>
-          </div>
+            <Button size="md" color="primary" isLoading={busy} onClick={() => void approve()}>
+              {notes.length ? `Approve with ${notes.length === 1 ? "a note" : `${notes.length} notes`}` : "Approve"}
+            </Button>
+          </footer>
         ))}
     </>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  if (!children) return null;
+/** A section of the brief: a small heading, then its content. */
+function Block({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="mt-7">
-      <h3 className="type-heading text-primary">{title}</h3>
-      <p className="mt-2 text-sm text-secondary">{children}</p>
-    </div>
+    <section>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h3 className="type-heading text-primary">{title}</h3>
+        {hint && <span className="hidden text-xs text-tertiary md:inline">{hint}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Label and value rows, the label in a fixed column; empty values are left out. */
+function Fields({ rows }: { rows: ReadonlyArray<readonly [string, string | undefined, boolean?]> }) {
+  return (
+    <dl className="flex flex-col divide-y divide-secondary">
+      {rows
+        .filter(([, v]) => v)
+        .map(([k, v, muted], n) => (
+          <div key={n} className="grid gap-1 py-2.5 text-sm first:pt-0 last:pb-0 sm:grid-cols-[112px_1fr] sm:gap-4">
+            <dt className="text-tertiary">{k}</dt>
+            <dd className={muted ? "text-tertiary" : "text-primary"}>{v}</dd>
+          </div>
+        ))}
+    </dl>
   );
 }

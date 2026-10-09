@@ -26,10 +26,13 @@ export function runId(w: Work): string {
   }
 }
 
-/** One look for work. Returns the run ids it asked for (existing ones included). */
-export async function dispatchOnce(): Promise<string[]> {
+/**
+ * One look for work. Returns the run ids it asked for (existing ones included).
+ * Admin's Run now passes a tenant and no settle time: that tenant's work, now.
+ */
+export async function dispatchOnce(site: string | null = null, settleSeconds = config.settleSeconds): Promise<string[]> {
   const started: string[] = [];
-  for (const w of await pendingWork(config.settleSeconds)) {
+  for (const w of await pendingWork(settleSeconds, 20, site)) {
     const id = runId(w);
     switch (w.kind) {
       case "check":
