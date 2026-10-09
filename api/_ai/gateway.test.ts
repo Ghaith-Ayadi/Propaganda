@@ -344,4 +344,39 @@ test("removing a key moves the tenant back to our AI Gateway", async () => {
   assert.equal(ours, 1);
 });
 
+// ---- the default model ----
+
+test("DEFAULT_MODEL runs on our gateway with no key, and as BYOK_MODEL on a tenant's key", async () => {
+  gate = open; calls.length = 0;
+  let ours = "", keyed = "";
+  setModelResolver((id) => { ours = id; return ok; });
+  g.setTenantModelResolver((_k, id) => { keyed = id; return ok; });
+  await callModel({ ...opts, site: noKeySite, model: g.DEFAULT_MODEL });
+  assert.equal(g.DEFAULT_MODEL, "deepseek/deepseek-v4-pro");
+  assert.equal(ours, g.DEFAULT_MODEL);
+  assert.equal(calls[0].model, g.DEFAULT_MODEL);
+  assert.equal(calls[0].paid_by, undefined);
+
+  await withKey(); calls.length = 0;
+  await callModel({ ...opts, site: tenantSite, model: g.DEFAULT_MODEL });
+  assert.equal(keyed, g.BYOK_MODEL);
+  assert.equal(calls[0].model, g.BYOK_MODEL);
+  assert.equal(calls[0].paid_by, "tenant");
+
+  // A model asked for by name (the editor's Gemini) stays ours even with a key.
+  calls.length = 0; ours = "";
+  await callModel({ ...opts, site: tenantSite, model: "google/gemini-2.5-flash-lite" });
+  assert.equal(ours, "google/gemini-2.5-flash-lite");
+  assert.equal(calls[0].paid_by, undefined);
+  delete keyRows[tenantSite];
+});
+
+test("the gateway's reported cost prices a call whose model has no price row", () => {
+  assert.equal(g.gatewayCost({ gateway: { cost: "0.0012345678" } }), 0.001235);
+  assert.equal(g.gatewayCost({ gateway: { cost: 0.5 } }), 0.5);
+  assert.equal(g.gatewayCost({ gateway: {} }), null);
+  assert.equal(g.gatewayCost(undefined), null);
+  assert.equal(g.gatewayCost({ gateway: { cost: "nope" } }), null);
+});
+
 test.after(() => server.close());

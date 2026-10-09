@@ -169,6 +169,15 @@ function defaultResolve(id: string): LanguageModel {
 
 let resolveModel: (id: string) => LanguageModel = defaultResolve;
 
+/**
+ * The model every agent and Chat asks for unless told otherwise (Ayadi,
+ * 2026-10-09: no Anthropic models on our account). DEFAULT_MODEL overrides it.
+ */
+export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "deepseek/deepseek-v4-pro";
+
+/** What a call for DEFAULT_MODEL runs on instead for a tenant that saved its own Anthropic key. BYOK_MODEL overrides it. */
+export const BYOK_MODEL = process.env.BYOK_MODEL || "anthropic/claude-sonnet-5.5";
+
 /** For tests: swap how a model id becomes a model. */
 export function setModelResolver(fn: (id: string) => LanguageModel): void {
   resolveModel = fn;
@@ -179,7 +188,8 @@ export function setModelResolver(fn: (id: string) => LanguageModel): void {
 // A tenant with a key set has every Anthropic call made with that key, and
 // nothing else of ours: no fallback to our account when it fails. Our budget
 // rules don't apply to its spend (cost_gate leaves out rows paid_by 'tenant'),
-// only the kill switch does. Other providers (Gemini for the editor) stay ours.
+// only the kill switch does. A call for DEFAULT_MODEL becomes BYOK_MODEL on the
+// key; other providers asked for by name (Gemini for the editor) stay ours.
 
 /** Gateway ids to Anthropic's: 'anthropic/claude-sonnet-5.5' is 'claude-sonnet-5-5'. */
 export function anthropicModelId(id: string): string {
@@ -220,6 +230,8 @@ function tenantKeyFailure(err: unknown): { error: TenantKeyError; broken: boolea
 }
 
 export interface Route {
+  /** The model id the call actually runs on: what is logged and priced. */
+  id: string;
   model: LanguageModel;
   /** The tenant's own key, when the call runs on it (marked ok or failed after the call). */
   tenant: TenantKey | null;
@@ -235,18 +247,20 @@ export interface Route {
 /**
  * How a call for `site` reaches `model`. Every path to a model goes through
  * this (callModel here, and streamModel for Chat). A tenant that saved its own
- * Anthropic key runs every `anthropic/` call on it, paid by the tenant and
- * outside our budgets, and never on ours, even when the key fails. Every other
- * call (a tenant with no key, or another provider) runs on our AI Gateway,
- * paid by us and inside our budgets.
+ * Anthropic key runs every `anthropic/` call on it, and every DEFAULT_MODEL
+ * call as BYOK_MODEL, paid by the tenant and outside our budgets, and never on
+ * ours, even when the key fails. Every other call (a tenant with no key, or
+ * another provider) runs on our AI Gateway, paid by us and inside our budgets.
  */
 export async function routeModel(site: string, model: string): Promise<Route> {
-  const ours = (): Route => ({ model: resolveModel(model), tenant: null, keyed: false, logged: {}, budgetFree: false });
-  if (!model.startsWith("anthropic/")) return ours();
+  const ours = (): Route => ({ id: model, model: resolveModel(model), tenant: null, keyed: false, logged: {}, budgetFree: false });
+  const keyed = model === DEFAULT_MODEL ? BYOK_MODEL : model;
+  if (!keyed.startsWith("anthropic/")) return ours();
   const tenant = await readTenantKey(rest, site);
   if (!tenant) return ours();
   return {
-    model: tenantResolve(tenant.apiKey, model),
+    id: keyed,
+    model: tenantResolve(tenant.apiKey, keyed),
     tenant,
     keyed: true,
     logged: { paid_by: "tenant", credential: "own" },
@@ -308,7 +322,7 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
   const base = {
     site: opts.site,
     job: opts.job,
-    model: opts.model,
+    model: route.id,
     background: opts.background,
     workflow_id: ctx.workflowId,
     step_id: ctx.stepId,
@@ -317,7 +331,7 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
 
   const result = await run(base, route, opts);
 
-  const { usage, cost } = await logDone(base, opts.model, result.totalUsage);
+  const { usage, cost } = await logDone(base, route.id, result.totalUsage, gatewayCost(result.providerMetadata));
   return { text: result.text, usage, costUsd: cost, budgetWarning: verdict.warn };
 }
 
@@ -356,11 +370,32 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
   }
 }
 
+/**
+ * The cost the AI Gateway reported for a call (providerMetadata.gateway.cost),
+ * or null when it reported none (a tenant's key, a direct provider).
+ */
+export function gatewayCost(meta: unknown): number | null {
+  const v = (meta as { gateway?: { cost?: unknown } } | undefined)?.gateway?.cost;
+  const n = typeof v === "string" || typeof v === "number" ? Number(v) : NaN;
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 1e6) / 1e6 : null;
+}
+
+/**
+ * A call's cost: at our price row for the model, else what the AI Gateway
+ * reported (so a model with no row yet is still counted), else unpriced.
+ */
+function priceCall(price: Price | null, usage: Usage, reported: number | null): { cost: number; priced: boolean } {
+  if (price) return { cost: costUsd(price, usage), priced: true };
+  if (reported !== null) return { cost: reported, priced: true };
+  return { cost: 0, priced: false };
+}
+
 /** Price a finished call and write its row. */
 async function logDone(
   base: Logged,
   model: string,
   u: Awaited<ReturnType<typeof generateText>>["totalUsage"],
+  reported: number | null = null,
 ): Promise<{ usage: Usage; cost: number }> {
   const usage: Usage = {
     inputTokens: u.inputTokens ?? 0,
@@ -369,7 +404,7 @@ async function logDone(
     cacheWriteTokens: u.inputTokenDetails?.cacheWriteTokens ?? 0,
   };
   const price = await readPrice(model).catch(() => null);
-  const cost = price ? costUsd(price, usage) : 0;
+  const { cost, priced } = priceCall(price, usage, reported);
   // The answer is already paid for: a log failure is thrown after it is
   // reported, but never silently skipped (callers see CostLogUnavailableError).
   await writeCall({
@@ -379,7 +414,7 @@ async function logDone(
     cache_read_tokens: usage.cacheReadTokens,
     cache_write_tokens: usage.cacheWriteTokens,
     cost_usd: cost,
-    priced: price !== null,
+    priced,
     status: "ok",
   });
   return { usage, cost };
@@ -535,7 +570,7 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
   const base = {
     site: opts.site,
     job: opts.job,
-    model: opts.model,
+    model: route.id,
     background: opts.background,
     workflow_id: ctx.workflowId,
     step_id: ctx.stepId,
@@ -544,13 +579,12 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
   const { tenant } = route;
 
   let price: Price | null | undefined;
-  const priceOf = async () => (price === undefined ? (price = await readPrice(opts.model).catch(() => null)) : price);
+  const priceOf = async () => (price === undefined ? (price = await readPrice(route.id).catch(() => null)) : price);
   let total = 0;
   let logFailure: unknown = null;
 
-  const log = async (usage: Usage, status: "ok" | "stopped") => {
-    const p = await priceOf();
-    const cost = p ? costUsd(p, usage) : 0;
+  const log = async (usage: Usage, status: "ok" | "stopped", reported: number | null = null) => {
+    const { cost, priced } = priceCall(await priceOf(), usage, reported);
     total = Math.round((total + cost) * 1e6) / 1e6;
     try {
       await writeCall({
@@ -560,7 +594,7 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
         cache_read_tokens: usage.cacheReadTokens,
         cache_write_tokens: usage.cacheWriteTokens,
         cost_usd: cost,
-        priced: p !== null,
+        priced,
         status,
       });
     } catch (err) {
@@ -609,7 +643,7 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
             const usage = usageOf(part.usage);
             // The next step re-sends this one's input and output.
             input = usage.inputTokens + usage.outputTokens;
-            await log(usage, "ok");
+            await log(usage, "ok", gatewayCost(part.providerMetadata));
             break;
           }
           case "error":

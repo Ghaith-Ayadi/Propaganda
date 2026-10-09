@@ -8,7 +8,7 @@
 //   contest  a person pushed back on a flag in one sentence: draft the
 //            changes and the argument they submit to the Guardian
 // It never writes a claim: anything for the knowledge base goes through the
-// Guardian. Model: the base tier (Sonnet).
+// Guardian. Model: the base tier (MODELS.base).
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { ask } from "./ai.js";

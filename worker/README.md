@@ -148,10 +148,10 @@ The Pitcher turns the request into ideas (origin team) and pitches them; the
 Writer finds the approved brief whose title matches the request.
 
 **Settings** (the stack's `.env`): `SUPABASE_URL` (the compose file sets the
-public API host), `SERVICE_ROLE_KEY` (already there), whatever the gateway
-needs to reach Claude (the plan is Ayadi's Claude Max subscription; the
-gateway's resolver doesn't have that path yet and sends Claude ids to the AI
-Gateway), `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` for web search (without
+public API host), `SERVICE_ROLE_KEY` (already there), `AI_GATEWAY_API_KEY`
+(every agent runs on DeepSeek V4 Pro through the AI Gateway by default, or on a
+tenant's own Anthropic key, see `DEFAULT_MODEL` and `BYOK_MODEL` in
+`api/_ai/gateway.ts`), `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` for web search (without
 them the agents work from what they were given), and optionally
 `AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `VOICE_FROM`, `PITCHER_BATCH_CRON`.
 ## The knowledge base agents

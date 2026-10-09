@@ -4,7 +4,7 @@
 // (verdict.ts) and rules through kb_guardian_decide. It rejects agents' proposals,
 // never a person's Remember (the database refuses that too).
 //
-// Model: the advanced tier (Opus). It never sees the whole knowledge base:
+// Model: the advanced tier (MODELS.advanced). It never sees the whole knowledge base:
 // only the proposal, its evidence and the claims retrieved around it.
 
 import { readFileSync } from "node:fs";
