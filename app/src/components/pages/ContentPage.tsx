@@ -1,6 +1,6 @@
-// #/content/<channel>[/<sub-channel>]. The header (Content, with a tab per
-// channel) sits in the shared container; the body runs full width. Blog's body
-// is a row of collections over the collection view (the 0.1 post table); the
+// #/content/<channel>[/<sub-channel>]. Two plain tab rows, both in the shared
+// container: the channels in the header, then (for Blog) the collections with
+// a + for a new one. Below them, the collection view (the 0.1 post table); the
 // other channels come after 0.2.
 
 import { useEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { cx } from "@/utils/cx";
 import type { Collection } from "@/types";
 import { useActiveCollection, setActiveCollection } from "@/lib/activeCollection";
 import { CollectionTabs } from "@/components/CollectionTabs";
-import { PageHeader, PageTabs, PageBody } from "@/components/shell/PageHeader";
+import { PageHeader, PageTabs, PageBody, CONTAINER } from "@/components/shell/PageHeader";
 import { go, goPage, usePageRest } from "@/lib/route";
 import { CHANNELS, contentRest, parseContentRest, type ChannelId } from "./contentTree";
 import { NewCollectionDialog } from "@/components/NewCollectionDialog";
@@ -42,8 +42,8 @@ export function ContentPage() {
           />
         }
       />
+      {channel === "blog" && <Collections active={sub ?? active} />}
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-        {channel === "blog" && <Collections active={sub ?? active} />}
         {current.live ? (
           <CollectionTabs />
         ) : (
@@ -59,31 +59,30 @@ export function ContentPage() {
 function Collections({ active }: { active: string | null }) {
   const collections = useLiveQuery(() => db.collections.orderBy("position").toArray(), [], [] as Collection[]);
   const [adding, setAdding] = useState(false);
+  const selected = active && collections.some((c) => c.name === active) ? active : (collections[0]?.name ?? "");
   return (
-    <nav aria-label="Collections" className="flex items-center gap-1 overflow-x-auto border-b border-secondary px-4 py-2 [scrollbar-width:none] md:px-8">
-      {collections.map((c) => (
-        <a
-          key={c.name}
-          href={`#/content/${contentRest("blog", c.name)}`}
-          aria-current={c.name === active ? "page" : undefined}
-          className={cx(
-            "shrink-0 rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition",
-            c.name === active ? "bg-primary text-primary shadow-xs ring-1 ring-secondary ring-inset" : "text-secondary hover:bg-primary_hover hover:text-primary",
-          )}
+    <div className="border-b border-secondary">
+      <div className={cx(CONTAINER, "flex items-end gap-1 pt-3")}>
+        {collections.length > 0 && (
+          <div className="-mb-px min-w-0">
+            <PageTabs
+              label="Collections"
+              items={collections.map((c) => ({ id: c.name, label: c.emoji ? `${c.emoji} ${c.name}` : c.name }))}
+              selected={selected}
+              onChange={(name) => goPage("content", contentRest("blog", name))}
+            />
+          </div>
+        )}
+        <button
+          type="button"
+          aria-label="New collection"
+          title="New collection"
+          onClick={() => setAdding(true)}
+          className="mb-1.5 shrink-0 rounded-md p-1.5 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
         >
-          {c.emoji ? `${c.emoji} ` : ""}
-          {c.name}
-        </a>
-      ))}
-      <button
-        type="button"
-        aria-label="New collection"
-        title="New collection"
-        onClick={() => setAdding(true)}
-        className="shrink-0 rounded-lg p-2 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
-      >
-        <Plus className="size-4" />
-      </button>
+          <Plus className="size-4" />
+        </button>
+      </div>
       {adding && (
         <NewCollectionDialog
           onClose={() => setAdding(false)}
@@ -97,6 +96,6 @@ function Collections({ active }: { active: string | null }) {
           }}
         />
       )}
-    </nav>
+    </div>
   );
 }
