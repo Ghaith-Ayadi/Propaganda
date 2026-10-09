@@ -121,8 +121,8 @@ async function main() {
     create schema private;
     create table private.superadmins (user_id uuid primary key);
     insert into private.superadmins values ('${admin}');
-    create table public.sites (id text primary key);
-    insert into public.sites values ('${SITE}');
+    create table public.sites (id text primary key, name text not null default '');
+    insert into public.sites values ('${SITE}', 'Test tenant');
   `);
   await startWorker();
 
@@ -227,6 +227,21 @@ async function main() {
   check(dispatched.output === "got: Check the post about pricing", "it got Chat's task");
   check(dispatched.input?.[0]?.post === null, "no post named: post is null");
   check((await api(`/runs?site=${SITE}`)).json.runs.some((r) => r.id === started.json.runId), "listed on the Runs page");
+
+  console.log("run now (Admin)");
+  check((await api("/triggers", { headers: { Authorization: `Bearer ${jwt(stranger)}` } })).status === 403, "triggers: not a superadmin: 403");
+  const trig = await api("/triggers");
+  check(trig.status === 200 && trig.json.triggers.some((t) => t.id === "scout" && t.scope === "tenant"), "lists the triggers");
+  check(trig.json.triggers.some((t) => t.id === "listener-granola" && t.scope === "all"), "a trigger for every tenant is marked so");
+  check(trig.json.tenants.some((t) => t.id === SITE && t.name === "Test tenant"), "lists the tenants for the picker");
+  check((await api("/triggers/nope", { method: "POST", body: { site: SITE } })).status === 404, "unknown trigger: 404");
+  check((await api("/triggers/scout", { method: "POST", body: {} })).status === 400, "a tenant trigger needs a tenant: 400");
+  check((await api("/triggers/scout", { method: "POST", body: { site: "bad" } })).status === 400, "bad site: 400");
+  check((await api("/triggers/scout", { method: "POST", body: { site: "nosuchsite0000a" } })).status === 422, "unknown tenant: 422");
+  const fired = await api("/triggers/writer-voice-suggest", { method: "POST", body: { site: SITE } });
+  check(fired.status === 200 && fired.json.runs.length === 1, "Run now starts one run");
+  const manualRun = await until("manual run listed", async () => (await api(`/runs?site=${SITE}&limit=200`)).json.runs.find((r) => r.id === fired.json.runs[0]));
+  check(manualRun.name === "writer:voice-suggest" && manualRun.site === SITE, "it is the agent's own workflow, for that tenant, on the Runs page");
 
   console.log("errors");
   check((await api("/runs/nope")).status === 404, "unknown run: 404");
