@@ -24,7 +24,7 @@ ln -sfn ../../app/node_modules "$HERE/node_modules"
 cd "$HERE"
 node seed.mjs
 failed=0
-for suite in access addresses hosts sites realtime; do
+for suite in access addresses hosts sites realtime waitlist; do
   echo "== $suite"
   node "$suite.mjs" || failed=1
 done
