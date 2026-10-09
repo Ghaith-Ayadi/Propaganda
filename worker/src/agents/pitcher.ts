@@ -84,7 +84,7 @@ interface Judged extends Judgement {
   changed: string;
 }
 
-function parseJudgements(ids: string[]) {
+export function parseJudgements(ids: string[]) {
   return (v: unknown): Judged[] => {
     const list = arr(obj(v, "The answer").ideas, "ideas");
     const out = list.map((x, i) => {
@@ -186,7 +186,44 @@ function goalsBlock(goals: Goals | null): string {
   ].join("\n");
 }
 
-const PITCHER_SYSTEM = `You are the Pitcher for Propaganda, a content team that runs a tenant's blog. You turn ideas into pitches that serve the tenant's goals for the quarter. You are blunt about weak ideas: an idea with no reason to be written now is rejected and kept for later, and that's a good outcome.
+/**
+ * The judging prompt: every idea in `ideas` against the goals and what exists.
+ * Pure, so Admin's Arena (src/arena.ts) asks other models exactly this.
+ */
+export function judgePrompt(o: {
+  now: Date;
+  tenantName: string | undefined;
+  goals: Goals | null;
+  existing: string[];
+  ideas: IdeaRow[];
+  close: Map<string, Seen | null>;
+}): string {
+  const { now, tenantName, goals, existing, ideas, close } = o;
+  return `Today is ${now.toISOString().slice(0, 10)}. Judge each idea below for ${tenantName ?? "the tenant"}.
+
+${goalsBlock(goals)}
+
+Already published or in the pipeline:
+${existing.join("\n") || "(nothing yet)"}
+
+Ideas:
+${ideas.map((i) => ideaBlock(i) + (close.get(i.id) ? `\n  close to something already ${seenLine(close.get(i.id)!)}` : "")).join("\n\n")}
+
+For each idea, answer:
+- topics: the one or two goal topics it belongs to (exact names from the goals; empty if none fit).
+- targetSearch: the exact target search it would rank for, or "".
+- timely: true only if it's tied to news, a date or a change that makes it worth less later; expiresAt: YYYY-MM-DD when it stops being worth it.
+- answersGap: one sentence when it answers a question customers keep asking, an objection, or a claim the tenant makes without backing (say which); else "".
+- demand: one sentence with the search-demand evidence in the idea (numbers only if the evidence has them); else "".
+- duplicateOf: the title of a published or pipeline post it mostly repeats; else "".
+- replacesFlagged: the title of a flagged post it would replace; else "".
+- searches: one or two web searches that would find good sources for it.
+- changed: only for an idea marked "close to something already ...": one sentence on what materially changed since then (a new source, news, a new number), or "" if nothing did.
+
+Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": "", "timely": false, "expiresAt": "", "answersGap": "", "demand": "", "duplicateOf": "", "replacesFlagged": "", "searches": [], "changed": ""}]}`;
+}
+
+export const PITCHER_SYSTEM = `You are the Pitcher for Propaganda, a content team that runs a tenant's blog. You turn ideas into pitches that serve the tenant's goals for the quarter. You are blunt about weak ideas: an idea with no reason to be written now is rejected and kept for later, and that's a good outcome.
 You never write the post. You write briefs a writer can work from.
 Use "tenant" for the business you work for. Never invent facts about the tenant: what it knows is in the knowledge base claims you're given.`;
 
@@ -259,28 +296,7 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
         model: MODELS.base,
         maxOutputTokens: 6000,
         system: PITCHER_SYSTEM,
-        prompt: `Today is ${now.toISOString().slice(0, 10)}. Judge each idea below for ${ctx.tenant?.name ?? "the tenant"}.
-
-${goalsBlock(goals)}
-
-Already published or in the pipeline:
-${existing.join("\n") || "(nothing yet)"}
-
-Ideas:
-${chunk.map((i) => ideaBlock(i) + (close.get(i.id) ? `\n  close to something already ${seenLine(close.get(i.id)!)}` : "")).join("\n\n")}
-
-For each idea, answer:
-- topics: the one or two goal topics it belongs to (exact names from the goals; empty if none fit).
-- targetSearch: the exact target search it would rank for, or "".
-- timely: true only if it's tied to news, a date or a change that makes it worth less later; expiresAt: YYYY-MM-DD when it stops being worth it.
-- answersGap: one sentence when it answers a question customers keep asking, an objection, or a claim the tenant makes without backing (say which); else "".
-- demand: one sentence with the search-demand evidence in the idea (numbers only if the evidence has them); else "".
-- duplicateOf: the title of a published or pipeline post it mostly repeats; else "".
-- replacesFlagged: the title of a flagged post it would replace; else "".
-- searches: one or two web searches that would find good sources for it.
-- changed: only for an idea marked "close to something already ...": one sentence on what materially changed since then (a new source, news, a new number), or "" if nothing did.
-
-Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": "", "timely": false, "expiresAt": "", "answersGap": "", "demand": "", "duplicateOf": "", "replacesFlagged": "", "searches": [], "changed": ""}]}`,
+        prompt: judgePrompt({ now, tenantName: ctx.tenant?.name, goals, existing, ideas: chunk, close }),
       },
       parseJudgements(chunk.map((i) => i.id)),
     );

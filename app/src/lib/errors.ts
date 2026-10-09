@@ -48,6 +48,9 @@
 //   GOALS-PROFILE-SAVE  the onboarding answers couldn't be saved
 //   GOALS-PLAN-SAVE     the plan drop (text or files) couldn't be saved
 //   GOALS-CADENCE       changing the batching setting failed
+//   ARENA-LOAD          Admin's Arena couldn't load tenants, calls or past votes
+//   ARENA-RUN           an Arena round couldn't be run
+//   ARENA-VOTE          an Arena vote couldn't be saved
 
 import { BackendError } from "@/lib/supabase";
 
