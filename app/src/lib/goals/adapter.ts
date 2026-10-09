@@ -21,7 +21,7 @@ import type {
   TenantGoalsContext,
 } from "./types";
 import { placeholderAdapter } from "./placeholder";
-import { liveAdapter, liveGoalsReady } from "./live";
+import { liveAdapter } from "./live";
 import { UI_PREVIEW } from "@/lib/preview";
 
 export interface GoalsAdapter {
@@ -72,22 +72,16 @@ export interface GoalsAdapter {
  * The real tables, always, outside the UI preview: a tenant with no goals sees
  * an empty page, never samples. In the UI preview (no server), the placeholder.
  */
-const sample = () => UI_PREVIEW && !liveGoalsReady();
+const sample = () => UI_PREVIEW;
 const pick = (): GoalsAdapter => (sample() ? placeholderAdapter : liveAdapter);
 
 export const goalsAdapter: GoalsAdapter = {
   get placeholder() {
     return sample();
   },
-  subscribe(cb) {
-    const a = liveAdapter.subscribe(cb);
-    const b = UI_PREVIEW ? placeholderAdapter.subscribe(cb) : () => {};
-    return () => {
-      a();
-      b();
-    };
-  },
-  version: () => liveAdapter.version() * 1_000_000 + (UI_PREVIEW ? placeholderAdapter.version() : 0),
+  // The preview has no server: it never subscribes to the live tables.
+  subscribe: (cb) => (UI_PREVIEW ? placeholderAdapter.subscribe(cb) : liveAdapter.subscribe(cb)),
+  version: () => (UI_PREVIEW ? placeholderAdapter.version() : liveAdapter.version()),
   context: () => pick().context(),
   quarters: () => pick().quarters(),
   quarterGoals: (q) => pick().quarterGoals(q),
