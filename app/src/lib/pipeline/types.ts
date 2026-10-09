@@ -2,8 +2,9 @@
 //
 // Shaped after the draft schema in /mnt/project-files/gaia-content-flow/README.md:
 // a pitch is a `briefs` row with a `pitched` status plus pillar, fit, sources,
-// reviewer and batch. None of those columns exist yet, so the data comes from
-// the placeholder adapter (lib/pipeline/adapter.ts) until they do.
+// reviewer and batch (supabase/migrations/20261008000030_pitch_and_write.sql).
+// lib/pipeline/live.ts reads them; the placeholder adapter (adapter.ts) serves
+// example data in the UI preview only.
 
 import type { PostFlag } from "@/lib/knowledge/types";
 
@@ -207,7 +208,8 @@ export interface TasteEntry {
   origin: string;
 }
 
-export type Batching = "weekly" | "flood";
+/** How pitches reach the board (agent_settings.batch_cadence): weekly batches, all at once, or each as it is written. */
+export type Batching = "weekly" | "flood" | "live";
 
 export interface PipelineSettings {
   /** Posts a week (the Volume goal, spread over the quarter). */
@@ -228,6 +230,8 @@ export interface PipelineSnapshot {
   batches: Batch[];
   tasteLog: TasteEntry[];
   settings: PipelineSettings;
-  /** True while the data is example data from the placeholder adapter. */
+  /** True while the data is example data from the placeholder adapter (UI preview only). */
   placeholder: boolean;
+  /** True until the tenant's data has loaded once (live only). */
+  loading?: boolean;
 }

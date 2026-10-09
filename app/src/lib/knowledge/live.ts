@@ -327,24 +327,16 @@ export const liveKb: KnowledgeBackend = {
     withCode(
       "KB-LOAD",
       (async () => {
+        // kb_flags.urgency isn't on the server yet (kb-ui/20261008000012_kb_ui_views.sql,
+        // not applied): every flag reads as normal, newest first, until it is.
         let query = sb
           .from("kb_flags")
-          .select("id, kind, status, post, claim, batch, urgency, created, posts(title)", { count: "exact" })
+          .select("id, kind, status, post, claim, batch, created, posts(title)", { count: "exact" })
           .eq("site", siteId())
           .in("status", q.status === "open" ? OPEN : CLOSED);
         query = q.kind === "all" ? query.neq("kind", "recheck") : query.eq("kind", q.kind);
-        let urgentQuery = sb
-          .from("kb_flags")
-          .select("id", { count: "exact", head: true })
-          .eq("site", siteId())
-          .eq("urgency", "high")
-          .in("status", q.status === "open" ? OPEN : CLOSED);
-        urgentQuery = q.kind === "all" ? urgentQuery.neq("kind", "recheck") : urgentQuery.eq("kind", q.kind);
-        // Urgent first ("high" sorts before "normal"), then newest.
-        const [{ data, error, count, status }, urgent] = await Promise.all([
-          query.order("urgency").order("created", { ascending: false }).range(q.offset, q.offset + q.limit - 1),
-          urgentQuery,
-        ]);
+        const { data, error, count, status } = await query.order("created", { ascending: false }).range(q.offset, q.offset + q.limit - 1);
+        const urgent = { count: 0 };
         if (error) await must(Promise.resolve({ data, error, status }));
         const rows = data ?? [];
         const claimIds = [...new Set(rows.map((r: Row) => r.claim))];

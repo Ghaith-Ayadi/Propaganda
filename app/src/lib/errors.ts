@@ -48,6 +48,9 @@
 //   GOALS-PROFILE-SAVE  the onboarding answers couldn't be saved
 //   GOALS-PLAN-SAVE     the plan drop (text or files) couldn't be saved
 //   GOALS-CADENCE       changing the batching setting failed
+//   PIPELINE-LOAD       the pipeline couldn't load its pitches, batches or decisions
+//   PIPELINE-SAVE       a decision on a pitch or a draft couldn't be saved
+//   PIPELINE-AGENT      the Writer or the Pitcher couldn't be started from the pipeline
 
 import { BackendError } from "@/lib/supabase";
 

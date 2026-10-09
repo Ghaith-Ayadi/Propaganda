@@ -2,22 +2,17 @@
 // conversation; this file gives it a transport and keeps the conversation list.
 // The page and hooks only see `chatBackend`.
 //
-// ┌──────────────────────────────────────────────────────────────────────────┐
-// │ PLACEHOLDER. There is no chat backend yet: no conversations or messages   │
-// │ tables, no /api/chat. Until they exist, placeholderBackend keeps          │
-// │ conversations in this browser (localStorage, per site) and its transport  │
-// │ streams scripted replies, with made-up costs, as the SDK's UI message     │
-// │ chunks. Nothing here reaches a model.                                     │
-// │                                                                          │
-// │ httpBackend is the real one: the SDK's DefaultChatTransport on            │
-// │ POST /api/chat, which answers with createUIMessageStream. Its model calls │
-// │ go through the cost gateway (api/_ai/gateway.ts, job "chat"); agent work  │
-// │ longer than a request starts on the DBOS worker and arrives as a handoff  │
-// │ with its runId. Set VITE_CHAT_BACKEND=http once it is deployed.           │
-// └──────────────────────────────────────────────────────────────────────────┘
+// httpBackend is the real one, in every build: the SDK's DefaultChatTransport
+// on POST /api/chat, which answers with createUIMessageStream. Its model calls
+// go through the cost gateway (api/_ai/gateway.ts, job "chat"); agent work
+// longer than a request starts on the DBOS worker and arrives as a handoff
+// with its runId. placeholderBackend (UI preview only, VITE_UI_PREVIEW) keeps
+// conversations in this browser and streams scripted replies; nothing there
+// reaches a model.
 
 import { DefaultChatTransport, type ChatTransport, type UIMessageChunk } from "ai";
 import { authHeader, newId } from "@/lib/supabase";
+import { UI_PREVIEW } from "@/lib/preview";
 import type { AgentName, ChatUIMessage, Citation, Conversation, Handoff, QuickAction } from "./types";
 
 export interface ChatBackend {
@@ -324,7 +319,8 @@ export const httpBackend: ChatBackend = {
   },
 };
 
-export const chatBackend: ChatBackend = import.meta.env.VITE_CHAT_BACKEND === "http" ? httpBackend : placeholderBackend;
+/** The real Chat (api/chat) in every build; the scripted placeholder in the UI preview only. */
+export const chatBackend: ChatBackend = UI_PREVIEW ? placeholderBackend : httpBackend;
 
 /** How each agent is named on screen. */
 export const AGENT_LABEL: Record<AgentName, string> = {
