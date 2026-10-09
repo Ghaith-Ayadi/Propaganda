@@ -5,7 +5,8 @@
 // under Content. The pitch brief opens over the board at #/pipeline/pitch/<id>;
 // review happens in the post screen's Review tab.
 //
-// Not a contained page: the board and the calendar run edge to edge.
+// The header sits in the shared container; the board and the calendar run
+// edge to edge below it.
 
 import { useMemo, useState } from "react";
 import { Plus } from "@untitledui/icons";
@@ -78,7 +79,6 @@ export function PipelinePage() {
       <PageHeader
         title="Content pipeline"
         actions={<BatchButton />}
-        contained={false}
       />
 
       <div className="flex flex-col xl:min-h-0 xl:flex-1 xl:flex-row">

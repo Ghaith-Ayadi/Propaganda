@@ -6,7 +6,6 @@ import { Toaster } from "@/components/base/toast/toast";
 import { NavBar } from "@/components/shell/NavBar";
 import { PhoneTabs } from "@/components/shell/PhoneTabs";
 import { EmptyPage } from "@/components/shell/EmptyPage";
-import { ContentDrawer } from "@/components/pages/ContentDrawer";
 import { Editor } from "@/components/Editor";
 import { AttributePanel } from "@/components/AttributePanel";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -165,15 +164,7 @@ function Shell() {
           )}
         </>
       ) : (
-        layout.sidebar && (
-          <>
-            {sidebar}
-            {/* Writing a post: the blog's drawer stays beside it, as in 0.1. */}
-            {route.view === "post" && currentPost && (
-              <ContentDrawer channel="blog" activeCollection={currentPost.type || null} currentPostId={currentPost.id} />
-            )}
-          </>
-        )
+        layout.sidebar && sidebar
       )}
       {route.view === "brief" ? (
         <BriefPage key={route.id} id={route.id} />
