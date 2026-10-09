@@ -22,7 +22,12 @@ import { useTheme } from "@/lib/theme";
 import { countWords, formatWordCount } from "@/lib/format";
 import { consumeTitleFocus } from "@/lib/postFocus";
 import { useEditorStyles } from "@/lib/editorStyles";
-import { toggleDrawer, useIsMobile } from "@/lib/mobile";
+import { setDrawer, toggleDrawer, useIsMobile } from "@/lib/mobile";
+import { useLayout } from "@/lib/layout";
+import { TextSelection } from "prosemirror-state";
+import { reviewMarksKey, reviewMarksPlugin } from "@/lib/review/marks";
+import { useReviewPublisher } from "@/lib/review/notes";
+import { activate, registerEditor, reviewState, setFound, setHover, subscribeReview } from "@/lib/review/store";
 import type { Collection } from "@/types";
 import { WikilinkAutocomplete } from "@/components/WikilinkAutocomplete";
 import {
@@ -37,7 +42,13 @@ interface Props {
 const SAVE_DEBOUNCE_MS = 100;
 
 export function Editor({ post }: Props) {
-  const editor = useCreateBlockNote({ uploadFile });
+  // The Review tab's notes, built here so the text shows them on any side tab.
+  useReviewPublisher(post.id, usePipelineItemForPost(post.id));
+  const editor = useCreateBlockNote({
+    uploadFile,
+    // The Review tab's highlights (lib/review): decorations only, never saved.
+    _extensions: { reviewMarks: { plugin: reviewMarksPlugin(setFound) } },
+  });
   const [theme] = useTheme();
   const lastLoadedId = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -198,9 +209,12 @@ export function Editor({ post }: Props) {
     return () => root.removeEventListener("keydown", onKeyDown, true);
   }, [editor, post.id]);
 
+  useReviewMarks(editor, post.id, editorRootRef);
+
   return (
     <div className="mx-auto w-full max-w-[760px] px-5 md:px-10">
       <style>{editorCss}</style>
+      <style>{REVIEW_MARK_CSS}</style>
       <PostNav post={post} showTitle={!titleVisible} />
       <div className="pt-8 md:pt-12">
         <input
@@ -270,6 +284,109 @@ export function Editor({ post }: Props) {
     </div>
   );
 }
+
+type AnyEditor = ReturnType<typeof useCreateBlockNote>;
+
+/**
+ * Keeps the Review tab's highlights in the text in step with its cards: feeds
+ * the passages to the marks plugin, lights up the hovered and active one,
+ * scrolls to a passage when its card is clicked, and opens the Review tab when
+ * a highlight is clicked.
+ */
+function useReviewMarks(editor: AnyEditor, postId: string, rootRef: React.RefObject<HTMLDivElement | null>) {
+  const isMobile = useIsMobile();
+  const [, setLayout] = useLayout();
+
+  useEffect(() => {
+    let seen = -1;
+    const push = () => {
+      const view = editor.prosemirrorView;
+      if (!view) return;
+      const r = reviewState();
+      const mine = r.postId === postId;
+      const cur = reviewMarksKey.getState(view.state);
+      const anchors = mine ? r.anchors : [];
+      const hover = mine ? r.hover : null;
+      const active = mine ? r.active : null;
+      if (cur && (cur.anchors !== anchors || cur.hover !== hover || cur.active !== active)) {
+        view.dispatch(view.state.tr.setMeta(reviewMarksKey, { anchors, hover, active }).setMeta("addToHistory", false));
+      }
+      // A card was clicked: bring its passage into view.
+      if (mine && r.activeFrom === "panel" && r.active && r.seq !== seen) {
+        seen = r.seq;
+        const el = rootRef.current?.querySelector(`[data-review-id="${CSS.escape(r.active)}"]`);
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    };
+    push();
+    // The view mounts a tick after the editor: try again once it's there.
+    const t = setTimeout(push, 0);
+    const unsub = subscribeReview(push);
+    return () => {
+      clearTimeout(t);
+      unsub();
+    };
+  }, [editor, postId, rootRef]);
+
+  useEffect(() => {
+    const range = (id: string) => {
+      const view = editor.prosemirrorView;
+      const r = view && reviewMarksKey.getState(view.state)?.ranges.get(id);
+      return view && r ? { view, ...r } : null;
+    };
+    registerEditor({
+      replace(id, text) {
+        const r = range(id);
+        if (!r) return false;
+        r.view.dispatch(r.view.state.tr.insertText(text, r.from, r.to));
+        return true;
+      },
+      select(id) {
+        const r = range(id);
+        if (!r) return false;
+        r.view.dispatch(r.view.state.tr.setSelection(TextSelection.create(r.view.state.doc, r.from, r.to)).scrollIntoView());
+        r.view.focus();
+        return true;
+      },
+    });
+    return () => registerEditor(null);
+  }, [editor]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const idOf = (e: Event) => (e.target as HTMLElement | null)?.closest?.("[data-review-id]")?.getAttribute("data-review-id") ?? null;
+    const onOver = (e: MouseEvent) => setHover(idOf(e));
+    const onLeave = () => setHover(null);
+    const onClick = (e: MouseEvent) => {
+      const id = idOf(e);
+      if (!id) return;
+      activate(id, "editor");
+      if (isMobile) setDrawer("attributes");
+      else setLayout({ attributes: true });
+    };
+    root.addEventListener("mouseover", onOver);
+    root.addEventListener("mouseleave", onLeave);
+    root.addEventListener("click", onClick);
+    return () => {
+      root.removeEventListener("mouseover", onOver);
+      root.removeEventListener("mouseleave", onLeave);
+      root.removeEventListener("click", onClick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootRef, isMobile]);
+}
+
+/** One colour per Review section: pitch notes neutral, source checks red, knowledge base orange. */
+const REVIEW_MARK_CSS = `
+.review-mark { cursor: pointer; border-radius: 2px; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; transition: background-color 120ms; }
+.review-mark--pitch { text-decoration-color: var(--color-utility-neutral-400); text-decoration-style: dashed; }
+.review-mark--sources { text-decoration-color: var(--color-utility-red-500); }
+.review-mark--kb { text-decoration-color: var(--color-utility-orange-500); }
+.review-mark--pitch.is-hover, .review-mark--pitch.is-active { background: var(--color-utility-neutral-100); }
+.review-mark--sources.is-hover, .review-mark--sources.is-active { background: var(--color-utility-red-100); }
+.review-mark--kb.is-hover, .review-mark--kb.is-active { background: var(--color-utility-orange-100); }
+`;
 
 function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
   const peers = useLiveQuery(

@@ -21,7 +21,7 @@ export interface PipelineAdapter {
   reset(): void;
 }
 
-const VERSION = 3;
+const VERSION = 4;
 const key = () => `propaganda:pipeline-placeholder:v${VERSION}:${safeSiteId()}`;
 
 function safeSiteId(): string {
@@ -112,6 +112,7 @@ function seed(): PipelineItem[] {
     createdAt: now,
     updatedAt: now,
   };
+  const chains = lines("What changed on Scale", "The three chains auditors like", "The one they flag");
   return [
     {
       ...base,
@@ -306,8 +307,12 @@ function seed(): PipelineItem[] {
       length: "800–1,200 words",
       angle: "The three chains auditors like, and the one they flag.",
       audience: "Controllers on the Scale plan.",
-      outline: lines("What changed on Scale", "The three chains auditors like", "The one they flag"),
-      notes: [{ lineId: null, text: "Provide examples here, on “The three chains auditors like”", done: true }],
+      outline: chains,
+      notes: [
+        { lineId: chains[1].id, text: "Provide examples here, one per chain.", done: true },
+        { lineId: chains[2].id, quote: "The chain they flag every time", text: "Say why auditors flag it, in one sentence, before naming it." },
+        { lineId: null, text: "Keep it under 1,000 words: controllers skim." },
+      ],
       batch: 1,
       review: {
         paragraphs: [
@@ -325,6 +330,7 @@ function seed(): PipelineItem[] {
             quote: "cut audit findings on AP by 40%",
             detail: "The Haldane call says “about a third”. 40% isn't in any source.",
             where: "Haldane call, Oct 2, 14:20",
+            fix: "cut audit findings on AP by about a third",
           },
           {
             id: "c3",
@@ -334,6 +340,18 @@ function seed(): PipelineItem[] {
           },
         ],
         ownClaims: [{ id: "o1", sentence: "Approvers can be added mid-chain without restarting it.", state: "open" }],
+        flags: [
+          {
+            id: "k1",
+            kind: "contradiction",
+            status: "open",
+            quote: "Haldane moved every vendor under €5,000 onto it",
+            claim: "Haldane runs the two-step chain for vendors under €2,500.",
+            explanation: "The knowledge base has Haldane's threshold at €2,500, from the Oct 2 call. Above that they add a budget owner.",
+            suggestedAction: "edit_wording",
+            fix: "Haldane moved every vendor under €2,500 onto it",
+          },
+        ],
       },
     },
     {
