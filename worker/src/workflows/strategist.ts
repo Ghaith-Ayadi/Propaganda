@@ -50,6 +50,7 @@ import {
   quarterBounds,
   quarterLabelOf,
   reviewPerMonth,
+  thinAnswers,
   validate,
   volumeCap,
   weeklyNotes,
@@ -86,6 +87,8 @@ interface Pack {
   site: { id: string; name: string; domain: string; blog: string };
   website: string;
   perMonth: number;
+  /** False when review capacity was never answered and perMonth is the default. */
+  perMonthAnswered: boolean;
   answers: Record<string, string>;
   plan: { text: string; files: string[] };
   pages: { url: string; title: string; text: string }[];
@@ -152,6 +155,7 @@ async function gather(site: string, request: string, now: Date): Promise<Pack> {
     site: { id: s.id, name: s.name, domain: s.domain ?? "", blog: s.domain || `${s.slug}.propaganda.pub` },
     website,
     perMonth: reviewPerMonth(set["strategist.reviewPerMonth"]),
+    perMonthAnswered: Number.isFinite(parseInt(String(set["strategist.reviewPerMonth"] ?? ""), 10)),
     answers: prof?.answers ?? {},
     plan: { text: [prof?.plan_text ?? "", ...planTexts].filter(Boolean).join("\n\n").slice(0, 30_000), files: (prof?.plan_files ?? []).map((f) => f.name) },
     pages,
@@ -184,7 +188,7 @@ async function market(site: string, pack: Pack): Promise<Market> {
   if (!dataForSeoConfigured()) return out;
   const w = { site, ...LOCATION };
   const ourDomain = hostOf(pack.website);
-  const competitorDomains = lines(pack.answers.watch).map(hostOf).filter((d) => d && d.includes(".")).slice(0, 2);
+  const competitorDomains = await competitorHosts(site, lines(pack.answers.watch), ourDomain);
   const tries: Promise<void>[] = [];
   if (seeds.length) tries.push(keywordIdeas(w, JOB, seeds, 60).then((k) => void (out.keywords = k)));
   if (ourDomain) tries.push(rankedKeywords(w, JOB, ourDomain, 50).then((k) => void (out.ours = k)));
@@ -208,6 +212,30 @@ async function market(site: string, pack: Pack): Promise<Market> {
   return out;
 }
 
+/**
+ * The watch list as hostnames. "airops.com" is one already; a bare name
+ * ("AirOps") is looked up with one web search and the first result's host
+ * wins, so a tenant who types names still gets competitor keyword data.
+ */
+async function competitorHosts(site: string, watch: string[], ourDomain: string): Promise<string[]> {
+  const hosts: string[] = [];
+  for (const line of watch) {
+    if (hosts.length >= 2) break;
+    let host = hostOf(line);
+    if (!host.includes(".") && searchConfigured()) {
+      try {
+        const hits = await searchWeb(line, 3, { site, job: JOB });
+        host = hits.map((h) => hostOf(h.url)).find((h) => h && h !== ourDomain) ?? "";
+      } catch (err) {
+        console.warn(`strategist: couldn't resolve "${line}": ${(err as Error).message}`);
+        host = "";
+      }
+    }
+    if (host && host.includes(".") && host !== ourDomain && !hosts.includes(host)) hosts.push(host);
+  }
+  return hosts;
+}
+
 /** Every keyword we have numbers for, by lower-cased query; our position wins over an idea's. */
 function keywordMap(m: Market): Map<string, Keyword> {
   const map = new Map<string, Keyword>();
@@ -218,17 +246,18 @@ function keywordMap(m: Market): Map<string, Keyword> {
 
 // ---- 2. the model call ----
 
-const SYSTEM = `You are the Strategist for a company's blog, inside Propaganda (a content platform). You propose the company's goals for a calendar quarter: how many posts, on which topics, which Google searches to win, which sites to watch. A person approves them; nothing you say is final.
+const SYSTEM = `You are the Strategist for a company's blog, inside Propaganda (a content platform). You propose the company's goals for a calendar quarter: how many posts, on which topics, which Google searches to win, which sites to watch. A person approves them; nothing you say is final. You are a strategist, not a form filler: a proposal that only restates what the company typed is a failure, however well it fits the rules.
 
 The rules (code checks them; a proposal that breaks one is sent back):
-1. Volume comes from capacity, never ambition. Never more than the cap you're given.
-2. 1 to 4 topics, best first, each a range (low to high). A topic is where three things meet: what they sell, what people search for, and what they can say with authority. The first topic gets the biggest range. The low ends add up to at most the volume. Name topics the way a customer would, never "cluster" or "pillar".
+1. Volume comes from capacity, never ambition. The cap you're given is a ceiling, not a target: propose less when more would mean a burst and then silence (after a Launch, the rest of the quarter should still carry about a post a week), and say so.
+2. 1 to 4 topics, best first, each a range (low to high). A topic is an angle with a point of view: what this company knows or believes that its competitors don't say, aimed at a named buyer. Name it the way the founder would say it in a sentence, never a product category, never one of their searches pasted back, never "cluster" or "pillar". The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume.
 3. Every topic gets pitched from every source; there is no internal/external split.
-4. 3 to 8 watched sites: regulators, trade press, competitors' blogs, standards bodies. Each tied to one topic, each with a why. Use real pages you know or that appear in the data; full https addresses.
-5. 5 to 10 target searches (10 when the data allows), all winnable: difficulty under 30 with at least 50 searches a month, or a search where they're already on page two. Each names one of the topics. A new domain targets at most 2 on page one by quarter end, and no AI-mention target in its first quarter (set it to null and say why).
+4. 3 to 8 watched sites: regulators, trade press, competitors' blogs, standards bodies, newsletters. Each is a source that keeps publishing (a site, a blog index, a news section: the root or one path segment), never one article, whitepaper or listicle. Each tied to one topic, each with a why. The competitors they named are always in. Use real sites you know or that appear in the data; full https addresses.
+5. 5 to 10 target searches (10 when the data allows, and at least 8 with 6 from the data when the data is rich): all winnable, which means difficulty under 30 with at least 50 searches a month, or a search where they're already on page two. A new domain targets long-tail searches only, never a head term (nothing over 5,000 searches a month), each one a question a post in its topic would literally answer. Each names one of the topics. A new domain targets at most 2 on page one by quarter end, and no AI-mention target in its first quarter (set it to null and say why).
 6. No Readership target without 4 weeks of reader data: value null, and say a target comes after 4 weeks of readers.
-7. Every number has a why (one line a person would say out loud) and a basis (what it came from: "your answer: 8 posts a month", "DataForSEO: 320 searches/month, difficulty 12").
-8. At most 3 questions: only what you couldn't decide alone.
+7. Every number has a why (one line a person would say out loud, adding something they didn't already know) and a basis (what it came from). A basis quotes only what they actually said or a number from the data: "your answer: 8 posts a month", "DataForSEO: 320 searches/month, difficulty 12". Never put words in their mouth: a default is called a default ("review capacity not answered; assumed 8 a month"), and anything you had to assume becomes a question.
+8. At most 3 questions: only what you couldn't decide alone. When their answers are thin (a blank, a one-liner, capacity not answered), ask at least one. Anything they said is coming up (a launch, an event, a deadline) gets either a place in the plan or a question, never silence.
+9. The summary is the strategy in one sentence the founder would say about the next three months, not a list of the numbers.
 
 Write plainly. No jargon, no hype. Never write "That's not X. It's Y."; say it as a comparison.
 
@@ -245,7 +274,13 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
   return [
     `Company: ${pack.site.name}. Website: ${pack.website || "(not given)"}. Blog: ${pack.site.blog}.`,
     `Proposal: ${o.kind}, for ${o.quarter}, covering ${o.covers.from} to ${o.covers.to} (${o.covers.weeks} weeks).`,
-    `Volume cap: ${o.cap} posts for those weeks (${o.hasHistory ? `last quarter they published ${pack.history.publishedLastQuarter}; at most +20%` : `their team can review ${pack.perMonth} posts a month, and a first quarter is at most 2 a week`}).`,
+    `Volume cap: ${o.cap} posts for those weeks (${
+      o.hasHistory
+        ? `last quarter they published ${pack.history.publishedLastQuarter}; at most +20%`
+        : pack.perMonthAnswered
+          ? `their team can review ${pack.perMonth} posts a month, and a first quarter is at most 2 a week`
+          : `they did not answer how many posts a month their team can review, so ${pack.perMonth} a month is assumed; a first quarter is at most 2 a week. Say it is assumed, and ask`
+    }).`,
     o.launch ? `They're new: a ${o.launch.target}-post Launch runs first and counts toward the volume.` : "",
     pack.request ? `\nWhat they asked for:\n${pack.request}` : "",
     `\nTheir onboarding answers:\n- What they sell, who buys: ${a.offer || "(blank)"}\n- Searches they want to be found by: ${a.searches || "(blank)"}\n- Competitors and sites to watch: ${a.watch || "(blank)"}\n- Coming up in the next three months: ${a.upcoming || "(blank)"}`,
@@ -291,7 +326,14 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     const hasHistory = pack.history.publishedLastQuarter > 0;
     const cap = volumeCap({ weeks: window.covers.weeks, perMonth: pack.perMonth, lastQuarterPublished: hasHistory ? pack.history.publishedLastQuarter : null });
     const launch = row.kind === "onboarding" && !hasHistory ? launchFor(now, window.join) : null;
-    const rules = { volumeCap: cap, hasHistory, readerWeeks: 0, keywords };
+    const rules = {
+      volumeCap: cap,
+      hasHistory,
+      readerWeeks: 0,
+      keywords,
+      seedSearches: lines(pack.answers.searches),
+      thinAnswers: thinAnswers(pack.answers, pack.perMonthAnswered),
+    };
 
     const ask = {
       site,
@@ -337,6 +379,8 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       website: pack.website,
       pages: pack.pages.map((p) => p.url),
       perMonth: pack.perMonth,
+      perMonthAnswered: pack.perMonthAnswered,
+      thinAnswers: rules.thinAnswers,
       cap,
       publishedLastQuarter: pack.history.publishedLastQuarter,
       keywords: m.keywords.length,

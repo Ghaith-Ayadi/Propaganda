@@ -231,6 +231,13 @@ try {
   check(t.winnable({ keyword: "x", volume: 50, difficulty: 29, position: null }), "easy and searched is winnable");
   check(!t.winnable({ keyword: "x", volume: 9900, difficulty: 78, position: null }), "hard is not");
   check(t.winnable({ keyword: "x", volume: 10, difficulty: 80, position: 14 }), "page two is");
+  check(!t.winnable({ keyword: "ai assistant", volume: 301000, difficulty: 25, position: null }, { newDomain: true }), "a head term is not, for a new domain, whatever its difficulty");
+  check(t.winnable({ keyword: "ai assistant", volume: 301000, difficulty: 25, position: null }), "but is with history");
+  check(t.looksLikeSource("https://www.airops.com/") && t.looksLikeSource("https://example.com/blog"), "a site or a blog index is a source");
+  check(!t.looksLikeSource("https://buffer.com/resources/ai-social-media-content-creation/") && !t.looksLikeSource("https://x.com/a/b.pdf"), "an article or a file is not");
+  check(t.thinAnswers({ offer: "We sell content software", searches: "AI CMS", watch: "AirOps", upcoming: "Beta" }, true), "a 4-word offer is thin");
+  check(t.thinAnswers(db.tenant_profile[0].answers, false), "capacity not answered is thin");
+  check(!t.thinAnswers(db.tenant_profile[0].answers, true), "Kontra's answers are not");
   const draft = t.parseDraft(GOOD);
   const rules = { volumeCap: 22, hasHistory: false, readerWeeks: 0, keywords: kw(KEYWORDS) };
   check(t.validate(draft, rules).length === 0, `a good proposal passes (${t.validate(draft, rules).join(" | ")})`);
@@ -238,17 +245,28 @@ try {
     ...GOOD,
     volume: r(40),
     readership: r(5000),
+    topics: [{ name: "Batch job retries", low: 6, high: 9, why: "x", basis: "y" }, ...GOOD.topics.slice(1)],
     ranking: { ...GOOD.ranking, searches: [...GOOD.ranking.searches, { query: "workflow orchestration", topic: "Nope", why: "Big." }], pageOneTarget: r(5), aiMentionTarget: r(2) },
+    watchedSites: [...GOOD.watchedSites, { url: `${WEB}/resources/whitepapers/ai-in-your-cms`, topic: "Reliability", why: "An article." }],
+    questions: [],
   });
-  const errs = t.validate(bad, rules);
+  const errs = t.validate(bad, { ...rules, seedSearches: ["batch job retries", "run scrapers at scale"], thinAnswers: true });
   for (const [frag, what] of [
     ["most allowed is 22", "volume over the cap"],
-    ["isn't winnable", "a search that isn't winnable"],
+    ["Search \"workflow orchestration\"", "a search that isn't winnable"],
     ["not one of the topics", "a search in no topic"],
     ["at most 2 searches on page one", "page-one target too high for a new domain"],
     ["No AI-mention target", "an AI target in quarter one"],
     ["No Readership target", "a Readership target without data"],
+    ["pasted back", "a topic that is a seed search"],
+    ["one article, not a source", "a watched site that is an article"],
+    ["ask at least one question", "no question on a thin brief"],
   ]) check(errs.some((e) => e.includes(frag)), `catches ${what}`);
+  const head = { keyword: "ai assistant", vol: 301000, kd: 25 };
+  const headDraft = t.parseDraft({ ...GOOD, ranking: { ...GOOD.ranking, searches: [...GOOD.ranking.searches.slice(1), { query: "ai assistant", topic: "Reliability", why: "Huge." }] } });
+  check(t.validate(headDraft, { ...rules, keywords: kw([...KEYWORDS, head]) }).some((e) => e.includes("is a head term")), "catches a head term on a new domain");
+  const rich = Array.from({ length: 20 }, (_, i) => ({ keyword: `long tail ${i}`, vol: 100 + i, kd: 10 }));
+  check(t.validate(draft, { ...rules, keywords: kw([...KEYWORDS, ...rich]) }).some((e) => e.includes("at least 8 target searches")), "rich data wants 8 searches, 6 from the data");
   let threw = false;
   try { t.parseDraft({ summary: "x" }); } catch { threw = true; }
   check(threw, "a draft missing its parts doesn't parse");

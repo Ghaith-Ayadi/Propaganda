@@ -274,14 +274,54 @@ export interface Rules {
   readerWeeks: number;
   /** Keyword data by lower-cased query, for the winnable check. */
   keywords: Map<string, Keyword>;
+  /** The searches the tenant typed at onboarding: a topic may not be one of them pasted back. */
+  seedSearches?: string[];
+  /** The brief is thin (a blank answer, a one-line answer, or capacity not answered): at least one question. */
+  thinAnswers?: boolean;
 }
 
-/** A search is winnable when we're on page two, or it is easy enough and searched enough (rule 5). Unknown data passes. */
-export function winnable(k: Keyword | undefined): boolean {
+/** A new domain can't win a head term in a quarter: searches a month above this need a page-two position already. */
+export const NEW_DOMAIN_MAX_VOLUME = 5_000;
+
+/** How many winnable keywords the data must hold before the proposal owes 8 searches, 6 of them with data. */
+export const RICH_DATA = 20;
+
+/**
+ * A search is winnable when we're on page two, or it is easy enough and
+ * searched enough (rule 5). Unknown data passes. For a new domain a head term
+ * (over NEW_DOMAIN_MAX_VOLUME searches a month) is out whatever its difficulty.
+ */
+export function winnable(k: Keyword | undefined, o: { newDomain?: boolean } = {}): boolean {
   if (!k) return true;
   if (k.position !== null && k.position > 10 && k.position <= 20) return true;
   if (k.position !== null && k.position <= 10) return true; // already there: keeping it is a goal too
+  if (o.newDomain && k.volume > NEW_DOMAIN_MAX_VOLUME) return false;
   return (k.difficulty === null || k.difficulty < 30) && k.volume >= 50;
+}
+
+/**
+ * A watched site is a source that keeps publishing (a site, a blog or news
+ * section), never one article: the root or one path segment, no file.
+ */
+export function looksLikeSource(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.search || /\.(pdf|docx?|pptx?)$/i.test(u.pathname)) return false;
+    const segments = u.pathname.split("/").filter(Boolean);
+    return segments.length <= 1;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether the onboarding answers are too thin to plan on without asking something. */
+export function thinAnswers(answers: Record<string, string>, perMonthAnswered: boolean): boolean {
+  if (!perMonthAnswered) return true;
+  for (const key of ["offer", "searches", "watch", "upcoming"]) {
+    const words = String(answers[key] ?? "").trim().split(/\s+/).filter(Boolean);
+    if (key === "offer" ? words.length < 5 : words.length === 0) return true;
+  }
+  return false;
 }
 
 /** Every rule the draft breaks, as sentences for the model. Empty means it passes. */
@@ -301,19 +341,35 @@ export function validate(d: Draft, r: Rules): string[] {
   if (d.topics.length > 1 && d.topics[0].high < Math.max(...d.topics.map((t) => t.high))) {
     errors.push("List topics best first: the first topic gets the biggest range (rule 2).");
   }
+  const seeds = new Set((r.seedSearches ?? []).map((q) => q.trim().toLowerCase()).filter(Boolean));
+  for (const t of d.topics) {
+    if (seeds.has(t.name.trim().toLowerCase())) {
+      errors.push(`Topic "${t.name}" is one of their searches pasted back. A topic is an angle with a point of view, named the way they'd say it in a sentence (rule 2).`);
+    }
+  }
 
   const searches = d.ranking.searches;
   if (searches.length < 5 || searches.length > 10) errors.push(`Give 5 to 10 target searches (there are ${searches.length}); 10 when the data allows (rule 5).`);
+  const known = [...r.keywords.values()].filter((k) => winnable(k, { newDomain: !r.hasHistory })).length;
+  const withData = searches.filter((s) => r.keywords.has(s.query.toLowerCase())).length;
+  if (known >= RICH_DATA && (searches.length < 8 || withData < 6)) {
+    errors.push(
+      `The data has ${known} winnable searches, so give at least 8 target searches with at least 6 of them from the data (there are ${searches.length}, ${withData} from the data) (rule 5).`,
+    );
+  }
   const seen = new Set<string>();
   for (const s of searches) {
     const q = s.query.toLowerCase();
     if (seen.has(q)) errors.push(`Search "${s.query}" is listed twice.`);
     seen.add(q);
     if (!topicNames.has(s.topic.toLowerCase())) errors.push(`Search "${s.query}" names topic "${s.topic}", which is not one of the topics.`);
-    if (!winnable(r.keywords.get(q))) {
+    if (!winnable(r.keywords.get(q), { newDomain: !r.hasHistory })) {
       const k = r.keywords.get(q)!;
+      const head = !r.hasHistory && k.volume > NEW_DOMAIN_MAX_VOLUME && (k.position === null || k.position > 20);
       errors.push(
-        `Search "${s.query}" isn't winnable: difficulty ${k.difficulty ?? "unknown"}, ${k.volume} searches a month, ${k.position === null ? "not ranking" : `position ${k.position}`}. Pick one under difficulty 30 with 50+ searches, or one where we're on page two (rule 5).`,
+        head
+          ? `Search "${s.query}" is a head term: ${k.volume} searches a month. A new domain can't reach page one for it in a quarter; pick long-tail searches under ${NEW_DOMAIN_MAX_VOLUME} a month (rule 5).`
+          : `Search "${s.query}" isn't winnable: difficulty ${k.difficulty ?? "unknown"}, ${k.volume} searches a month, ${k.position === null ? "not ranking" : `position ${k.position}`}. Pick one under difficulty 30 with 50+ searches, or one where we're on page two (rule 5).`,
       );
     }
   }
@@ -331,10 +387,16 @@ export function validate(d: Draft, r: Rules): string[] {
   if (d.watchedSites.length < 3 || d.watchedSites.length > 8) errors.push(`Give 3 to 8 watched sites (there are ${d.watchedSites.length}) (rule 4).`);
   for (const w of d.watchedSites) {
     if (!/^https?:\/\/[^\s/]+\.[^\s]+/.test(w.url)) errors.push(`Watched site "${w.url}" must be a full https address.`);
+    else if (!looksLikeSource(w.url)) {
+      errors.push(`Watched site ${w.url} is one article, not a source. Give the site, blog or news section it lives in: the root or one path segment, like https://example.com/blog (rule 4).`);
+    }
     if (!topicNames.has(w.topic.toLowerCase())) errors.push(`Watched site ${w.url} names topic "${w.topic}", which is not one of the topics.`);
   }
 
   if (d.questions.length > 3) errors.push(`At most 3 questions (there are ${d.questions.length}).`);
+  if (r.thinAnswers && d.questions.length === 0) {
+    errors.push("Their answers are thin (a blank, a one-liner, or review capacity not answered): ask at least one question about what you had to assume.");
+  }
   return errors;
 }
 
