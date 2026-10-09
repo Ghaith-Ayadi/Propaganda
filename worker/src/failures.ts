@@ -108,9 +108,17 @@ function messageOf(err: unknown): string | null {
   return String(err);
 }
 
-/** A step's name without the bits that change between runs: "propose (again)" is "propose". */
+/**
+ * A step's name without the bits that change between runs: "propose (again)"
+ * is "propose", and "search arenaseed000001 1" is "search <id>", so the same
+ * failure on different ideas or posts is one group.
+ */
 export function stepKey(step: string | null): string {
-  return (step ?? "").replace(/\s*\(again\)$/i, "").replace(/\s+\d+$/, "").trim();
+  return (step ?? "")
+    .replace(/\s*\(again\)$/i, "")
+    .replace(/\s+\d+$/, "")
+    .replace(/\b(?=[a-z]*\d)[a-z0-9]{15}\b/g, "<id>")
+    .trim();
 }
 
 /**

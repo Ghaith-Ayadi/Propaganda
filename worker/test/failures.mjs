@@ -18,6 +18,9 @@ assert.match(fingerprintOf("strategist", "propose", sig), /^[0-9a-f]{16}$/);
 assert.equal(signatureOf("post abc123def456gh not found after 3 tries"), signatureOf("post zz9988776655aa not found after 4 tries"));
 assert.equal(signatureOf("run 1b4e28ba-2fa1-11d2-883f-0016d3cca427 died"), "run <uuid> died");
 assert.equal(stepKey("draft 2"), "draft");
+assert.equal(stepKey("search arenaseed000001 1"), "search <id>");
+assert.equal(stepKey("search arenaseed000004 2"), stepKey("search arenaseed000001 1"));
+assert.equal(stepKey("judge ideas"), "judge ideas");
 // Keys and tokens never leave the worker.
 assert.doesNotMatch(scrub("Anthropic refused sk-ant-api03-abcdefghijklmnop"), /abcdefghij/);
 assert.doesNotMatch(scrub("Authorization: Bearer eyJhbGciOi.eyJzdWIi.c2lnbmF0dXJl"), /eyJzdWIi/);

@@ -33,7 +33,7 @@ import { MODELS, askJson, askText, obj, str, strs } from "./model.js";
 import { voiceFor, voiceGuideWorkflow, voiceSourceFor } from "./voice.js";
 import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
-import { readPage, searchWeb, type Page } from "./web.js";
+import { readPage, searchWebOrNothing, type Page } from "./web.js";
 import { HOUSE_RULES, contrastHits, unsourcedNumbers, wordCount } from "./writing.js";
 
 export interface WriteInput {
@@ -154,7 +154,7 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
 
   const urls: string[] = (brief.sources ?? []).map((s) => s.url);
   for (const [n, q] of queries.entries()) {
-    const hits = await DBOS.runStep(() => searchWeb(q, 5, { site, job: "writer:research" }), { name: `search ${n + 1}` });
+    const hits = await DBOS.runStep(() => searchWebOrNothing(q, 5, { site, job: "writer:research" }), { name: `search ${n + 1}` });
     for (const h of hits) if (!urls.includes(h.url)) urls.push(h.url);
   }
 

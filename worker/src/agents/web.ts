@@ -1,6 +1,8 @@
 // The agents' internet: a web search (DataForSEO's Google results, already our
 // pick for SEO data, pay per request) and a page reader. Both run as their own
-// steps in a workflow, so a restart never searches or fetches twice.
+// steps in a workflow, so a restart never searches or fetches twice. A search
+// that fails on DataForSEO's side is asked again twice; the Pitcher and the
+// Writer then carry on without results rather than fail the run.
 //
 // DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD from the stack's .env. Without them
 // searching returns nothing and says so in the log; the agents still work from
@@ -48,8 +50,61 @@ export interface SearchOptions {
   location?: number;
 }
 
-/** Google's organic results for `query` (top `limit`). */
+/**
+ * A search that failed on DataForSEO's side or on the way there: a 5xx or 429,
+ * a task status of 50000 and up ("Internal SE Server Error."), a timeout or a
+ * dropped connection. Worth asking again; anything else (a bad request, an
+ * empty account) is not.
+ */
+export class SearchUnavailableError extends Error {}
+
+/** What DataForSEO said a refused task cost, for the cost log (callPaidApi reads `costUsd`). */
+function withCost<E extends Error>(err: E, cost: unknown): E {
+  if (typeof cost === "number" && Number.isFinite(cost)) Object.assign(err, { costUsd: cost });
+  return err;
+}
+
+/** Waits between attempts, in ms. One try plus these. */
+const RETRY_AFTER = [2_000, 6_000];
+let sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** For tests. */
+export function setSearchSleep(f: (ms: number) => Promise<void>): void {
+  sleep = f;
+}
+
+/**
+ * Google's organic results for `query` (top `limit`). A failure on the
+ * provider's side is asked again twice; each attempt is its own logged
+ * request. After that it throws SearchUnavailableError.
+ */
 export async function searchWeb(query: string, limit: number, opts: SearchOptions): Promise<SearchHit[]> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await searchOnce(query, limit, opts);
+    } catch (err) {
+      if (!(err instanceof SearchUnavailableError) || attempt >= RETRY_AFTER.length) throw err;
+      console.warn(`web search "${query.slice(0, 80)}" failed (${err.message}), asking again`);
+      await sleep(RETRY_AFTER[attempt]);
+    }
+  }
+}
+
+/**
+ * The same search, but a provider outage gives no results instead of an error,
+ * for agents that can carry on without them. Anything else still throws.
+ */
+export async function searchWebOrNothing(query: string, limit: number, opts: SearchOptions): Promise<SearchHit[]> {
+  try {
+    return await searchWeb(query, limit, opts);
+  } catch (err) {
+    if (!(err instanceof SearchUnavailableError)) throw err;
+    console.warn(`web search "${query.slice(0, 80)}" gave up: ${err.message}`);
+    return [];
+  }
+}
+
+async function searchOnce(query: string, limit: number, opts: SearchOptions): Promise<SearchHit[]> {
   const login = process.env.DATAFORSEO_LOGIN;
   const password = process.env.DATAFORSEO_PASSWORD;
   if (!login || !password) {
@@ -59,30 +114,40 @@ export async function searchWeb(query: string, limit: number, opts: SearchOption
   return callPaidApi(
     { site: opts.site, job: opts.job, service: "dataforseo/serp-organic", background: true },
     async () => {
-      const res = await fetchImpl("https://api.dataforseo.com/v3/serp/google/organic/live/regular", {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${login}:${password}`).toString("base64")}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify([
-          {
-            keyword: query.slice(0, 700),
-            language_code: opts.language ?? "en",
-            location_code: opts.location ?? 2840,
-            depth: Math.max(10, limit),
+      let res: Response;
+      try {
+        res = await fetchImpl("https://api.dataforseo.com/v3/serp/google/organic/live/regular", {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${Buffer.from(`${login}:${password}`).toString("base64")}`,
+            "Content-Type": "application/json",
           },
-        ]),
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!res.ok) throw new Error(`web search answered ${res.status}`);
+          body: JSON.stringify([
+            {
+              keyword: query.slice(0, 700),
+              language_code: opts.language ?? "en",
+              location_code: opts.location ?? 2840,
+              depth: Math.max(10, limit),
+            },
+          ]),
+          signal: AbortSignal.timeout(30_000),
+        });
+      } catch (err) {
+        throw new SearchUnavailableError(`web search didn't answer: ${(err as Error).message}`);
+      }
+      if (!res.ok) {
+        const msg = `web search answered ${res.status}`;
+        throw res.status >= 500 || res.status === 429 ? new SearchUnavailableError(msg) : new Error(msg);
+      }
       const body = (await res.json()) as {
         cost?: number;
         tasks?: { cost?: number; status_code?: number; status_message?: string; result?: { items?: Record<string, unknown>[] }[] }[];
       };
       const task = body.tasks?.[0];
       if (!task || (task.status_code && task.status_code >= 40000)) {
-        throw new Error(`web search failed: ${task?.status_message ?? "no task"}`);
+        const msg = `web search failed: ${task?.status_message ?? "no task"}`;
+        const err = !task || (task.status_code ?? 0) >= 50000 ? new SearchUnavailableError(msg) : new Error(msg);
+        throw withCost(err, body.cost ?? task?.cost);
       }
       const items = task.result?.[0]?.items ?? [];
       const value = items

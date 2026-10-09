@@ -37,7 +37,7 @@ import { claimsFor, renderClaims } from "./kb.js";
 import { nearest, readTaste, renderTaste, seenLine, type Seen } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
-import { searchWeb, type SearchHit } from "./web.js";
+import { searchWebOrNothing, type SearchHit } from "./web.js";
 import { AGENT_QUEUE, registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
 import { writer } from "./writer.js";
 import { voiceSuggest } from "./edits.js";
@@ -366,7 +366,7 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     // 4. Research: what's already out there, and what the tenant knows.
     const hits: SearchHit[] = [];
     for (const [n, q] of j.searches.entries()) {
-      hits.push(...(await DBOS.runStep(() => searchWeb(q, 6, { site, job: "pitcher:research" }), { name: `search ${idea.id} ${n + 1}` })));
+      hits.push(...(await DBOS.runStep(() => searchWebOrNothing(q, 6, { site, job: "pitcher:research" }), { name: `search ${idea.id} ${n + 1}` })));
     }
     const claims = await DBOS.runStep(() => claimsFor(site, [idea.title, ...j.topics], 8), { name: `knowledge ${idea.id}` });
     const evidenceUrls = (idea.evidence ?? []).filter((e) => e.url).map((e) => ({ url: e.url!, label: e.label }));

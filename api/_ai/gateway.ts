@@ -516,7 +516,9 @@ export interface PaidCallOptions {
 /**
  * Run one request to a paid API under the budget rules, and log what it cost.
  * `run` returns the value and the cost the provider reported (USD). A failed
- * request is logged unpriced, like a failed model call.
+ * request is logged unpriced, like a failed model call, unless the error
+ * carries the provider's reported cost as `costUsd` (a refused task often
+ * says it cost nothing).
  */
 export async function callPaidApi<T>(
   opts: PaidCallOptions,
@@ -545,7 +547,13 @@ export async function callPaidApi<T>(
   try {
     out = await run();
   } catch (err) {
-    await writeCall({ ...base, status: "error", priced: false }).catch(() => {});
+    const reported = (err as { costUsd?: unknown } | null)?.costUsd;
+    const priced = typeof reported === "number" && Number.isFinite(reported);
+    await writeCall(
+      priced
+        ? { ...base, status: "error", priced: true, cost_usd: Math.round(Math.max(0, reported) * 1e6) / 1e6 }
+        : { ...base, status: "error", priced: false },
+    ).catch(() => {});
     throw err;
   }
   const cost = Math.round(Math.max(0, out.costUsd) * 1e6) / 1e6;

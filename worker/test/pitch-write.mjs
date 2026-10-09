@@ -147,9 +147,15 @@ process.env.DATAFORSEO_PASSWORD = "password";
 
 const PAGE = "http://93.184.216.34/temporal-study";
 const fetched = [];
+// How many searches in a row DataForSEO fails on its side, as it did on 2026-10-10.
+let searchOutage = 0;
 const web = async (input, init) => {
   const url = String(input);
   fetched.push(url);
+  if (url.startsWith("https://api.dataforseo.com/") && searchOutage > 0) {
+    searchOutage--;
+    return Response.json({ cost: 0, tasks: [{ status_code: 50000, status_message: "Internal SE Server Error.", cost: 0 }] });
+  }
   if (url.startsWith("https://api.dataforseo.com/")) {
     const [{ keyword }] = JSON.parse(init.body);
     return Response.json({
@@ -241,6 +247,7 @@ await admin.end();
 const t = await import("../dist/agents/testing.js");
 t.setModelResolver(() => model);
 t.setWebFetch(web);
+t.setSearchSleep(async () => {});
 t.wireGateway();
 t.DBOS.setConfig({ name: "propaganda-agents-test", systemDatabaseUrl: `${PGURL}/${SYS_DB}`, applicationVersion: "test" });
 await t.DBOS.launch();
@@ -339,6 +346,21 @@ try {
   const sug = db.post_versions.find((x) => x.post === "emptypost000001" && x.version === rv.version);
   check(rv.status === "drafted" && sug?.attributes.suggestion === true && sug.content.includes("What to change tonight"), "the revision is a new suggested version");
   check(db.posts.find((x) => x.id === "emptypost000001").content_md === before, "and the post itself is unchanged");
+
+  console.log("a search engine outage");
+  const searchRowsBefore = db.model_calls.filter((c) => String(c.model).startsWith("dataforseo/")).length;
+  searchOutage = 1;
+  const [blip] = await t.handOffIdeas(SITE, [{ title: "Retries after a blip", summary: "Customers asked.", origin: "calls", evidence: [{ label: "Call", quote: "it blipped" }], sourceAgent: "listener" }], { pitchNow: false });
+  const o1 = await (await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: [blip], batch: 1, max: 1, draftTop: 0, goals, today: "2026-10-08" })).getResult();
+  const blipRows = db.model_calls.filter((c) => String(c.model).startsWith("dataforseo/")).slice(searchRowsBefore);
+  check(o1.pitched.length === 1 && searchOutage === 0, "one failed search is asked again and the pitch goes out");
+  check(blipRows.length === 2 && blipRows[0].status === "error" && blipRows[0].priced === true && blipRows[0].cost_usd === 0, `the failed attempt is logged at the $0 DataForSEO reported, not unpriced (${JSON.stringify(blipRows.map((c) => [c.status, c.priced, c.cost_usd]))})`);
+  searchOutage = 99;
+  const [down] = await t.handOffIdeas(SITE, [{ title: "Retries while search is down", summary: "Customers asked again.", origin: "calls", evidence: [{ label: "Call", quote: "still down" }], sourceAgent: "listener" }], { pitchNow: false });
+  const o2 = await (await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: [down], batch: 1, max: 1, draftTop: 0, goals, today: "2026-10-08" })).getResult();
+  check(o2.pitched.length === 1 && searchOutage === 96, `search down for good: three attempts, then the pitch is written without results (${99 - searchOutage} attempts)`);
+  check(prompts.filter((x) => x.includes("Write the pitch")).pop().includes("(no search results)"), "and the brief is told there were none");
+  searchOutage = 0;
 
   console.log("a request from Chat");
   const runId = await t.dispatchAgent("pitcher", { site: SITE, task: "Pitch me two posts on retries", requestedBy: "11111111-1111-1111-1111-111111111111", conversation: "conv1", post: null });
