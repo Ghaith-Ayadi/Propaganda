@@ -163,35 +163,3 @@ export async function removeTenantKey(rest: Rest, site: string): Promise<void> {
   const res = await rest(`/model_keys?site=eq.${enc(site)}&provider=eq.${PROVIDER}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`model_keys delete answered ${res.status}`);
 }
-
-// ---- which account a tenant runs on ----
-//
-// Hardcoded on purpose: the only tenants that run on Ayadi's own Anthropic
-// accounts are listed here, by site id (slugs can be edited, ids can't). Every
-// other tenant runs on the key its owner saves in Settings, and with none saved
-// its Claude calls stop and wait for one. Nobody falls back to another account.
-// The account keys live in the server's environment (ANTHROPIC_KEY_PRIVATE,
-// ANTHROPIC_KEY_AXONIQ), never in the database.
-
-export type Account = "private" | "axoniq";
-
-let accounts: Readonly<Record<string, Account>> = {
-  verbatimsite000: "private", // Verbatim
-  ppgdsite0000000: "private", // PPGD (supabase/migrations/20261008000090_ppgd_site.sql)
-  // Axoniq: "axoniq" goes here once its site exists.
-};
-
-/** The Ayadi account a tenant runs on, or null when it brings its own key. */
-export function accountOf(site: string): Account | null {
-  return Object.hasOwn(accounts, site) ? accounts[site] : null;
-}
-
-/** For tests: swap the list. */
-export function setAccounts(list: Record<string, Account>): void {
-  accounts = list;
-}
-
-/** The account's API key from the server's environment, or null when it isn't set. */
-export function accountKey(account: Account): string | null {
-  return process.env[`ANTHROPIC_KEY_${account.toUpperCase()}`] || null;
-}

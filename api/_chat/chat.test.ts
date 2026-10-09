@@ -91,8 +91,6 @@ before(async () => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service";
   process.env.SUPABASE_ANON_KEY = "anon";
   gateway = await import("../_ai/gateway");
-  // On our account (the private list), so the scripted model answers.
-  gateway.setAccounts({ siteaaaaaaaaaaa: "private" });
   agent = await import("./agent");
 });
 

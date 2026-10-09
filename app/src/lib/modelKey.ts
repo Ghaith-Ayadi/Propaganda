@@ -25,15 +25,14 @@ async function call<T>(code: string, sentence: string, init: RequestInit & { que
     headers: { Authorization: await authHeader(), "Content-Type": "application/json" },
   });
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
-  // A 400 is a key that doesn't look like one, a 409 a tenant whose key we manage: the answer says why, like a red test.
-  if (!res.ok && res.status !== 400 && res.status !== 409) {
+  // A 400 is a key that doesn't look like one: the answer says why, like a red test.
+  if (!res.ok && res.status !== 400) {
     throw new AppError(code, body.error ?? sentence, Object.assign(new Error(`model-key answered ${res.status}`), { status: res.status }));
   }
   return body;
 }
 
-/** managed: Propaganda holds this tenant's key for it, so a key saved here would not be used. */
-export function loadKey(site: string): Promise<{ key: KeyInfo | null; managed?: boolean }> {
+export function loadKey(site: string): Promise<{ key: KeyInfo | null }> {
   return call("MODEL-KEY-LOAD", "Couldn't load your Anthropic key's status.", { query: `?site=${site}` });
 }
 
