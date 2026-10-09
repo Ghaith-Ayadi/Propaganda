@@ -4,7 +4,7 @@
 // instead of failing it (src/limits.ts).
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { callModel, setWorkflowContext } from "../../../api/_ai/gateway";
+import { callModel, DEFAULT_MODEL, setWorkflowContext } from "../../../api/_ai/gateway";
 import { modelStep } from "../limits.js";
 
 let wired = false;
@@ -16,10 +16,14 @@ export function wireGateway(): void {
   setWorkflowContext(() => ({ workflowId: DBOS.workflowID ?? null, stepId: DBOS.stepID ?? null }));
 }
 
-/** Model ids as the AI SDK / AI Gateway spells them. Sonnet is the base, Opus the advanced tier (agents.md). */
+/**
+ * Model ids as the AI SDK / AI Gateway spells them. Both tiers are the gateway's
+ * DEFAULT_MODEL (DeepSeek V4 Pro, Ayadi 2026-10-09) until a benchmark says a
+ * job needs another; on a tenant's own Anthropic key it runs as BYOK_MODEL.
+ */
 export const MODELS = {
-  base: process.env.AGENT_MODEL_BASE ?? "anthropic/claude-sonnet-5.5",
-  advanced: process.env.AGENT_MODEL_ADVANCED ?? "anthropic/claude-opus-5.5",
+  base: process.env.AGENT_MODEL_BASE || DEFAULT_MODEL,
+  advanced: process.env.AGENT_MODEL_ADVANCED || DEFAULT_MODEL,
 };
 
 export interface Ask {
