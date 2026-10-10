@@ -163,7 +163,7 @@ function ModelsCard() {
   return (
     <Card
       title="Models"
-      description="Without a key of your own, every agent runs on DeepSeek V4 Pro on Propaganda's account. With your Anthropic key below, they run on Claude Sonnet, on your bill."
+      description="On Propaganda's account, the Strategist runs on Claude Fable and every other agent on DeepSeek V4 Pro. With your Anthropic key below, they all run on Claude with your key, on your bill: the Strategist on Fable, the others on Sonnet."
     >
       <Toggle
         isSelected={western}

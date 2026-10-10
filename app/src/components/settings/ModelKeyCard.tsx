@@ -102,7 +102,7 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
   return (
     <Card
       title="Your Anthropic key"
-      description="Bring your own key and every agent call for this tenant runs on Claude Sonnet with it, billed to your Anthropic account. It is used for this tenant's work only."
+      description="Bring your own key and every agent call for this tenant runs on Claude with it, billed to your Anthropic account. It is used for this tenant's work only."
       action={key && <Badge size="sm" color={key.status === "ok" ? "success" : "error"}>{key.status === "ok" ? "Own key" : "Key failed"}</Badge>}
     >
       <div className="space-y-4">
