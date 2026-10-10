@@ -321,7 +321,10 @@ export function pickHost(name: string, hosts: string[], ourDomain: string): stri
   const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
   const ok = (h: string) => h.includes(".") && h !== ourDomain && !NOT_A_COMPANY.has(h.replace(/^www\./, ""));
   const named = key.length >= 3 ? hosts.find((h) => ok(h) && h.replace(/[^a-z0-9]/g, "").includes(key)) : undefined;
-  return named ?? hosts.find(ok) ?? "";
+  // The company's site, not its app or docs host (app.airops.com ranks for
+  // "airops login", airops.com for what they write about).
+  if (named) return named.split(".").slice(-2).join(".");
+  return hosts.find(ok) ?? "";
 }
 
 export function looksLikeSource(url: string): boolean {
