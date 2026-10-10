@@ -177,6 +177,7 @@ analytics worker, never by PostHog.
 - Events go through `/ingest` on our own host (`vercel.json` rewrites, Vite proxy in dev).
   `VITE_POSTHOG_KEY` unset means telemetry is off.
 - Every event and replay carries `tenant_id`, `tenant_slug` and `account_id`; filter recordings by those.
+- Worker run failures go to PostHog too (`worker/src/telemetry.ts`, once per recorded run, route `worker/<workflow>`, with `tenant_id`) when the box has `POSTHOG_KEY`; the failure log and its tickets (Slack, GitHub, Notion) are unchanged. Each ticket destination is tried on its own: one refusing never silences the others.
 
 ## Notion is mandatory and is part of "done"
 
