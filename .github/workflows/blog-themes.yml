@@ -9,6 +9,7 @@
 # Results (every failure, grouped) are uploaded as an artifact.
 name: blog-themes
 on:
+  workflow_call: # the release run (release.yml)
   pull_request:
     paths: ["app/src/blog/**", "app/scripts/pg-*.cjs", "app/public/fonts/pg/**", "app/package-lock.json", ".github/workflows/blog-themes.yml"]
   push:

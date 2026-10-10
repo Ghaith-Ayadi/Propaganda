@@ -1,9 +1,11 @@
 name: deploy-app
 # Ships the app (app/ and api/) to Vercel production. Vercel's Git integration is off for
 # this project, so pushes and PRs never create Vercel deployments; this run is the only way
-# to production. Started by hand on main, and only on Ayadi's word.
+# to production. Started by the release run (release.yml) once its tests pass, or by hand on
+# main; either only on Ayadi's word.
 on:
   workflow_dispatch:
+  workflow_call:
 concurrency: { group: deploy-app, cancel-in-progress: false }
 jobs:
   deploy:
