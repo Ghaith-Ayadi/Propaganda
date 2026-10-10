@@ -11,6 +11,7 @@ node test/agents.mjs
 node test/pitch-write.mjs
 node test/e2e.mjs
 node test/strategy.mjs
+node test/first-day.mjs
 node test/scout.mjs
 node test/listener.mjs
 node test/arena.mjs

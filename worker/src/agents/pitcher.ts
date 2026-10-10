@@ -112,7 +112,7 @@ export function parseJudgements(ids: string[]) {
   };
 }
 
-interface Written {
+export interface Written {
   title: string;
   why: string;
   angle: string;
@@ -125,7 +125,7 @@ interface Written {
   learned: string;
 }
 
-function parsePitch(allowedUrls: Set<string>, collectionNames: string[]) {
+export function parsePitch(allowedUrls: Set<string>, collectionNames: string[]) {
   return (v: unknown): Written => {
     const o = obj(v, "The answer");
     const outline = strs(o.outline, "outline");
@@ -165,7 +165,7 @@ function counted(briefs: BriefRow[], published: { tags: string[] | null; publish
 }
 
 /** Thursday of an ISO week (a publish-by date inside it). */
-function thursdayOf(week: string): string {
+export function thursdayOf(week: string): string {
   const [y, w] = week.split("-W").map(Number);
   const jan4 = new Date(Date.UTC(y, 0, 4));
   const monday = new Date(jan4.getTime() - ((jan4.getUTCDay() || 7) - 1) * 86_400_000 + (w - 1) * 7 * 86_400_000);
