@@ -58,13 +58,22 @@ export function Editor({ post }: Props) {
   // image blocks over the stored content). We only save genuine user edits.
   const loadingRef = useRef(false);
 
+  // Content this editor loaded or wrote for the open post (the last few: a sync
+  // re-emit of an older save of ours can arrive after a newer one).
+  const ours = useRef<string[]>([]);
+
   // Load post content into editor when switching documents — same editor instance.
+  // Also when the open post changes from outside (the Writer's draft, another
+  // device), unless a keystroke is waiting to be saved: without this the page
+  // showed the old text until reopened, and the next keystroke saved it back.
   useEffect(() => {
     if (!editor) return;
-    if (lastLoadedId.current === post.id) return;
+    const content = post.content || "";
+    if (lastLoadedId.current === post.id && (ours.current.includes(content) || saveTimer.current)) return;
     lastLoadedId.current = post.id;
+    ours.current = [content];
     void (async () => {
-      const blocks = await editor.tryParseMarkdownToBlocks(post.content || "");
+      const blocks = await editor.tryParseMarkdownToBlocks(content);
       loadingRef.current = true;
       // Render image-URL file blocks / links as real images (legacy content
       // saved images as `[name](url)` links — see lib/images).
@@ -98,6 +107,7 @@ export function Editor({ post }: Props) {
     const postId = post.id;
     async function save() {
       const md = await editor!.blocksToMarkdownLossy();
+      ours.current = [...ours.current.slice(-19), md];
       await updatePost(postId, { content: md, wordCount: countWords(md) });
     }
     return () => {
@@ -136,6 +146,13 @@ export function Editor({ post }: Props) {
     setSubtitleDraft(post.subtitle ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post.id]);
+  // A change from outside (the Writer, another device) shows in a field nobody is typing in.
+  useEffect(() => {
+    if (document.activeElement !== titleRef.current) setTitleDraft(post.title);
+  }, [post.title]);
+  useEffect(() => {
+    if (document.activeElement !== subtitleRef.current) setSubtitleDraft(post.subtitle ?? "");
+  }, [post.subtitle]);
 
   // Auto-size the subtitle textarea to its content on mount and when the post
   // changes (e.g. navigating between posts or subtitle syncing in).
