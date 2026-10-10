@@ -311,6 +311,20 @@ const NOT_A_COMPANY = new Set([
 ]);
 
 /**
+ * A host's registrable site: the company's site, not its app or docs host
+ * (app.airops.com ranks for "airops login", airops.com for what they write
+ * about). A country second-level domain keeps three labels (acme.co.uk).
+ */
+export function siteOf(host: string): string {
+  const parts = host.toLowerCase().split(".");
+  if (parts.length <= 2) return parts.join(".");
+  const second = parts[parts.length - 2]!;
+  const tld = parts[parts.length - 1]!;
+  const keep = tld.length === 2 && ["co", "com", "org", "net", "ac", "gov", "edu", "ltd", "plc"].includes(second) ? 3 : 2;
+  return parts.slice(-keep).join(".");
+}
+
+/**
  * The host for a competitor typed as a bare name ("AirOps"), from the hosts a
  * web search returned in order: a host that carries the name wins
  * (airops.com), then the first that isn't ours or a profile site, else none.
@@ -319,18 +333,16 @@ const NOT_A_COMPANY = new Set([
  */
 export function pickHost(name: string, hosts: string[], ourDomain: string): string {
   const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const ok = (h: string) => h.includes(".") && h !== ourDomain && !NOT_A_COMPANY.has(h.replace(/^www\./, ""));
-  // The company's site, not its app or docs host (app.airops.com ranks for
-  // "airops login", airops.com for what they write about).
-  const site = (h: string) => h.split(".").slice(-2).join(".");
-  const label = (h: string) => site(h).split(".")[0]!.replace(/[^a-z0-9]/g, "");
+  const ok = (h: string) => h.includes(".") && siteOf(h) !== ourDomain && h !== ourDomain && !NOT_A_COMPANY.has(siteOf(h));
+  const label = (h: string) => siteOf(h).split(".")[0]!.replace(/[^a-z0-9]/g, "");
   if (key.length >= 3) {
     // "Box" is box.com before dropbox.com: the exact label wins over a host that merely contains the name.
     const exact = hosts.find((h) => ok(h) && label(h) === key);
     const named = exact ?? hosts.find((h) => ok(h) && h.replace(/[^a-z0-9]/g, "").includes(key));
-    if (named) return site(named);
+    if (named) return siteOf(named);
   }
-  return hosts.find(ok) ?? "";
+  const first = hosts.find(ok);
+  return first ? siteOf(first) : "";
 }
 
 export function looksLikeSource(url: string): boolean {
