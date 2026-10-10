@@ -20,10 +20,15 @@ export function wireGateway(): void {
  * Model ids as the AI SDK / AI Gateway spells them. Both tiers are the gateway's
  * DEFAULT_MODEL (DeepSeek V4 Pro, Ayadi 2026-10-09) until a benchmark says a
  * job needs another; on a tenant's own Anthropic key it runs as BYOK_MODEL.
+ * The Strategist is the exception (Ayadi, 2026-10-10, after the blind test of
+ * the first PPGD proposal): Claude Fable 5.1, the one document that sets a
+ * tenant's quarter, $0.30 to $0.80 a run. On a tenant's own key it is Fable
+ * on that key.
  */
 export const MODELS = {
   base: process.env.AGENT_MODEL_BASE || DEFAULT_MODEL,
   advanced: process.env.AGENT_MODEL_ADVANCED || DEFAULT_MODEL,
+  strategist: process.env.AGENT_MODEL_STRATEGIST || "anthropic/claude-fable-5.1",
 };
 
 export interface Ask {

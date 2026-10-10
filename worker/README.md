@@ -182,6 +182,12 @@ Design: `agents/strategist.md` and `agents/strategist-cold-start-and-pacing.md`
 in the project files (approved by Ayadi, 2026-10-09). Schema:
 `supabase/migrations/20261009000070_strategist.sql`.
 
+**Model.** The one agent not on the default model: Claude Fable 5.1
+(`MODELS.strategist`, `AGENT_MODEL_STRATEGIST` overrides it; Ayadi, 2026-10-10,
+after a blind comparison of the first PPGD proposal). One call a run, about
+$0.30 to $0.80 at API prices, four to eight runs a tenant a year. On a tenant's
+own Anthropic key it is Fable on that key, like every `anthropic/` call.
+
 **How a proposal starts.** Whatever wants one adds a `strategy_proposals` row
 in status `requested`: the app through `strategy_request()` (onboarding's
 "Save and continue", "Ask for changes", the superadmin's "Run the Strategist

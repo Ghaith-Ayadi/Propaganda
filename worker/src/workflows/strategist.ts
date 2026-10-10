@@ -7,7 +7,7 @@
 //      quarter's output and pitch outcomes, the last approved proposal's edits,
 //      the taste summary, keyword data from DataForSEO, and who ranks for the
 //      tenant's own searches;
-//   2. one model call (the advanced tier) writes the proposal as JSON;
+//   2. one model call (MODELS.strategist, Claude Fable 5.1) writes the proposal as JSON;
 //   3. the validator (agents/strategy.ts) checks the rules; a draft that
 //      breaks one goes back once with the errors, and a second failure fails
 //      the run (Admin > Runs) instead of reaching the tenant;
@@ -339,7 +339,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     const ask = {
       site,
       job: JOB,
-      model: MODELS.advanced,
+      model: MODELS.strategist,
       system: SYSTEM,
       prompt: promptFor(pack, m, { kind: row.kind, quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now) }),
       maxOutputTokens: 6_000,
@@ -392,7 +392,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       droppedSites: draft.watchedSites.length - readable.length,
       at: now.toISOString(),
     };
-    await DBOS.runStep(() => sendProposal(proposalId, site, proposal, inputs, MODELS.advanced), { name: "send" });
+    await DBOS.runStep(() => sendProposal(proposalId, site, proposal, inputs, MODELS.strategist), { name: "send" });
     if (inputs.planRead) await DBOS.runStep(() => markPlanRead(site), { name: "plan read" });
     await DBOS.runStep(() => runCost(proposalId, runId), { name: "cost" });
     return { status: "sent" };
