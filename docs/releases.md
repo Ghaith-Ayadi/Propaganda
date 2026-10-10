@@ -10,7 +10,6 @@ Only on Ayadi's word. Run the **release** workflow (`.github/workflows/release.y
 
 | Input | Choices |
 | --- | --- |
-| `objective` | what the release is for, one line; it heads the release's log entry |
 | `bump` | `patch` (default: fixes and small changes), `minor` (a milestone), `major` |
 | `ai_tests` | `changed` (default) or `all` |
 | `deploy_app` | deploy the app to Vercel production once tagged (default yes) |

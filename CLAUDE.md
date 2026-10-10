@@ -110,6 +110,12 @@ provider's reported cost. Never call a provider directly:
 cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month on Home
 (`CostMeter`), the superadmin sees all of it in Admin > Consumption.
 
+**Capture (Propaganda Labs).** Every model call's full input and output (system, prompt or
+messages, tools, text, reasoning, tool calls and results, or the error) also lands in
+`public.model_call_io`, one row per `model_calls` row (`api/_ai/capture.ts`). Superadmin only:
+it holds drafts and call transcripts. A capture never fails the call; `MODEL_CAPTURE=off`
+turns it off. It is the input Labs replays.
+
 **Own keys (BYOK).** A tenant may save its own Anthropic key (Settings, "Your Anthropic
 key", through `api/model-key.ts`; owners set or remove it). It is stored only as AES-GCM ciphertext under
 `MODEL_KEY_SECRET` in `model_keys` (service role only; `api/_ai/modelKeys.ts`) and never goes
