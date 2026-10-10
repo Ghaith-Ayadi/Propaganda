@@ -21,6 +21,7 @@ import { DBOS, type WorkflowStatus } from "@dbos-inc/dbos-sdk";
 import pg, { type Pool } from "pg";
 import { tenantKeyOf, usageLimitOf } from "./limits.js";
 import { fileTicket, recurTicket, ticketSinks, type BugReport, type Ticket } from "./tickets.js";
+import { reportRunFailure } from "./telemetry.js";
 
 /** How often the sweep runs (seconds); 0 turns it off. */
 const SWEEP_SECONDS = Number(process.env.WORKER_FAILURE_SWEEP_SECONDS ?? 60);
@@ -306,6 +307,11 @@ async function record(appDb: Pool, w: WorkflowStatus): Promise<boolean> {
        stack, input, JSON.stringify(trail), requestIds, commitOf(), environmentOf()],
     );
     await client.query("commit");
+    // Once per recorded run: to PostHog with the rest of the app's errors.
+    void reportRunFailure({
+      workflow: w.workflowName, step: stepName, fingerprint, runId: w.workflowID, site, error, stack,
+      models: spend.models, environment: environmentOf(), commit: commitOf(),
+    });
     return true;
   } catch (err) {
     await client.query("rollback").catch(() => {});
@@ -586,20 +592,39 @@ export async function processFailures(appDb: Pool, only?: string): Promise<{ fil
     try {
       const report = await reportOf(appDb, group);
       const tickets = [...group.tickets];
+      // Each destination on its own: one that refuses (a GitHub token without
+      // the Issues permission, a dead Slack webhook) must not keep the others
+      // from hearing about the failure.
+      const problems: string[] = [];
+      let reached = 0;
       for (const sink of sinks) {
-        const have = tickets.find((t) => t.kind === sink);
-        if (have) {
-          await recurTicket(have, report, group.occurrences - group.reportedCount);
-          noted++;
-        } else {
-          tickets.push(await fileTicket(sink, report));
-          filed++;
+        try {
+          const have = tickets.find((t) => t.kind === sink);
+          if (have) {
+            await recurTicket(have, report, group.occurrences - group.reportedCount);
+            noted++;
+          } else {
+            tickets.push(await fileTicket(sink, report));
+            filed++;
+          }
+          reached++;
+        } catch (err) {
+          problems.push(`${sink}: ${scrub(String((err as Error)?.message ?? err))}`.slice(0, 300));
         }
       }
+      if (problems.length) console.error(`failures: ${group.fingerprint}: ${problems.join("; ")}`);
+      if (!reached) {
+        // Nothing went out: keep the group as it was; it is tried again next sweep.
+        await db().query("update ops.failure_groups set process_error = $2 where fingerprint = $1", [
+          group.fingerprint, problems.join("; ").slice(0, 500),
+        ]);
+        continue;
+      }
+      // At least one destination took it. A refused one is retried when the group fails again.
       await db().query(
-        `update ops.failure_groups set status = 'filed', tickets = $2, reported_count = $3, reported_at = now(), process_error = null
+        `update ops.failure_groups set status = 'filed', tickets = $2, reported_count = $3, reported_at = now(), process_error = $4
           where fingerprint = $1`,
-        [group.fingerprint, JSON.stringify(tickets), group.occurrences],
+        [group.fingerprint, JSON.stringify(tickets), group.occurrences, problems.length ? problems.join("; ").slice(0, 500) : null],
       );
     } catch (err) {
       const why = scrub(String((err as Error)?.message ?? err)).slice(0, 500);
