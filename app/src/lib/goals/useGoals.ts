@@ -87,3 +87,16 @@ export function useStrategistState() {
   const v = useVersion();
   return useMemo(() => strategistState(), [v]);
 }
+
+/** The newest proposal in any quarter the app shows (sent, being revised or approved), or null. */
+export function useLatestProposal(): Proposal | null {
+  const v = useVersion();
+  return useMemo(() => {
+    let latest: Proposal | null = null;
+    for (const q of goalsAdapter.quarters()) {
+      const p = goalsAdapter.proposal(q);
+      if (p && (!latest || p.createdAt >= latest.createdAt)) latest = p;
+    }
+    return latest;
+  }, [v]);
+}

@@ -50,6 +50,20 @@ interface ProposalRow {
   approved_at: string | null;
 }
 
+/** The Strategist's newest request, for "working on it", "failed" and the round count. */
+export interface StrategistState {
+  id: string;
+  kind: Proposal["kind"];
+  quarter: QuarterKey;
+  status: ProposalRow["status"];
+  error: string;
+  created: string;
+  /** The tenant's note on a revision. */
+  request: string;
+  /** Proposals written for this quarter so far, this one included. */
+  rounds: number;
+}
+
 interface VersionRow {
   quarter: QuarterKey;
   version: number;
@@ -107,6 +121,29 @@ let loading: Promise<void> | null = null;
 let ver = 0;
 const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
+/** How often an open page re-reads: 30 s, or faster while a page waits on the Strategist. */
+const POLL_MS = 30_000;
+let pollMs = POLL_MS;
+
+function startTimer() {
+  if (timer) clearInterval(timer);
+  timer = setInterval(() => {
+    if (listeners.size && state && state !== "missing") void refreshGoals();
+  }, pollMs);
+}
+
+/**
+ * Re-read every `ms` while someone waits on the Strategist (Getting started),
+ * or back to every 30 s with null. Returns the undo.
+ */
+export function pollGoalsEvery(ms: number | null): () => void {
+  pollMs = ms ?? POLL_MS;
+  if (timer) startTimer();
+  return () => {
+    pollMs = POLL_MS;
+    if (timer) startTimer();
+  };
+}
 
 function emit() {
   ver++;
@@ -334,17 +371,13 @@ export const liveAdapter: GoalsAdapter & {
   /** Ask the Strategist for a proposal (onboarding, a revision, or "Run it now"). */
   askStrategist(kind: Proposal["kind"], note: string, quarter?: QuarterKey): Promise<string>;
   /** The newest proposal row's state, for "working on it" and "failed" lines. */
-  strategistState(): { status: ProposalRow["status"]; error: string; created: string } | null;
+  strategistState(): StrategistState | null;
 } = {
   placeholder: false,
   subscribe(cb) {
     listeners.add(cb);
     ensure();
-    if (!timer) {
-      timer = setInterval(() => {
-        if (listeners.size && state && state !== "missing") void refreshGoals();
-      }, 30_000);
-    }
+    if (!timer) startTimer();
     return () => {
       listeners.delete(cb);
       if (!listeners.size && timer) {
@@ -506,7 +539,10 @@ export const liveAdapter: GoalsAdapter & {
   strategistState() {
     const rows = s().proposals;
     const newest = rows[rows.length - 1];
-    return newest ? { status: newest.status, error: newest.error, created: newest.created } : null;
+    if (!newest) return null;
+    // Rounds: every proposal the Strategist wrote for this quarter, the one being written included.
+    const rounds = rows.filter((r) => r.quarter === newest.quarter && r.status !== "failed").length;
+    return { id: newest.id, kind: newest.kind, quarter: newest.quarter, status: newest.status, error: newest.error, created: newest.created, request: newest.request, rounds };
   },
 
   async savePlanDrop(text, files) {

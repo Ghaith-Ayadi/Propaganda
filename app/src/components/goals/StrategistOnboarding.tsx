@@ -1,11 +1,11 @@
-// The Strategist's onboarding step: the `strategist` slot in
-// components/onboarding/handoffs.ts (#35). Four questions in Ayadi's order
+// The Strategist's questions on a tenant's first day: step 2 of Getting
+// started (components/gettingStarted). Four questions in Ayadi's order
 // (2026-10-08), then the plan drop. Review capacity was already asked in
 // "Your business" (site setting strategist.reviewPerMonth), so it's read here,
 // never asked again. There's no consultant review: the Strategist's proposal
 // goes straight to the tenant's Goals page.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { Label, TextArea, TextField } from "react-aria-components";
 import { ArrowRight } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
@@ -76,7 +76,16 @@ function writeDraft(siteId: string, draft: Partial<StrategyAnswers>) {
   }
 }
 
-export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
+export function StrategistOnboarding({
+  onDone,
+  submitLabel = "Save and continue",
+  submitIcon = ArrowRight,
+}: {
+  onDone: () => void;
+  /** Getting started says "Write my plan". */
+  submitLabel?: string;
+  submitIcon?: FC<{ className?: string }>;
+}) {
   const { site } = useWorkspace();
   const saved = useStrategyAnswers(site.id);
   const [draft] = useState(() => readDraft(site.id));
@@ -166,8 +175,8 @@ export function StrategistOnboarding({ onDone }: { onDone: () => void }) {
         <p className="text-sm text-tertiary">
           {answered} of {QUESTIONS.length} answered. The Strategist drafts your goals and first briefs from these.
         </p>
-        <Button color="primary" iconTrailing={ArrowRight} isLoading={saving} isDisabled={saving} onClick={() => void save()}>
-          Save and continue
+        <Button color="primary" iconTrailing={submitIcon} isLoading={saving} isDisabled={saving} onClick={() => void save()}>
+          {submitLabel}
         </Button>
       </div>
     </div>
