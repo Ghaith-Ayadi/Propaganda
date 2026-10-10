@@ -772,6 +772,9 @@ function PlanStep({
   onRevise: (note: string) => void;
 }) {
   const [asking, setAsking] = useState(false);
+  const [answers, setAnswers] = useState<string[]>(() => QUESTIONS.map(() => ""));
+  const [answered, setAnswered] = useState(false);
+  const allAnswered = answers.every((a) => a.trim());
   const [ask, setAsk] = useState("");
   const allPitched = topicsPitched >= TOPICS.length;
   return (
@@ -880,11 +883,38 @@ function PlanStep({
       </section>
 
       <section>
-        <SectionTitle title="What it couldn't decide alone" lede="Answer here. Your answers count as feedback for the next round." />
+        <SectionTitle
+          title="What it couldn't decide alone"
+          lede={answered ? "Sent. The Strategist folded your answers into the plan." : "Answer all three and send them together. Approving unlocks once they're sent."}
+        />
         <div className="flex flex-col gap-4">
-          {QUESTIONS.map((q) => (
-            <Box key={q} label={q} rows={2} placeholder="Your answer" />
-          ))}
+          {QUESTIONS.map((q, i) =>
+            answered ? (
+              <div key={q} className="flex gap-2.5 text-sm">
+                <CheckCircle className="mt-0.5 size-4 shrink-0 text-fg-success-primary" />
+                <div>
+                  <p className="text-secondary">{q}</p>
+                  <p className="mt-0.5 text-primary">{answers[i]}</p>
+                </div>
+              </div>
+            ) : (
+              <TextField key={q} value={answers[i]} onChange={(v) => setAnswers((a) => a.map((x, j) => (j === i ? v : x)))} className="flex flex-col gap-1.5">
+                <Label className="text-sm font-medium text-secondary">{q}</Label>
+                <TextArea
+                  rows={2}
+                  placeholder="Your answer"
+                  className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-md text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+                />
+              </TextField>
+            ),
+          )}
+          {!answered && (
+            <div>
+              <Button size="sm" isDisabled={!allAnswered} onClick={() => setAnswered(true)}>
+                Send answers
+              </Button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -910,12 +940,13 @@ function PlanStep({
             <>
               <span className="text-sm text-tertiary">
                 Round {round} of 5 · {allPitched ? "10 pitches ready" : "pitches on their way"}
+                {!answered && " · Answer its 3 questions to approve"}
               </span>
               <div className="ml-auto flex gap-2">
                 <Button color="secondary" size="sm" isDisabled={round >= 5} onClick={() => setAsking(true)}>
                   Ask for changes
                 </Button>
-                <Button size="sm" iconTrailing={ArrowRight} onClick={onApprove}>
+                <Button size="sm" iconTrailing={ArrowRight} isDisabled={!answered} onClick={onApprove}>
                   Approve plan
                 </Button>
               </div>
