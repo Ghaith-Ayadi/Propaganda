@@ -1,8 +1,8 @@
 // The agents' internet: a web search (DataForSEO's Google results, already our
 // pick for SEO data, pay per request) and a page reader. Both run as their own
 // steps in a workflow, so a restart never searches or fetches twice. A search
-// that fails on DataForSEO's side is asked again twice; the Pitcher and the
-// Writer then carry on without results rather than fail the run.
+// that fails on DataForSEO's side is asked again: by the Pitcher and the Writer
+// after durable waits (search.ts), by the Strategist twice within its step.
 //
 // DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD from the stack's .env. Without them
 // searching returns nothing and says so in the log; the agents still work from
@@ -56,7 +56,9 @@ export interface SearchOptions {
  * dropped connection. Worth asking again; anything else (a bad request, an
  * empty account) is not.
  */
-export class SearchUnavailableError extends Error {}
+export class SearchUnavailableError extends Error {
+  override name = "SearchUnavailableError";
+}
 
 /** What DataForSEO said a refused task cost, for the cost log (callPaidApi reads `costUsd`). */
 function withCost<E extends Error>(err: E, cost: unknown): E {
@@ -74,8 +76,9 @@ export function setSearchSleep(f: (ms: number) => Promise<void>): void {
 }
 
 /**
- * Google's organic results for `query` (top `limit`). A failure on the
- * provider's side is asked again twice; each attempt is its own logged
+ * Google's organic results for `query` (top `limit`), for code that runs
+ * inside one step (the Strategist's gather). A failure on the provider's side
+ * is asked again twice, a few seconds apart; each attempt is its own logged
  * request. After that it throws SearchUnavailableError.
  */
 export async function searchWeb(query: string, limit: number, opts: SearchOptions): Promise<SearchHit[]> {
@@ -91,20 +94,10 @@ export async function searchWeb(query: string, limit: number, opts: SearchOption
 }
 
 /**
- * The same search, but a provider outage gives no results instead of an error,
- * for agents that can carry on without them. Anything else still throws.
+ * One request, no retries: for workflows, which wait between attempts
+ * durably (search.ts) instead of sleeping inside a step.
  */
-export async function searchWebOrNothing(query: string, limit: number, opts: SearchOptions): Promise<SearchHit[]> {
-  try {
-    return await searchWeb(query, limit, opts);
-  } catch (err) {
-    if (!(err instanceof SearchUnavailableError)) throw err;
-    console.warn(`web search "${query.slice(0, 80)}" gave up: ${err.message}`);
-    return [];
-  }
-}
-
-async function searchOnce(query: string, limit: number, opts: SearchOptions): Promise<SearchHit[]> {
+export async function searchOnce(query: string, limit: number, opts: SearchOptions): Promise<SearchHit[]> {
   const login = process.env.DATAFORSEO_LOGIN;
   const password = process.env.DATAFORSEO_PASSWORD;
   if (!login || !password) {

@@ -37,7 +37,8 @@ import { claimsFor, renderClaims } from "./kb.js";
 import { nearest, readTaste, renderTaste, seenLine, type Seen } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
-import { searchWebOrNothing, type SearchHit } from "./web.js";
+import { type SearchHit } from "./web.js";
+import { SearchSession, searchDurably } from "./search.js";
 import { AGENT_QUEUE, registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
 import { writer } from "./writer.js";
 import { voiceSuggest } from "./edits.js";
@@ -67,6 +68,8 @@ export interface PitchResult {
   rejected: { idea: string; reason: string }[];
   waiting: string[];
   drafting: string[];
+  /** Searches that gave up after DataForSEO kept failing; the pitches went out without them. */
+  skippedSearches?: { step: string; query: string; message: string }[];
 }
 
 const MAX_IDEAS = 40;
@@ -234,6 +237,7 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
   const max = Math.min(Math.max(input.max ?? 5, 1), MAX_BATCH);
   const now = input.today ? new Date(`${input.today}T12:00:00Z`) : new Date(await DBOS.now());
   const result: PitchResult = { pitched: [], rejected: [], waiting: [], drafting: [] };
+  const searches = new SearchSession();
 
   const pending = await DBOS.runStep(
     async () => (await readIdeas(site, input.ideaIds ?? null, Math.max(MAX_IDEAS, input.ideaIds?.length ?? 0))).filter((i) => i.status === "new"),
@@ -365,9 +369,11 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
 
     // 4. Research: what's already out there, and what the tenant knows.
     const hits: SearchHit[] = [];
+    const gapsBefore = searches.gaps.length;
     for (const [n, q] of j.searches.entries()) {
-      hits.push(...(await DBOS.runStep(() => searchWebOrNothing(q, 6, { site, job: "pitcher:research" }), { name: `search ${idea.id} ${n + 1}` })));
+      hits.push(...(await searchDurably(searches, q, 6, { site, job: "pitcher:research" }, `search ${idea.id} ${n + 1}`)));
     }
+    const researchGap = searches.notice(searches.gaps.slice(gapsBefore));
     const claims = await DBOS.runStep(() => claimsFor(site, [idea.title, ...j.topics], 8), { name: `knowledge ${idea.id}` });
     const evidenceUrls = (idea.evidence ?? []).filter((e) => e.url).map((e) => ({ url: e.url!, label: e.label }));
     const allowed = new Set([...evidenceUrls.map((e) => e.url), ...hits.map((h) => h.url)]);
@@ -429,7 +435,7 @@ Answer with JSON only:
           collection_name: written.collection,
           planned_date: publishBy,
           topics: j.topics,
-          fit: { why: written.why, grade: r.grade, reasons: r.reasons, goals: r.goals },
+          fit: { why: written.why, grade: r.grade, reasons: r.reasons, goals: r.goals, ...(researchGap ? { research: researchGap } : {}) },
           origin: idea.origin,
           sources: written.sources,
           outline: written.outline.map((text, n) => ({ id: `l${n + 1}`, text })),
@@ -459,6 +465,7 @@ Answer with JSON only:
     const handle = await startForTenant(site, writer, { site, briefId: p.brief, beforeApproval: true });
     result.drafting.push(handle.workflowID);
   }
+  if (searches.gaps.length) result.skippedSearches = searches.gaps;
   return result;
 }
 

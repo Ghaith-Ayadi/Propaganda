@@ -370,6 +370,8 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary?: RunSu
         </p>
       )}
 
+      <SoftFailures steps={run.steps} />
+
       <ol className="space-y-1">
         {run.steps.length === 0 && <li className="text-sm text-tertiary">No steps yet.</li>}
         {run.steps.map((s) => (
@@ -380,14 +382,38 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary?: RunSu
   );
 }
 
+/** Steps that failed without failing the run: how many were tried again, and what the run went on without. */
+function SoftFailures({ steps }: { steps: StepView[] }) {
+  const retried = steps.filter((s) => s.state === "retried").length;
+  const skipped = steps.filter((s) => s.state === "skipped");
+  if (!retried && !skipped.length) return null;
+  return (
+    <p className="text-sm text-warning-primary">
+      {retried > 0 && `${retried} failed attempt${retried === 1 ? " was" : "s were"} tried again after a wait. `}
+      {skipped.length > 0 && `Carried on without ${skipped.map((s) => `“${s.name}”`).join(", ")}: ${skipped.length === 1 ? "it" : "they"} kept failing (${skipped[0]!.error ?? "no message"}).`}
+    </p>
+  );
+}
+
 function StepRow({ step, runError }: { step: StepView; runError: string | null }) {
   const dot: Record<StepView["state"], string> = {
     done: "bg-success-solid",
     failed: "bg-error-solid",
     stalled: "bg-warning-solid",
     running: "bg-brand-solid",
+    retried: "bg-warning-solid",
+    skipped: "bg-fg-quaternary",
   };
-  const note = step.state === "stalled" ? "waiting (usage limit or the tenant's key)" : step.state === "failed" ? "failed" : step.state === "running" ? "running" : "";
+  const note =
+    step.state === "stalled"
+      ? "waiting (usage limit or the tenant's key)"
+      : step.state === "failed"
+        ? "failed"
+        : step.state === "running"
+          ? "running"
+          : step.state === "retried" || step.state === "skipped"
+            ? `failed, ${step.note ?? (step.state === "retried" ? "tried again" : "carried on without it")}`
+            : "";
   return (
     <li className="text-sm">
       <div className="flex items-center gap-3">
@@ -403,6 +429,9 @@ function StepRow({ step, runError }: { step: StepView; runError: string | null }
       </div>
       {step.error && step.state === "failed" && step.error !== runError && (
         <pre className="ml-11 mt-1 whitespace-pre-wrap text-xs text-error-primary">{step.error}</pre>
+      )}
+      {step.error && (step.state === "retried" || step.state === "skipped") && (
+        <pre className="ml-11 mt-1 whitespace-pre-wrap text-xs text-warning-primary">{step.error}</pre>
       )}
     </li>
   );

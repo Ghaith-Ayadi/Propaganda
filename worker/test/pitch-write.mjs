@@ -248,6 +248,7 @@ const t = await import("../dist/agents/testing.js");
 t.setModelResolver(() => model);
 t.setWebFetch(web);
 t.setSearchSleep(async () => {});
+t.setSearchWaits([10, 10, 10, 10]);
 t.wireGateway();
 t.DBOS.setConfig({ name: "propaganda-agents-test", systemDatabaseUrl: `${PGURL}/${SYS_DB}`, applicationVersion: "test" });
 await t.DBOS.launch();
@@ -269,6 +270,9 @@ try {
   check(t.contrastHits("It's not raining. We went out anyway.").length === 0, "lets an ordinary negation through");
   check(t.unsourcedNumbers("About 12% of teams do it.").length === 1, "flags a number with no link");
   check(t.unsourcedNumbers("About [12%](https://x.y/z) of teams do it.").length === 0, "accepts a linked number");
+  const legacy = t.asAttempt([{ url: "https://x.y", title: "t", snippet: "", position: 1 }]);
+  check(legacy.hits.length === 1 && !legacy.failure, "a search step recorded before durable retries (the hits array) replays as a success");
+  check(t.asAttempt({ hits: [], failure: { message: "m", next: "retry", note: "" } }).failure?.message === "m", "a recorded failure replays as a failure");
   check(t.htmlToText("<p>a</p><script>x()</script><p>b</p>") === "a\nb", "page text drops scripts");
   let refused = false;
   try { await t.assertPublicUrl("http://169.254.169.254/latest/meta-data"); } catch { refused = true; }
@@ -351,15 +355,26 @@ try {
   const searchRowsBefore = db.model_calls.filter((c) => String(c.model).startsWith("dataforseo/")).length;
   searchOutage = 1;
   const [blip] = await t.handOffIdeas(SITE, [{ title: "Retries after a blip", summary: "Customers asked.", origin: "calls", evidence: [{ label: "Call", quote: "it blipped" }], sourceAgent: "listener" }], { pitchNow: false });
-  const o1 = await (await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: [blip], batch: 1, max: 1, draftTop: 0, goals, today: "2026-10-08" })).getResult();
+  const h1 = await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: [blip], batch: 1, max: 1, draftTop: 0, goals, today: "2026-10-08" });
+  const o1 = await h1.getResult();
   const blipRows = db.model_calls.filter((c) => String(c.model).startsWith("dataforseo/")).slice(searchRowsBefore);
-  check(o1.pitched.length === 1 && searchOutage === 0, "one failed search is asked again and the pitch goes out");
+  check(o1.pitched.length === 1 && searchOutage === 0 && !o1.skippedSearches, "one failed search is asked again after a wait and the pitch goes out");
   check(blipRows.length === 2 && blipRows[0].status === "error" && blipRows[0].priced === true && blipRows[0].cost_usd === 0, `the failed attempt is logged at the $0 DataForSEO reported, not unpriced (${JSON.stringify(blipRows.map((c) => [c.status, c.priced, c.cost_usd]))})`);
+  const s1 = await t.DBOS.listWorkflowSteps(h1.workflowID);
+  const names1 = s1.map((x) => x.name);
+  check(names1.includes(`search ${blip} 1`) && names1.includes(`search ${blip} 1 (try 2)`) && names1.includes("DBOS.sleep"), `each attempt is its own step, with a durable wait between (${names1.filter((n) => n.startsWith("search") || n === "DBOS.sleep").join(" | ")})`);
+  const first = s1.find((x) => x.name === `search ${blip} 1`);
+  check(first?.output?.failure?.next === "retry" && first.output.failure.note === "trying again in 0 s" && !first.error, "the failed attempt returns its failure instead of failing the run");
+  check(!db.briefs.find((b) => b.idea === blip)?.fit?.research, "a pitch whose search came back carries no research note");
+
   searchOutage = 99;
   const [down] = await t.handOffIdeas(SITE, [{ title: "Retries while search is down", summary: "Customers asked again.", origin: "calls", evidence: [{ label: "Call", quote: "still down" }], sourceAgent: "listener" }], { pitchNow: false });
   const o2 = await (await t.DBOS.startWorkflow(t.pitcher)({ site: SITE, ideaIds: [down], batch: 1, max: 1, draftTop: 0, goals, today: "2026-10-08" })).getResult();
-  check(o2.pitched.length === 1 && searchOutage === 96, `search down for good: three attempts, then the pitch is written without results (${99 - searchOutage} attempts)`);
+  check(o2.pitched.length === 1 && searchOutage === 94, `search down for good: five attempts, then the pitch is written without results (${99 - searchOutage} attempts)`);
   check(prompts.filter((x) => x.includes("Write the pitch")).pop().includes("(no search results)"), "and the brief is told there were none");
+  const downBrief = db.briefs.find((b) => b.idea === down);
+  check(/^Written without one web search: the search service \(DataForSEO\) kept failing \(Internal SE Server Error\)/.test(downBrief?.fit?.research ?? ""), `the person is told on the pitch (${downBrief?.fit?.research})`);
+  check(o2.skippedSearches?.length === 1 && o2.skippedSearches[0].message.includes("Internal SE Server Error"), "and the run's result lists the skipped search");
   searchOutage = 0;
 
   console.log("a request from Chat");

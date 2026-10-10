@@ -155,6 +155,8 @@ export interface PipelineItem {
   learned?: string;
   /** briefs.changed: what is materially different from a rejected near-duplicate. */
   changed?: string;
+  /** Set when web searches were skipped (the search service kept failing): the pitch or draft has less research than usual. */
+  research?: string;
   /** Content batch (1-based); null for a bonus post outside the plan. */
   batch: number | null;
   /** The draft post in the editor, once the pitch is approved. */

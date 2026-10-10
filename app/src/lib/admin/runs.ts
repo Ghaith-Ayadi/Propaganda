@@ -46,7 +46,8 @@ export interface RunSummary {
   queue: string | null;
 }
 
-export type StepState = "done" | "failed" | "stalled" | "running";
+/** "retried": failed, and the run tried again after a wait; "skipped": failed for good, and the run carried on without it. */
+export type StepState = "done" | "failed" | "stalled" | "running" | "retried" | "skipped";
 
 export interface StepView {
   id: number;
@@ -57,6 +58,8 @@ export interface StepView {
   completedAt: number | null;
   childId: string | null;
   cost: Cost | null;
+  /** For a retried or skipped step: what happened next ("trying again in 5 min"). */
+  note?: string;
 }
 
 export interface RunDetail extends RunSummary {
