@@ -10,13 +10,17 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
+      # The CLI reads these from the environment; nothing goes on a command line.
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # Git deploys used to set this; the app's /version and api/_telemetry.ts read it.
+      VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: npm install --global vercel@latest
-      - run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-      - run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-      - run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - run: npm install --global vercel@63.1.2
+      - run: vercel pull --yes --environment=production
+      - run: vercel build --prod
+      - run: vercel deploy --prebuilt --prod --env VERCEL_GIT_COMMIT_SHA=${{ github.sha }}
