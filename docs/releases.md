@@ -14,7 +14,8 @@ Only on Ayadi's word. Run the **release** workflow (`.github/workflows/release.y
 | `ai_tests` | `changed` (default) or `all` |
 | `deploy_app` | deploy the app to Vercel production once tagged (default yes) |
 
-The first release is `v0.2.0`; after that the number is the previous tag bumped.
+The first release is `v0.2.0`; after that the number is the previous tag bumped. `v1.0.0` is
+Verbatim's tag from May 2026 and is not counted.
 
 It runs, in order:
 
