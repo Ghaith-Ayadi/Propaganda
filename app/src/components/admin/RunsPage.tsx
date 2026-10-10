@@ -264,7 +264,10 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary?: RunSu
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reload with the list (summary changes on every poll).
+  // Reload with the list. A run's status and updatedAt don't change while it
+  // works through its steps, so a live run reloads on every poll (each poll
+  // hands in a new summary object).
+  const live = summary ? ACTIVE.includes(summary.state) : false;
   useEffect(() => {
     getRun(client, id).then(
       (r) => {
@@ -276,7 +279,7 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary?: RunSu
         setError(userMessage(err));
       },
     );
-  }, [client, id, summary?.status, summary?.updatedAt, summary?.stall?.until]);
+  }, [client, id, summary?.status, summary?.updatedAt, summary?.stall?.until, live ? summary : null]);
 
   const act = async (what: "retry" | "cancel") => {
     setBusy(true);
