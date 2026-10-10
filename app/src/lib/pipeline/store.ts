@@ -16,6 +16,7 @@ import { createCollection } from "@/lib/collections";
 import { UI_PREVIEW } from "@/lib/preview";
 import { onScopeReset, siteId } from "@/lib/scope";
 import { reportError } from "@/lib/telemetry";
+import { onServerChange } from "@/lib/serverChanges";
 import { placeholderAdapter, type PipelineAdapter } from "./adapter";
 import { addDays, shortDate, ymd } from "./dates";
 import { live, loadLive, meOf } from "./live";
@@ -131,10 +132,13 @@ onScopeReset(() => {
   emit();
 });
 
-// Pitches arrive while the page is open (the Pitcher runs on the worker):
-// read again every minute while someone is looking, and on coming back.
+// Pitches arrive while the page is open (the Pitcher runs on the worker): read
+// again when the server says a brief or batch changed (lib/serverChanges.ts),
+// every minute while someone is looking in case no event came, and on coming
+// back.
 const POLL_MS = 60_000;
 let timer: ReturnType<typeof setInterval> | null = null;
+let stopEvents: (() => void) | null = null;
 const onFocus = () => {
   if (document.visibilityState === "visible") void refresh();
 };
@@ -144,6 +148,7 @@ function subscribe(fn: () => void) {
   if (LIVE && !timer) {
     timer = setInterval(onFocus, POLL_MS);
     document.addEventListener("visibilitychange", onFocus);
+    stopEvents = onServerChange("pipeline", () => void refresh());
   }
   return () => {
     listeners.delete(fn);
@@ -151,6 +156,8 @@ function subscribe(fn: () => void) {
       clearInterval(timer);
       timer = null;
       document.removeEventListener("visibilitychange", onFocus);
+      stopEvents?.();
+      stopEvents = null;
     }
   };
 }
