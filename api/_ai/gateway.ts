@@ -685,7 +685,8 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
       call,
       site: opts.site,
       turn,
-      step: stepNo,
+      // A reply that failed before its first step began is still step 1.
+      step: Math.max(stepNo, 1),
       request:
         stepNo <= 1
           ? { model: route.id, system: opts.system ?? null, messages: opts.messages, tools: Object.keys(opts.tools ?? {}), maxSteps: opts.maxSteps ?? 6, maxOutputTokens: opts.maxOutputTokens ?? null, reasoning: opts.reasoning ?? null }

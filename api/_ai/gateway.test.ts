@@ -511,3 +511,16 @@ test("a streamed reply with a tool round is captured step by step, under one tur
   assert.deepEqual(results, [{ id: "c1", tool: "lookup", output: "three posts on retries" }]);
   assert.equal(two.response.text, "Found it.");
 });
+
+test("a stream that fails before its first step is captured as step 1, with its request and error", async () => {
+  gate = open; calls.length = 0; captures.length = 0;
+  setModelResolver(() => new MockLanguageModelV3({ doStream: async () => { throw Object.assign(new Error("bad request"), { statusCode: 400 }); } }));
+  const s = await g.streamModel(streamOpts);
+  await assert.rejects(async () => { for await (const _ of s.parts) { /* drain */ } });
+  assert.equal(calls.length, 1);
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].call, calls[0].id);
+  assert.equal(captures[0].step, 1);
+  assert.deepEqual(captures[0].request.messages, streamOpts.messages);
+  assert.equal(captures[0].response.error.status, 400);
+});
