@@ -14,7 +14,8 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      # Git deploys used to set this; the app's /version and api/_telemetry.ts read it.
+      # Git deploys used to set this; the build reads it for /version. The functions get the sha
+      # as APP_COMMIT_SHA (Vercel reserves VERCEL_* names), read by api/_telemetry.ts.
       VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -23,4 +24,4 @@ jobs:
       - run: npm install --global vercel@63.1.2
       - run: vercel pull --yes --environment=production
       - run: vercel build --prod
-      - run: vercel deploy --prebuilt --prod --env VERCEL_GIT_COMMIT_SHA=${{ github.sha }}
+      - run: vercel deploy --prebuilt --prod --env APP_COMMIT_SHA=${{ github.sha }}
