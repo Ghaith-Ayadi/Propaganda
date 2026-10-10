@@ -43,7 +43,8 @@ const member = await user(`kb-agents-${S}@test.local`);
 await ok(admin.from("sites").insert({ id: S, name: "Acme (agents test)", slug: `acme-${S}` }));
 await ok(admin.from("site_members").insert({ site: S, user_id: member.userId, role: "owner" }));
 await ok(admin.from("collections").insert({ site: S, name: "Test", emoji: "🧪", position: 1 }));
-sql(`insert into public.kb_agent_sites (site, since) values ('${S}', now() - interval '1 day')`);
+// The site's row comes from its insert (20261010000050); move `since` back a day.
+sql(`update public.kb_agent_sites set since = now() - interval '1 day' where site = '${S}'`);
 
 // The knowledge base starts with one settled claim, admitted the way the Guardian does.
 const seedProp = newId();
