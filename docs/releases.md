@@ -10,6 +10,7 @@ Only on Ayadi's word. Run the **release** workflow (`.github/workflows/release.y
 
 | Input | Choices |
 | --- | --- |
+| `objective` | what the release is for, one line; it heads the release's log entry |
 | `bump` | `patch` (default: fixes and small changes), `minor` (a milestone), `major` |
 | `ai_tests` | `changed` (default) or `all` |
 | `deploy_app` | deploy the app to Vercel production once tagged (default yes) |
@@ -52,6 +53,9 @@ Fable and follows the same prompt, at a fifth of the price ($2/$10 per million t
 $10/$50). Haiku would be cheaper, but a long plan in JSON is where it fails, and a test that
 fails because of the test model is worse than no test. The other agents already run on a
 cheap model in prod, so their tests use it.
+
+Each test stops at $5 of model spend (`LIVE_SPEND_CAP_USD`): the stand-in `cost_gate` reports
+what the test has spent so far against that cap, and the gateway refuses the next call.
 
 Without `AI_GATEWAY_API_KEY` a real-model test prints `skipped`; with `LIVE_REQUIRED=1` (the
 release run) that is a failure. To run one by hand:
