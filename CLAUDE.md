@@ -41,6 +41,11 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
   `VITE_SUPABASE_ANON_KEY` the public key. Editor at `/admin`. Blogs each get their own
   host (`app/src/lib/siteUrl.ts`) and read the API cross-origin; the editor never runs on
   a blog's subdomain.
+- **Deploying the app.** Vercel's Git integration is off for the `verbatim` project: no push or
+  PR creates a Vercel deployment or check (the free plan's 100 deployments a day were being
+  spent on ignored PR builds). Production ships only from `.github/workflows/deploy-app.yml`,
+  run by hand on `main` (`vercel build` + `deploy --prebuilt`, with the `VERCEL_TOKEN`,
+  `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` repo secrets), and only on Ayadi's word.
 - **Multi-tenant.** Content belongs to a **site** (`sites`, `site_members` with owner/editor
   roles). Every content table has a required `site`; row-level security is keyed on it,
   and every query, pull and realtime subscription must filter by it (published posts of
