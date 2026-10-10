@@ -51,6 +51,7 @@ import {
   quarterLabelOf,
   reviewPerMonth,
   thinAnswers,
+  pickHost,
   validate,
   volumeCap,
   weeklyNotes,
@@ -214,8 +215,8 @@ async function market(site: string, pack: Pack): Promise<Market> {
 
 /**
  * The watch list as hostnames. "airops.com" is one already; a bare name
- * ("AirOps") is looked up with one web search and the first result's host
- * wins, so a tenant who types names still gets competitor keyword data.
+ * ("AirOps") is looked up with one web search and pickHost() chooses among
+ * the results, so a tenant who types names still gets competitor keyword data.
  */
 async function competitorHosts(site: string, watch: string[], ourDomain: string): Promise<string[]> {
   const hosts: string[] = [];
@@ -224,8 +225,8 @@ async function competitorHosts(site: string, watch: string[], ourDomain: string)
     let host = hostOf(line);
     if (!host.includes(".") && searchConfigured()) {
       try {
-        const hits = await searchWeb(line, 3, { site, job: JOB });
-        host = hits.map((h) => hostOf(h.url)).find((h) => h && h !== ourDomain) ?? "";
+        const hits = await searchWeb(line, 5, { site, job: JOB });
+        host = pickHost(line, hits.map((h) => hostOf(h.url)), ourDomain);
       } catch (err) {
         console.warn(`strategist: couldn't resolve "${line}": ${(err as Error).message}`);
         host = "";

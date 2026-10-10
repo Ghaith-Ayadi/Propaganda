@@ -303,6 +303,36 @@ export function winnable(k: Keyword | undefined, o: { newDomain?: boolean } = {}
  * A watched site is a source that keeps publishing (a site, a blog or news
  * section), never one article: the root or one path segment, no file.
  */
+/** Hosts a web search returns for a company's name that are never the company: profiles and directories. */
+const NOT_A_COMPANY = new Set([
+  "instagram.com", "linkedin.com", "facebook.com", "x.com", "twitter.com", "youtube.com", "tiktok.com",
+  "wikipedia.org", "crunchbase.com", "g2.com", "capterra.com", "producthunt.com", "github.com", "reddit.com",
+  "medium.com", "apps.apple.com", "play.google.com",
+]);
+
+/**
+ * The host for a competitor typed as a bare name ("AirOps"), from the hosts a
+ * web search returned in order: a host that carries the name wins
+ * (airops.com), then the first that isn't ours or a profile site, else none.
+ * A wrong host (the first result being Instagram) poisons the keyword data,
+ * so none beats a guess.
+ */
+export function pickHost(name: string, hosts: string[], ourDomain: string): string {
+  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ok = (h: string) => h.includes(".") && h !== ourDomain && !NOT_A_COMPANY.has(h.replace(/^www\./, ""));
+  // The company's site, not its app or docs host (app.airops.com ranks for
+  // "airops login", airops.com for what they write about).
+  const site = (h: string) => h.split(".").slice(-2).join(".");
+  const label = (h: string) => site(h).split(".")[0]!.replace(/[^a-z0-9]/g, "");
+  if (key.length >= 3) {
+    // "Box" is box.com before dropbox.com: the exact label wins over a host that merely contains the name.
+    const exact = hosts.find((h) => ok(h) && label(h) === key);
+    const named = exact ?? hosts.find((h) => ok(h) && h.replace(/[^a-z0-9]/g, "").includes(key));
+    if (named) return site(named);
+  }
+  return hosts.find(ok) ?? "";
+}
+
 export function looksLikeSource(url: string): boolean {
   try {
     const u = new URL(url);
