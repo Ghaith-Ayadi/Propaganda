@@ -366,6 +366,30 @@ export function thinAnswers(answers: Record<string, string>, perMonthAnswered: b
   return false;
 }
 
+/**
+ * Nothing to plan from: no website, every onboarding answer blank, no plan
+ * dropped and no posts. A run on that would only reflect the product's own
+ * rules back as the company's strategy (PPGD on prod, 2026-10-10), so the
+ * workflow stops before the model call and says what to answer first.
+ */
+export function emptyBrief(o: { website: string; answers: Record<string, string>; planText: string; planFiles: number; published: number }): boolean {
+  if (o.website.trim() || o.planText.trim() || o.planFiles > 0 || o.published > 0) return false;
+  return ["offer", "searches", "watch", "upcoming"].every((key) => !String(o.answers[key] ?? "").trim());
+}
+
+export const EMPTY_BRIEF_ERROR =
+  "Nothing to plan from yet: no website, no onboarding answers, no plan and no posts. Answer the onboarding questions (your website, what you sell, the searches you want to be found by) and run the Strategist again.";
+
+/**
+ * The kind of proposal a run really is: a tenant with no published history
+ * and no approved goals is onboarding whatever button asked for the run (a
+ * by-hand run from the Goals page asks for a revision), so its first
+ * proposal carries the Launch.
+ */
+export function effectiveKind(asked: ProposalKind, o: { hasHistory: boolean; hasGoals: boolean }): ProposalKind {
+  return !o.hasHistory && !o.hasGoals ? "onboarding" : asked;
+}
+
 /** Every rule the draft breaks, as sentences for the model. Empty means it passes. */
 export function validate(d: Draft, r: Rules): string[] {
   const errors: string[] = [];

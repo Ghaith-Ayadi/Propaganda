@@ -10,6 +10,8 @@ import { MockLanguageModelV3 } from "ai/test";
 const PGURL = process.env.PGURL ?? "postgres://postgres:postgres@localhost:5432";
 const SYS_DB = "worker_test_strategist_dbos";
 const SITE = "stratsite000001";
+/** A tenant that never answered onboarding: nothing to plan from. */
+const BLANK = "stratsite000002";
 const WEB = "http://93.184.216.34";
 
 let failures = 0;
@@ -24,7 +26,10 @@ function check(cond, what) {
 // ---- a stand-in PostgREST ----
 
 const db = {
-  sites: [{ id: SITE, name: "Kontra", slug: "kontra", domain: "" }],
+  sites: [
+    { id: SITE, name: "Kontra", slug: "kontra", domain: "" },
+    { id: BLANK, name: "Blank", slug: "blank", domain: "" },
+  ],
   app_settings: [
     { site: SITE, key: "tenant.website", value: WEB },
     { site: SITE, key: "strategist.reviewPerMonth", value: "8" },
@@ -37,6 +42,7 @@ const db = {
       plan_files: [],
       plan_read_at: null,
     },
+    { site: BLANK, answers: { offer: "", searches: "", watch: "", upcoming: "" }, plan_text: "", plan_files: [], plan_read_at: null },
   ],
   strategy_proposals: [],
   goal_versions: [],
@@ -141,6 +147,11 @@ async function web(input, init) {
     calls.push(url);
     if (url.includes("keyword_ideas")) return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: KEYWORDS.map(labsItem) }] }] });
     if (url.includes("ranked_keywords")) return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: [] }] }] });
+    if (url.includes("keyword_overview")) {
+      const asked = JSON.parse(init.body)[0].keywords;
+      const priced = asked.includes("cron job alerting") ? [labsItem({ keyword: "cron job alerting", vol: 140, kd: 9 })] : [];
+      return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: priced }] }] });
+    }
     if (url.includes("serp/google/organic")) {
       return Response.json({ cost: 0.002, tasks: [{ status_code: 20000, result: [{ items: [{ type: "organic", url: "https://prefect.io/blog/retries", title: "Retries", rank_absolute: 1 }] }] }] });
     }
@@ -167,7 +178,7 @@ const GOOD = {
     { name: "Scraping at scale", low: 3, high: 5, why: "A search you named.", basis: "DataForSEO: 210/month" },
   ],
   ranking: {
-    searches: ["batch job retries", "durable batch jobs", "retry failed cron job", "nightly etl failures", "run scrapers at scale"].map((q, i) => ({
+    searches: ["batch job retries", "durable batch jobs", "retry failed cron job", "nightly etl failures", "run scrapers at scale", "cron job alerting"].map((q, i) => ({
       query: q,
       topic: i === 4 ? "Scraping at scale" : "Reliability",
       why: "Winnable.",
@@ -246,6 +257,11 @@ try {
   check(t.thinAnswers({ offer: "We sell content software", searches: "AI CMS", watch: "AirOps", upcoming: "Beta" }, true), "a 4-word offer is thin");
   check(t.thinAnswers(db.tenant_profile[0].answers, false), "capacity not answered is thin");
   check(!t.thinAnswers(db.tenant_profile[0].answers, true), "Kontra's answers are not");
+  const blank = { website: "", answers: { offer: "", searches: "", watch: "", upcoming: "" }, planText: "", planFiles: 0, published: 0 };
+  check(t.emptyBrief(blank), "no website, blank answers, no plan and no posts is nothing to plan from");
+  check(!t.emptyBrief({ ...blank, website: "propaganda.pub" }) && !t.emptyBrief({ ...blank, answers: { ...blank.answers, offer: "We sell content software" } }) && !t.emptyBrief({ ...blank, published: 3 }), "a website, one answer or posts is enough to plan from");
+  check(t.effectiveKind("revision", { hasHistory: false, hasGoals: false }) === "onboarding", "a by-hand run for a tenant with no history and no goals is an onboarding run");
+  check(t.effectiveKind("revision", { hasHistory: false, hasGoals: true }) === "revision" && t.effectiveKind("quarterly", { hasHistory: true, hasGoals: true }) === "quarterly", "with goals or history the asked kind stands");
   const draft = t.parseDraft(GOOD);
   const rules = { volumeCap: 22, hasHistory: false, readerWeeks: 0, keywords: kw(KEYWORDS) };
   check(t.validate(draft, rules).length === 0, `a good proposal passes (${t.validate(draft, rules).join(" | ")})`);
@@ -307,6 +323,9 @@ try {
   check(p.quarter === "2026-Q4" && p.covers.from && p.kind === "onboarding" && p.launch?.target === 15, "with its window and the Launch");
   check(p.watchedSites.length === 3 && !p.watchedSites.some((w) => w.url.includes("dead")), "the watched site that didn't answer was dropped");
   check(p.ranking.searches.find((s) => s.query === "batch job retries")?.volume === 320, "searches carry their volume");
+  check(row.inputs?.pricedSearches === 1, `the inputs count the priced search (${JSON.stringify(row.inputs)})`);
+  check(calls.filter((u) => u.includes("keyword_overview")).length === 1, `one overview call, and none for the fix draft since nothing new was proposed (${calls.filter((u) => u.includes("keyword_overview")).length})`);
+  check(p.ranking.searches.find((s) => s.query === "cron job alerting")?.volume === 140, `a search the data never listed was priced before the check and carries its numbers (${JSON.stringify(p.ranking.searches.find((s) => s.query === "cron job alerting"))}, priced ${row.inputs?.pricedSearches}, overview calls ${calls.filter((u) => u.includes("keyword_overview")).length})`);
   check(p.batches.value >= 1 && /Weekly/.test(p.batches.why), "and the batch count from the cadence");
   check(db.tenant_profile[0].plan_read_at, "the plan is marked read");
   check(db.model_calls.some((c) => c.job === "strategist") && db.model_calls.some((c) => String(c.model).startsWith("dataforseo/")), "model calls and DataForSEO are in the cost log");
@@ -320,6 +339,16 @@ try {
   const row2 = db.strategy_proposals[1];
   check(res2.status === "failed" && row2.status === "failed" && row2.error.includes("Broke the rules twice"), "fails instead of reaching the tenant");
   check(db.strategy_proposals[0].status === "sent", "and the earlier proposal stays");
+  check(prompts[2].includes("-post Launch runs first"), "a by-hand run for a tenant with no goals yet still plans the Launch");
+
+  console.log("a run with nothing to plan from");
+  db.strategy_proposals.push({ id: "proposal0000003", site: BLANK, quarter: "2026-Q4", kind: "revision", status: "requested", request: "Run by hand from the Goals page.", requested_by: "u1", proposal: null, edits: null, created: new Date().toISOString(), approved_at: null });
+  const before = prompts.length;
+  const [id3] = await t.dispatchStrategist();
+  const res3 = await t.DBOS.retrieveWorkflow(id3).getResult();
+  const row3 = db.strategy_proposals[2];
+  check(res3.status === "failed" && row3.status === "failed" && row3.error.startsWith("Nothing to plan from yet"), `stops and says what to answer first (${row3.error})`);
+  check(prompts.length === before, "without asking the model");
 
   console.log("goals for the Pitcher and the weekly check");
   db.goal_versions.push({ site: SITE, quarter: "2026-Q4", version: 1, targets: { volume: { total: 18, topics: targets.volume.topics }, ranking: { searches: [{ query: "batch job retries" }], pageOneTarget: 2 } }, covers: { from: "2026-10-01", to: "2026-12-31", weeks: 13, prorated: false }, approved_at: "2026-10-09T00:00:00Z" });

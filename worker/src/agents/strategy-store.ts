@@ -135,6 +135,17 @@ export async function latestGoals(site: string, quarter: string): Promise<GoalVe
   }
 }
 
+/** Whether the tenant has ever approved goals: a tenant without any gets the onboarding kind of proposal, whatever asked for the run. */
+export async function hasApprovedGoals(site: string): Promise<boolean> {
+  try {
+    const rows = await select<{ site: string }>("goal_versions", `site=eq.${enc(site)}&select=site&limit=1`);
+    return rows.length > 0;
+  } catch (err) {
+    if (isMissing(err)) return false;
+    throw err;
+  }
+}
+
 /** Tenants with goals for `quarter` (the weekly check, the quarterly run). */
 export async function sitesWithGoals(quarter: string): Promise<string[]> {
   try {
