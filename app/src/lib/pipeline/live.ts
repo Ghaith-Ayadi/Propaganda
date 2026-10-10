@@ -72,7 +72,7 @@ export function meOf(): Person {
 }
 
 function toItem(r: Row, meId: string): PipelineItem {
-  const fit = (r.fit ?? {}) as { why?: string; reasons?: FitReason[]; goals?: GoalEffect[] };
+  const fit = (r.fit ?? {}) as { why?: string; reasons?: FitReason[]; goals?: GoalEffect[]; research?: string };
   const byAgent = typeof r.pitched_by === "string" && r.pitched_by.startsWith("agent:");
   const at = r.scheduled_at ? new Date(r.scheduled_at) : null;
   const created = Date.parse(r.created) || Date.now();
@@ -101,6 +101,7 @@ function toItem(r: Row, meId: string): PipelineItem {
     rejectReason: r.reject_reason || undefined,
     learned: r.learned || undefined,
     changed: r.changed || undefined,
+    research: fit.research || undefined,
     batch: typeof r.batch === "number" ? r.batch : null,
     postId: r.post ?? null,
     briefId: r.id,

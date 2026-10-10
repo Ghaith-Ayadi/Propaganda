@@ -8,6 +8,7 @@ import { DBOS, type WorkflowStatus, type WorkflowStatusString } from "@dbos-inc/
 import type { Pool } from "pg";
 import { HttpError } from "./auth.js";
 import { STALL_EVENT, tenantKeyOf, usageLimitOf, type Stall } from "./limits.js";
+import type { StepFailure } from "./agents/search.js";
 
 type StepInfo = NonNullable<Awaited<ReturnType<typeof DBOS.listWorkflowSteps>>>[number];
 
@@ -41,7 +42,8 @@ export interface RunSummary {
   queue: string | null;
 }
 
-export type StepState = "done" | "failed" | "stalled" | "running";
+/** "retried": failed, and the run tried again after a wait; "skipped": failed for good, and the run carried on without it. */
+export type StepState = "done" | "failed" | "stalled" | "running" | "retried" | "skipped";
 
 export interface StepView {
   id: number;
@@ -52,6 +54,8 @@ export interface StepView {
   completedAt: number | null;
   childId: string | null;
   cost: Cost | null;
+  /** For a retried or skipped step: what happened next ("trying again in 5 min"). */
+  note?: string;
 }
 
 export interface RunDetail extends RunSummary {
@@ -189,8 +193,18 @@ export async function listRuns(db: Pool, q: ListQuery): Promise<{ runs: RunSumma
   return { runs, costLog: cost !== null };
 }
 
+/** A step that failed but let the run carry on returns `{ failure }` (agents/search.ts). */
+function softFailureOf(s: StepInfo): StepFailure | null {
+  const f = s.output && typeof s.output === "object" ? (s.output as { failure?: unknown }).failure : null;
+  if (!f || typeof f !== "object") return null;
+  const { message, next, note } = f as Partial<StepFailure>;
+  return typeof message === "string" && (next === "retry" || next === "carry on") ? { message, next, note: typeof note === "string" ? note : "" } : null;
+}
+
 function stepState(s: StepInfo): StepState {
   if (s.error) return usageLimitOf(s.error) !== null || tenantKeyOf(s.error) !== null ? "stalled" : "failed";
+  const soft = softFailureOf(s);
+  if (soft) return soft.next === "retry" ? "retried" : "skipped";
   return s.completedAtEpochMs ? "done" : "running";
 }
 
@@ -232,7 +246,8 @@ export async function getRun(db: Pool, id: string): Promise<RunDetail> {
       id: s.functionID,
       name: STEP_NAMES[s.name] ?? s.name,
       state: stepState(s),
-      error: messageOf(s.error),
+      error: messageOf(s.error) ?? softFailureOf(s)?.message ?? null,
+      note: softFailureOf(s)?.note || undefined,
       startedAt: s.startedAtEpochMs ?? null,
       completedAt: s.completedAtEpochMs ?? null,
       childId: s.childWorkflowID,

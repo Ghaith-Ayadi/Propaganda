@@ -246,6 +246,14 @@ export async function reviewerFeedback(site: string, limit = 20): Promise<{ titl
   );
 }
 
+/** Say on an agent-made pitch that its research is thinner than usual (shown on the pitch). */
+export async function noteResearchGap(site: string, brief: string, note: string): Promise<void> {
+  const [row] = await select<{ fit: unknown }>("briefs", `site=eq.${enc(site)}&id=eq.${enc(brief)}&pitched_by=like.agent:*&select=fit`);
+  if (!row) return;
+  const fit = row.fit && typeof row.fit === "object" ? (row.fit as Record<string, unknown>) : {};
+  await patch("briefs", `site=eq.${enc(site)}&id=eq.${enc(brief)}&pitched_by=like.agent:*`, { fit: { ...fit, research: note } });
+}
+
 /** Mark an agent-made brief's stage. Briefs a person made are never changed. */
 export async function setAgentBriefStatus(site: string, brief: string, status: string, from: string[]): Promise<void> {
   await patch("briefs", `site=eq.${enc(site)}&id=eq.${enc(brief)}&pitched_by=like.agent:*&status=in.(${from.join(",")})`, { status });

@@ -157,6 +157,12 @@ function PitchBody({
       {/* body: one column, one rhythm */}
       <div className="flex-1 overflow-y-auto">
         <div className="flex flex-col gap-8 px-6 py-6 md:px-8">
+          {item.research && (
+            <p className="border-l-2 border-secondary pl-3 text-sm text-secondary">
+              <span className="font-medium text-primary">Less research than usual. </span>
+              {item.research}
+            </p>
+          )}
           {item.changed && (
             <p className="border-l-2 border-secondary pl-3 text-sm text-secondary">
               <span className="font-medium text-primary">Pitched before. </span>

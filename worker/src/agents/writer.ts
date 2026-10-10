@@ -22,6 +22,7 @@ import {
   pipelineBriefs,
   insertVersion,
   linkDraft,
+  noteResearchGap,
   setAgentBriefStatus,
   versionAuthors,
   voiceGuide,
@@ -33,7 +34,8 @@ import { MODELS, askJson, askText, obj, str, strs } from "./model.js";
 import { voiceFor, voiceGuideWorkflow, voiceSourceFor } from "./voice.js";
 import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
-import { readPage, searchWebOrNothing, type Page } from "./web.js";
+import { readPage, type Page } from "./web.js";
+import { SearchSession, searchDurably } from "./search.js";
 import { HOUSE_RULES, contrastHits, unsourcedNumbers, wordCount } from "./writing.js";
 
 export interface WriteInput {
@@ -138,7 +140,7 @@ ${markdown}`,
   return wordCount(cleaned) > wordCount(markdown) * 0.8 ? cleaned : markdown;
 }
 
-async function research(site: string, brief: BriefRow): Promise<{ pages: Page[]; claims: Claim[] }> {
+async function research(site: string, brief: BriefRow): Promise<{ pages: Page[]; claims: Claim[]; searches: SearchSession }> {
   const queries = await askJson(
     "plan research",
     {
@@ -153,8 +155,9 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
   );
 
   const urls: string[] = (brief.sources ?? []).map((s) => s.url);
+  const searches = new SearchSession();
   for (const [n, q] of queries.entries()) {
-    const hits = await DBOS.runStep(() => searchWebOrNothing(q, 5, { site, job: "writer:research" }), { name: `search ${n + 1}` });
+    const hits = await searchDurably(searches, q, 5, { site, job: "writer:research" }, `search ${n + 1}`);
     for (const h of hits) if (!urls.includes(h.url)) urls.push(h.url);
   }
 
@@ -170,7 +173,7 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
     () => claimsFor(site, [brief.title, brief.angle, ...(brief.outline ?? []).map((l) => l.text)].filter(Boolean), 8),
     { name: "read the knowledge base" },
   );
-  return { pages, claims };
+  return { pages, claims, searches };
 }
 
 async function writeRun(input: WriteInput): Promise<WriteResult> {
@@ -200,7 +203,8 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
     guide = await DBOS.runStep(() => voiceGuide(site), { name: "read the new voice guide" });
   }
   const voice = voiceFor(guide);
-  const { pages, claims } = await research(site, brief);
+  const { pages, claims, searches } = await research(site, brief);
+  const researchGap = searches.notice();
   const edits = await DBOS.runStep(() => reviewerEdits(site, null, 5), { name: "read reviewer edits" });
 
   const draft = await askJson(
@@ -255,7 +259,7 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
         site,
         post: postId,
         content: markdown,
-        message: `First draft by the Writer, from the brief "${brief.title}".`,
+        message: `First draft by the Writer, from the brief "${brief.title}".${researchGap ? ` ${researchGap}` : ""}`,
         attributes: {
           agent: "writer",
           brief: brief.id,
@@ -263,6 +267,7 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
           sources: pages.map((p) => ({ url: p.url, label: p.title })),
           claims: claims.map((c) => c.id),
           missingFacts: draft.missingFacts,
+          ...(researchGap ? { research: researchGap, skippedSearches: searches.gaps } : {}),
           lint: {
             contrast: contrast.map((h) => h.sentence),
             unsourced: unsourced.map((h) => h.sentence),
@@ -272,6 +277,9 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
       }),
     { name: "save the version" },
   );
+
+  // Tell the reviewer on the pitch too: the draft is thinner than usual.
+  if (researchGap) await DBOS.runStep(() => noteResearchGap(site, brief.id, researchGap), { name: "note the skipped searches" });
 
   await DBOS.runStep(
     async () => {
