@@ -14,6 +14,10 @@ name: release
 on:
   workflow_dispatch:
     inputs:
+      objective:
+        description: "What this release is for, in one line (heads its entry in the release log)"
+        type: string
+        required: true
       bump:
         description: "patch (fixes and small changes), minor (a milestone), major"
         type: choice
@@ -148,8 +152,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.plan.outputs.version }}
           PREV: ${{ needs.plan.outputs.previous }}
+          OBJECTIVE: ${{ inputs.objective }}
         run: |
           {
+            echo "**Objective:** $OBJECTIVE"
+            echo
             echo "Released $(date -u +%Y-%m-%dT%H:%MZ) from \`${GITHUB_SHA::7}\` by run [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
             echo
             echo "Free suites passed: api, worker, kb, blog themes."
@@ -164,4 +171,7 @@ jobs:
     needs: publish
     if: inputs.deploy_app
     uses: ./.github/workflows/deploy-app.yml
-    secrets: inherit
+    secrets:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

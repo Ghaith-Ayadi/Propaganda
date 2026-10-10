@@ -16,6 +16,7 @@ import { createServer } from "node:http";
 import pg from "pg";
 
 export const PGURL = process.env.PGURL ?? "postgres://postgres:postgres@localhost:5432";
+const SPEND_CAP_USD = Number(process.env.LIVE_SPEND_CAP_USD || 5);
 
 /** The models a release test runs on, where they differ from prod. Read before the agents' code loads. */
 export const TEST_MODELS = { AGENT_MODEL_STRATEGIST: "anthropic/claude-sonnet-5.5" };
@@ -87,7 +88,17 @@ function filterRows(rows, params) {
  */
 export async function standInRest(db, { rpcs = {}, clock } = {}) {
   const all = {
-    cost_gate: () => ({ tenant_month_usd: 0, tenant_monthly_limit: null, tenant_warn_ratio: 0.8, global_day_usd: 0, global_daily_limit: null, killed: false }),
+    // A ceiling on what one test may spend (LIVE_SPEND_CAP_USD, default $5): past it the
+    // gateway's own daily cap refuses the next call, so a runaway loop stops at a known cost.
+    cost_gate: () => ({
+      tenant_month_usd: 0,
+      tenant_monthly_limit: null,
+      tenant_warn_ratio: 0.8,
+      global_day_usd: (db.model_calls ?? []).reduce((s, c) => s + Number(c.cost_usd ?? 0), 0),
+      global_daily_limit: SPEND_CAP_USD,
+      killed: false,
+    }),
+    cost_engage_kill: () => null,
     ...rpcs,
   };
   const server = createServer((req, res) => {
