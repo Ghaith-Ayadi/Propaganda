@@ -121,6 +121,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
 process.env.DATAFORSEO_LOGIN = "login";
 process.env.DATAFORSEO_PASSWORD = "password";
 process.env.WORKER_DISPATCH_SECONDS = "0";
+// Day one's first pitches have their own tests (first-day.mjs); here the tenant is Lite, so they skip.
+process.env.WORKER_LITE_SITES = SITE;
 
 // ---- a stand-in web (DataForSEO and the pages) ----
 
@@ -204,7 +206,7 @@ const t = await import("../dist/agents/testing.js");
 t.setModelResolver(() => model);
 t.setWebFetch(web);
 t.wireGateway();
-t.DBOS.setConfig({ name: "propaganda-strategist-test", systemDatabaseUrl: `${PGURL}/${SYS_DB}`, applicationVersion: "test" });
+t.DBOS.setConfig({ name: "propaganda-strategist-test", systemDatabaseUrl: `${PGURL}/${SYS_DB}`, applicationVersion: "test", enablePatching: true });
 await t.DBOS.launch();
 await t.registerQueues();
 
@@ -311,6 +313,10 @@ try {
   check(db.tenant_profile[0].plan_read_at, "the plan is marked read");
   check(db.model_calls.some((c) => c.job === "strategist") && db.model_calls.some((c) => String(c.model).startsWith("dataforseo/")), "model calls and DataForSEO are in the cost log");
   check(calls.some((u) => u.includes("keyword_ideas")) && calls.filter((u) => u.includes("serp/google")).length === 2, "it asked DataForSEO for keyword ideas and searched both of the tenant's searches");
+  const stepNames = ((await t.DBOS.listWorkflowSteps(ids[0])) ?? []).map((s) => s.name);
+  check(stepNames.includes("keyword data") && stepNames.indexOf("who ranks") > stepNames.indexOf("keyword data"), `searches, then who ranks, as two steps (${stepNames.join(", ")})`);
+  const first = await t.DBOS.retrieveWorkflow(t.firstPitchesId("proposal0000001")).getResult();
+  check(/Lite/.test(first?.skipped ?? ""), `sending started the first pitches (a Lite tenant here, so none: ${first?.skipped})`);
 
   console.log("a run that keeps breaking the rules");
   db.strategy_proposals.push({ id: "proposal0000002", site: SITE, quarter: "2026-Q4", kind: "revision", status: "requested", request: "Make it bigger", requested_by: "u1", proposal: null, edits: null, created: new Date().toISOString(), approved_at: null });
