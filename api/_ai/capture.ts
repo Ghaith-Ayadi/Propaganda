@@ -1,5 +1,5 @@
 // Everything a model got and gave back, one row per model call in
-// public.model_call_io (migration 20261010000020), linked to its model_calls
+// public.model_call_io (migration 20261010000040), linked to its model_calls
 // row. It is the raw material for Propaganda Labs (Ayadi, 2026-10-10): read a
 // past answer, change a prompt, replay the same input and compare.
 //
