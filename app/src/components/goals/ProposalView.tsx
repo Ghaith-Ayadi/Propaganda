@@ -29,6 +29,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   const [asking, setAsking] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   useEffect(() => setDraft(proposal), [proposal]);
 
   const editable = proposal.status === "sent" || proposal.status === "draft";
@@ -59,11 +60,17 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
     }
   };
 
-  const ask = async () => {
+  const answered = proposal.questions.filter((q) => answers[q]?.trim());
+  // The answers go back as a revision request, so the next proposal is built on them.
+  const answerNote = () =>
+    ["Answers to your questions:", ...answered.map((q, i) => `${i + 1}. ${q}\n${answers[q].trim()}`)].join("\n\n");
+
+  const ask = async (text: string) => {
     setBusy(true);
     try {
-      await goalsActions.requestChanges(proposal.id, note);
+      await goalsActions.requestChanges(proposal.id, text);
       setAsking(false);
+      setAnswers({});
       toast.add({ type: "success", title: "Sent to the Strategist", description: "A revision comes back here." });
     } catch (err) {
       reportError("goals.requestChanges", err);
@@ -98,11 +105,36 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
         {proposal.questions.length > 0 && (
           <div className="mt-4 rounded-xl bg-brand-primary_alt p-4">
             <p className="text-sm font-medium text-brand-secondary">What it couldn't decide alone</p>
-            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-secondary">
-              {proposal.questions.map((q) => (
-                <li key={q}>{q}</li>
-              ))}
-            </ul>
+            {editable ? (
+              <>
+                <ol className="mt-2 space-y-3">
+                  {proposal.questions.map((q) => (
+                    <li key={q}>
+                      <p className="text-sm text-secondary">{q}</p>
+                      <textarea
+                        value={answers[q] ?? ""}
+                        onChange={(e) => setAnswers((a) => ({ ...a, [q]: e.target.value }))}
+                        rows={2}
+                        placeholder="Your answer"
+                        className="mt-1.5 w-full rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+                      />
+                    </li>
+                  ))}
+                </ol>
+                <div className="mt-3 flex items-center justify-end gap-3">
+                  <p className="text-xs text-tertiary">The Strategist revises the proposal with your answers.</p>
+                  <Button size="sm" color="primary" isDisabled={answered.length === 0 || busy} onClick={() => void ask(answerNote())}>
+                    Send answers
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-secondary">
+                {proposal.questions.map((q) => (
+                  <li key={q}>{q}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </Card>
@@ -209,7 +241,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                 <Button size="sm" color="secondary" onClick={() => setAsking(false)}>
                   Cancel
                 </Button>
-                <Button size="sm" color="primary" isDisabled={!note.trim() || busy} onClick={() => void ask()}>
+                <Button size="sm" color="primary" isDisabled={!note.trim() || busy} onClick={() => void ask(note)}>
                   Send to the Strategist
                 </Button>
               </div>
