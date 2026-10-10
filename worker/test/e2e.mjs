@@ -67,6 +67,7 @@ async function until(what, fn, timeoutMs = 30000) {
 // A fake Notion, GitHub and Slack webhook: what the worker files lands here.
 const tickets = { pages: [], appended: [], issues: [], comments: [], patches: [], slack: [] };
 let issueState = "open";
+let githubRefuses = false;
 const ticketServer = createServer((req, res) => {
   let raw = "";
   req.on("data", (c) => (raw += c));
@@ -81,7 +82,10 @@ const ticketServer = createServer((req, res) => {
     if (u.endsWith("/issues") && req.method === "POST") { tickets.issues.push({ url: u, body }); return reply({ number: 7, html_url: "https://github.com/x/issues/7" }); }
     if (u.endsWith("/issues/7") && req.method === "GET") return reply({ state: issueState });
     if (u.endsWith("/issues/7") && req.method === "PATCH") { tickets.patches.push(body); issueState = body.state; return reply({}); }
-    if (u.endsWith("/issues/7/comments")) { tickets.comments.push(body); return reply({}); }
+    if (u.endsWith("/issues/7/comments")) {
+      if (githubRefuses) { res.statusCode = 403; return reply({ message: "Resource not accessible by personal access token" }); }
+      tickets.comments.push(body); return reply({});
+    }
     if (u === "/slack/hook") { tickets.slack.push(body); res.end("ok"); return; }
     res.statusCode = 404; reply({});
   });
@@ -271,6 +275,16 @@ async function main() {
   check(tickets.appended.length === 1 && tickets.comments.length === 1 && tickets.slack.length === 2, "the note is on the Notion task, the issue and Slack");
   check(!/asked to fail/i.test(JSON.stringify(tickets.comments)), "the issue comment carries no error text");
   check(tickets.patches.some((p) => p.state === "open") && tickets.patches.some((p) => p.properties?.Status?.status?.name === "Backlog"), "closed tickets are reopened");
+  // One destination refusing (a GitHub token without the Issues permission) must not silence the others.
+  githubRefuses = true;
+  const slackBefore = tickets.slack.length;
+  const bad3 = (await api("/runs/demo", { method: "POST", body: { site: SITE, fail: true } })).json.id;
+  await until("failed a third time", async () => (await run(bad3))?.state === "failed");
+  const fourth = (await api("/failures/sweep", { method: "POST" })).json;
+  githubRefuses = false;
+  check(fourth.added === 1 && tickets.slack.length === slackBefore + 1, `Slack still hears about it while GitHub refuses (${JSON.stringify(fourth)})`);
+  const afterRefusal = (await api("/failures")).json.groups.find((g) => g.fingerprint === demoGroup.fingerprint);
+  check(afterRefusal.tickets.length === 3, "no ticket is lost when one destination refuses");
   const ignored = (await api(`/failures/${demoGroup.fingerprint}/ignore`, { method: "POST", body: { ignored: true } })).json;
   check(ignored.group.status === "ignored", "a group can be ignored");
   check((await api(`/failures/${demoGroup.fingerprint}/ignore`, { method: "POST", body: { ignored: false } })).json.group.status === "filed", "and un-ignored");

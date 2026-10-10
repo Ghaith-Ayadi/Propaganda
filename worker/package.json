@@ -18,7 +18,8 @@
     "@ai-sdk/google": "^4.0.92",
     "@dbos-inc/dbos-sdk": "5.2.11",
     "ai": "^7.0.133",
-    "pg": "^8.21.0"
+    "pg": "^8.21.0",
+    "posthog-node": "^5.55.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
