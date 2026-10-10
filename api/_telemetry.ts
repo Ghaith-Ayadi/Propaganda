@@ -25,7 +25,7 @@ export async function report(err: unknown, route: string, extra: Record<string, 
     await client.captureExceptionImmediate(err, undefined, {
       route,
       app_env: process.env.VERCEL_ENV ?? "development",
-      commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7),
+      commit: (process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.APP_COMMIT_SHA)?.slice(0, 7),
       ...extra,
     });
   } catch {
