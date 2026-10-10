@@ -235,6 +235,7 @@ try {
   check(t.winnable({ keyword: "ai assistant", volume: 301000, difficulty: 25, position: null }), "but is with history");
   check(t.looksLikeSource("https://www.airops.com/") && t.looksLikeSource("https://example.com/blog"), "a site or a blog index is a source");
   check(!t.looksLikeSource("https://buffer.com/resources/ai-social-media-content-creation/") && !t.looksLikeSource("https://x.com/a/b.pdf"), "an article or a file is not");
+  check(t.MODELS.strategist === (process.env.AGENT_MODEL_STRATEGIST || "anthropic/claude-fable-5.1"), `the Strategist runs on Claude Fable 5.1 (${t.MODELS.strategist})`);
   check(t.pickHost("AirOps", ["instagram.com", "www.airops.com", "g2.com"], "propaganda.pub") === "airops.com", "a bare competitor name picks the host that carries it, not the first result");
   check(t.pickHost("AirOps", ["app.airops.com", "airops.com"], "propaganda.pub") === "airops.com", "the company's site, not its app host");
   check(t.pickHost("Box", ["dropbox.com", "box.com"], "propaganda.pub") === "box.com", "the exact name wins over a host that merely contains it");

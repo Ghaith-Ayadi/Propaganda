@@ -195,7 +195,8 @@ let resolveModel: (id: string) => LanguageModel = defaultResolve;
 
 /**
  * The model every agent and Chat asks for unless told otherwise (Ayadi,
- * 2026-10-09: no Anthropic models on our account). DEFAULT_MODEL overrides it.
+ * 2026-10-09). DEFAULT_MODEL overrides it. The Strategist asks for Claude
+ * Fable 5.1 by name (worker MODELS.strategist, Ayadi 2026-10-10).
  */
 export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "deepseek/deepseek-v4-pro";
 
