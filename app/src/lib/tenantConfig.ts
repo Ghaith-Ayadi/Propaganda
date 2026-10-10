@@ -61,20 +61,19 @@ export interface AgentInfo {
   id: AgentId;
   name: string;
   job: string;
-  model: "Opus" | "Sonnet";
   internet: boolean;
 }
 
 /** The roster from reviews/agents.md (approved 2026-10-07). */
 export const AGENTS: AgentInfo[] = [
-  { id: "strategist", name: "Strategist", job: "Proposes the quarter's goals and keeps an eye on them", model: "Opus", internet: true },
-  { id: "listener", name: "Listener", job: "Reads incoming transcripts and Slack; finds ideas and candidate facts", model: "Sonnet", internet: false },
-  { id: "scout", name: "Scout", job: "Finds outside ideas: search demand, AI answers, news, watched sites", model: "Sonnet", internet: true },
-  { id: "pitcher", name: "Pitcher", job: "Turns ideas into pitches rated against goals, or rejects them with a reason", model: "Sonnet", internet: true },
-  { id: "writer", name: "Writer", job: "Writes the post from the approved brief, minding tone, voice and veracity", model: "Opus", internet: true },
-  { id: "checker", name: "Checker", job: "Checks a post in review: sources, numbers, and the knowledge base", model: "Sonnet", internet: true },
-  { id: "guardian", name: "Guardian", job: "The only writer to the knowledge base; admits, contests, rejects or escalates", model: "Opus", internet: false },
-  { id: "chat", name: "Chat", job: "Talks with the operator and calls the others", model: "Sonnet", internet: true },
+  { id: "strategist", name: "Strategist", job: "Proposes the quarter's goals and keeps an eye on them", internet: true },
+  { id: "listener", name: "Listener", job: "Reads incoming transcripts and Slack; finds ideas and candidate facts", internet: false },
+  { id: "scout", name: "Scout", job: "Finds outside ideas: search demand, AI answers, news, watched sites", internet: true },
+  { id: "pitcher", name: "Pitcher", job: "Turns ideas into pitches rated against goals, or rejects them with a reason", internet: true },
+  { id: "writer", name: "Writer", job: "Writes the post from the approved brief, minding tone, voice and veracity", internet: true },
+  { id: "checker", name: "Checker", job: "Checks a post in review: sources, numbers, and the knowledge base", internet: true },
+  { id: "guardian", name: "Guardian", job: "The only writer to the knowledge base; admits, contests, rejects or escalates", internet: false },
+  { id: "chat", name: "Chat", job: "Talks with the operator and calls the others", internet: true },
 ];
 
 export type StageMode = "off" | "ask" | "auto";

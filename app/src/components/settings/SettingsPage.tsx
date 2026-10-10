@@ -63,7 +63,7 @@ function GoalsLink() {
   return (
     <Card
       title="Goals"
-      description="Five goals per calendar quarter: Volume, Coverage, Consistency, Readership and Ranking. The Strategist proposes them, you tweak and approve."
+      description="Four goals per calendar quarter: Volume, Consistency, Readership and Ranking. The Strategist proposes them, you tweak and approve."
       action={
         <Button size="sm" href="#/goals" iconLeading={Edit05}>
           Open Goals
