@@ -1,52 +1,28 @@
 import { useState } from "react";
 import { Globe01 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
-import { Toggle } from "@/components/base/toggle/toggle";
 import {
   AGENTS,
-  STAGES,
   WRITER_RULE,
-  type StageMode,
-  useStageModes,
   useTaste,
   useVoiceSuggestion,
   useVoiceGuide,
-  useWesternOnly,
 } from "@/lib/tenantConfig";
 import { ModelKeyCard } from "./ModelKeyCard";
-import { Card, Note, Row, Segmented, TextArea } from "./ui";
+import { Card, Note, TextArea } from "./ui";
 
+// "How far the agents go" (per-stage Off / Ask me / On its own) and "Western
+// models only" were removed until an agent reads them (Ayadi, 2026-10-10): they
+// saved settings nothing acted on. Their hooks stay in lib/tenantConfig; the
+// cards are in git history.
 export function AgentsSection() {
   return (
     <div className="space-y-6">
-      <StagesCard />
       <RosterCard />
       <TasteCard />
       <ModelsCard />
       <ModelKeyCard />
     </div>
-  );
-}
-
-function StagesCard() {
-  const [modes, setMode] = useStageModes();
-  return (
-    <Card title="How far the agents go" description="Each stage on its own. Off means the stage does not run at all.">
-      {STAGES.map((s) => (
-        <Row key={s.id} title={s.name} hint={s.what}>
-          <Segmented<StageMode>
-            label={s.name}
-            value={modes[s.id]}
-            onChange={(m) => setMode(s.id, m)}
-            options={[
-              { value: "off", label: "Off" },
-              { value: "ask", label: "Ask me" },
-              { value: "auto", label: "On its own" },
-            ]}
-          />
-        </Row>
-      ))}
-    </Card>
   );
 }
 
@@ -159,18 +135,10 @@ function TasteCard() {
 }
 
 function ModelsCard() {
-  const [western, setWestern] = useWesternOnly();
   return (
     <Card
       title="Models"
       description="On Propaganda's account, the Strategist runs on Claude Fable and every other agent on DeepSeek V4 Pro. With your Anthropic key below, they all run on Claude with your key, on your bill: the Strategist on Fable, the others on Sonnet."
-    >
-      <Toggle
-        isSelected={western}
-        onChange={setWestern}
-        label="Western models only 🦅"
-        hint="Off by default. When on, background jobs only use Western providers. It does not change your price."
-      />
-    </Card>
+    />
   );
 }
