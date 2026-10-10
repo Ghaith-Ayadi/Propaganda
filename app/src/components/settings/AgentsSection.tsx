@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Globe01 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
-import { Badge } from "@/components/base/badges/badges";
 import { Toggle } from "@/components/base/toggle/toggle";
 import {
   AGENTS,
@@ -14,6 +13,7 @@ import {
   useVoiceGuide,
   useWesternOnly,
 } from "@/lib/tenantConfig";
+import { ModelKeyCard } from "./ModelKeyCard";
 import { Card, Note, Row, Segmented, TextArea } from "./ui";
 
 export function AgentsSection() {
@@ -23,6 +23,7 @@ export function AgentsSection() {
       <RosterCard />
       <TasteCard />
       <ModelsCard />
+      <ModelKeyCard />
     </div>
   );
 }
@@ -67,7 +68,6 @@ function RosterCard() {
                 <div className="text-xs text-tertiary">{a.job}</div>
               </div>
               {a.internet && <Globe01 aria-label="Can search the web" className="size-4 text-quaternary" />}
-              <Badge size="sm" color={a.model === "Opus" ? "brand" : "gray"}>{a.model}</Badge>
             </button>
             {open === a.id && a.id === "writer" && <WriterPanel />}
           </li>
@@ -161,7 +161,10 @@ function TasteCard() {
 function ModelsCard() {
   const [western, setWestern] = useWesternOnly();
   return (
-    <Card title="Models" description="Which model providers the agents may use.">
+    <Card
+      title="Models"
+      description="Without a key of your own, every agent runs on DeepSeek V4 Pro on Propaganda's account. With your Anthropic key below, they run on Claude Sonnet, on your bill."
+    >
       <Toggle
         isSelected={western}
         onChange={setWestern}

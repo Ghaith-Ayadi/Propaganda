@@ -3,7 +3,7 @@
 // Only a key that passes is saved, and it never comes back to the browser.
 // With a key saved, every Claude call for this tenant runs on it and nothing
 // else does; if it stops working, runs wait for it instead of using ours.
-// Without a key, Claude runs on Propaganda's AI Gateway, on our bill.
+// Without a key, the agents run on Propaganda's AI Gateway, on our bill.
 
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/base/badges/badges";
@@ -15,6 +15,7 @@ import { userMessage } from "@/lib/errors";
 import { type KeyInfo, loadKey, removeKey, retestKey, testAndSaveKey } from "@/lib/modelKey";
 import { siteId } from "@/lib/scope";
 import { cx } from "@/utils/cx";
+import { Card } from "./ui";
 
 type Light = { tone: "green" | "red" | "gray"; text: string };
 
@@ -25,7 +26,7 @@ function clock(iso: string): string {
 
 function lightOf(key: KeyInfo | null, red: string | null): Light {
   if (red) return { tone: "red", text: red };
-  if (!key) return { tone: "gray", text: "No key: Claude runs on Propaganda's account." };
+  if (!key) return { tone: "gray", text: "No key: the agents run on Propaganda's account." };
   if (key.status === "failed") return { tone: "red", text: `Key ending ${key.last4} failed ${clock(key.checked)}: ${key.error}` };
   return { tone: "green", text: `Key ending ${key.last4} works. Last checked ${clock(key.checked)}.` };
 }
@@ -99,19 +100,12 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
   const light = lightOf(key, red);
 
   return (
-    <section className="rounded-xl border border-secondary bg-primary p-5 shadow-xs">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="font-title text-xl text-primary">Your Anthropic key</h2>
-          <p className="mt-1 text-sm text-tertiary">
-            Bring your own key and every Claude call for this tenant runs on it, billed to your Anthropic account. It is used for this
-            tenant's work only.
-          </p>
-        </div>
-        {key && <Badge size="sm" color={key.status === "ok" ? "success" : "error"}>{key.status === "ok" ? "Own key" : "Key failed"}</Badge>}
-      </div>
-
-      <div className="mt-4 space-y-4">
+    <Card
+      title="Your Anthropic key"
+      description="Bring your own key and every agent call for this tenant runs on Claude Sonnet with it, billed to your Anthropic account. It is used for this tenant's work only."
+      action={key && <Badge size="sm" color={key.status === "ok" ? "success" : "error"}>{key.status === "ok" ? "Own key" : "Key failed"}</Badge>}
+    >
+      <div className="space-y-4">
         <div className="flex items-start gap-2.5" role="status" aria-live="polite">
           <span
             aria-hidden
@@ -166,6 +160,6 @@ export function ModelKeyCard({ site = siteId() }: { site?: string }) {
           by themselves.
         </p>
       </div>
-    </section>
+    </Card>
   );
 }

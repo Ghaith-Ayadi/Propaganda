@@ -106,3 +106,40 @@ export async function remember(token: string, site: string, statement: string): 
     throw err;
   }
 }
+
+interface GoalVersionRow {
+  quarter: string;
+  version: number;
+  targets: {
+    volume?: { total?: number; topics?: { name: string; low: number; high: number }[] };
+    ranking?: { searches?: { query: string; topic: string }[]; pageOneTarget?: number };
+  } | null;
+}
+
+/**
+ * The tenant's approved goals for the newest quarter, and whether a proposal
+ * from the Strategist is being written or waits on approval: what Chat reads
+ * before it answers "what should we write" or asks the Strategist for anything.
+ */
+export async function readGoals(token: string, site: string): Promise<string> {
+  const db = asUser(token);
+  const [versions, proposals] = await Promise.all([
+    db.get<GoalVersionRow[]>(`/goal_versions?select=quarter,version,targets&site=${eq(site)}&order=quarter.desc,version.desc&limit=1`),
+    db.get<{ quarter: string; status: string }[]>(`/strategy_proposals?select=quarter,status&site=${eq(site)}&status=in.(requested,running,sent)`),
+  ]);
+  const lines: string[] = [];
+  const v = versions[0];
+  if (v) {
+    const vol = v.targets?.volume;
+    lines.push(`Approved goals for ${v.quarter} (version ${v.version}): ${vol?.total ?? "?"} posts planned.`);
+    for (const t of vol?.topics ?? []) lines.push(`- Topic "${t.name}": ${t.low} to ${t.high} posts`);
+    const searches = v.targets?.ranking?.searches ?? [];
+    if (searches.length) lines.push(`Ranking: page one for ${v.targets?.ranking?.pageOneTarget ?? 0} of these searches: ${searches.map((s) => `"${s.query}"`).join(", ")}.`);
+  } else {
+    lines.push("No goals approved yet.");
+  }
+  for (const p of proposals) {
+    lines.push(p.status === "sent" ? `A Strategist proposal for ${p.quarter} is waiting on the operator's approval in Goals.` : `The Strategist is already writing a proposal for ${p.quarter}.`);
+  }
+  return lines.join("\n");
+}

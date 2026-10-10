@@ -19,7 +19,7 @@ import {
 import { report } from "../_telemetry";
 import { CitationStream, Sources } from "./citations";
 import { DISPATCHABLE, dispatch } from "./dispatch";
-import { searchKnowledge, searchPosts, siteName } from "./lookups";
+import { readGoals, searchKnowledge, searchPosts, siteName } from "./lookups";
 import type { AgentName, ChatEvent, ChatUIMessage, Handoff, QuickAction } from "./types";
 
 /**
@@ -59,8 +59,9 @@ How you work:
 2. Cite every claim and post you rely on by writing its marker right after the words it backs, exactly as the tool gave it: [[claim:<id>]] or [[post:<id>]]. Only cite what a tool returned in this conversation turn.
 3. A contested claim is not settled: say it is contested when you use it.
 4. You never change the knowledge base. When the operator states a fact about ${tenant} that the knowledge base lacks, or contradicts one, call offer_remember with that fact as one plain sentence; the Guardian reviews it. Say you've offered it, don't claim it's saved.
-5. Work that takes longer than a reply goes to another agent with ask_agent: ${Object.entries(AGENT_JOBS).map(([a, j]) => `${a} (${j})`).join("; ")}. Tell the operator what you asked and that it runs in the background. If the tool says the agent isn't running yet, say so and answer what you can yourself.
-6. When the operator should look at a specific post or claim, call offer_open.
+5. For anything about goals, topics or what to write next, call read_goals first and answer from the approved goals. Ask the strategist only when the operator asks to change the goals, or none are approved and no proposal is being written or waiting.
+6. Work that takes longer than a reply goes to another agent with ask_agent: ${Object.entries(AGENT_JOBS).map(([a, j]) => `${a} (${j})`).join("; ")}. Tell the operator what you asked and that it runs in the background. If the tool says the agent isn't running yet, say so and answer what you can yourself.
+7. When the operator should look at a specific post or claim, call offer_open.
 
 Writing: short, plain, direct. Lead with the answer. Markdown is fine, but no headings for short answers. Never use the "That's not X. It's Y." contrast; say it as a comparison instead ("This is much more of a maintenance job than it is the ol' art of writing"). Never write the ids yourself outside a marker.`;
 }
@@ -159,6 +160,11 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
         };
       },
     }),
+    read_goals: tool({
+      description: "Read the tenant's approved goals (topics, volume, searches to rank for) and whether a Strategist proposal is being written or waits on approval.",
+      inputSchema: z.object({}),
+      execute: async () => ({ summary: "Read", result: await readGoals(turn.token, turn.site) }),
+    }),
     ask_agent: tool({
       description: "Hand work to another agent. It runs in the background; the operator sees it in the reply.",
       inputSchema: z.object({
@@ -200,6 +206,7 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
   const shown: Record<string, (input: Record<string, string>) => { agent: AgentName; task: string } | null> = {
     search_knowledge: (i) => ({ agent: "guardian", task: `Search the knowledge base for “${i.query}”` }),
     search_posts: (i) => ({ agent: "chat", task: `Search posts for “${i.query}”` }),
+    read_goals: () => ({ agent: "strategist", task: "Read the approved goals" }),
     ask_agent: (i) => ({ agent: i.agent as AgentName, task: i.task }),
   };
 

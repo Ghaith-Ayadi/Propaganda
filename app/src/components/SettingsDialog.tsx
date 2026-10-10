@@ -562,6 +562,7 @@ function ImageField({
 }
 
 function FaviconField({ current }: { current: string | null }) {
+  const { site } = useWorkspace();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -589,7 +590,7 @@ function FaviconField({ current }: { current: string | null }) {
           {current ? (
             <img src={current} alt="favicon" className="h-10 w-10 object-contain" />
           ) : (
-            <span className="font-medium text-quaternary">V</span>
+            <span className="font-medium text-quaternary">{site.name.trim().charAt(0).toUpperCase() || "?"}</span>
           )}
         </div>
         <div className="flex-1 text-xs text-tertiary">
