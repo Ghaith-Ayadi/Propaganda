@@ -237,6 +237,7 @@ try {
   check(!t.looksLikeSource("https://buffer.com/resources/ai-social-media-content-creation/") && !t.looksLikeSource("https://x.com/a/b.pdf"), "an article or a file is not");
   check(t.pickHost("AirOps", ["instagram.com", "www.airops.com", "g2.com"], "propaganda.pub") === "airops.com", "a bare competitor name picks the host that carries it, not the first result");
   check(t.pickHost("AirOps", ["app.airops.com", "airops.com"], "propaganda.pub") === "airops.com", "the company's site, not its app host");
+  check(t.pickHost("Box", ["dropbox.com", "box.com"], "propaganda.pub") === "box.com", "the exact name wins over a host that merely contains it");
   check(t.pickHost("Acme Corp", ["instagram.com", "linkedin.com", "acme-tools.io"], "propaganda.pub") === "acme-tools.io", "profile sites never stand in for a company");
   check(t.pickHost("Propaganda", ["propaganda.pub", "instagram.com"], "propaganda.pub") === "", "our own domain and nothing else resolves to nothing");
   check(t.thinAnswers({ offer: "We sell content software", searches: "AI CMS", watch: "AirOps", upcoming: "Beta" }, true), "a 4-word offer is thin");

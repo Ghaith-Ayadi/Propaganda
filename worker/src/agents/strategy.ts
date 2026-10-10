@@ -320,10 +320,16 @@ const NOT_A_COMPANY = new Set([
 export function pickHost(name: string, hosts: string[], ourDomain: string): string {
   const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
   const ok = (h: string) => h.includes(".") && h !== ourDomain && !NOT_A_COMPANY.has(h.replace(/^www\./, ""));
-  const named = key.length >= 3 ? hosts.find((h) => ok(h) && h.replace(/[^a-z0-9]/g, "").includes(key)) : undefined;
   // The company's site, not its app or docs host (app.airops.com ranks for
   // "airops login", airops.com for what they write about).
-  if (named) return named.split(".").slice(-2).join(".");
+  const site = (h: string) => h.split(".").slice(-2).join(".");
+  const label = (h: string) => site(h).split(".")[0]!.replace(/[^a-z0-9]/g, "");
+  if (key.length >= 3) {
+    // "Box" is box.com before dropbox.com: the exact label wins over a host that merely contains the name.
+    const exact = hosts.find((h) => ok(h) && label(h) === key);
+    const named = exact ?? hosts.find((h) => ok(h) && h.replace(/[^a-z0-9]/g, "").includes(key));
+    if (named) return site(named);
+  }
   return hosts.find(ok) ?? "";
 }
 
