@@ -238,6 +238,8 @@ try {
   check(t.pickHost("AirOps", ["instagram.com", "www.airops.com", "g2.com"], "propaganda.pub") === "airops.com", "a bare competitor name picks the host that carries it, not the first result");
   check(t.pickHost("AirOps", ["app.airops.com", "airops.com"], "propaganda.pub") === "airops.com", "the company's site, not its app host");
   check(t.pickHost("Box", ["dropbox.com", "box.com"], "propaganda.pub") === "box.com", "the exact name wins over a host that merely contains it");
+  check(t.pickHost("Acme", ["blog.acme.co.uk"], "propaganda.pub") === "acme.co.uk", "a country second-level domain keeps the company's label");
+  check(t.pickHost("Acme Corp", ["uk.linkedin.com", "m.facebook.com", "app.acmecorp.io"], "propaganda.pub") === "acmecorp.io", "regional profile hosts are still profile sites; the fallback is the site, not the app host");
   check(t.pickHost("Acme Corp", ["instagram.com", "linkedin.com", "acme-tools.io"], "propaganda.pub") === "acme-tools.io", "profile sites never stand in for a company");
   check(t.pickHost("Propaganda", ["propaganda.pub", "instagram.com"], "propaganda.pub") === "", "our own domain and nothing else resolves to nothing");
   check(t.thinAnswers({ offer: "We sell content software", searches: "AI CMS", watch: "AirOps", upcoming: "Beta" }, true), "a 4-word offer is thin");
