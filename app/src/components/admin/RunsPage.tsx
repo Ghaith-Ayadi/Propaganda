@@ -268,6 +268,7 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary?: RunSu
   // works through its steps, so a live run reloads on every poll (each poll
   // hands in a new summary object).
   const live = summary ? ACTIVE.includes(summary.state) : false;
+  const liveSummary = live ? summary : null;
   useEffect(() => {
     getRun(client, id).then(
       (r) => {
@@ -279,7 +280,7 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary?: RunSu
         setError(userMessage(err));
       },
     );
-  }, [client, id, summary?.status, summary?.updatedAt, summary?.stall?.until, live ? summary : null]);
+  }, [client, id, summary?.status, summary?.updatedAt, summary?.stall?.until, liveSummary]);
 
   const act = async (what: "retry" | "cancel") => {
     setBusy(true);
@@ -380,8 +381,28 @@ function RunDetailView({ id, summary, onChanged }: { id: string; summary?: RunSu
         {run.steps.map((s) => (
           <StepRow key={s.id} step={s} runError={run.error} />
         ))}
+        {run.state === "running" && <NextStep steps={run.steps} since={run.createdAt} />}
       </ol>
     </div>
+  );
+}
+
+/**
+ * DBOS lists a step only once it has finished, so during a long one (a model
+ * call writing a draft) the last row is the previous step and the run looks
+ * stuck. Say that the next one is under way, and for how long.
+ */
+function NextStep({ steps, since }: { steps: StepView[]; since: number }) {
+  if (steps.some((s) => s.state === "running" || s.state === "stalled")) return null;
+  const from = Math.max(since, ...steps.map((s) => s.completedAt ?? 0));
+  return (
+    <li className="flex items-center gap-3 text-sm">
+      <span className="size-2 shrink-0 animate-pulse rounded-full bg-brand-solid" />
+      <span className="w-6 shrink-0" />
+      <span className="text-tertiary">Working on the next step</span>
+      <span className="ml-auto tabular-nums text-xs text-tertiary">{duration(from, null)}</span>
+      <span className="w-16" />
+    </li>
   );
 }
 
