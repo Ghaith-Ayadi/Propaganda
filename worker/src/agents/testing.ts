@@ -6,7 +6,7 @@ export { setModelResolver } from "../../../api/_ai/gateway";
 export { registerQueues, dispatchAgent } from "../workflows/agents.js";
 export { wireGateway, extractJson } from "./model.js";
 export { setWebFetch, setSearchSleep, htmlToText, assertPublicUrl } from "./web.js";
-export { setSearchWaits } from "./search.js";
+export { setSearchWaits, asAttempt } from "./search.js";
 export { newId, stableId } from "./ids.js";
 // The knowledge base agents' pure parts (test/agents.mjs).
 export { passages, links, numbersMatch } from "./text.js";

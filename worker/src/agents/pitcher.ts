@@ -373,8 +373,7 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     for (const [n, q] of j.searches.entries()) {
       hits.push(...(await searchDurably(searches, q, 6, { site, job: "pitcher:research" }, `search ${idea.id} ${n + 1}`)));
     }
-    const researchGap = new SearchSession();
-    researchGap.gaps.push(...searches.gaps.slice(gapsBefore));
+    const researchGap = searches.notice(searches.gaps.slice(gapsBefore));
     const claims = await DBOS.runStep(() => claimsFor(site, [idea.title, ...j.topics], 8), { name: `knowledge ${idea.id}` });
     const evidenceUrls = (idea.evidence ?? []).filter((e) => e.url).map((e) => ({ url: e.url!, label: e.label }));
     const allowed = new Set([...evidenceUrls.map((e) => e.url), ...hits.map((h) => h.url)]);
@@ -436,7 +435,7 @@ Answer with JSON only:
           collection_name: written.collection,
           planned_date: publishBy,
           topics: j.topics,
-          fit: { why: written.why, grade: r.grade, reasons: r.reasons, goals: r.goals, ...(researchGap.notice() ? { research: researchGap.notice() } : {}) },
+          fit: { why: written.why, grade: r.grade, reasons: r.reasons, goals: r.goals, ...(researchGap ? { research: researchGap } : {}) },
           origin: idea.origin,
           sources: written.sources,
           outline: written.outline.map((text, n) => ({ id: `l${n + 1}`, text })),

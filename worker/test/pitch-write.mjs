@@ -270,6 +270,9 @@ try {
   check(t.contrastHits("It's not raining. We went out anyway.").length === 0, "lets an ordinary negation through");
   check(t.unsourcedNumbers("About 12% of teams do it.").length === 1, "flags a number with no link");
   check(t.unsourcedNumbers("About [12%](https://x.y/z) of teams do it.").length === 0, "accepts a linked number");
+  const legacy = t.asAttempt([{ url: "https://x.y", title: "t", snippet: "", position: 1 }]);
+  check(legacy.hits.length === 1 && !legacy.failure, "a search step recorded before durable retries (the hits array) replays as a success");
+  check(t.asAttempt({ hits: [], failure: { message: "m", next: "retry", note: "" } }).failure?.message === "m", "a recorded failure replays as a failure");
   check(t.htmlToText("<p>a</p><script>x()</script><p>b</p>") === "a\nb", "page text drops scripts");
   let refused = false;
   try { await t.assertPublicUrl("http://169.254.169.254/latest/meta-data"); } catch { refused = true; }

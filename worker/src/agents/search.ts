@@ -41,12 +41,22 @@ export class SearchSession {
   /** The searches that gave up, for the person and the run's result. */
   readonly gaps: { step: string; query: string; message: string }[] = [];
 
-  /** One line for the person, or "" when every search answered. */
-  notice(): string {
-    if (this.gaps.length === 0) return "";
-    const n = this.gaps.length;
-    return `Written without ${n === 1 ? "one web search" : `${n} web searches`}: the search service (DataForSEO) kept failing (${this.gaps[0]!.message.replace(/^web search (failed|answered|didn't answer):?\s*/i, "").replace(/\.$/, "")}) after waiting about 20 minutes, so ${n === 1 ? "it was" : "they were"} skipped.`;
+  /** One line for the person about these gaps (all of this run's by default), or "" when every search answered. */
+  notice(gaps = this.gaps): string {
+    if (gaps.length === 0) return "";
+    const n = gaps.length;
+    return `Written without ${n === 1 ? "one web search" : `${n} web searches`}: the search service (DataForSEO) kept failing (${gaps[0]!.message.replace(/^web search (failed|answered|didn't answer):?\s*/i, "").replace(/\.$/, "")}) after waiting about 20 minutes, so ${n === 1 ? "it was" : "they were"} skipped.`;
   }
+}
+
+/**
+ * A step's recorded output as an Attempt. Runs started before durable retries
+ * recorded the hits array itself; a recovered run replays that shape.
+ */
+export function asAttempt(out: unknown): Attempt {
+  if (Array.isArray(out)) return { hits: out as SearchHit[] };
+  const a = (out ?? {}) as Partial<Attempt>;
+  return { hits: Array.isArray(a.hits) ? a.hits : [], ...(a.failure ? { failure: a.failure } : {}) };
 }
 
 const unavailable = (err: unknown) => err instanceof Error && err.name === "SearchUnavailableError";
@@ -70,7 +80,7 @@ export async function searchDurably(
       last
         ? { message, next: "carry on", note: `gave up after ${n + 1} tr${n ? "ies" : "y"}${session.down && n === 0 ? " (search was already down in this run)" : ""}; carried on without results` }
         : { message, next: "retry", note: `trying again in ${wait(waits[n]!)}` };
-    const out = await DBOS.runStep(
+    const out = asAttempt(await DBOS.runStep(
       async (): Promise<Attempt> => {
         try {
           return { hits: await searchOnce(query, limit, opts) };
@@ -80,7 +90,7 @@ export async function searchDurably(
         }
       },
       { name: n === 0 ? step : `${step} (try ${n + 1})` },
-    );
+    ));
     if (!out.failure) {
       session.down = null;
       return out.hits;
