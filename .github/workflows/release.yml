@@ -46,7 +46,8 @@ jobs:
       - id: version
         env: { BUMP: "${{ inputs.bump }}" }
         run: |
-          prev=$(git tag --list 'v*.*.*' --sort=-v:refname | head -1)
+          # v1.0.0 is Verbatim's tag from 2026-05, before Propaganda's numbering: not a release here.
+          prev=$(git tag --list 'v*.*.*' --sort=-v:refname | grep -vx v1.0.0 | head -1 || true)
           if [ -z "$prev" ]; then next=v0.2.0
           else
             IFS=. read -r major minor patch <<< "${prev#v}"
