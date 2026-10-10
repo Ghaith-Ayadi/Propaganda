@@ -288,6 +288,23 @@ export async function keywordIdeas(w: Where, job: string, seeds: string[], limit
   return items(result).map(keywordOf).filter((k) => k.keyword);
 }
 
+/**
+ * Volume and difficulty for exact `keywords` (at most 700): the Strategist
+ * prices the searches the model proposed that the ideas pull never covered.
+ * A keyword DataForSEO has no row for is left out.
+ */
+export async function keywordOverview(w: Where, job: string, keywords: string[]): Promise<KeywordRow[]> {
+  if (!keywords.length) return [];
+  const result = await callPaidApi({ site: w.site, job, service: "dataforseo/keyword-overview", background: true }, () =>
+    live("/v3/dataforseo_labs/google/keyword_overview/live", {
+      keywords: keywords.slice(0, 700),
+      location_code: w.locationCode,
+      language_code: w.languageCode,
+    }),
+  );
+  return items(result).map(keywordOf).filter((k) => k.keyword);
+}
+
 /** Searches `domain` already ranks for (top 100), best first. */
 export async function rankedKeywords(w: Where, job: string, domain: string, limit = 50): Promise<KeywordRow[]> {
   const result = await callPaidApi({ site: w.site, job, service: "dataforseo/ranked-keywords", background: true }, () =>
