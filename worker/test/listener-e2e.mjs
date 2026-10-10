@@ -230,7 +230,8 @@ async function main() {
     insert into auth.users (id, email) values ('${member}', 'ayadi@kontra.run'), ('${stranger}', 'eve@else.com');
     insert into public.sites (id, name, slug) values ('${SITE}', 'Kontra', 'kontra'), ('${LITE}', 'Lite', 'lite');
     insert into public.site_members (site, user_id, role) values ('${SITE}', '${member}', 'owner'), ('${LITE}', '${member}', 'owner');
-    insert into public.kb_agent_sites (site) values ('${SITE}');
+    -- New sites get their agents row on insert (20261010000050); the Lite tenant has none.
+    delete from public.kb_agent_sites where site = '${LITE}';
     insert into public.kb_topics (site, name) values ('${SITE}', 'Pricing');
   `);
 
