@@ -4,6 +4,7 @@
 # real PostgREST (it applies every migration, so the image carries pgvector).
 name: worker
 on:
+  workflow_call: # the release run (release.yml)
   pull_request:
     paths: ["worker/**", "api/_ai/**", "supabase/migrations/**", ".github/workflows/worker.yml"]
   push:

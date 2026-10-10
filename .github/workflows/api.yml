@@ -1,5 +1,6 @@
 name: api
 on:
+  workflow_call: # the release run (release.yml)
   pull_request:
   push:
     branches: [main]

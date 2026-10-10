@@ -1,0 +1,167 @@
+# A numbered release to production (docs/releases.md). Started by hand on main, and only
+# on Ayadi's word:
+#   1. plan: the next version (v0.2.0, v0.2.1, ...) and which real-model tests to run
+#      (worker/test/live/affected.mjs: the agents whose code changed since the last
+#      release; all of them on the first release of a month);
+#   2. the free suites on this exact commit: api, worker, kb SQL, blog themes;
+#   3. the real-model tests, through the AI Gateway (AI_GATEWAY_API_KEY), with the cost
+#      of each from the cost log;
+#   4. only if all of that is green: the tag and a GitHub Release (the release log), with
+#      its PRs, what ran and what it cost;
+#   5. the app to Vercel production (deploy-app.yml). The box follows the tag through
+#      Bedrock's compose/propaganda-supabase/schema.env.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "patch (fixes and small changes), minor (a milestone), major"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      ai_tests:
+        description: "changed: only the agents whose code changed; all: every real-model test"
+        type: choice
+        options: [changed, all]
+        default: changed
+      deploy_app:
+        description: "Deploy the app to Vercel production after tagging"
+        type: boolean
+        default: true
+concurrency: { group: release, cancel-in-progress: false }
+permissions:
+  contents: read
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      previous: ${{ steps.version.outputs.previous }}
+      tests: ${{ steps.affected.outputs.tests }}
+      plan: ${{ steps.affected.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, fetch-tags: true }
+      - id: version
+        env: { BUMP: "${{ inputs.bump }}" }
+        run: |
+          prev=$(git tag --list 'v*.*.*' --sort=-v:refname | head -1)
+          if [ -z "$prev" ]; then next=v0.2.0
+          else
+            IFS=. read -r major minor patch <<< "${prev#v}"
+            case "$BUMP" in
+              major) next="v$((major + 1)).0.0" ;;
+              minor) next="v$major.$((minor + 1)).0" ;;
+              *)     next="v$major.$minor.$((patch + 1))" ;;
+            esac
+          fi
+          git rev-parse -q --verify "refs/tags/$next" >/dev/null && { echo "::error::$next already exists"; exit 1; }
+          echo "previous=$prev" >> "$GITHUB_OUTPUT"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "Releasing $next (previous: ${prev:-none})"
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: worker
+      - id: affected
+        working-directory: worker
+        env:
+          PREV: ${{ steps.version.outputs.previous }}
+          ALL: ${{ inputs.ai_tests == 'all' && '--all' || '' }}
+        run: node test/live/affected.mjs ${PREV:+--since "$PREV"} $ALL
+
+  api:
+    needs: plan
+    uses: ./.github/workflows/api.yml
+  worker:
+    needs: plan
+    uses: ./.github/workflows/worker.yml
+  kb:
+    needs: plan
+    uses: ./.github/workflows/kb.yml
+  blog-themes:
+    needs: plan
+    uses: ./.github/workflows/blog-themes.yml
+
+  ai:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults: { run: { working-directory: worker } }
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run build
+      - name: Real-model tests
+        env:
+          PGURL: "postgres://postgres:postgres@localhost:5432"
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          LIVE_REQUIRED: "1"
+          LIVE_COST_FILE: ${{ runner.temp }}/live-costs.jsonl
+          TESTS: ${{ needs.plan.outputs.tests }}
+          PLAN: ${{ needs.plan.outputs.plan }}
+        run: |
+          touch "$LIVE_COST_FILE"
+          failed=0
+          for t in $(echo "$TESTS" | jq -r '.[]'); do
+            echo "::group::$t"
+            node "../$t" || failed=1
+            echo "::endgroup::"
+          done
+          {
+            echo "### Real-model tests"
+            echo '```'
+            echo "$PLAN"
+            echo '```'
+            jq -rs 'if length == 0 then "None ran." else (map("- \(.area): \(if .ok then "passed" else "FAILED" end), $\(.usd)") | join("\n")) + "\n\nTotal: $\(map(.usd) | add * 10000 | round / 10000)" end' "$LIVE_COST_FILE"
+          } | tee -a "$GITHUB_STEP_SUMMARY" > "$RUNNER_TEMP/ai-summary.md"
+          exit "$failed"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-summary
+          path: ${{ runner.temp }}/ai-summary.md
+          if-no-files-found: ignore
+
+  publish:
+    needs: [plan, api, worker, kb, blog-themes, ai]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, fetch-tags: true }
+      - uses: actions/download-artifact@v4
+        with:
+          name: ai-summary
+          path: ${{ runner.temp }}
+      - name: Tag and write the release log
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          PREV: ${{ needs.plan.outputs.previous }}
+        run: |
+          {
+            echo "Released $(date -u +%Y-%m-%dT%H:%MZ) from \`${GITHUB_SHA::7}\` by run [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+            echo
+            echo "Free suites passed: api, worker, kb, blog themes."
+            echo
+            cat "$RUNNER_TEMP/ai-summary.md"
+            echo
+          } > notes.md
+          gh release create "$VERSION" --target "$GITHUB_SHA" --title "$VERSION" --notes-file notes.md \
+            --generate-notes ${PREV:+--notes-start-tag "$PREV"}
+
+  deploy-app:
+    needs: publish
+    if: inputs.deploy_app
+    uses: ./.github/workflows/deploy-app.yml
+    secrets: inherit

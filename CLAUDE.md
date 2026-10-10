@@ -44,7 +44,7 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
 - **Deploying the app.** Vercel's Git integration is off for the `verbatim` project: no push or
   PR creates a Vercel deployment or check (the free plan's 100 deployments a day were being
   spent on ignored PR builds). Production ships only from `.github/workflows/deploy-app.yml`,
-  run by hand on `main` (`vercel build` + `deploy --prebuilt`, with the `VERCEL_TOKEN`,
+  run by a release (below) or by hand on `main` (`vercel build` + `deploy --prebuilt`, with the `VERCEL_TOKEN`,
   `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` repo secrets), and only on Ayadi's word.
 - **Multi-tenant.** Content belongs to a **site** (`sites`, `site_members` with owner/editor
   roles). Every content table has a required `site`; row-level security is keyed on it,
@@ -88,6 +88,15 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
   (or `blog.themes`) on a real site is the owner's call, like any other live data.
 - `scripts/src/*` are tools from the Supabase Cloud days and stop working when that
   project is deleted after 2026-10-16. `docs/archive/` is history, not instructions.
+
+## Releases
+
+Production moves in numbered releases (`v0.2.0`, `v0.2.1`, ...), cut by the **release**
+workflow on `main`, only on Ayadi's word: the free suites, then real-model tests
+(`worker/test/live/`) for the agents whose code changed since the last release (all of them on
+the first release of a month), then the tag, a GitHub Release as the log (PRs, tests, their
+cost), and the app deploy. The box follows the tag in Bedrock's `schema.env`. Tests run the
+Strategist on Sonnet, never Fable. Details: [docs/releases.md](docs/releases.md).
 
 ## Model calls: one logged path
 

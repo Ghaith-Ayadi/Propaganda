@@ -2,6 +2,7 @@
 # every migration on a fresh Postgres with pgvector, then supabase/tests/kb/test.sql.
 name: kb
 on:
+  workflow_call: # the release run (release.yml)
   pull_request:
     paths: ["supabase/migrations/**", "supabase/tests/kb/**", ".github/workflows/kb.yml"]
   push:
