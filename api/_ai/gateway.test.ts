@@ -4,8 +4,12 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
+import { z } from "zod";
 
 const calls: Record<string, unknown>[] = [];
+// What the gateway captured (model_call_io), and what that endpoint answers.
+const captures: Record<string, any>[] = [];
+let captureStatus = 201;
 let gate: Record<string, unknown> = {};
 let kills = 0;
 // model_keys rows by site (sealed with encryptKey), and the PATCHes the gateway sends.
@@ -26,6 +30,10 @@ const server = createServer((req, res) => {
       return void res.end(JSON.stringify(keyRows[site] ? [keyRows[site]] : []));
     }
     if (req.url?.startsWith("/rest/v1/model_calls")) { calls.push(JSON.parse(body)); res.statusCode = 201; return void res.end("[]"); }
+    if (req.url?.startsWith("/rest/v1/model_call_io")) {
+      if (captureStatus !== 201) { res.statusCode = captureStatus; return void res.end("{}"); }
+      captures.push(JSON.parse(body)); res.statusCode = 201; return void res.end("");
+    }
     res.statusCode = 404; res.end("{}");
   });
 });
@@ -416,3 +424,103 @@ test("the gateway's reported cost prices a call whose model has no price row", (
 });
 
 test.after(() => server.close());
+
+// ---- the capture (capture.ts) ----
+
+test("a call's full input and output are captured, linked to its cost-log row", async () => {
+  gate = open; calls.length = 0; captures.length = 0;
+  setModelResolver(() => ok);
+  await callModel({ ...opts, system: "Be brief.", prompt: "Say hi.", maxOutputTokens: 100 });
+  assert.equal(captures.length, 1);
+  const c = captures[0];
+  assert.match(String(calls[0].id), /^[a-z0-9]{15}$/);
+  assert.equal(c.call, calls[0].id);
+  assert.equal(c.site, opts.site);
+  assert.equal(c.step, 1);
+  assert.equal(c.turn, null);
+  assert.deepEqual(c.request, { model: "m", system: "Be brief.", prompt: "Say hi.", maxOutputTokens: 100, reasoning: null });
+  assert.equal(c.response.text, "hi");
+  assert.equal(c.response.finishReason, "stop");
+  assert.equal(c.truncated, false);
+});
+
+test("a failed call is captured with its error", async () => {
+  gate = open; calls.length = 0; captures.length = 0;
+  setModelResolver(() => new MockLanguageModelV3({ doGenerate: async () => { throw Object.assign(new Error("bad request"), { statusCode: 400 }); } }));
+  await assert.rejects(callModel(opts));
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].call, calls[0].id);
+  assert.equal(captures[0].request.prompt, "p");
+  assert.equal(captures[0].response.error.message, "bad request");
+  assert.equal(captures[0].response.error.status, 400);
+  setModelResolver(() => ok);
+});
+
+test("a capture that fails, or a database without the table, never fails the call", async () => {
+  gate = open; calls.length = 0; captures.length = 0;
+  setModelResolver(() => ok);
+  for (const status of [404, 500]) {
+    captureStatus = status;
+    const r = await callModel(opts);
+    assert.equal(r.text, "hi");
+  }
+  captureStatus = 201;
+  assert.equal(calls.length, 2);
+  assert.equal(captures.length, 0);
+});
+
+test("a streamed reply with a tool round is captured step by step, under one turn", async () => {
+  gate = open; calls.length = 0; captures.length = 0;
+  let n = 0;
+  setModelResolver(() => new MockLanguageModelV3({
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: n++ === 0
+          ? [
+            { type: "stream-start", warnings: [] },
+            { type: "tool-call", toolCallId: "c1", toolName: "lookup", input: JSON.stringify({ q: "retries" }) },
+            { type: "finish", finishReason: { unified: "tool-calls", raw: "tool_use" }, usage },
+          ]
+          : [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "t" },
+            { type: "text-delta", id: "t", delta: "Found it." },
+            { type: "text-end", id: "t" },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ],
+      }),
+    }),
+  }));
+  const tools = { lookup: g.tool({ description: "Look up", inputSchema: z.object({ q: z.string() }), execute: async ({ q }: { q: string }) => `three posts on ${q}` }) };
+  const s = await g.streamModel({ ...streamOpts, system: "You are Chat.", tools });
+  for await (const _ of s.parts) { /* drain */ }
+  assert.equal(calls.length, 2);
+  assert.equal(captures.length, 2);
+  const [one, two] = captures;
+  assert.match(String(one.turn), /^[a-z0-9]{15}$/);
+  assert.equal(two.turn, one.turn);
+  assert.deepEqual([one.step, two.step], [1, 2]);
+  assert.deepEqual([one.call, two.call], [calls[0].id, calls[1].id]);
+  assert.equal(one.request.system, "You are Chat.");
+  assert.deepEqual(one.request.messages, streamOpts.messages);
+  assert.deepEqual(one.request.tools, ["lookup"]);
+  assert.deepEqual(one.response.toolCalls, [{ id: "c1", tool: "lookup", input: { q: "retries" } }]);
+  assert.equal(one.response.finishReason, "tool-calls");
+  assert.deepEqual(two.request, { continues: one.turn, step: 2 });
+  const results = [...one.response.toolResults, ...two.response.toolResults];
+  assert.deepEqual(results, [{ id: "c1", tool: "lookup", output: "three posts on retries" }]);
+  assert.equal(two.response.text, "Found it.");
+});
+
+test("a stream that fails before its first step is captured as step 1, with its request and error", async () => {
+  gate = open; calls.length = 0; captures.length = 0;
+  setModelResolver(() => new MockLanguageModelV3({ doStream: async () => { throw Object.assign(new Error("bad request"), { statusCode: 400 }); } }));
+  const s = await g.streamModel(streamOpts);
+  await assert.rejects(async () => { for await (const _ of s.parts) { /* drain */ } });
+  assert.equal(calls.length, 1);
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].call, calls[0].id);
+  assert.equal(captures[0].step, 1);
+  assert.deepEqual(captures[0].request.messages, streamOpts.messages);
+  assert.equal(captures[0].response.error.status, 400);
+});

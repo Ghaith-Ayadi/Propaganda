@@ -9,6 +9,9 @@
 // callPaidApi(): the same budget rules, one row per request with the cost the
 // provider reported and zero tokens, so they count against the same budgets.
 //
+// Every model call's full input and output also goes to public.model_call_io
+// (capture.ts), superadmin only, for Propaganda Labs.
+//
 // Server-side only: it writes with the service role key, which never reaches a
 // browser. Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
 
@@ -29,6 +32,7 @@ import {
 } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { errorOf, newCallId, writeCapture } from "./capture";
 import { costUsd, decide, type Gate, type Price, type Usage } from "./cost";
 import { BudgetError, CostLogUnavailableError, EmptyAnswerError, UsageLimitError } from "./errors";
 import {
@@ -345,6 +349,7 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
 
   const ctx = workflowContext();
   const base = {
+    id: newCallId(),
     site: opts.site,
     job: opts.job,
     model: route.id,
@@ -357,12 +362,23 @@ export async function callModel(opts: CallOptions): Promise<CallResult> {
   const result = await run(base, route, opts);
 
   const { usage, cost } = await logDone(base, route.id, result.totalUsage, gatewayCost(result.providerMetadata));
+  await writeCapture(rest, {
+    call: base.id,
+    site: opts.site,
+    request: requestOf(route.id, opts),
+    response: { text: result.text, reasoning: result.reasoningText ?? null, finishReason: result.finishReason, usage },
+  });
   // Logged and paid for, but nothing to use: say so instead of handing back "".
   if (!result.text.trim() && result.finishReason === "length") throw new EmptyAnswerError(usage.outputTokens);
   return { text: result.text, finishReason: result.finishReason, usage, costUsd: cost, budgetWarning: verdict.warn };
 }
 
 type Logged = Record<string, unknown>;
+
+/** What callModel sends, as Labs replays it. */
+function requestOf(model: string, opts: CallOptions) {
+  return { model, system: opts.system ?? null, prompt: opts.prompt, maxOutputTokens: opts.maxOutputTokens ?? null, reasoning: opts.reasoning ?? null };
+}
 
 /** The call itself, on our account or the tenant's key. A failure is logged before it is thrown. */
 async function run(base: Logged, route: Route, opts: CallOptions) {
@@ -385,6 +401,7 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
       const failed = await tenantKeyFailed(opts.site, route, err);
       if (failed) {
         await writeCall({ ...base, status: "error", priced: refused(err) }).catch(() => {});
+        await writeCapture(rest, { call: String(base.id), site: opts.site, request: requestOf(route.id, opts), response: errorOf(err) });
         throw failed;
       }
     } else {
@@ -395,6 +412,7 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
     // keep the trace at zero tokens and mark it unpriced so Consumption counts the gap.
     // A refused one never ran, so it is a known $0.
     await writeCall({ ...base, status: "error", priced: refused(err) }).catch(() => {});
+    await writeCapture(rest, { call: String(base.id), site: opts.site, request: requestOf(route.id, opts), response: errorOf(err) });
     throw err;
   }
 }
@@ -590,6 +608,17 @@ export interface ModelStream {
   costUsd(): number;
 }
 
+/** One streamed step's output, as it arrives. */
+function emptyStep() {
+  return {
+    text: "",
+    reasoning: "",
+    toolCalls: [] as { id: string; tool: string; input: unknown }[],
+    toolResults: [] as { id: string; tool: string; output: unknown }[],
+    finishReason: null as string | null,
+  };
+}
+
 /** About four characters a token: the estimate for a call stopped before the provider reported usage. */
 const estimateTokens = (chars: number) => Math.ceil(chars / 4);
 
@@ -646,12 +675,33 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
   let total = 0;
   let logFailure: unknown = null;
 
+  // The capture (capture.ts): every step of the reply is one row, sharing a turn. The
+  // first carries the request; the later ones continue from it and the earlier steps.
+  const turn = newCallId();
+  let stepNo = 0;
+  let out = emptyStep();
+  const capture = (call: string, response: Record<string, unknown>) =>
+    writeCapture(rest, {
+      call,
+      site: opts.site,
+      turn,
+      // A reply that failed before its first step began is still step 1.
+      step: Math.max(stepNo, 1),
+      request:
+        stepNo <= 1
+          ? { model: route.id, system: opts.system ?? null, messages: opts.messages, tools: Object.keys(opts.tools ?? {}), maxSteps: opts.maxSteps ?? 6, maxOutputTokens: opts.maxOutputTokens ?? null, reasoning: opts.reasoning ?? null }
+          : { continues: turn, step: stepNo },
+      response,
+    });
+
   const log = async (usage: Usage, status: "ok" | "stopped", reported: number | null = null) => {
     const { cost, priced } = priceCall(await priceOf(), usage, reported);
     total = Math.round((total + cost) * 1e6) / 1e6;
+    const id = newCallId();
     try {
       await writeCall({
         ...base,
+        id,
         input_tokens: usage.inputTokens,
         output_tokens: usage.outputTokens,
         cache_read_tokens: usage.cacheReadTokens,
@@ -663,7 +713,9 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
     } catch (err) {
       // The reply is already paid for: finish it, then fail (as callModel does).
       logFailure ??= err;
+      return;
     }
+    await capture(id, { ...out, status, usage });
   };
 
   const result = streamText({
@@ -681,6 +733,17 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
 
   const promptChars = (opts.system?.length ?? 0) + JSON.stringify(opts.messages).length;
 
+  /** A failed step: its cost-log row, then what it got and what arrived before the failure. */
+  const logError = async (err: unknown, priced: boolean) => {
+    const id = newCallId();
+    try {
+      await writeCall({ ...base, id, status: "error", priced });
+    } catch {
+      return;
+    }
+    await capture(id, { ...out, ...errorOf(err) });
+  };
+
   async function* parts(): AsyncGenerator<TextStreamPart<ToolSet>> {
     let open = false; // a step has started and not reported its usage
     let started = false; // any step started at all
@@ -694,10 +757,22 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
           case "start-step":
             open = started = true;
             chars = 0;
+            stepNo++;
+            out = emptyStep();
             break;
           case "text-delta":
+            chars += part.text.length;
+            out.text += part.text;
+            break;
           case "reasoning-delta":
             chars += part.text.length;
+            out.reasoning += part.text;
+            break;
+          case "tool-call":
+            out.toolCalls.push({ id: part.toolCallId, tool: part.toolName, input: part.input });
+            break;
+          case "tool-result":
+            out.toolResults.push({ id: part.toolCallId, tool: part.toolName, output: part.output });
             break;
           case "tool-input-delta":
             chars += part.delta.length;
@@ -707,6 +782,7 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
             const usage = usageOf(part.usage);
             // The next step re-sends this one's input and output.
             input = usage.inputTokens + usage.outputTokens;
+            out.finishReason = part.finishReason;
             await log(usage, "ok", gatewayCost(part.providerMetadata));
             break;
           }
@@ -726,12 +802,12 @@ export async function streamModel(opts: StreamOptions): Promise<ModelStream> {
           const keyErr = await tenantKeyFailed(opts.site, route, failed);
           // Never usageLimit, never a retry on another account.
           if (keyErr) thrown = keyErr;
-          await writeCall({ ...base, status: "error", priced: !started && refused(failed) }).catch(() => {});
+          await logError(failed, !started && refused(failed));
         } else {
           const limit = usageLimit(failed);
           if (limit) thrown = limit; // cost nothing: not logged
           // As callModel: billed upstream for an amount we don't know, unless refused before it ran.
-          else await writeCall({ ...base, status: "error", priced: !started && refused(failed) }).catch(() => {});
+          else await logError(failed, !started && refused(failed));
         }
       } else {
         if (open || (!started && opts.abortSignal?.aborted)) {

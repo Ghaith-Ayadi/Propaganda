@@ -53,7 +53,10 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
   picks some when several are set. With none, failures are recorded and listed,
   and filed once one is set. Repeats are noted at most hourly
   (`WORKER_FAILURE_RENOTE_SECONDS`). Demo runs are never filed
-  (`WORKER_FAILURE_NEVER_FILED`).
+  (`WORKER_FAILURE_NEVER_FILED`). Each destination is tried on its own, so one
+  that refuses (a GitHub token without the Issues permission) never keeps Slack
+  from hearing about a failure; the refusal is kept as the group's `process_error`.
+  Every recorded run is also sent to PostHog (`src/telemetry.ts`, `POSTHOG_KEY`).
 - **Thinking models**: an `Ask`'s `maxOutputTokens` is the answer's budget; the
   gateway adds `MODEL_THINKING_TOKENS` (16,000) for the model's reasoning. A model
   that still thinks until the budget runs out throws `EmptyAnswerError` (logged,

@@ -44,7 +44,7 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
 - **Deploying the app.** Vercel's Git integration is off for the `verbatim` project: no push or
   PR creates a Vercel deployment or check (the free plan's 100 deployments a day were being
   spent on ignored PR builds). Production ships only from `.github/workflows/deploy-app.yml`,
-  run by hand on `main` (`vercel build` + `deploy --prebuilt`, with the `VERCEL_TOKEN`,
+  run by a release (below) or by hand on `main` (`vercel build` + `deploy --prebuilt`, with the `VERCEL_TOKEN`,
   `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` repo secrets), and only on Ayadi's word.
 - **Multi-tenant.** Content belongs to a **site** (`sites`, `site_members` with owner/editor
   roles). Every content table has a required `site`; row-level security is keyed on it,
@@ -89,6 +89,15 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
 - `scripts/src/*` are tools from the Supabase Cloud days and stop working when that
   project is deleted after 2026-10-16. `docs/archive/` is history, not instructions.
 
+## Releases
+
+Production moves in numbered releases (`v0.2.0`, `v0.2.1`, ...), cut by the **release**
+workflow on `main`, only on Ayadi's word: the free suites, then real-model tests
+(`worker/test/live/`) for the agents whose code changed since the last release (all of them on
+the first release of a month), then the tag, a GitHub Release as the log (PRs, tests, their
+cost), and the app deploy. The box follows the tag in Bedrock's `schema.env`. Tests run the
+Strategist on Sonnet, never Fable. Details: [docs/releases.md](docs/releases.md).
+
 ## Model calls: one logged path
 
 Every call to a language model goes through `callModel()` in `api/_ai/gateway.ts` (Vercel AI
@@ -100,6 +109,12 @@ provider's reported cost. Never call a provider directly:
 `npm run check:model-paths` (in `api/`) fails on it. Limits default to off; the global daily
 cap engages `cost_kill`, which only a superadmin lifts. Tenants see their month on Home
 (`CostMeter`), the superadmin sees all of it in Admin > Consumption.
+
+**Capture (Propaganda Labs).** Every model call's full input and output (system, prompt or
+messages, tools, text, reasoning, tool calls and results, or the error) also lands in
+`public.model_call_io`, one row per `model_calls` row (`api/_ai/capture.ts`). Superadmin only:
+it holds drafts and call transcripts. A capture never fails the call; `MODEL_CAPTURE=off`
+turns it off. It is the input Labs replays.
 
 **Own keys (BYOK).** A tenant may save its own Anthropic key (Settings, "Your Anthropic
 key", through `api/model-key.ts`; owners set or remove it). It is stored only as AES-GCM ciphertext under
@@ -162,6 +177,7 @@ analytics worker, never by PostHog.
 - Events go through `/ingest` on our own host (`vercel.json` rewrites, Vite proxy in dev).
   `VITE_POSTHOG_KEY` unset means telemetry is off.
 - Every event and replay carries `tenant_id`, `tenant_slug` and `account_id`; filter recordings by those.
+- Worker run failures go to PostHog too (`worker/src/telemetry.ts`, once per recorded run, route `worker/<workflow>`, with `tenant_id`) when the box has `POSTHOG_KEY`; the failure log and its tickets (Slack, GitHub, Notion) are unchanged. Each ticket destination is tried on its own: one refusing never silences the others.
 
 ## Notion is mandatory and is part of "done"
 
