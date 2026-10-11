@@ -178,6 +178,7 @@ analytics worker, never by PostHog.
   `VITE_POSTHOG_KEY` unset means telemetry is off.
 - Every event and replay carries `tenant_id`, `tenant_slug` and `account_id`; filter recordings by those.
 - Worker run failures go to PostHog too (`worker/src/telemetry.ts`, once per recorded run, route `worker/<workflow>`, with `tenant_id`) when the box has `POSTHOG_KEY`; the failure log and its tickets (Slack, GitHub, Notion) are unchanged. Each ticket destination is tried on its own: one refusing never silences the others.
+- **Before a dev or E2E run is called green, run `node scripts/posthog-check.mjs --env dev --since <age of the run>`** ([docs/posthog-check.md](docs/posthog-check.md)): new exceptions and rage-clicked or errored sessions, with replay links. Needs `POSTHOG_READ_KEY` (read-only, set by the keys thread); exit 1 means look before saying green, exit 2 means it could not ask.
 
 ## Notion is mandatory and is part of "done"
 
