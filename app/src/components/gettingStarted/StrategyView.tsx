@@ -150,6 +150,8 @@ export function StrategyView({
                           </li>
                         ))}
                       </ul>
+                    ) : pitching && pitching.topics > 0 && pitching.topicsDone >= pitching.topics ? (
+                      <p className="text-sm text-tertiary">No first pitches here. The Pitcher writes for this topic in its next batch, once you approve.</p>
                     ) : (
                       <div className="flex flex-col gap-2">
                         <p className="flex items-center gap-2 text-sm text-tertiary">

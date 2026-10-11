@@ -305,6 +305,8 @@ try {
     threw = err.message;
   }
   check(/not one of the URLs/.test(threw), "a source it wasn't given goes back");
+  const tracked = t.parseTopicPitches(new Set(["https://ok.example/a?srsltid=AfmBOoq1"]), ["Blog"], 1, [])({ pitches: [pitch("X", "https://ok.example/a/?srsltid=AU7gw4X3&utm_source=x", 0)] });
+  check(tracked[0].written.sources[0].url === "https://ok.example/a?srsltid=AfmBOoq1", "a given URL copied with other tracking tokens counts, as given");
   const ok = parse({ pitches: [{ ...pitch("X", "", 0), targetSearch: "Batch Job Retries" }, { ...pitch("X", "", 1), targetSearch: "made up" }] });
   check(ok[0].judgement.targetSearch === "batch job retries" && ok[1].judgement.targetSearch === "", "only the plan's searches count as targets");
 

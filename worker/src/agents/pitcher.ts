@@ -125,15 +125,33 @@ export interface Written {
   learned: string;
 }
 
+/**
+ * A URL without what search results add to it (Google's srsltid, utm_*), its
+ * fragment and a trailing slash: models copy those tokens badly, and the page
+ * is the same page.
+ */
+export function sameUrl(url: string): string {
+  try {
+    const u = new URL(url.trim());
+    for (const k of [...u.searchParams.keys()]) if (k === "srsltid" || k.startsWith("utm_")) u.searchParams.delete(k);
+    u.hash = "";
+    return `${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}${u.search}`;
+  } catch {
+    return url.trim();
+  }
+}
+
 export function parsePitch(allowedUrls: Set<string>, collectionNames: string[]) {
+  const given = new Map([...allowedUrls].map((u) => [sameUrl(u), u]));
   return (v: unknown): Written => {
     const o = obj(v, "The answer");
     const outline = strs(o.outline, "outline");
     if (outline.length < 4 || outline.length > 10) throw new Error("outline must have 4 to 10 lines.");
     const sources = arr(o.sources, "sources", { optional: true }).map((x, i) => {
       const s = obj(x, `sources[${i}]`);
-      const url = str(s.url, `sources[${i}].url`);
-      if (!allowedUrls.has(url)) throw new Error(`sources[${i}].url is not one of the URLs you were given: ${url}`);
+      const asked = str(s.url, `sources[${i}].url`);
+      const url = allowedUrls.has(asked) ? asked : given.get(sameUrl(asked));
+      if (!url) throw new Error(`sources[${i}].url is not one of the URLs you were given: ${asked}`);
       return { url, label: str(s.label, `sources[${i}].label`, { max: 200 }) };
     });
     let collection = str(o.collection, "collection", { optional: true });
