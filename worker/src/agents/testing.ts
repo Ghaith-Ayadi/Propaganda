@@ -19,6 +19,7 @@ export { handOffIdeas } from "./ideas.js";
 export { pitcher, pitchFromRequest } from "./pitcher.js";
 export { writer, reviser, briefForTask } from "./writer.js";
 export { voiceGuideWorkflow, DEFAULT_VOICE } from "./voice.js";
+export { saveVoiceGuide } from "./store.js";
 export { pitchBatch, dailyBatches } from "./pitcher.js";
 export { nextQuota, approvalRate, pitchesFor, unassigned } from "./batches.js";
 export { similarity, nearest } from "./taste.js";

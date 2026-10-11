@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminContext";
+import { tenantNames } from "@/components/admin/tenantNames";
 import {
   liftKill, loadConsumption, loadDaily, loadLimits, setLimits, usd,
   type ConsumptionRow, type DayCost, type Killswitch, type Limits,
@@ -29,6 +30,7 @@ export function ConsumptionPage() {
   const [daily, setDaily] = useState<DayCost[]>([]);
   const [limits, setLimitsState] = useState<Limits[]>([]);
   const [kill, setKill] = useState<Killswitch>({ engaged: false, reason: "" });
+  const [names, setNames] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -40,6 +42,7 @@ export function ConsumptionPage() {
         loadLimits(client),
       ]);
       setRows(r);
+      setNames(await tenantNames(client, [...new Set(r.map((x) => x.site))]));
       setDaily(d);
       setLimitsState(l.limits);
       setKill(l.kill);
@@ -59,13 +62,13 @@ export function ConsumptionPage() {
   const tenants = useMemo(() => {
     const m = new Map<string, { name: string; usd: number; rows: ConsumptionRow[] }>();
     for (const r of rows ?? []) {
-      const t = m.get(r.site) ?? { name: r.siteName, usd: 0, rows: [] };
+      const t = m.get(r.site) ?? { name: names.get(r.site) ?? r.siteName, usd: 0, rows: [] };
       t.usd += r.costUsd;
       t.rows.push(r);
       m.set(r.site, t);
     }
     return [...m.entries()].sort((a, b) => b[1].usd - a[1].usd);
-  }, [rows]);
+  }, [rows, names]);
 
   if (error) return <p className="text-sm text-error-primary">{error}</p>;
   if (!rows) return <p className="text-sm text-tertiary">Loading…</p>;

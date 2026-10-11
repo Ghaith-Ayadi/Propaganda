@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminContext";
+import { tenantNames } from "@/components/admin/tenantNames";
 import { toast } from "@/components/base/toast/toast";
 import {
   fileFailure, getFailure, ignoreFailure, listFailures, sweepFailures,
@@ -62,10 +63,7 @@ export function FailuresPage() {
       setEnvironment(r.environment);
       setError(null);
       const ids = [...new Set(r.groups.flatMap((g) => g.sites))];
-      if (ids.length) {
-        const { data } = await client.from("sites").select("id,name").in("id", ids);
-        if (data) setSites(new Map(data.map((s: { id: string; name: string }) => [s.id, s.name])));
-      }
+      if (ids.length) setSites(await tenantNames(client, ids));
     } catch (err) {
       reportError("FailuresPage", err);
       setError(userMessage(err));

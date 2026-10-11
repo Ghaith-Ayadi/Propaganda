@@ -7,7 +7,7 @@
 // Every write filters on the site as well as the id. Nothing here can touch a
 // post a person wrote (CLAUDE.md, the highest-priority rule).
 
-import { enc, insert, isMissing, patch, rest, select } from "./backend.js";
+import { BackendError, enc, insert, isMissing, patch, rest, select } from "./backend.js";
 import { newId, stableId } from "./ids.js";
 
 // ---- rows ----
@@ -237,6 +237,15 @@ export async function insertVersion(row: {
   return version;
 }
 
+/**
+ * The voice the tenant wrote in its own words (Getting started's "Your voice",
+ * Settings), or "" when it wrote none. It wins over any guide the Writer made.
+ */
+export async function personVoice(site: string): Promise<string> {
+  const [row] = await select<{ value: unknown }>("app_settings", `site=eq.${enc(site)}&key=eq.tenant.voice.guide&select=value`);
+  return typeof row?.value === "string" ? row.value.trim() : "";
+}
+
 /** Writes the voice guide unless a person has edited it: theirs always wins. */
 export async function saveVoiceGuide(row: Omit<VoiceGuideRow, "updated" | "updated_by">): Promise<boolean> {
   const current = await voiceGuide(row.site);
@@ -244,7 +253,14 @@ export async function saveVoiceGuide(row: Omit<VoiceGuideRow, "updated" | "updat
   if (current) {
     await patch("voice_guides", `site=eq.${enc(row.site)}&source=neq.person`, { ...row, updated_by: "agent:writer" });
   } else {
-    await insert("voice_guides", { ...row, updated_by: "agent:writer" });
+    try {
+      await insert("voice_guides", { ...row, updated_by: "agent:writer" });
+    } catch (err) {
+      // A tenant's first drafts are written side by side, and each makes the
+      // guide when none exists: the first one saved stands.
+      if (err instanceof BackendError && err.status === 409) return false;
+      throw err;
+    }
   }
   return true;
 }
