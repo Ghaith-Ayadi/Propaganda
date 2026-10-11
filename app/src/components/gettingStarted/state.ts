@@ -18,6 +18,19 @@ import type { PipelineItem } from "@/lib/pipeline/types";
 import type { Proposal } from "@/lib/goals/types";
 import type { StrategistState } from "@/lib/goals/live";
 
+/**
+ * Why the Strategist stopped, said for the tenant. The worker stores the raw
+ * error; a budget refusal (api/_ai/errors.ts BudgetError) reads as a code, so
+ * it gets a sentence. Anything unrecognised keeps the generic line.
+ */
+export function stopReason(error: string | null | undefined): string {
+  const e = error ?? "";
+  if (e.includes("Model call refused: tenant-budget")) return "This month's AI budget is spent, so the Strategist couldn't start. Your answers are saved; ask again once the budget is raised.";
+  if (e.includes("Model call refused:")) return "AI is paused on our side right now, so the Strategist couldn't start. Your answers are saved; ask again a little later.";
+  if (e.startsWith("Nothing to plan from") || e.startsWith("The Strategist stopped")) return e;
+  return "Nothing was lost. Ask it again; your answers are saved.";
+}
+
 export type StepId = "business" | "strategy" | "planning" | "plan" | "pitches" | "drafts" | "publish";
 
 export interface TimelineStep {
@@ -88,7 +101,7 @@ export function useFirstDay(): FirstDay {
 
   return useMemo(() => {
     const running = strategist?.status === "requested" || strategist?.status === "running";
-    const failed = strategist?.status === "failed" ? strategist.error || "The Strategist stopped." : null;
+    const failed = strategist?.status === "failed" ? stopReason(strategist.error) : null;
     // worker EMPTY_BRIEF_ERROR: the run stopped before any model call.
     const emptyBrief = !!failed && failed.startsWith("Nothing to plan from") && !proposal;
     const sent = proposal?.status === "sent";

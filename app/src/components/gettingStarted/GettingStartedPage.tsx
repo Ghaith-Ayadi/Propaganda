@@ -33,7 +33,7 @@ import { FirstPitches } from "./FirstPitches";
 import { PlanningStep } from "./PlanningStep";
 import { useStrategistProgress } from "./progress";
 import { Confetti, NextDialog, PublishedStep } from "./Published";
-import { useFirstDay } from "./state";
+import { stopReason, useFirstDay } from "./state";
 import { StrategyView } from "./StrategyView";
 import { PhoneProgress, TodayPanel } from "./TodayPanel";
 
@@ -127,7 +127,7 @@ export function GettingStartedPage() {
                     progress={progress}
                     failedAsk={
                       day.strategist?.status === "failed" && day.strategist.id !== day.proposal.id && day.strategist.request
-                        ? { request: day.strategist.request, error: day.strategist.error || "The Strategist stopped." }
+                        ? { request: day.strategist.request, error: stopReason(day.strategist.error) }
                         : null
                     }
                   />
