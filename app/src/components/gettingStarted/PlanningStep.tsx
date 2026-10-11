@@ -44,7 +44,7 @@ export function PlanningStep({ day, progress }: { day: FirstDay; progress: Strat
       <section>
         <StepTitle
           title={day.failed ? "The Strategist stopped" : revising ? `Revising your plan, round ${round} of ${MAX_ROUNDS}` : "The Strategist is writing your plan"}
-          lede={day.failed ? "Nothing was lost. Ask it again; your answers are saved." : "About 3 minutes. Your plan opens here as soon as it's ready."}
+          lede={day.failed ?? "About 3 minutes. Your plan opens here as soon as it's ready."}
         />
         {day.failed ? (
           <Retry />
