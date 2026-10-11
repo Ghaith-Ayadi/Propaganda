@@ -197,7 +197,7 @@ in status `requested`: the app through `strategy_request()` (onboarding's
 now" on the Goals page), Chat (`POST /agents/strategist`, a revision), and the
 quarterly schedule (`STRATEGIST_QUARTERLY_CRON`, 17 Mar, Jun, Sep and Dec:
 next quarter's proposal for every tenant with goals). A poller
-(`WORKER_DISPATCH_SECONDS`) starts one run per row, id `strategist-<row>`.
+(every `WORKER_STRATEGIST_PICKUP_SECONDS`, 5) starts one run per row, id `strategist-<row>`.
 From code, `runStrategistNow(site, by)` and `weeklyCheckNow(site)` start runs
 by hand (for Admin's "Run now").
 
@@ -226,6 +226,49 @@ Approving is the app's: `strategy_approve()` writes the next `goal_versions`
 row and points the Scout at the approved searches and watched sites.
 `readGoals()` (`agents/goals.ts`) gives the Pitcher the newest version, with
 today's positions from the Scout's ranking facts.
+
+**Day one** (`workflows/first-day.ts`, pure parts in `agents/first-day.ts`;
+design: `onboarding/first-day-flow.md` in the project files, stage 3b):
+
+- **The first pitches.** Right after it sends an onboarding proposal with a
+  Launch, or a revision of one, before the tenant ever approved a plan, the
+  Strategist run starts `strategist:first-pitches` (`first-pitches-<proposal>`,
+  on the agents queue): 10 pitches over the plan's topics, proportional to each
+  topic's low end, at least 2 each (`splitPitches`). One child per topic
+  (`strategist:topic-pitches`, `first-pitches-<proposal>-t<i>`, started off the
+  queue so a waiting parent can't starve them), all at once: one search per
+  pitch (`searchDurably`), one Fable call (`MODELS.strategist`) for the topic's
+  pitches in the Pitcher's brief format, rated by `fit.ts` against the plan.
+  Each is a `briefs` row (status `pitched`, `batch` 1, `pitched_by`
+  `agent:strategist`) with its `agent_ideas` row (origin plan, key
+  `first-<proposal>-<topic>-<n>`). Batch 1's `content_batches` row is released
+  with them (quota: the Launch's day-one briefs, at most 5), so the Pitcher's
+  morning run neither releases another batch that week nor tops batch 1 up the
+  same day, and numbers its batches from 2. About $0.70 a tenant.
+- **Revisions** re-pitch only the topics that changed (`topicChanges`, by
+  name): pitches on kept topics stay with any decision on them; undecided ones
+  on topics that left the plan become `cancelled` with "Topic left the plan"
+  (not `rejected`: nobody decided, so no replacement and no rejection in the
+  taste log); new or renamed topics get their share of the 10.
+- **Drafts.** A poll (`dispatchFirstDay`, every `WORKER_FIRST_DAY_SECONDS`,
+  15) finds plans approved in the last two days and starts
+  `strategist:first-drafts` (`first-drafts-<proposal>`): the Writer drafts the 3
+  strongest pitches (`strongest`: Strong first, then the most fit reasons)
+  before anyone approves them (`beforeApproval`). While the first pitches are
+  still being written it waits for them.
+- **Replacements.** The same poll finds day-one pitches rejected with a reason
+  in the last two days and starts `strategist:replace` (`replace-<brief>`):
+  one replacement for the same topic, written after the reason
+  (`learned`: "Written after your note: ..."). A replacement (`fit.replaces`)
+  is never replaced.
+- **Lite tenants** get none of it (`isLite`: the app's placeholder, Verbatim,
+  plus `WORKER_LITE_SITES`), until the plan has a home on the server.
+- **Pickup.** Requested proposals are picked up every
+  `WORKER_STRATEGIST_PICKUP_SECONDS` (5): one lookup on a partial index.
+- **Progress** for the tenant's own people: `GET /progress/strategist` (below).
+- The Strategist's own run got two `DBOS.patch()` guards for this
+  (`strategist-who-ranks-step`, `strategist-first-pitches`); `main.ts` turns
+  patching on (`enablePatching`).
 
 **Monday's check** (`strategist:weekly`, `STRATEGIST_WEEKLY_CRON`, 06:00
 UTC) is code only: per tenant with goals this quarter, pace = published ÷
@@ -357,7 +400,35 @@ process waits too without spending a request. The Runs page shows such a run as
 ## The Runs API
 
 Served at `https://app.propaganda.pub/worker/v1/` (Caddy strips the prefix).
-Every route but `/health` needs a superadmin's Supabase access token.
+Every route but `/health`, the dispatch route, the Listener's routes and
+`/progress/strategist` needs a superadmin's Supabase access token.
+
+### Day one's progress, for a tenant's members
+
+`GET /progress/strategist?site=<site id>` with `Authorization: Bearer <access
+token>` of a member of that site (`site_members`; 401 without a valid token,
+403 for anyone else, superadmins included). Read-only (`src/progress.ts`): the
+site's newest proposal and what its runs have done.
+
+```json
+{
+  "proposalId": "abc...",          // newest strategy_proposals row, or null
+  "status": "running",             // requested | running | sent | approved | failed | superseded | null
+  "steps": [                       // always these five, in order; state done | running | waiting
+    { "label": "Read your website", "state": "done" },
+    { "label": "Looked up searches and their volumes", "state": "done" },
+    { "label": "Checked who ranks for your searches", "state": "running" },
+    { "label": "Writing the plan", "state": "waiting" },
+    { "label": "Checking it against the Launch rules", "state": "waiting" }
+  ],
+  "pitches": { "topicsDone": 1, "topics": 2, "written": 7 },  // that proposal's first pitches; null before they start or when it gets none
+  "drafts": [ { "briefId": "def...", "state": "running" } ]   // running | done | failed; [] before the plan is approved
+}
+```
+
+The lines come from the Strategist run's step names (`planSteps`): `gather`,
+`keyword data`, `who ranks` (one `keyword data` step in runs from before),
+`propose`, then the steps after the rules check.
 
 | | |
 |---|---|

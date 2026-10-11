@@ -300,8 +300,8 @@ export function Workspace({ children }: { children: React.ReactNode }) {
           if (open?.account.userId !== account.userId) cancel();
         }}
         onDone={(site) => {
-          // The new tenant opens on its first run (components/onboarding).
-          window.location.hash = "#/welcome";
+          // The new tenant opens on its first day (components/gettingStarted).
+          window.location.hash = "#/getting-started";
           leaveThen(account, site);
         }}
       />

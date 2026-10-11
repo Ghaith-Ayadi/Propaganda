@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 import { toast } from "@/components/base/toast/toast";
 import { db } from "@/lib/db";
 import { userMessage } from "@/lib/errors";
-import { createPost } from "@/lib/posts";
+import { createPost, setPostStatus } from "@/lib/posts";
 import { createBrief } from "@/lib/plan/briefs";
 import { createCollection } from "@/lib/collections";
 import { UI_PREVIEW } from "@/lib/preview";
@@ -299,8 +299,8 @@ export async function approvePitch(
   const approved: PipelineItem = { ...item, ...decision, stage: "writing" };
 
   if (LIVE) {
-    const { postId, agentNote } = await live.approve(item, decision);
-    updateItem(id, { ...decision, stage: "writing", postId, notes: item.notes });
+    const { postId, agentNote, drafted } = await live.approve(item, decision);
+    updateItem(id, { ...decision, stage: drafted ? "in_review" : "writing", postId, notes: item.notes });
     void refresh();
     if (agentNote) {
       toast.add({ title: "The Writer didn't start", description: `The worker says ${agentNote}. Write it yourself, or ask Chat to write it later.` });
@@ -372,6 +372,21 @@ export function approveAndSchedule(id: string): string | null {
   if (LIVE) persist(live.schedule(id, item.publishBy, time));
   updateItem(id, { stage: "scheduled", scheduledFor: { date: item.publishBy, time } });
   return `${shortDate(item.publishBy)}, ${time}`;
+}
+
+/**
+ * Approve a draft and publish it now, whatever its stage: a tenant's first
+ * article on Getting started, drafted before its pitch was approved.
+ */
+export async function publishNow(id: string): Promise<void> {
+  const item = getItem(id);
+  if (!item?.postId) return;
+  const at = new Date();
+  if (LIVE) await live.publishNow(id, at.toISOString());
+  await setPostStatus(item.postId, "published");
+  const time = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  updateItem(id, { stage: "published", scheduledFor: { date: ymd(at), time } });
+  if (LIVE) void refresh();
 }
 
 export function setClaimState(id: string, claimId: string, state: "remembered" | "not_a_fact" | "open") {

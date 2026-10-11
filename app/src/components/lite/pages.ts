@@ -4,13 +4,16 @@
 // calendar, and adds one quiet Upgrade entry. The nav, the phone tabs, the
 // command menu and the router all read pages through here.
 
-import { lazy } from "react";
+import { lazy, useMemo } from "react";
+import { useSetting } from "@/lib/settings";
 import { Calendar, Stars02 } from "@untitledui/icons";
 import { PAGES, type PageRoute } from "@/lib/routes";
 import { usePlan, type Plan } from "@/lib/tenantPlan";
 
 /** Lite's take on a page: `false` leaves it out, an object changes it. */
 const LITE: Record<string, false | Partial<PageRoute>> = {
+  // A first day with the agents: Lite has none.
+  "getting-started": false,
   home: {
     description: "Your latest writing at a glance.",
     component: lazy(() => import("./LiteHome").then((m) => ({ default: m.LiteHome }))),
@@ -55,7 +58,11 @@ export function pagesFor(plan: Plan): PageRoute[] {
 }
 
 export function usePages(): PageRoute[] {
-  return pagesFor(usePlan());
+  const pages = pagesFor(usePlan());
+  // Getting started is in the nav from the day a tenant starts there until it says "I got it".
+  const started = !!useSetting<string>("onboarding.started", "");
+  const completed = !!useSetting<string>("onboarding.completed", "");
+  return useMemo(() => (started && !completed ? pages : pages.filter((p) => p.id !== "getting-started")), [pages, started, completed]);
 }
 
 /**

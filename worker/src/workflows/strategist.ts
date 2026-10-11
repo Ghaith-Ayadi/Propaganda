@@ -35,6 +35,7 @@ import {
   profile,
   publishedBetween,
   requestedProposals,
+  runningProposals,
   requestProposal,
   runCost,
   saveNotes,
@@ -67,6 +68,7 @@ import {
 import { batchCadence } from "../agents/store.js";
 import { dataForSeoConfigured, keywordIdeas, keywordOverview, rankedKeywords } from "../scout/dataforseo.js";
 import { AGENT_QUEUE, registerAgent, startOnceForTenant, type DispatchInput } from "./agents.js";
+import { dispatchFirstDay, startFirstPitches } from "./first-day.js";
 
 const JOB = "strategist";
 const LOCATION = { locationCode: 2840, languageCode: "en" };
@@ -188,6 +190,13 @@ interface Market {
 }
 
 async function market(site: string, pack: Pack): Promise<Market> {
+  const out = await keywordData(site, pack);
+  if (dataForSeoConfigured()) out.serps = await whoRanks(site, pack);
+  return out;
+}
+
+/** Keyword ideas around their searches, and what they and their competitors rank for. */
+async function keywordData(site: string, pack: Pack): Promise<Market> {
   const out: Market = { keywords: [], ours: [], competitors: [], serps: [] };
   const seeds = lines(pack.answers.searches).slice(0, 5);
   if (!dataForSeoConfigured()) return out;
@@ -202,19 +211,22 @@ async function market(site: string, pack: Pack): Promise<Market> {
   }
   const settled = await Promise.allSettled(tries);
   for (const r of settled) if (r.status === "rejected") console.warn(`strategist keyword data: ${(r.reason as Error).message}`);
+  return out;
+}
 
-  // Who ranks for the tenant's own searches (at most 5, so at most 5 paid searches).
-  if (searchConfigured()) {
-    for (const q of seeds) {
-      try {
-        const hits = await searchWeb(q, 10, { site, job: JOB });
-        out.serps.push({ query: q, top: hits.slice(0, 5).map((h) => ({ position: h.position, url: h.url, title: h.title })) });
-      } catch (err) {
-        console.warn(`strategist search "${q}": ${(err as Error).message}`);
-      }
+/** Who ranks for the tenant's own searches (at most 5, so at most 5 paid searches). */
+async function whoRanks(site: string, pack: Pack): Promise<Market["serps"]> {
+  const serps: Market["serps"] = [];
+  if (!searchConfigured()) return serps;
+  for (const q of lines(pack.answers.searches).slice(0, 5)) {
+    try {
+      const hits = await searchWeb(q, 10, { site, job: JOB });
+      serps.push({ query: q, top: hits.slice(0, 5).map((h) => ({ position: h.position, url: h.url, title: h.title })) });
+    } catch (err) {
+      console.warn(`strategist search "${q}": ${(err as Error).message}`);
     }
   }
-  return out;
+  return serps;
 }
 
 /**
@@ -346,7 +358,17 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     const hasGoals = await DBOS.runStep(() => hasApprovedGoals(site), { name: "approved goals" });
     const kind = effectiveKind(row.kind, { hasHistory, hasGoals });
     const window = windowFor(kind, now, row.quarter);
-    const m = await DBOS.runStep(() => market(site, pack), { name: "keyword data" });
+    // Two steps since day one's progress card (GET /progress/strategist): the
+    // searches and their volumes, then who ranks for them. Runs from before
+    // did both in "keyword data".
+    let m: Market;
+    if (await DBOS.patch("strategist-who-ranks-step")) {
+      m = await DBOS.runStep(() => keywordData(site, pack), { name: "keyword data" });
+      const serps = dataForSeoConfigured() ? await DBOS.runStep(() => whoRanks(site, pack), { name: "who ranks" }) : [];
+      m = { ...m, serps };
+    } else {
+      m = await DBOS.runStep(() => market(site, pack), { name: "keyword data" });
+    }
     const keywords = keywordMap(m);
     const cap = volumeCap({ weeks: window.covers.weeks, perMonth: pack.perMonth, lastQuarterPublished: hasHistory ? pack.history.publishedLastQuarter : null });
     const launch = kind === "onboarding" && !hasHistory ? launchFor(now, window.join) : null;
@@ -429,6 +451,9 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       at: now.toISOString(),
     };
     await DBOS.runStep(() => sendProposal(proposalId, site, proposal, inputs, MODELS.strategist), { name: "send" });
+    // Day one: the first pitches, written while the person reads the plan
+    // (workflows/first-day.ts). A run of its own, so the plan doesn't wait.
+    if (await DBOS.patch("strategist-first-pitches")) await startFirstPitches(row, Boolean(proposal.launch));
     if (inputs.planRead) await DBOS.runStep(() => markPlanRead(site), { name: "plan read" });
     await DBOS.runStep(() => runCost(proposalId, runId), { name: "cost" });
     return { status: "sent" };
@@ -465,37 +490,84 @@ export function strategistRunId(proposalId: string): string {
   return `strategist-${proposalId}`;
 }
 
+/** Rows this process already started, so the fast tick doesn't ask DBOS again every few seconds. */
+const startedRows = new Map<string, number>();
+
 /** Start the run for each requested proposal (once per row, however often it's asked). */
 export async function dispatchStrategist(): Promise<string[]> {
   const started: string[] = [];
+  const now = Date.now();
   for (const r of await requestedProposals()) {
     const id = strategistRunId(r.id);
-    await startOnceForTenant(r.site, id, strategist, r.id);
+    const at = startedRows.get(id);
+    // DBOS dedupes by id anyway; this only saves it a write per tick. Asked again after 10 minutes.
+    if (at === undefined || now - at > 10 * 60_000) {
+      await startOnceForTenant(r.site, id, strategist, r.id);
+      startedRows.set(id, now);
+    }
     started.push(id);
   }
+  for (const [id, at] of startedRows) if (now - at > 60 * 60_000) startedRows.delete(id);
   return started;
 }
 
-/** Look for requested proposals now and every WORKER_DISPATCH_SECONDS. Returns a stop function. */
+export const STOPPED_ERROR = "The Strategist stopped before finishing. Ask it again: your answers are saved.";
+const ENDED = new Set(["ERROR", "CANCELLED", "MAX_RECOVERY_ATTEMPTS_EXCEEDED"]);
+
+/**
+ * Running proposals whose run ended without saying so (it died where its own
+ * catch couldn't write, or was cancelled) are marked failed, so the person sees
+ * "ask again" instead of waiting forever, and strategy_request takes a new ask
+ * (it returns the open one while a row says running). A row with no run after
+ * 15 minutes counts as ended too. Returns the ids it failed.
+ */
+export async function settleStrategist(now = Date.now()): Promise<string[]> {
+  const failed: string[] = [];
+  for (const r of await runningProposals()) {
+    const st = await DBOS.getWorkflowStatus(r.run_id || strategistRunId(r.id));
+    const ended = st ? ENDED.has(st.status) : now - Date.parse(r.created) > 15 * 60_000;
+    if (!ended) continue;
+    await failProposal(r.id, STOPPED_ERROR);
+    failed.push(r.id);
+  }
+  return failed;
+}
+
+/**
+ * The Strategist's polls. Requested proposals every
+ * WORKER_STRATEGIST_PICKUP_SECONDS (5): on day one the person is waiting, and
+ * the query is one lookup on a partial index (strategy_proposals_requested,
+ * status = 'requested') that is empty almost always. Day one's approvals and
+ * rejections (workflows/first-day.ts) every WORKER_FIRST_DAY_SECONDS (15).
+ * Runs that ended without a word (settleStrategist) every minute.
+ * WORKER_DISPATCH_SECONDS=0 turns both off. Returns a stop function.
+ */
 export function startStrategistPoller(): () => void {
-  // The same tick as the knowledge base dispatcher (config.ts dispatchSeconds).
-  const seconds = Number(process.env.WORKER_DISPATCH_SECONDS ?? 60);
-  if (seconds <= 0) return () => {};
-  let busy = false;
-  const tick = async () => {
-    if (busy) return;
-    busy = true;
-    try {
-      await dispatchStrategist();
-    } catch (err) {
-      DBOS.logger.error(`strategist poller: ${(err as Error).message}`);
-    } finally {
-      busy = false;
-    }
+  if (Number(process.env.WORKER_DISPATCH_SECONDS ?? 60) <= 0) return () => {};
+  const pickup = Math.max(1, Number(process.env.WORKER_STRATEGIST_PICKUP_SECONDS ?? 5));
+  const firstDay = Math.max(1, Number(process.env.WORKER_FIRST_DAY_SECONDS ?? 15));
+  const poll = (what: string, fn: () => Promise<unknown>, seconds: number) => {
+    let busy = false;
+    const tick = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        await fn();
+      } catch (err) {
+        DBOS.logger.error(`${what} poller: ${(err as Error).message}`);
+      } finally {
+        busy = false;
+      }
+    };
+    void tick();
+    return setInterval(() => void tick(), seconds * 1000);
   };
-  void tick();
-  const timer = setInterval(() => void tick(), seconds * 1000);
-  return () => clearInterval(timer);
+  const timers = [
+    poll("strategist", dispatchStrategist, pickup),
+    poll("first day", () => dispatchFirstDay(), firstDay),
+    poll("strategist settle", () => settleStrategist(), 60),
+  ];
+  return () => timers.forEach((t) => clearInterval(t));
 }
 
 /**
