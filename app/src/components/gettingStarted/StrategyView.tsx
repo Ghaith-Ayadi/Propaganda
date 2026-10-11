@@ -48,11 +48,12 @@ export function StrategyView({
   const [answers, setAnswers] = useState<string[]>(() => proposal.questions.map(() => ""));
   const [busy, setBusy] = useState(false);
   const questions = proposal.questions;
-  // Open questions block approval, every round (as on Goals, #102).
-  const mustAnswer = questions.length > 0;
+  const lastRound = round >= MAX_ROUNDS;
+  // Open questions block approval, every round (as on Goals, #102), except the
+  // last: no answer can be sent then, so it would never unlock.
+  const mustAnswer = questions.length > 0 && !lastRound;
   const allAnswered = answers.every((a) => a.trim());
   const pitching = progress?.proposalId === proposal.id ? progress.pitches : null;
-  const lastRound = round >= MAX_ROUNDS;
 
   const revise = async (note: string, what: string) => {
     setBusy(true);
@@ -228,26 +229,36 @@ export function StrategyView({
           <SectionTitle
             title="What it couldn't decide alone"
             lede={
-              `Answer ${questions.length === 1 ? "it" : `all ${questions.length}`} and send them together. The Strategist folds your answers into the plan, and approving unlocks then.`
+              lastRound
+                ? "That was the last round. Approve the plan as it is; you can change it any time on Goals."
+                : `Answer ${questions.length === 1 ? "it" : `all ${questions.length}`} and send them together. The Strategist folds your answers into the plan, and approving unlocks then.`
             }
           />
-          <div className="flex flex-col gap-4">
-            {questions.map((q, i) => (
-              <TextField key={q} value={answers[i] ?? ""} onChange={(v) => setAnswers((a) => a.map((x, j) => (j === i ? v : x)))} className="flex flex-col gap-1.5">
-                <Label className="text-sm font-medium text-secondary">{q}</Label>
-                <TextArea
-                  rows={2}
-                  placeholder="Your answer"
-                  className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-md text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
-                />
-              </TextField>
-            ))}
-            <div>
-              <Button size="sm" isDisabled={!allAnswered || busy || lastRound} isLoading={busy} onClick={() => void revise(answerNote(), "answers")}>
-                Send answers
-              </Button>
+          {lastRound ? (
+            <ul className="flex list-disc flex-col gap-2 pl-5 text-sm text-secondary">
+              {questions.map((q) => (
+                <li key={q}>{q}</li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {questions.map((q, i) => (
+                <TextField key={q} value={answers[i] ?? ""} onChange={(v) => setAnswers((a) => a.map((x, j) => (j === i ? v : x)))} className="flex flex-col gap-1.5">
+                  <Label className="text-sm font-medium text-secondary">{q}</Label>
+                  <TextArea
+                    rows={2}
+                    placeholder="Your answer"
+                    className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-md text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+                  />
+                </TextField>
+              ))}
+              <div>
+                <Button size="sm" isDisabled={!allAnswered || busy || lastRound} isLoading={busy} onClick={() => void revise(answerNote(), "answers")}>
+                  Send answers
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </section>
       )}
 
