@@ -55,6 +55,16 @@ export async function requestedProposals(limit = 20): Promise<{ id: string; site
   }
 }
 
+/** Proposals a run is writing now, with the run that claimed each. */
+export async function runningProposals(limit = 50): Promise<{ id: string; run_id: string | null; created: string }[]> {
+  try {
+    return await select("strategy_proposals", `status=eq.running&select=id,run_id,created&order=created&limit=${limit}`);
+  } catch (err) {
+    if (isMissing(err)) return [];
+    throw err;
+  }
+}
+
 /** A proposal the worker asks for itself (a quarterly run, Chat). Returns its id. */
 export async function requestProposal(site: string, quarter: string, kind: ProposalKind, request: string, by: string): Promise<string> {
   const [waiting] = await select<{ id: string }>(
@@ -135,6 +145,17 @@ export async function latestGoals(site: string, quarter: string): Promise<GoalVe
   }
 }
 
+/** Whether the tenant has ever approved goals: a tenant without any gets the onboarding kind of proposal, whatever asked for the run. */
+export async function hasApprovedGoals(site: string): Promise<boolean> {
+  try {
+    const rows = await select<{ site: string }>("goal_versions", `site=eq.${enc(site)}&select=site&limit=1`);
+    return rows.length > 0;
+  } catch (err) {
+    if (isMissing(err)) return false;
+    throw err;
+  }
+}
+
 /** Tenants with goals for `quarter` (the weekly check, the quarterly run). */
 export async function sitesWithGoals(quarter: string): Promise<string[]> {
   try {
@@ -144,6 +165,14 @@ export async function sitesWithGoals(quarter: string): Promise<string[]> {
     if (isMissing(err)) return [];
     throw err;
   }
+}
+
+/** This quarter's earlier proposals for the site (oldest first): what each asked, and the request that answered it. */
+export async function earlierProposals(site: string, quarter: string): Promise<Pick<ProposalRow, "id" | "kind" | "status" | "request" | "proposal" | "created">[]> {
+  return select(
+    "strategy_proposals",
+    `site=eq.${enc(site)}&quarter=eq.${enc(quarter)}&status=in.(sent,superseded,approved)&select=id,kind,status,request,proposal,created&order=created.asc&limit=20`,
+  );
 }
 
 /** The last proposal the tenant approved, with their edits: how it learns their taste. */

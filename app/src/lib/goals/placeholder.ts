@@ -71,7 +71,7 @@ export const SCENARIOS: { id: ScenarioId; label: string; hint: string }[] = [
 ];
 
 const SCENARIO_KEY = "propaganda:goals-placeholder-scenario";
-/** Same key as the onboarding fallback in #35 (StrategyQuestions.tsx), so typed answers carry over. */
+/** The answers typed in the UI preview, per site. */
 const answersKey = (siteId: string) => `propaganda:onboarding:strategy:${siteId}`;
 
 // ── Sample tenant ───────────────────────────────────────────────────────────

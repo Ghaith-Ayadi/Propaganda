@@ -185,6 +185,8 @@ export interface Proposal {
   batches: Reasoned<number>;
   /** At most 3 things the Strategist couldn't decide alone. */
   questions: string[];
+  /** A new tenant's Launch (worker/src/agents/strategy.ts launchFor): onboarding proposals only. */
+  launch?: LaunchPlan | null;
   /** Approved: who and when. */
   approvedBy?: string;
   approvedAt?: Day;
@@ -201,6 +203,20 @@ export interface ProposalEdit {
 }
 
 // ── Launch (first 30 days of a new tenant) ──────────────────────────────────
+
+/** The Launch as the Strategist planned it (worker LaunchPlan). */
+export interface LaunchPlan {
+  startsOn: Day;
+  target: number;
+  floor: number;
+  ceiling: number;
+  /** Every Launch post written by this day. */
+  produceByDay: number;
+  /** And published over this many days. */
+  publishOverDays: number;
+  dayOne: { briefs: number; drafted: number };
+  prorated: boolean;
+}
 
 export interface LaunchCluster {
   name: string;

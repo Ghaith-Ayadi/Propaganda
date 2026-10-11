@@ -28,6 +28,9 @@ on:
         description: "Deploy the app to Vercel production after tagging"
         type: boolean
         default: true
+      notes_since:
+        description: "First release only: list the PRs merged after this commit (the last production deploy)"
+        default: ""
 concurrency: { group: release, cancel-in-progress: false }
 permissions:
   contents: read
@@ -46,7 +49,8 @@ jobs:
       - id: version
         env: { BUMP: "${{ inputs.bump }}" }
         run: |
-          prev=$(git tag --list 'v*.*.*' --sort=-v:refname | head -1)
+          # v1.0.0 is Verbatim's tag from 2026-05, before Propaganda's numbering: not a release here.
+          prev=$(git tag --list 'v*.*.*' --sort=-v:refname | grep -vx v1.0.0 | head -1 || true)
           if [ -z "$prev" ]; then next=v0.2.0
           else
             IFS=. read -r major minor patch <<< "${prev#v}"
@@ -148,7 +152,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.plan.outputs.version }}
           PREV: ${{ needs.plan.outputs.previous }}
+          NOTES_SINCE: ${{ inputs.notes_since }}
         run: |
+          # Which PRs: GitHub lists them from the previous release. The first release has none
+          # (only Verbatim's v1.0.0 from May), so its PRs come from notes_since when given.
+          generate=(--generate-notes ${PREV:+--notes-start-tag "$PREV"})
+          prs=""
+          if [ -z "$PREV" ] && [ -n "$NOTES_SINCE" ]; then
+            git rev-parse -q --verify "$NOTES_SINCE^{commit}" >/dev/null || { echo "::error::notes_since $NOTES_SINCE is not a commit"; exit 1; }
+            generate=()
+            prs=$(git log --first-parent --merges --reverse --format='%H' "$NOTES_SINCE..$GITHUB_SHA" | while read -r h; do
+              n=$(git show -s --format=%s "$h" | grep -o '#[0-9]*' | head -1 || true)
+              [ -n "$n" ] && echo "- $n $(git show -s --format=%b "$h" | head -1)"
+            done)
+          fi
           {
             echo "Released $(date -u +%Y-%m-%dT%H:%MZ) from \`${GITHUB_SHA::7}\` by run [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
             echo
@@ -156,9 +173,13 @@ jobs:
             echo
             cat "$RUNNER_TEMP/ai-summary.md"
             echo
+            if [ -n "$prs" ]; then
+              echo "## What's in it"
+              echo
+              echo "$prs"
+            fi
           } > notes.md
-          gh release create "$VERSION" --target "$GITHUB_SHA" --title "$VERSION" --notes-file notes.md \
-            --generate-notes ${PREV:+--notes-start-tag "$PREV"}
+          gh release create "$VERSION" --target "$GITHUB_SHA" --title "$VERSION" --notes-file notes.md "${generate[@]}"
 
   deploy-app:
     needs: publish

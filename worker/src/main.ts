@@ -22,6 +22,7 @@ import "./agents/voice.js";
 import { schedulePitcher } from "./agents/pitcher.js";
 import { scheduleScout } from "./workflows/scout.js";
 import { scheduleStrategist, startStrategistPoller } from "./workflows/strategist.js";
+import "./workflows/first-day.js";
 import "./agents/checker.js";
 import "./agents/guardian.js";
 import { setListenerPool, startListener } from "./listener/index.js";
@@ -34,6 +35,8 @@ async function main(): Promise<void> {
     applicationVersion: config.appVersion,
     // One process: the default executor id is what recovery keys on, keep it stable.
     executorID: "propaganda-worker",
+    // DBOS.patch() guards changes to workflows with runs in flight (README, "Replays must match").
+    enablePatching: true,
   });
   // Every model and paid-API call is then logged with its run and step.
   wireGateway();

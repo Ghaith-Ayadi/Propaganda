@@ -177,11 +177,22 @@ export async function settleIdea(site: string, id: string, status: "pitched" | "
   await patch("agent_ideas", `site=eq.${enc(site)}&id=eq.${enc(id)}`, { status, reason, brief });
 }
 
-/** A new pitched brief. The id is minted by the caller so a replayed step writes the same row. */
-export async function insertPitch(row: Partial<BriefRow> & { id: string; site: string; title: string }): Promise<void> {
+/** Who pitched a brief (briefs.pitched_by's check constraint). The Strategist writes day one's; the Pitcher every batch after. */
+export type PitchedBy = "agent:pitcher" | "agent:strategist";
+
+/**
+ * A new brief from an agent, status `pitched` unless `status` says otherwise
+ * (the Strategist saves a pitch for a topic that left the plan as cancelled).
+ * The id is minted by the caller so a replayed step writes the same row.
+ */
+export async function insertPitch(
+  row: Partial<BriefRow> & { id: string; site: string; title: string },
+  pitchedBy: PitchedBy = "agent:pitcher",
+  status: "pitched" | "cancelled" = "pitched",
+): Promise<void> {
   const [existing] = await select<{ id: string }>("briefs", `id=eq.${enc(row.id)}&select=id`);
   if (existing) return; // the step ran before the worker restarted
-  await insert("briefs", { ...row, status: "pitched", pitched_by: "agent:pitcher" });
+  await insert("briefs", { ...row, status, pitched_by: pitchedBy });
 }
 
 /** Link the draft to an agent-made brief. Briefs a person made are never changed. */

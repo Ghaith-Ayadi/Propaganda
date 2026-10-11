@@ -1,5 +1,5 @@
 // A tenant's first run, decided from its own data: opening a full tenant that
-// never finished onboarding and has no goals yet goes to #/welcome. No tenant
+// never finished onboarding and has no goals yet goes to #/getting-started. No tenant
 // is named here; Lite tenants (the CMS alone) never get it.
 //
 // Asked once per tab per tenant, so "Finish later" in the flow sticks until

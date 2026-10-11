@@ -77,3 +77,17 @@ export async function requireSuperadmin(db: Pool, authorization: string | undefi
   if (!(await isSuperadmin(db, claims.sub))) throw new HttpError(403, "Forbidden");
   return claims;
 }
+
+/**
+ * The signed-in member of `site` behind `authorization`, or an HttpError: 401
+ * without a valid token, 403 when they aren't in site_members. For the
+ * read-only routes a tenant's own people use (GET /progress/strategist).
+ */
+export async function requireMember(db: Pool, authorization: string | undefined, site: string, secret: string): Promise<Claims> {
+  const token = (authorization ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) throw new HttpError(401, "Unauthorized");
+  const claims = verifyToken(token, secret);
+  const r = await db.query("select 1 from public.site_members where site = $1 and user_id = $2", [site, claims.sub]);
+  if (!r.rowCount) throw new HttpError(403, "Forbidden");
+  return claims;
+}

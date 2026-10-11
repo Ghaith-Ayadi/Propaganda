@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Workspace } from "@/components/Workspace";
@@ -28,9 +28,7 @@ import { toggleTheme } from "@/lib/theme";
 import { initTelemetry } from "@/lib/telemetry";
 import { setDrawer, useDrawer, useIsMobile, useMobileShell } from "@/lib/mobile";
 
-const OnboardingFlow = lazy(() =>
-  import("@/components/onboarding/OnboardingFlow").then((m) => ({ default: m.OnboardingFlow })),
-);
+import { BackStrip } from "@/components/gettingStarted/BackStrip";
 
 // Errors and product analytics, editor only (lib/telemetry.ts).
 initTelemetry();
@@ -88,7 +86,7 @@ function Shell() {
     // purpose of showing the back-to-admin strip on the public site.
     try { localStorage.setItem("verbatim:admin-known", "1"); } catch {}
     // A tenant that was never set up opens on its first run.
-    void openFirstRunIfNeeded(() => goPage("welcome"));
+    void openFirstRunIfNeeded(() => goPage("getting-started"));
     // Load app_settings (author bio, favicon, …) into the in-memory cache,
     // then start the Verbose recorder if enabled.
     void import("@/lib/settings")
@@ -148,14 +146,10 @@ function Shell() {
   const sidebar = <NavBar currentCollection={route.view === "post" ? currentPost?.type : undefined} />;
   const attributes = route.view === "post" && currentPost ? <AttributePanel post={currentPost} /> : null;
 
-  // A new tenant's first run (components/onboarding): full screen, no nav.
-  if (route.view === "page" && route.page === "welcome") {
-    return (
-      <Suspense fallback={null}>
-        <OnboardingFlow />
-      </Suspense>
-    );
-  }
+  // The old first run's address (#/welcome) is Getting started now.
+  useEffect(() => {
+    if (route.view === "page" && route.page === "welcome") window.location.replace("#/getting-started");
+  }, [route]);
 
   return (
     <div className="flex h-dvh w-full overflow-hidden">
@@ -186,7 +180,12 @@ function Shell() {
                 Post not found.
               </div>
             )}
-            {route.view === "post" && currentPost && <Editor post={currentPost} />}
+            {route.view === "post" && currentPost && (
+              <>
+                <BackStrip postId={currentPost.id} />
+                <Editor post={currentPost} />
+              </>
+            )}
           </main>
           {!isMobile && layout.attributes && attributes}
         </>

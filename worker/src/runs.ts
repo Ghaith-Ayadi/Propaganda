@@ -242,7 +242,7 @@ export async function getRun(db: Pool, id: string): Promise<RunDetail> {
     ...summary(w, stall, runCost),
     input: w.input ?? null,
     output: w.output ?? null,
-    steps: steps.filter((s) => !HIDDEN_STEPS.has(s.name)).map((s) => ({
+    steps: steps.filter((s) => !HIDDEN_STEPS.has(s.name) && !s.name.startsWith("DBOS.patch")).map((s) => ({
       id: s.functionID,
       name: STEP_NAMES[s.name] ?? s.name,
       state: stepState(s),

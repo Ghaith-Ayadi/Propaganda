@@ -140,11 +140,11 @@ export function SitePage() {
 
         <Card className="mt-4">
           <CardHeader
-            title="Start over"
-            description="Run the first-time setup again: blog, strategy and sources."
+            title="Getting started"
+            description="Your first day's guide: business, strategy, the plan and your first article."
             actions={
-              <Button color="secondary" size="sm" iconLeading={RefreshCw01} onClick={() => goPage("welcome")}>
-                Replay onboarding
+              <Button color="secondary" size="sm" iconLeading={RefreshCw01} onClick={() => goPage("getting-started")}>
+                Open Getting started
               </Button>
             }
           />

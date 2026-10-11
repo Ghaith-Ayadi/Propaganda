@@ -102,6 +102,7 @@ function toItem(r: Row, meId: string): PipelineItem {
     learned: r.learned || undefined,
     changed: r.changed || undefined,
     research: fit.research || undefined,
+    pitchedBy: typeof r.pitched_by === "string" ? r.pitched_by : undefined,
     batch: typeof r.batch === "number" ? r.batch : null,
     postId: r.post ?? null,
     briefId: r.id,
@@ -236,19 +237,21 @@ async function startAgent(body: Row): Promise<string | null> {
 
 export const live = {
   /** Approve: the brief moves to writing with its draft; the Writer starts when it's the writer. */
-  async approve(item: PipelineItem, d: { writerId: string; reviewerId: string; publishBy: string; notes: PitchNote[] }): Promise<{ postId: string; agentNote: string | null }> {
+  async approve(item: PipelineItem, d: { writerId: string; reviewerId: string; publishBy: string; notes: PitchNote[] }): Promise<{ postId: string; agentNote: string | null; drafted: boolean }> {
     const postId = item.postId ?? (await newDraft(item.collection, item.title));
     if (!postId) throw coded("PIPELINE-SAVE", new Error("no draft"), "Couldn't create the draft. Try again.");
+    // Drafted before approval (a tenant's first day): the draft is written, so it goes to review.
+    const drafted = !!item.postId && !!(await db.posts.get(item.postId))?.content?.trim();
     await patchBrief(item.id, {
-      status: "in_progress",
+      status: drafted ? "in_review" : "in_progress",
       post: postId,
       writer: d.writerId,
       reviewer: d.reviewerId,
       planned_date: d.publishBy,
       notes: d.notes,
     });
-    const agentNote = d.writerId === AGENT_ID ? await startAgent({ agent: "writer", post: postId, task: item.title }) : null;
-    return { postId, agentNote };
+    const agentNote = d.writerId === AGENT_ID && !drafted ? await startAgent({ agent: "writer", post: postId, task: item.title }) : null;
+    return { postId, agentNote, drafted };
   },
   reject: (id: string, reason: string) => patchBrief(id, { status: "rejected", reject_reason: reason }),
   notNow: (id: string, reason: string) => patchBrief(id, { status: "backlog", reject_reason: reason }),
@@ -267,6 +270,8 @@ export const live = {
       }),
     ).catch(() => undefined); // the log is a nicety; the status already moved
   },
+  /** Approved and published now (a tenant's first article): the brief is done. */
+  publishNow: (id: string, at: string) => patchBrief(id, { status: "done", scheduled_at: at }),
   schedule: (id: string, date: string, time: string) => patchBrief(id, { status: "scheduled", scheduled_at: new Date(`${date}T${time}:00`).toISOString() }),
   saveNotes: (id: string, notes: PitchNote[]) => patchBrief(id, { notes }),
   /** The + on a column: your own pitch (no draft), or a draft in writing or review. */

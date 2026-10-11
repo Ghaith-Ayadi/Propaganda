@@ -54,6 +54,20 @@ interface ProposalRow {
   approved_at: string | null;
 }
 
+/** The Strategist's newest request, for "working on it", "failed" and the round count. */
+export interface StrategistState {
+  id: string;
+  kind: Proposal["kind"];
+  quarter: QuarterKey;
+  status: ProposalRow["status"];
+  error: string;
+  created: string;
+  /** The tenant's note on a revision. */
+  request: string;
+  /** Proposals written for this quarter so far, this one included. */
+  rounds: number;
+}
+
 interface VersionRow {
   quarter: QuarterKey;
   version: number;
@@ -113,8 +127,21 @@ const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
 let stopEvents: (() => void) | null = null;
 let loadedAt = 0;
+/** How often an open page re-reads: 30 s, 5 s while a Strategist run is in flight, or what a page waiting on it asks for. */
 const POLL_MS = 30_000;
 const RUNNING_POLL_MS = 5_000;
+let pollMs = POLL_MS;
+
+/**
+ * Re-read every `ms` while someone waits on the Strategist (Getting started),
+ * or back to every 30 s with null. Returns the undo.
+ */
+export function pollGoalsEvery(ms: number | null): () => void {
+  pollMs = ms ?? POLL_MS;
+  return () => {
+    pollMs = POLL_MS;
+  };
+}
 
 function emit() {
   ver++;
@@ -200,7 +227,7 @@ function running(): boolean {
 function tick() {
   if (!listeners.size || !state || state === "missing" || loading) return;
   if (document.visibilityState !== "visible") return;
-  if (Date.now() - loadedAt >= (running() ? RUNNING_POLL_MS : POLL_MS)) void refreshGoals();
+  if (Date.now() - loadedAt >= Math.min(pollMs, running() ? RUNNING_POLL_MS : POLL_MS)) void refreshGoals();
 }
 
 const onVisible = () => {
@@ -367,14 +394,14 @@ export const liveAdapter: GoalsAdapter & {
   /** Ask the Strategist for a proposal (onboarding, a revision, or "Run it now"). */
   askStrategist(kind: Proposal["kind"], note: string, quarter?: QuarterKey): Promise<string>;
   /** The newest proposal row's state, for "working on it" and "failed" lines. */
-  strategistState(): { status: ProposalRow["status"]; error: string; created: string } | null;
+  strategistState(): StrategistState | null;
 } = {
   placeholder: false,
   subscribe(cb) {
     listeners.add(cb);
     ensure();
     if (!timer) {
-      timer = setInterval(tick, RUNNING_POLL_MS);
+      timer = setInterval(tick, 1_000);
       document.addEventListener("visibilitychange", onVisible);
       stopEvents = onServerChange("strategy", (from) => {
         if (from !== "goals" && state !== "missing") void refreshGoals();
@@ -544,7 +571,10 @@ export const liveAdapter: GoalsAdapter & {
   strategistState() {
     const rows = s().proposals;
     const newest = rows[rows.length - 1];
-    return newest ? { status: newest.status, error: newest.error, created: newest.created } : null;
+    if (!newest) return null;
+    // Rounds: every proposal the Strategist wrote for this quarter, the one being written included.
+    const rounds = rows.filter((r) => r.quarter === newest.quarter && r.status !== "failed").length;
+    return { id: newest.id, kind: newest.kind, quarter: newest.quarter, status: newest.status, error: newest.error, created: newest.created, request: newest.request, rounds };
   },
 
   async savePlanDrop(text, files) {

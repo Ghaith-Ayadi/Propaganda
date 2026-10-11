@@ -24,8 +24,10 @@ import { assertPublicUrl, readPage, searchWeb, searchConfigured } from "../agent
 import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
 import {
   claimProposal,
+  earlierProposals,
   failProposal,
   getProposal,
+  hasApprovedGoals,
   lastApproved,
   latestGoals,
   markPlanRead,
@@ -34,6 +36,7 @@ import {
   profile,
   publishedBetween,
   requestedProposals,
+  runningProposals,
   requestProposal,
   runCost,
   saveNotes,
@@ -42,8 +45,15 @@ import {
   sitesWithGoals,
 } from "../agents/strategy-store.js";
 import {
+  asksAboutTopics,
   dayOf,
+  effectiveKind,
+  emptyBrief,
+  EMPTY_BRIEF_ERROR,
   finish,
+  keepTopicNames,
+  parseAnswers,
+  perMonthFromAnswers,
   launchFor,
   nextQuarter,
   parseDraft,
@@ -56,13 +66,15 @@ import {
   volumeCap,
   weeklyNotes,
   windowFor,
+  type Answered,
   type Draft,
   type Keyword,
   type ProposalKind,
 } from "../agents/strategy.js";
 import { batchCadence } from "../agents/store.js";
-import { dataForSeoConfigured, keywordIdeas, rankedKeywords } from "../scout/dataforseo.js";
+import { dataForSeoConfigured, keywordIdeas, keywordOverview, rankedKeywords } from "../scout/dataforseo.js";
 import { AGENT_QUEUE, registerAgent, startOnceForTenant, type DispatchInput } from "./agents.js";
+import { dispatchFirstDay, startFirstPitches } from "./first-day.js";
 
 const JOB = "strategist";
 const LOCATION = { locationCode: 2840, languageCode: "en" };
@@ -104,9 +116,16 @@ interface Pack {
   lastEdits: { field: string; from: string; to: string; reason?: string }[];
   taste: string;
   request: string;
+  /** This quarter's earlier rounds: what was asked and answered, and the last proposal's topics. */
+  rounds: {
+    answered: Answered[];
+    previous: { summary: string; topics: { name: string; low: number; high: number }[]; questions: string[] } | null;
+    /** Review capacity came from an answer in a round ("8", "2 a week"), not from Settings. */
+    perMonthAnswer: string;
+  };
 }
 
-async function gather(site: string, request: string, now: Date): Promise<Pack> {
+async function gather(site: string, request: string, now: Date, quarter = quarterLabelOf(now)): Promise<Pack> {
   const [s, prof, set, taste] = await Promise.all([
     getSite(site),
     profile(site),
@@ -145,18 +164,38 @@ async function gather(site: string, request: string, now: Date): Promise<Pack> {
   }
 
   const last = quarterBounds(quarterLabelOf(new Date(quarterBounds(quarterLabelOf(now)).start.getTime() - 86_400_000)));
-  const [lastPosts, recent, outcomes, approved] = await Promise.all([
+  const [lastPosts, recent, outcomes, approved, earlier] = await Promise.all([
     publishedBetween(site, last.start.toISOString(), last.end.toISOString()),
     publishedPosts(site, 30),
     pitchOutcomes(site, last.start.toISOString()),
     lastApproved(site),
+    earlierProposals(site, quarter),
   ]);
+
+  // The rounds so far: each earlier proposal's questions were answered by the
+  // request that followed it (the next row's, or this run's). Without this
+  // the model saw only the latest answers, re-asked settled questions and
+  // reworded every topic each round (first-day run, 2026-10-11).
+  const answered: Answered[] = [];
+  const asked = new Set<string>();
+  for (const [i, row] of earlier.entries()) {
+    for (const q of row.proposal?.questions ?? []) asked.add(q);
+    const next = earlier[i + 1]?.request ?? request;
+    for (const a of parseAnswers(next)) if (!answered.some((x) => x.question === a.question)) answered.push(a);
+  }
+  const lastProposal = [...earlier].reverse().find((r) => r.proposal)?.proposal ?? null;
+  const previous = lastProposal
+    ? { summary: lastProposal.summary, topics: lastProposal.topics.map((t) => ({ name: t.name, low: t.low, high: t.high })), questions: lastProposal.questions }
+    : null;
+  const settingPerMonth = parseInt(String(set["strategist.reviewPerMonth"] ?? ""), 10);
+  const fromAnswer = Number.isFinite(settingPerMonth) ? null : perMonthFromAnswers(answered);
+  const perMonthAnswer = fromAnswer === null ? "" : (answered.find((a) => perMonthFromAnswers([a]) !== null)?.answer ?? "");
 
   return {
     site: { id: s.id, name: s.name, domain: s.domain ?? "", blog: s.domain || `${s.slug}.propaganda.pub` },
     website,
-    perMonth: reviewPerMonth(set["strategist.reviewPerMonth"]),
-    perMonthAnswered: Number.isFinite(parseInt(String(set["strategist.reviewPerMonth"] ?? ""), 10)),
+    perMonth: fromAnswer ?? reviewPerMonth(set["strategist.reviewPerMonth"]),
+    perMonthAnswered: Number.isFinite(settingPerMonth) || fromAnswer !== null,
     answers: prof?.answers ?? {},
     plan: { text: [prof?.plan_text ?? "", ...planTexts].filter(Boolean).join("\n\n").slice(0, 30_000), files: (prof?.plan_files ?? []).map((f) => f.name) },
     pages,
@@ -171,6 +210,7 @@ async function gather(site: string, request: string, now: Date): Promise<Pack> {
     lastEdits: approved?.edits ?? [],
     taste: taste?.summary ?? "",
     request,
+    rounds: { answered, previous, perMonthAnswer },
   };
 }
 
@@ -184,6 +224,13 @@ interface Market {
 }
 
 async function market(site: string, pack: Pack): Promise<Market> {
+  const out = await keywordData(site, pack);
+  if (dataForSeoConfigured()) out.serps = await whoRanks(site, pack);
+  return out;
+}
+
+/** Keyword ideas around their searches, and what they and their competitors rank for. */
+async function keywordData(site: string, pack: Pack): Promise<Market> {
   const out: Market = { keywords: [], ours: [], competitors: [], serps: [] };
   const seeds = lines(pack.answers.searches).slice(0, 5);
   if (!dataForSeoConfigured()) return out;
@@ -198,19 +245,22 @@ async function market(site: string, pack: Pack): Promise<Market> {
   }
   const settled = await Promise.allSettled(tries);
   for (const r of settled) if (r.status === "rejected") console.warn(`strategist keyword data: ${(r.reason as Error).message}`);
+  return out;
+}
 
-  // Who ranks for the tenant's own searches (at most 5, so at most 5 paid searches).
-  if (searchConfigured()) {
-    for (const q of seeds) {
-      try {
-        const hits = await searchWeb(q, 10, { site, job: JOB });
-        out.serps.push({ query: q, top: hits.slice(0, 5).map((h) => ({ position: h.position, url: h.url, title: h.title })) });
-      } catch (err) {
-        console.warn(`strategist search "${q}": ${(err as Error).message}`);
-      }
+/** Who ranks for the tenant's own searches (at most 5, so at most 5 paid searches). */
+async function whoRanks(site: string, pack: Pack): Promise<Market["serps"]> {
+  const serps: Market["serps"] = [];
+  if (!searchConfigured()) return serps;
+  for (const q of lines(pack.answers.searches).slice(0, 5)) {
+    try {
+      const hits = await searchWeb(q, 10, { site, job: JOB });
+      serps.push({ query: q, top: hits.slice(0, 5).map((h) => ({ position: h.position, url: h.url, title: h.title })) });
+    } catch (err) {
+      console.warn(`strategist search "${q}": ${(err as Error).message}`);
     }
   }
-  return out;
+  return serps;
 }
 
 /**
@@ -245,16 +295,27 @@ function keywordMap(m: Market): Map<string, Keyword> {
   return map;
 }
 
+/** Volume and difficulty for searches the model proposed that the ideas pull never covered. A failure prices nothing; the run goes on. */
+async function priceSearches(site: string, queries: string[]): Promise<Keyword[]> {
+  if (!dataForSeoConfigured() || !queries.length) return [];
+  try {
+    return (await keywordOverview({ site, ...LOCATION }, JOB, queries)).map((k) => ({ keyword: k.keyword, volume: k.volume, difficulty: k.difficulty, position: null }));
+  } catch (err) {
+    console.warn(`strategist keyword overview: ${(err as Error).message}`);
+    return [];
+  }
+}
+
 // ---- 2. the model call ----
 
 const SYSTEM = `You are the Strategist for a company's blog, inside Propaganda (a content platform). You propose the company's goals for a calendar quarter: how many posts, on which topics, which Google searches to win, which sites to watch. A person approves them; nothing you say is final. You are a strategist, not a form filler: a proposal that only restates what the company typed is a failure, however well it fits the rules.
 
 The rules (code checks them; a proposal that breaks one is sent back):
 1. Volume comes from capacity, never ambition. The cap you're given is a ceiling, not a target: propose less when more would mean a burst and then silence (after a Launch, the rest of the quarter should still carry about a post a week), and say so.
-2. 1 to 4 topics, best first, each a range (low to high). A topic is an angle with a point of view: what this company knows or believes that its competitors don't say, aimed at a named buyer. Name it the way the founder would say it in a sentence, never a product category, never one of their searches pasted back, never "cluster" or "pillar". The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume.
+2. 1 to 4 topics, best first, each a range (low to high). A topic is an angle with a point of view: what this company knows or believes that its competitors don't say, aimed at a named buyer. Name it the way the founder would say it in a sentence, never a product category, never one of their searches pasted back, never "cluster" or "pillar". The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume. In a revision, keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away.
 3. Every topic gets pitched from every source; there is no internal/external split.
 4. 3 to 8 watched sites: regulators, trade press, competitors' blogs, standards bodies, newsletters. Each is a source that keeps publishing (a site, a blog index, a news section: the root or one path segment), never one article, whitepaper or listicle. Each tied to one topic, each with a why. The competitors they named are always in. Use real sites you know or that appear in the data; full https addresses.
-5. 5 to 10 target searches (10 when the data allows, and at least 8 with 6 from the data when the data is rich): all winnable, which means difficulty under 30 with at least 50 searches a month, or a search where they're already on page two. A new domain targets long-tail searches only, never a head term (nothing over 5,000 searches a month), each one a question a post in its topic would literally answer. Each names one of the topics. A new domain targets at most 2 on page one by quarter end, and no AI-mention target in its first quarter (set it to null and say why).
+5. 5 to 10 target searches (10 when the data allows, and at least 8 with 6 from the data when the data is rich): all winnable, which means difficulty under 30 with at least 50 searches a month, or a search where they're already on page two. A new domain targets long-tail searches only, never a head term (nothing over 5,000 searches a month), each one a question a post in its topic would literally answer. Each names one of the topics. A search you propose that the data doesn't list gets its numbers looked up before your proposal is checked, so take the best questions from the data first and add your own only when the data has none. A new domain targets at most 2 on page one by quarter end, and no AI-mention target in its first quarter (set it to null and say why).
 6. No Readership target without 4 weeks of reader data: value null, and say a target comes after 4 weeks of readers.
 7. Every number has a why (one line a person would say out loud, adding something they didn't already know) and a basis (what it came from). A basis quotes only what they actually said or a number from the data: "your answer: 8 posts a month", "DataForSEO: 320 searches/month, difficulty 12". Never put words in their mouth: a default is called a default ("review capacity not answered; assumed 8 a month"), and anything you had to assume becomes a question.
 8. At most 3 questions: only what you couldn't decide alone. When their answers are thin (a blank, a one-liner, capacity not answered), ask at least one. Anything they said is coming up (a launch, an event, a deadline) gets either a place in the plan or a question, never silence. When what they asked for answers your earlier questions, those questions are settled: decide with their answers, never ask one again, and ask something new only when an answer leaves a choice you truly can't make alone. Where an answer is still vague, pick the sensible reading and say so in the basis.
@@ -279,10 +340,16 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
       o.hasHistory
         ? `last quarter they published ${pack.history.publishedLastQuarter}; at most +20%`
         : pack.perMonthAnswered
-          ? `their team can review ${pack.perMonth} posts a month, and a first quarter is at most 2 a week`
+          ? `their team can review ${pack.perMonth} posts a month${pack.rounds.perMonthAnswer ? ` (their answer to your question: "${pack.rounds.perMonthAnswer}")` : ""}, and a first quarter is at most 2 a week`
           : `they did not answer how many posts a month their team can review, so ${pack.perMonth} a month is assumed; a first quarter is at most 2 a week. Say it is assumed, and ask`
     }).`,
     o.launch ? `They're new: a ${o.launch.target}-post Launch runs first and counts toward the volume.` : "",
+    pack.rounds.previous
+      ? `\nYour previous proposal this quarter (this is a revision of it). Keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away. Summary: ${pack.rounds.previous.summary}\nTopics:\n${pack.rounds.previous.topics.map((t) => `- "${t.name}" (${t.low} to ${t.high})`).join("\n")}`
+      : "",
+    pack.rounds.answered.length
+      ? `\nQuestions you asked in earlier rounds and their answers (settled: decide with them, never ask again):\n${pack.rounds.answered.map((a) => `- Q: ${a.question}\n  A: ${a.answer}`).join("\n")}`
+      : "",
     pack.request ? `\nWhat they asked for:\n${pack.request}` : "",
     `\nTheir onboarding answers:\n- What they sell, who buys: ${a.offer || "(blank)"}\n- Searches they want to be found by: ${a.searches || "(blank)"}\n- Competitors and sites to watch: ${a.watch || "(blank)"}\n- Coming up in the next three months: ${a.upcoming || "(blank)"}`,
     pack.plan.text || pack.plan.files.length
@@ -320,13 +387,33 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
 
   try {
     const now = new Date(await DBOS.runStep(async () => new Date().toISOString(), { name: "now" }));
-    const window = windowFor(row.kind, now, row.quarter);
-    const pack = await DBOS.runStep(() => gather(site, row.request, now), { name: "gather", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 });
-    const m = await DBOS.runStep(() => market(site, pack), { name: "keyword data" });
-    const keywords = keywordMap(m);
+    const pack = await DBOS.runStep(() => gather(site, row.request, now, row.quarter), { name: "gather", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 });
+    // A run started before rounds existed replays its recorded gather output after a restart: no rounds yet.
+    pack.rounds ??= { answered: [], previous: null, perMonthAnswer: "" };
     const hasHistory = pack.history.publishedLastQuarter > 0;
+    // Nothing to plan from: stop before spending a model call (and say what to answer).
+    if (emptyBrief({ website: pack.website, answers: pack.answers, planText: pack.plan.text, planFiles: pack.plan.files.length, published: pack.history.publishedLastQuarter + pack.history.recentTitles.length })) {
+      await DBOS.runStep(() => failProposal(proposalId, EMPTY_BRIEF_ERROR), { name: "fail" });
+      return { status: "failed", errors: [EMPTY_BRIEF_ERROR] };
+    }
+    // A tenant with no history and no approved goals is onboarding, whatever asked for the run: its first proposal carries the Launch.
+    const hasGoals = await DBOS.runStep(() => hasApprovedGoals(site), { name: "approved goals" });
+    const kind = effectiveKind(row.kind, { hasHistory, hasGoals });
+    const window = windowFor(kind, now, row.quarter);
+    // Two steps since day one's progress card (GET /progress/strategist): the
+    // searches and their volumes, then who ranks for them. Runs from before
+    // did both in "keyword data".
+    let m: Market;
+    if (await DBOS.patch("strategist-who-ranks-step")) {
+      m = await DBOS.runStep(() => keywordData(site, pack), { name: "keyword data" });
+      const serps = dataForSeoConfigured() ? await DBOS.runStep(() => whoRanks(site, pack), { name: "who ranks" }) : [];
+      m = { ...m, serps };
+    } else {
+      m = await DBOS.runStep(() => market(site, pack), { name: "keyword data" });
+    }
+    const keywords = keywordMap(m);
     const cap = volumeCap({ weeks: window.covers.weeks, perMonth: pack.perMonth, lastQuarterPublished: hasHistory ? pack.history.publishedLastQuarter : null });
-    const launch = row.kind === "onboarding" && !hasHistory ? launchFor(now, window.join) : null;
+    const launch = kind === "onboarding" && !hasHistory ? launchFor(now, window.join) : null;
     const rules = {
       volumeCap: cap,
       hasHistory,
@@ -334,23 +421,40 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       keywords,
       seedSearches: lines(pack.answers.searches),
       thinAnswers: thinAnswers(pack.answers, pack.perMonthAnswered),
+      answered: pack.rounds.answered,
+      previousTopics: pack.rounds.previous?.topics.map((t) => t.name) ?? [],
+      requestAboutTopics: asksAboutTopics(pack.request),
     };
+    const previousTopics = rules.previousTopics;
 
     const ask = {
       site,
       job: JOB,
       model: MODELS.strategist,
       system: SYSTEM,
-      prompt: promptFor(pack, m, { kind: row.kind, quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now) }),
+      prompt: promptFor(pack, m, { kind, quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now) }),
       maxOutputTokens: 6_000,
     };
-    let draft: Draft = await askJson("propose", ask, parseDraft);
+    // Searches the model proposed that the data never priced get their numbers
+    // now, so the winnable check sees them and the proposal carries them.
+    let priced = 0;
+    const price = async (d: Draft) => {
+      const missing = d.ranking.searches.map((s) => s.query.toLowerCase()).filter((q) => !keywords.has(q));
+      if (!missing.length) return;
+      const rows = await DBOS.runStep(() => priceSearches(site, missing), { name: "price proposed searches" });
+      for (const k of rows) keywords.set(k.keyword.toLowerCase(), k);
+      priced += rows.length;
+    };
+    let draft: Draft = keepTopicNames(await askJson("propose", ask, parseDraft), previousTopics);
+    await price(draft);
     let errors = validate(draft, rules);
     if (errors.length) {
       draft = await askJson("propose (fix)", {
         ...ask,
         prompt: `${ask.prompt}\n\nYour proposal broke these rules:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nYour proposal was:\n${JSON.stringify(draft)}\n\nAnswer again with the whole proposal, fixed.`,
       }, parseDraft);
+      draft = keepTopicNames(draft, previousTopics);
+      await price(draft);
       errors = validate(draft, rules);
     }
     if (errors.length) {
@@ -375,7 +479,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     draft = { ...draft, watchedSites: draft.watchedSites.filter((w) => readable.includes(w.url)) };
 
     const cadence = await DBOS.runStep(() => batchCadence(site), { name: "batching" });
-    const proposal = finish(draft, { kind: row.kind, window, cadence, launch, keywords });
+    const proposal = finish(draft, { kind, window, cadence, launch, keywords });
     const inputs = {
       website: pack.website,
       pages: pack.pages.map((p) => p.url),
@@ -388,11 +492,15 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       rankedFor: m.ours.length,
       competitors: m.competitors.map((c) => c.domain),
       serps: m.serps.map((s) => s.query),
+      pricedSearches: priced,
       planRead: Boolean(pack.plan.text || pack.plan.files.length),
       droppedSites: draft.watchedSites.length - readable.length,
       at: now.toISOString(),
     };
     await DBOS.runStep(() => sendProposal(proposalId, site, proposal, inputs, MODELS.strategist), { name: "send" });
+    // Day one: the first pitches, written while the person reads the plan
+    // (workflows/first-day.ts). A run of its own, so the plan doesn't wait.
+    if (await DBOS.patch("strategist-first-pitches")) await startFirstPitches(row, Boolean(proposal.launch));
     if (inputs.planRead) await DBOS.runStep(() => markPlanRead(site), { name: "plan read" });
     await DBOS.runStep(() => runCost(proposalId, runId), { name: "cost" });
     return { status: "sent" };
@@ -429,37 +537,84 @@ export function strategistRunId(proposalId: string): string {
   return `strategist-${proposalId}`;
 }
 
+/** Rows this process already started, so the fast tick doesn't ask DBOS again every few seconds. */
+const startedRows = new Map<string, number>();
+
 /** Start the run for each requested proposal (once per row, however often it's asked). */
 export async function dispatchStrategist(): Promise<string[]> {
   const started: string[] = [];
+  const now = Date.now();
   for (const r of await requestedProposals()) {
     const id = strategistRunId(r.id);
-    await startOnceForTenant(r.site, id, strategist, r.id);
+    const at = startedRows.get(id);
+    // DBOS dedupes by id anyway; this only saves it a write per tick. Asked again after 10 minutes.
+    if (at === undefined || now - at > 10 * 60_000) {
+      await startOnceForTenant(r.site, id, strategist, r.id);
+      startedRows.set(id, now);
+    }
     started.push(id);
   }
+  for (const [id, at] of startedRows) if (now - at > 60 * 60_000) startedRows.delete(id);
   return started;
 }
 
-/** Look for requested proposals now and every WORKER_DISPATCH_SECONDS. Returns a stop function. */
+export const STOPPED_ERROR = "The Strategist stopped before finishing. Ask it again: your answers are saved.";
+const ENDED = new Set(["ERROR", "CANCELLED", "MAX_RECOVERY_ATTEMPTS_EXCEEDED"]);
+
+/**
+ * Running proposals whose run ended without saying so (it died where its own
+ * catch couldn't write, or was cancelled) are marked failed, so the person sees
+ * "ask again" instead of waiting forever, and strategy_request takes a new ask
+ * (it returns the open one while a row says running). A row with no run after
+ * 15 minutes counts as ended too. Returns the ids it failed.
+ */
+export async function settleStrategist(now = Date.now()): Promise<string[]> {
+  const failed: string[] = [];
+  for (const r of await runningProposals()) {
+    const st = await DBOS.getWorkflowStatus(r.run_id || strategistRunId(r.id));
+    const ended = st ? ENDED.has(st.status) : now - Date.parse(r.created) > 15 * 60_000;
+    if (!ended) continue;
+    await failProposal(r.id, STOPPED_ERROR);
+    failed.push(r.id);
+  }
+  return failed;
+}
+
+/**
+ * The Strategist's polls. Requested proposals every
+ * WORKER_STRATEGIST_PICKUP_SECONDS (5): on day one the person is waiting, and
+ * the query is one lookup on a partial index (strategy_proposals_requested,
+ * status = 'requested') that is empty almost always. Day one's approvals and
+ * rejections (workflows/first-day.ts) every WORKER_FIRST_DAY_SECONDS (15).
+ * Runs that ended without a word (settleStrategist) every minute.
+ * WORKER_DISPATCH_SECONDS=0 turns both off. Returns a stop function.
+ */
 export function startStrategistPoller(): () => void {
-  // The same tick as the knowledge base dispatcher (config.ts dispatchSeconds).
-  const seconds = Number(process.env.WORKER_DISPATCH_SECONDS ?? 60);
-  if (seconds <= 0) return () => {};
-  let busy = false;
-  const tick = async () => {
-    if (busy) return;
-    busy = true;
-    try {
-      await dispatchStrategist();
-    } catch (err) {
-      DBOS.logger.error(`strategist poller: ${(err as Error).message}`);
-    } finally {
-      busy = false;
-    }
+  if (Number(process.env.WORKER_DISPATCH_SECONDS ?? 60) <= 0) return () => {};
+  const pickup = Math.max(1, Number(process.env.WORKER_STRATEGIST_PICKUP_SECONDS ?? 5));
+  const firstDay = Math.max(1, Number(process.env.WORKER_FIRST_DAY_SECONDS ?? 15));
+  const poll = (what: string, fn: () => Promise<unknown>, seconds: number) => {
+    let busy = false;
+    const tick = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        await fn();
+      } catch (err) {
+        DBOS.logger.error(`${what} poller: ${(err as Error).message}`);
+      } finally {
+        busy = false;
+      }
+    };
+    void tick();
+    return setInterval(() => void tick(), seconds * 1000);
   };
-  void tick();
-  const timer = setInterval(() => void tick(), seconds * 1000);
-  return () => clearInterval(timer);
+  const timers = [
+    poll("strategist", dispatchStrategist, pickup),
+    poll("first day", () => dispatchFirstDay(), firstDay),
+    poll("strategist settle", () => settleStrategist(), 60),
+  ];
+  return () => timers.forEach((t) => clearInterval(t));
 }
 
 /**
