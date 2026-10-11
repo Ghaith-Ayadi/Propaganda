@@ -32,6 +32,12 @@ hooks (`pb/`) are in git history, its final data in R2
   `access.sql` covered only that day's tables. So a migration that adds a
   table enables row-level security and revokes from `anon` and `authenticated`
   before granting exactly what they need; `service_role` keeps its access.
+- **Reading production from a cloud session**: the role `propaganda_reader`
+  (`20261010000080_reader_role.sql`) reads every public table but `model_keys`,
+  over PostgREST with a token Bedrock mints (`scripts/propaganda-reader-key.sh`
+  there; the token is a cloud environment secret, never in a repo or a chat).
+  PostgREST's pre-request hook makes its transactions read-only. A migration
+  that adds a table holding secrets revokes it from `propaganda_reader` too.
 - **Hooks** are triggers (numbers, slugs, redirects, a version's site) and
   functions called through `rpc()`: `create_site`, `update_site`,
   `delete_site`, `increment_writing_activity`, `tls_check` (Caddy's on-demand
