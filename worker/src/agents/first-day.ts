@@ -11,8 +11,12 @@ import { arr, obj, str } from "./model.js";
 import { parsePitch, PITCHER_SYSTEM, type Written } from "./pitcher.js";
 import type { LaunchPlan, StoredProposal } from "./strategy.js";
 
-/** Day one's pitches in all (Ayadi, 2026-10-10: about 6 cents each on Fable). */
-export const FIRST_PITCHES = 10;
+/**
+ * Day one's pitches in all (Ayadi, 2026-10-10: about 6 cents each on Fable;
+ * measured about 9). WORKER_FIRST_PITCHES lowers it where the count doesn't
+ * matter: dev runs test the plumbing with 3 (Ayadi, 2026-10-11).
+ */
+export const FIRST_PITCHES = Number(process.env.WORKER_FIRST_PITCHES) > 0 ? Math.floor(Number(process.env.WORKER_FIRST_PITCHES)) : 10;
 /** Every topic gets at least this many. */
 export const MIN_PER_TOPIC = 2;
 /** Pitches drafted before anyone approves them, once the plan is approved. */
