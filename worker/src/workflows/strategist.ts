@@ -35,6 +35,7 @@ import {
   profile,
   publishedBetween,
   requestedProposals,
+  runningProposals,
   requestProposal,
   runCost,
   saveNotes,
@@ -510,12 +511,35 @@ export async function dispatchStrategist(): Promise<string[]> {
   return started;
 }
 
+export const STOPPED_ERROR = "The Strategist stopped before finishing. Ask it again: your answers are saved.";
+const ENDED = new Set(["ERROR", "CANCELLED", "MAX_RECOVERY_ATTEMPTS_EXCEEDED"]);
+
+/**
+ * Running proposals whose run ended without saying so (it died where its own
+ * catch couldn't write, or was cancelled) are marked failed, so the person sees
+ * "ask again" instead of waiting forever, and strategy_request takes a new ask
+ * (it returns the open one while a row says running). A row with no run after
+ * 15 minutes counts as ended too. Returns the ids it failed.
+ */
+export async function settleStrategist(now = Date.now()): Promise<string[]> {
+  const failed: string[] = [];
+  for (const r of await runningProposals()) {
+    const st = await DBOS.getWorkflowStatus(r.run_id || strategistRunId(r.id));
+    const ended = st ? ENDED.has(st.status) : now - Date.parse(r.created) > 15 * 60_000;
+    if (!ended) continue;
+    await failProposal(r.id, STOPPED_ERROR);
+    failed.push(r.id);
+  }
+  return failed;
+}
+
 /**
  * The Strategist's polls. Requested proposals every
  * WORKER_STRATEGIST_PICKUP_SECONDS (5): on day one the person is waiting, and
  * the query is one lookup on a partial index (strategy_proposals_requested,
  * status = 'requested') that is empty almost always. Day one's approvals and
  * rejections (workflows/first-day.ts) every WORKER_FIRST_DAY_SECONDS (15).
+ * Runs that ended without a word (settleStrategist) every minute.
  * WORKER_DISPATCH_SECONDS=0 turns both off. Returns a stop function.
  */
 export function startStrategistPoller(): () => void {
@@ -538,7 +562,11 @@ export function startStrategistPoller(): () => void {
     void tick();
     return setInterval(() => void tick(), seconds * 1000);
   };
-  const timers = [poll("strategist", dispatchStrategist, pickup), poll("first day", () => dispatchFirstDay(), firstDay)];
+  const timers = [
+    poll("strategist", dispatchStrategist, pickup),
+    poll("first day", () => dispatchFirstDay(), firstDay),
+    poll("strategist settle", () => settleStrategist(), 60),
+  ];
   return () => timers.forEach((t) => clearInterval(t));
 }
 

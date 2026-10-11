@@ -209,7 +209,15 @@ async function topicPitchesRun(input: TopicInput): Promise<TopicResult> {
   const session = new SearchSession();
   const hits: SearchHit[] = [];
   for (const [i, q] of searchesFor(topic.name, targets.map((t) => t.query), n).entries()) {
-    for (const h of await searchDurably(session, q, 5, { site, job: JOB }, `search ${i + 1}`)) {
+    // A search the service refused (not an outage: those wait in searchDurably)
+    // costs this pitch its sources, not the topic its pitches.
+    let found: SearchHit[] = [];
+    try {
+      found = await searchDurably(session, q, 5, { site, job: JOB }, `search ${i + 1}`);
+    } catch (err) {
+      DBOS.logger.warn(`first pitches, ${topic.name}: search "${q}" refused: ${(err as Error).message}`);
+    }
+    for (const h of found) {
       if (!hits.some((x) => x.url === h.url)) hits.push(h);
     }
   }

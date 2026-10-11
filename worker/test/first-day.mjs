@@ -135,11 +135,14 @@ process.env.WORKER_LITE_SITES = LITE;
 // ---- a stand-in web ----
 
 const searches = [];
+// Searches the service refuses (a 4xxxx task, not an outage).
+const refused = new Set();
 const web = async (input, init) => {
   const url = String(input);
   if (url.startsWith("https://api.dataforseo.com/")) {
     const [{ keyword }] = JSON.parse(init.body);
     searches.push(keyword);
+    if (refused.has(keyword)) return Response.json({ cost: 0.002, tasks: [{ status_code: 40000, status_message: "Internal SE Server Error." }] });
     const slug = keyword.replace(/\W+/g, "-");
     return Response.json({
       cost: 0.002,
@@ -308,9 +311,11 @@ try {
   console.log("the first pitches");
   const P1 = "proposal1000001";
   db.strategy_proposals.push(row(P1, "onboarding", "sent", proposal([["Reliability", 6, 9], ["Scraping at scale", 3, 5]])));
+  refused.add("batch job retries");
   const res1 = await run(t.firstPitches, t.firstPitchesId(P1), P1);
+  refused.clear();
   const b1 = strategistBriefs();
-  check(res1.written === 10 && b1.length === 10, `10 pitches (${JSON.stringify(res1)})`);
+  check(res1.written === 10 && b1.length === 10, `10 pitches, though one search was refused (${JSON.stringify(res1)})`);
   check(b1.filter((b) => b.topics[0] === "Reliability").length === 7 && b1.filter((b) => b.topics[0] === "Scraping at scale").length === 3, "7 and 3, by the low ends");
   check(b1.every((b) => b.status === "pitched" && b.batch === 1 && b.origin === "plan" && b.outline.length === 4 && b.body.includes("## Fit")), "briefs in the Pitcher's format, pitched, batch 1");
   check(
@@ -385,6 +390,20 @@ try {
   const pg2 = await t.strategistProgress(pool, SITE);
   check(pg2.proposalId === P2 && pg2.status === "approved" && pg2.drafts.length === drafts.drafting.length && pg2.drafts.every((d) => ["running", "done", "failed"].includes(d.state)), `progress lists the drafts (${JSON.stringify(pg2.drafts)})`);
   check(JSON.stringify(pg2.pitches) === JSON.stringify({ topicsDone: 1, topics: 1, written: 3 }), "and the revision's pitches");
+
+  console.log("a run that ended without a word");
+  const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
+  db.strategy_proposals.push(
+    { ...row("stuckcancelled1", "revision", "running", null), run_id: drafts.drafting[0]?.runId ?? "" },
+    { ...row("stucknorun00001", "revision", "running", null), run_id: "never-started", created: ago(20) },
+    { ...row("stillfresh00001", "revision", "running", null), run_id: "not-yet-started" },
+  );
+  const settled = await t.settleStrategist();
+  const st = (id) => db.strategy_proposals.find((x) => x.id === id);
+  check(drafts.drafting.length > 0 && st("stuckcancelled1").status === "failed" && st("stuckcancelled1").error === t.STOPPED_ERROR, "a running proposal whose run was cancelled is failed, saying to ask again");
+  check(st("stucknorun00001").status === "failed", "one with no run after 15 minutes too");
+  check(st("stillfresh00001").status === "running" && settled.length === 2, `a fresh one is left alone (${settled})`);
+  for (const id of ["stuckcancelled1", "stucknorun00001", "stillfresh00001"]) st(id).status = "superseded";
 
   console.log("not day one");
   const P3 = "proposal3000003";

@@ -25,7 +25,7 @@ export { similarity, nearest } from "./taste.js";
 export { voiceSuggest, diffDraft } from "./edits.js";
 // The Strategist.
 export { windowFor, launchFor, volumeCap, validate, parseDraft, finish, weeklyNotes, winnable, batchCount, looksLikeSource, thinAnswers, pickHost, emptyBrief, effectiveKind } from "./strategy.js";
-export { strategist, dispatchStrategist, strategistWeeklyCheck, strategistInput } from "../workflows/strategist.js";
+export { strategist, dispatchStrategist, settleStrategist, STOPPED_ERROR, strategistWeeklyCheck, strategistInput } from "../workflows/strategist.js";
 export { readGoals } from "./goals.js";
 // Day one (test/first-day.mjs).
 export { splitPitches, topicChanges, strongest, planSteps, dayOneQuota, isLite, replacementLearned, searchesFor, goalsFromProposal, parseTopicPitches, PLAN_STEPS } from "./first-day.js";

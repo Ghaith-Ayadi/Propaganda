@@ -55,6 +55,16 @@ export async function requestedProposals(limit = 20): Promise<{ id: string; site
   }
 }
 
+/** Proposals a run is writing now, with the run that claimed each. */
+export async function runningProposals(limit = 50): Promise<{ id: string; run_id: string | null; created: string }[]> {
+  try {
+    return await select("strategy_proposals", `status=eq.running&select=id,run_id,created&order=created&limit=${limit}`);
+  } catch (err) {
+    if (isMissing(err)) return [];
+    throw err;
+  }
+}
+
 /** A proposal the worker asks for itself (a quarterly run, Chat). Returns its id. */
 export async function requestProposal(site: string, quarter: string, kind: ProposalKind, request: string, by: string): Promise<string> {
   const [waiting] = await select<{ id: string }>(

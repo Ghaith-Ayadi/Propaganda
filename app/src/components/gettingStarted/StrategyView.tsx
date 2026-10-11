@@ -10,7 +10,7 @@
 
 import { useState } from "react";
 import { Label, TextArea, TextField } from "react-aria-components";
-import { ArrowRight, CheckCircle, ChevronDown, Edit03 } from "@untitledui/icons";
+import { ArrowRight, CheckCircle, ChevronDown, Edit03, RefreshCw01 } from "@untitledui/icons";
 import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { toast } from "@/components/base/toast/toast";
@@ -33,8 +33,11 @@ export function StrategyView({
   round,
   pitches,
   progress,
+  failedAsk,
 }: {
   proposal: Proposal;
+  /** The person's last change request, when its run failed: shown with "Send it again". */
+  failedAsk?: { request: string; error: string } | null;
   round: number;
   /** The Strategist's first pitches (briefs it pitched). */
   pitches: PipelineItem[];
@@ -102,6 +105,16 @@ export function StrategyView({
 
   return (
     <div className="flex flex-col gap-8">
+      {failedAsk && (
+        <div className="flex flex-col gap-3 rounded-lg bg-secondary px-4 py-3 text-sm text-primary sm:flex-row sm:items-center">
+          <p className="flex-1">
+            <span className="font-medium">Your last request didn't go through.</span> {failedAsk.error} This is still the plan from before.
+          </p>
+          <Button size="sm" color="secondary" iconLeading={RefreshCw01} isDisabled={busy || lastRound} onClick={() => void revise(failedAsk.request, "retry")}>
+            Send it again
+          </Button>
+        </div>
+      )}
       <div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Badge color="gray" size="sm">{quarterLabel(proposal.quarter)} plan</Badge>

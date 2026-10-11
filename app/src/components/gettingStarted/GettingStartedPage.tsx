@@ -120,7 +120,17 @@ export function GettingStartedPage() {
                 {day.step === "strategy" && <StrategyStep emptyBrief={day.emptyBrief} />}
                 {day.step === "planning" && <PlanningStep day={day} progress={progress} />}
                 {day.step === "plan" && day.proposal && (
-                  <StrategyView proposal={day.proposal} round={day.strategist?.rounds ?? 1} pitches={day.firstPitches} progress={progress} />
+                  <StrategyView
+                    proposal={day.proposal}
+                    round={day.strategist?.rounds ?? 1}
+                    pitches={day.firstPitches}
+                    progress={progress}
+                    failedAsk={
+                      day.strategist?.status === "failed" && day.strategist.id !== day.proposal.id && day.strategist.request
+                        ? { request: day.strategist.request, error: day.strategist.error || "The Strategist stopped." }
+                        : null
+                    }
+                  />
                 )}
                 {day.step === "pitches" && <FirstPitches day={day} progress={progress} continuing={day.after === "guide"} />}
                 {day.step === "publish" && <PublishedStep day={day} onNext={() => setNextOpen(true)} />}
