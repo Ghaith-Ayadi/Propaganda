@@ -19,7 +19,7 @@ test("costUsd never goes negative when cached exceeds input", () => {
 
 const off: Gate = {
   tenantMonthUsd: 999, tenantMonthlyLimit: null, tenantWarnRatio: 0.8,
-  globalDayUsd: 999, globalDailyLimit: null, killed: false,
+  globalDayUsd: 999, globalDailyLimit: null, killed: false, suspended: false,
 };
 
 test("limits default to off: always allowed, no warning", () => {
@@ -39,4 +39,9 @@ test("global daily cap engages the kill switch; the switch blocks everything", (
   const g = { ...off, globalDailyLimit: 50, globalDayUsd: 50 };
   assert.deepEqual(decide(g, false), { allow: false, reason: "global-daily-cap", engageKill: true });
   assert.deepEqual(decide({ ...off, killed: true }, false), { allow: false, reason: "kill-switch" });
+});
+
+test("a suspended tenant gets nothing, editor included", () => {
+  assert.deepEqual(decide({ ...off, suspended: true }, true), { allow: false, reason: "suspended" });
+  assert.deepEqual(decide({ ...off, suspended: true }, false), { allow: false, reason: "suspended" });
 });

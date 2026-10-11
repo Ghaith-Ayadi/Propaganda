@@ -195,6 +195,15 @@ test("with a key, Anthropic calls use it, are logged as the tenant's, and skip o
   assert.equal(calls[0].paid_by, undefined);
 });
 
+test("a suspended tenant is refused on its own key too, before any call", async () => {
+  await withKey();
+  gate = { ...open, suspended: true }; calls.length = 0;
+  await assert.rejects(callModel({ ...opts, site: tenantSite, model: "anthropic/claude-sonnet-5.5" }), (e: Error) => e instanceof BudgetError && e.reason === "suspended");
+  await assert.rejects(callModel({ ...opts, background: false }), BudgetError);
+  assert.equal(calls.length, 0);
+  gate = open;
+});
+
 test("the kill switch still stops calls on a tenant's key", async () => {
   await withKey();
   gate = { ...open, killed: true };
