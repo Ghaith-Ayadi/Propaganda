@@ -278,6 +278,12 @@ export interface Rules {
   seedSearches?: string[];
   /** The brief is thin (a blank answer, a one-line answer, or capacity not answered): at least one question. */
   thinAnswers?: boolean;
+  /** Questions earlier rounds asked that the person answered: settled, never asked again. */
+  answered?: Answered[];
+  /** The previous proposal's topic names (a revision): kept unless the request is about the topics. */
+  previousTopics?: string[];
+  /** The revision's request talks about the topics, so renaming them is what was asked. */
+  requestAboutTopics?: boolean;
 }
 
 /** A new domain can't win a head term in a quarter: searches a month above this need a page-two position already. */
@@ -390,6 +396,135 @@ export function effectiveKind(asked: ProposalKind, o: { hasHistory: boolean; has
   return !o.hasHistory && !o.hasGoals ? "onboarding" : asked;
 }
 
+// ---- revision rounds: what was asked and answered, and the topics' names ----
+
+export interface Answered {
+  question: string;
+  answer: string;
+}
+
+/**
+ * The answers a revision's request carries, in the app's format
+ * ("Answers to your questions:" then "N. question" and the answer on the
+ * next lines). Any other request text parses to nothing.
+ */
+export function parseAnswers(request: string): Answered[] {
+  const text = String(request ?? "");
+  if (!/answers to your questions:/i.test(text)) return [];
+  const body = text.slice(text.search(/answers to your questions:/i)).replace(/^[^\n]*\n/, "");
+  const out: Answered[] = [];
+  for (const block of body.split(/\n(?=\d+\.\s)/)) {
+    const m = block.match(/^\d+\.\s*([^\n]*)\n?([\s\S]*)$/);
+    if (!m) continue;
+    const question = m[1].trim();
+    const answer = m[2].trim();
+    if (question && answer) out.push({ question, answer });
+  }
+  return out;
+}
+
+const STOP = new Set("a an the and or of to in on for with your you we our us it its is are be can do does how many much what which who when where why will would should could this that these those as at by from into than then there their them they so if not no yes about per each every one any all some more most also just".split(" "));
+
+/** The words that carry a question's meaning. */
+function contentWords(s: string): Set<string> {
+  return new Set(
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !STOP.has(w)),
+  );
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let both = 0;
+  for (const w of a) if (b.has(w)) both++;
+  return both / (a.size + b.size - both);
+}
+
+/** The two questions ask the same thing (half their meaningful words in common). */
+export function sameQuestion(a: string, b: string): boolean {
+  return jaccard(contentWords(a), contentWords(b)) >= 0.5;
+}
+
+const CAPACITY = /\b(review|reviewer|posts? (a|per) month|a month|per month|capacity|how many posts)\b/i;
+
+/**
+ * Review capacity from an answered question about it: the first number in
+ * the answer, read per month ("2 a week" is 8). Null when no answer says.
+ */
+export function perMonthFromAnswers(answered: Answered[]): number | null {
+  for (const { question, answer } of answered) {
+    if (!CAPACITY.test(question)) continue;
+    const m = answer.match(/(\d+)/);
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    const weekly = /\b(a|per|each|every)\s+week\b|weekly/i.test(answer) && !/\bmonth/i.test(answer);
+    return weekly ? Math.round(n * 4.33) : n;
+  }
+  return null;
+}
+
+const normTopic = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * The previous proposal's name for each topic the revision kept. Pitches
+ * hang on a topic's exact name, so a reworded name withdraws and re-pitches
+ * all of them. A new topic is the same as a previous one when it says the
+ * same (two fifths of their meaningful words in common, or one inside the
+ * other); each previous name is used once, best match first. Searches and
+ * watched sites follow the renamed topic.
+ */
+export function keepTopicNames<D extends Draft>(d: D, previous: string[]): D {
+  if (!previous.length) return d;
+  const prevWords = previous.map((p) => ({ name: p, norm: normTopic(p), words: contentWords(p) }));
+  const pairs: { i: number; p: number; score: number }[] = [];
+  d.topics.forEach((t, i) => {
+    const norm = normTopic(t.name);
+    const words = contentWords(t.name);
+    prevWords.forEach((p, j) => {
+      let score = 0;
+      if (p.norm === norm) score = 2;
+      else if (p.norm.includes(norm) || norm.includes(p.norm)) score = 1;
+      else score = jaccard(words, p.words);
+      if (score >= 0.4) pairs.push({ i, p: j, score });
+    });
+  });
+  pairs.sort((a, b) => b.score - a.score);
+  const rename = new Map<string, string>();
+  const usedTopic = new Set<number>();
+  const usedPrev = new Set<number>();
+  for (const { i, p } of pairs) {
+    if (usedTopic.has(i) || usedPrev.has(p)) continue;
+    usedTopic.add(i);
+    usedPrev.add(p);
+    if (d.topics[i].name !== prevWords[p].name) rename.set(d.topics[i].name, prevWords[p].name);
+  }
+  if (!rename.size) return d;
+  const to = (name: string) => rename.get(name) ?? name;
+  return {
+    ...d,
+    topics: d.topics.map((t) => ({ ...t, name: to(t.name) })),
+    ranking: { ...d.ranking, searches: d.ranking.searches.map((s) => ({ ...s, topic: to(s.topic) })) },
+    watchedSites: d.watchedSites.map((w) => ({ ...w, topic: to(w.topic) })),
+  };
+}
+
+/**
+ * Whether a revision's request asks about the topics themselves, so renaming
+ * them is what was asked. The questions echoed back in an answers block
+ * ("1. Should v2 get its own topic?") don't count; only what the tenant wrote.
+ */
+export function asksAboutTopics(request: string): boolean {
+  const own = String(request ?? "")
+    .split("\n")
+    .filter((line) => !/^\d+\.\s/.test(line.trim()) && !/answers to your questions:/i.test(line))
+    .join("\n");
+  return /\b(topics?|angles?|themes?|rename|pillars?)\b/i.test(own);
+}
+
 /** Every rule the draft breaks, as sentences for the model. Empty means it passes. */
 export function validate(d: Draft, r: Rules): string[] {
   const errors: string[] = [];
@@ -462,6 +597,19 @@ export function validate(d: Draft, r: Rules): string[] {
   if (d.questions.length > 3) errors.push(`At most 3 questions (there are ${d.questions.length}).`);
   if (r.thinAnswers && d.questions.length === 0) {
     errors.push("Their answers are thin (a blank, a one-liner, or review capacity not answered): ask at least one question about what you had to assume.");
+  }
+  for (const q of d.questions) {
+    const earlier = (r.answered ?? []).find((a) => sameQuestion(a.question, q));
+    if (earlier) {
+      errors.push(`You already asked "${earlier.question}" and they answered: "${earlier.answer}". That is settled: decide with their answer and drop the question (rule 8).`);
+    }
+  }
+  const previous = r.previousTopics ?? [];
+  if (previous.length >= 2 && !r.requestAboutTopics) {
+    const kept = d.topics.filter((t) => previous.some((p) => normTopic(p) === normTopic(t.name))).length;
+    if (kept === 0) {
+      errors.push(`You renamed every topic. Their pitches hang on the exact names; keep each previous name (${previous.map((p) => `"${p}"`).join(", ")}) unless they asked for that topic to change (rule 2).`);
+    }
   }
   return errors;
 }

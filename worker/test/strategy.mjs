@@ -264,8 +264,39 @@ try {
   check(!t.emptyBrief({ ...blank, website: "propaganda.pub" }) && !t.emptyBrief({ ...blank, answers: { ...blank.answers, offer: "We sell content software" } }) && !t.emptyBrief({ ...blank, published: 3 }), "a website, one answer or posts is enough to plan from");
   check(t.effectiveKind("revision", { hasHistory: false, hasGoals: false }) === "onboarding", "a by-hand run for a tenant with no history and no goals is an onboarding run");
   check(t.effectiveKind("revision", { hasHistory: false, hasGoals: true }) === "revision" && t.effectiveKind("quarterly", { hasHistory: true, hasGoals: true }) === "quarterly", "with goals or history the asked kind stands");
+  console.log("revision rounds");
+  const REQUEST = "Answers to your questions:\n\n1. How many posts a month can your team review?\n2 a week, maybe 3 later.\n\n2. Should v2's launch get its own topic?\nYes, give it one.";
+  const parsed = t.parseAnswers(REQUEST);
+  check(parsed.length === 2 && parsed[0].question === "How many posts a month can your team review?" && parsed[1].answer === "Yes, give it one.", `the app's answers block parses (${JSON.stringify(parsed)})`);
+  check(t.parseAnswers("Make it bigger").length === 0, "any other request parses to nothing");
+  check(t.sameQuestion("How many posts a month can your team review?", "How many posts per month is your team able to review?"), "the same question, reworded, is the same");
+  check(!t.sameQuestion("How many posts a month can your team review?", "Which competitor should we watch first?"), "a different question is not");
+  check(t.perMonthFromAnswers(parsed) === 9, `"2 a week" is 9 a month (${t.perMonthFromAnswers(parsed)})`);
+  check(t.perMonthFromAnswers([{ question: "How many posts a month can your team review?", answer: "About 8." }]) === 8, "a plain number is itself");
+  check(t.perMonthFromAnswers([{ question: "Which competitor first?", answer: "Prefect, 2 of them" }]) === null, "a number in another answer is not capacity");
+  const renamed = t.parseDraft({
+    ...GOOD,
+    topics: [{ ...GOOD.topics[0], name: "Reliability of batch jobs" }, { ...GOOD.topics[1], name: "Large-scale scraping" }],
+    ranking: { ...GOOD.ranking, searches: GOOD.ranking.searches.map((s) => ({ ...s, topic: s.topic === "Reliability" ? "Reliability of batch jobs" : "Large-scale scraping" })) },
+    watchedSites: GOOD.watchedSites.map((w) => ({ ...w, topic: w.topic === "Reliability" ? "Reliability of batch jobs" : "Large-scale scraping" })),
+  });
+  const kept = t.keepTopicNames(renamed, ["Reliability", "Scraping at scale"]);
+  check(kept.topics.map((x) => x.name).join("|") === "Reliability|Scraping at scale", `reworded topics get their previous names back (${kept.topics.map((x) => x.name).join("|")})`);
+  check(kept.ranking.searches.every((s) => ["Reliability", "Scraping at scale"].includes(s.topic)) && kept.watchedSites.every((w) => ["Reliability", "Scraping at scale"].includes(w.topic)), "and the searches and watched sites follow");
+  const fresh = t.keepTopicNames(renamed, ["Pricing pages", "Hiring"]);
+  check(fresh.topics[0].name === "Reliability of batch jobs", "a topic unlike any previous one keeps its new name");
+  check(t.asksAboutTopics("Drop the scraping topic, add one on pricing") && !t.asksAboutTopics("Make it bigger"), "a request about the topics is recognised");
+  check(!t.asksAboutTopics(REQUEST), "but a question echoed back in the answers block is not the tenant asking about topics");
   const draft = t.parseDraft(GOOD);
   const rules = { volumeCap: 22, hasHistory: false, readerWeeks: 0, keywords: kw(KEYWORDS) };
+  const reask = t.validate(draft, { ...rules, answered: parsed });
+  check(reask.length === 1 && reask[0].includes("You already asked") && reask[0].includes("Yes, give it one."), `a question they already answered is an error (${reask.join(" | ")})`);
+  const allNew = t.validate(t.parseDraft({ ...GOOD, questions: [] }), { ...rules, previousTopics: ["Pricing pages", "Hiring"], requestAboutTopics: false });
+  check(allNew.length === 1 && allNew[0].includes("You renamed every topic"), `renaming every topic unasked is an error (${allNew.join(" | ")})`);
+  check(t.validate(t.parseDraft({ ...GOOD, questions: [] }), { ...rules, previousTopics: ["Pricing pages", "Hiring"], requestAboutTopics: true }).length === 0, "unless they asked about the topics");
+  check(t.validate(t.parseDraft({ ...GOOD, questions: [] }), { ...rules, previousTopics: ["Reliability", "Hiring"], requestAboutTopics: false }).length === 0, "keeping one is enough");
+
+  console.log("the validator");
   check(t.validate(draft, rules).length === 0, `a good proposal passes (${t.validate(draft, rules).join(" | ")})`);
   const bad = t.parseDraft({
     ...GOOD,
@@ -368,6 +399,23 @@ try {
   check(n === 1 && db.drift_notes[0]?.goal === "volume", `Monday's check writes a note (${db.drift_notes.map((x) => x.message).join(" | ")})`);
   await (await t.DBOS.startWorkflow(t.strategistWeeklyCheck, { workflowID: "again" })(SITE, "2026-11-02")).getResult();
   check(db.drift_notes.length === 1, "and the same note twice in a week is kept once");
+
+  console.log("a revision round, end to end");
+  db.strategy_proposals.push({ id: "proposal0000004", site: SITE, quarter: "2026-Q4", kind: "revision", status: "requested", request: REQUEST, requested_by: "u1", proposal: null, edits: null, created: new Date().toISOString(), approved_at: null });
+  const reworded = { ...renamed, volume: r(18), ranking: { ...renamed.ranking, pageOneTarget: r(2), aiMentionTarget: r(null) }, readership: r(null) };
+  answers = [{ ...reworded, questions: ["Roughly how many posts per month can your team review?"] }, { ...reworded, questions: [] }];
+  const before4 = prompts.length;
+  const [id4] = await t.dispatchStrategist();
+  const res4 = await t.DBOS.retrieveWorkflow(id4).getResult();
+  const row4 = db.strategy_proposals.find((x) => x.id === "proposal0000004");
+  check(res4.status === "sent" && row4.status === "sent", `sent (${JSON.stringify(res4)}, ${row4.error ?? ""})`);
+  const p4 = prompts[before4] ?? "";
+  check(p4.includes("Your previous proposal this quarter") && p4.includes('"Reliability" (6 to 9)') && p4.includes('"Scraping at scale" (3 to 5)'), "the prompt carries the previous proposal's topics by name");
+  check(p4.includes("Questions you asked in earlier rounds") && p4.includes("A: Yes, give it one."), "and the earlier questions with their answers");
+  check(prompts.length === before4 + 2 && prompts[before4 + 1].includes("You already asked"), `a re-asked question went back once with the error (${prompts.length - before4} prompts)`);
+  check(row4.proposal.topics.map((x) => x.name).join("|") === "Reliability|Scraping at scale", `the sent proposal keeps the previous topic names (${row4.proposal.topics.map((x) => x.name).join("|")})`);
+  check(row4.proposal.ranking.searches.every((s) => ["Reliability", "Scraping at scale"].includes(s.topic)) && row4.proposal.watchedSites.every((w) => ["Reliability", "Scraping at scale"].includes(w.topic)), "with its searches and watched sites on those names");
+  check(row4.proposal.questions.length === 0 && db.strategy_proposals[0].status === "superseded", "no question left, and the earlier proposal is superseded");
 } finally {
   await t.DBOS.shutdown();
   rest.close();
