@@ -26,6 +26,7 @@ import type { StrategistState } from "@/lib/goals/live";
 export function stopReason(error: string | null | undefined): string {
   const e = error ?? "";
   if (e.includes("Model call refused: tenant-budget")) return "This month's AI budget is spent, so the Strategist couldn't start. Your answers are saved; ask again once the budget is raised.";
+  if (e.includes("Model call refused: suspended")) return "AI is switched off for this workspace, so the Strategist couldn't start. Your answers are saved; ask again once it's back on.";
   if (e.includes("Model call refused:")) return "AI is paused on our side right now, so the Strategist couldn't start. Your answers are saved; ask again a little later.";
   if (e.startsWith("Nothing to plan from") || e.startsWith("The Strategist stopped")) return e;
   return "Nothing was lost. Ask it again; your answers are saved.";
