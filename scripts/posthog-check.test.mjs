@@ -1,7 +1,7 @@
 // node --test scripts/posthog-check.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseSince, queries } from "./posthog-check.mjs";
+import { parseSince, plain, queries } from "./posthog-check.mjs";
 
 test("--since takes minutes, hours and days", () => {
   assert.equal(parseSince("30m"), 30);
@@ -20,4 +20,11 @@ test("every query is scoped to the window and leaves out the artificial test eve
       assert.match(sql, /artificial-test/);
     }
   }
+});
+
+test("plain flattens PostHog's array-valued exception fields", () => {
+  assert.equal(plain('["WorkerRunFailure"]'), "WorkerRunFailure");
+  assert.equal(plain('["TypeError","AppError"]'), "TypeError; AppError");
+  assert.equal(plain("not json"), "not json");
+  assert.equal(plain(null), "");
 });

@@ -28,6 +28,16 @@ export function parseSince(text) {
   return minutes;
 }
 
+// $exception_types and $exception_values come back as JSON array strings ('["TypeError"]').
+export function plain(value) {
+  if (value == null) return "";
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.join("; ");
+  } catch {}
+  return String(value);
+}
+
 export function queries(env, minutes) {
   const scope = `timestamp > now() - interval ${minutes} minute
     and ${ENV_FILTER[env]}
@@ -110,7 +120,7 @@ async function main() {
     console.log(`PostHog, ${values.env}, last ${values.since}`);
     console.log(`  exceptions: ${exceptions.length} issue(s)`);
     for (const e of report.exceptions) {
-      console.log(`    - ${e.types ?? "?"}: ${String(e.message ?? "").slice(0, 120)} (${e.events}x, ${e.sessions} session(s))`);
+      console.log(`    - ${plain(e.types) || "?"}: ${plain(e.message).slice(0, 120)} (${e.events}x, ${e.sessions} session(s))`);
       console.log(`      ${e.url ?? e.route ?? ""} ${e.link ?? ""}`.trimEnd());
     }
     console.log(`  rage or dead clicks: ${rage.length} session(s)`);
