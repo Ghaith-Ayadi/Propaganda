@@ -16,7 +16,7 @@ export interface StrategistProgress {
   status: "requested" | "running" | "sent" | "approved" | "failed" | "superseded" | null;
   steps: { label: string; state: "done" | "running" | "waiting" }[];
   /** The first pitches, one Strategist call per topic. Null until they start. */
-  pitches: { topicsDone: number; topics: number; written: number } | null;
+  pitches: { topicsDone: number; topics: number; written: number; failed?: boolean } | null;
   /** The first drafts, started when the plan is approved. */
   drafts: { briefId: string; state: "running" | "done" | "failed" }[];
 }

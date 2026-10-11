@@ -16,7 +16,7 @@ export interface StrategistProgress {
   /** The five lines, in order. */
   steps: { label: string; state: StepState }[];
   /** That proposal's first pitches; null before they start (or when it gets none). */
-  pitches: { topicsDone: number; topics: number; written: number } | null;
+  pitches: { topicsDone: number; topics: number; written: number; failed: boolean } | null;
   /** The drafts started when the plan was approved; [] before. */
   drafts: { briefId: string; state: "running" | "done" | "failed" }[];
 }
@@ -60,7 +60,9 @@ export async function strategistProgress(db: Pool, site: string): Promise<Strate
       if (FINISHED.has(w.status)) topicsDone++;
       if (w.status === "SUCCESS") written += Number((w.output as TopicResult | undefined)?.written) || 0;
     }
-    pitches = { topicsDone, topics: plan?.children.length ?? 0, written };
+    // The run itself died (a budget cap, a crash): no more topics are coming.
+    const failed = FINISHED.has(parent.status) && parent.status !== "SUCCESS";
+    pitches = { topicsDone, topics: plan?.children.length ?? 0, written, failed };
   }
 
   // The drafts started on approval.

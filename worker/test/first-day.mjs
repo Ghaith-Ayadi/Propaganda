@@ -338,7 +338,7 @@ try {
 
   let pg1 = await t.strategistProgress(pool, SITE);
   check(pg1.proposalId === P1 && pg1.status === "sent" && pg1.steps.every((s) => s.state === "done"), "progress: the plan is done");
-  check(JSON.stringify(pg1.pitches) === JSON.stringify({ topicsDone: 2, topics: 2, written: 10 }) && pg1.drafts.length === 0, `progress: 2 of 2 topics, 10 written (${JSON.stringify(pg1.pitches)})`);
+  check(JSON.stringify(pg1.pitches) === JSON.stringify({ topicsDone: 2, topics: 2, written: 10, failed: false }) && pg1.drafts.length === 0, `progress: 2 of 2 topics, 10 written (${JSON.stringify(pg1.pitches)})`);
 
   console.log("the Pitcher's morning run the same day");
   db.agent_ideas.push({ id: "scoutidea000001", site: SITE, title: "A Scout idea", summary: "", origin: "search", evidence: [], source_agent: "scout", expires_at: null, target_search: "", status: "new", reason: "", brief: null, created: NOW() });
@@ -391,7 +391,7 @@ try {
   for (const d of drafts.drafting) await t.DBOS.cancelWorkflow(d.runId).catch(() => {});
   const pg2 = await t.strategistProgress(pool, SITE);
   check(pg2.proposalId === P2 && pg2.status === "approved" && pg2.drafts.length === drafts.drafting.length && pg2.drafts.every((d) => ["running", "done", "failed"].includes(d.state)), `progress lists the drafts (${JSON.stringify(pg2.drafts)})`);
-  check(JSON.stringify(pg2.pitches) === JSON.stringify({ topicsDone: 1, topics: 1, written: 3 }), "and the revision's pitches");
+  check(JSON.stringify(pg2.pitches) === JSON.stringify({ topicsDone: 1, topics: 1, written: 3, failed: false }), "and the revision's pitches");
 
   console.log("a run that ended without a word");
   const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();

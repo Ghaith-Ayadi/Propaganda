@@ -38,6 +38,9 @@ export function FirstPitches({ day, progress, continuing }: { day: FirstDay; pro
   const published = pitches.filter((p) => p.stage === "published").length;
   const ready = pitches.find((p) => p.stage !== "rejected" && p.stage !== "published" && p.stage !== "not_now" && draftState(p, day, progress) === "ready");
   const [open, setOpen] = useState<string | null>(null);
+  // The plan's pitching is over (or never started) and nothing came: say so instead of spinning.
+  const pp = progress?.proposalId === day.proposal?.id ? progress?.pitches : undefined;
+  const pitchingEnded = pp === null || (!!pp && (!!pp.failed || (pp.topics > 0 && pp.topicsDone >= pp.topics)));
 
   return (
     <div className="flex flex-col gap-5">
@@ -68,7 +71,11 @@ export function FirstPitches({ day, progress, continuing }: { day: FirstDay; pro
         </div>
       )}
 
-      {pitches.length === 0 ? (
+      {pitches.length === 0 && pitchingEnded ? (
+        <p className="rounded-lg bg-secondary px-3.5 py-2.5 text-sm text-primary">
+          No first pitches came through this time. The Pitcher writes your first batch on its next morning run, and it lands here and in the Pipeline.
+        </p>
+      ) : pitches.length === 0 ? (
         <p className="flex items-center gap-2 text-sm text-tertiary">
           <Spinner /> The Strategist is writing your first pitches. They show up here one topic at a time.
         </p>
