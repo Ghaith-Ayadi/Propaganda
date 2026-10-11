@@ -62,5 +62,35 @@ const gone = ownerDeletes.events.find((e) => e.old?.id === draft);
 check("an unfiltered one does, with the id and nothing else", !!gone && Object.keys(gone.old).join() === "id");
 
 for (const w of [ownerPosts, strangerPosts, ownerVersions, ownerSettings, ownerDeletes]) await w.channel.unsubscribe();
+
+// What the agents write reaches the app live (20261010000070_realtime_agents):
+// the worker turning a proposal to "sent", a pitch or a draft in review, a batch.
+const ownerProposals = await watch(owner, "strategy_proposals", `site=eq.${V}`);
+const strangerProposals = await watch(stranger, "strategy_proposals", `site=eq.${V}`);
+const ownerBriefs = await watch(owner, "briefs", `site=eq.${V}`);
+const strangerBriefs = await watch(stranger, "briefs", `site=eq.${V}`);
+const ownerBatches = await watch(owner, "content_batches", `site=eq.${V}`);
+const ownerGoals = await watch(owner, "goal_versions", `site=eq.${V}`);
+
+const proposal = newId();
+await ok(admin.from("strategy_proposals").insert({ id: proposal, site: V, quarter: "2026-Q4", kind: "onboarding", status: "running" }));
+await ok(admin.from("strategy_proposals").update({ status: "sent", proposal: { summary: "x" } }).eq("id", proposal));
+const brief = newId();
+await ok(admin.from("briefs").insert({ id: brief, site: V, title: "rt pitch", status: "pitched" }));
+await ok(admin.from("content_batches").insert({ site: V, quarter: "2026-Q4", number: 1, quota: 3 }));
+await ok(admin.from("goal_versions").insert({ site: V, quarter: "2026-Q4", version: 1, targets: {}, proposal }));
+await sleep(2000);
+
+check("a member hears a proposal turn sent", ownerProposals.events.some((e) => e.eventType === "UPDATE" && e.new?.id === proposal && e.new?.status === "sent"));
+check("…a stranger hears nothing of it", strangerProposals.events.length === 0);
+check("a member hears a new pitch", ids(ownerBriefs).includes(brief));
+check("…a stranger doesn't", strangerBriefs.events.length === 0);
+check("a member hears a new batch", ownerBatches.events.length === 1);
+check("a member hears approved goals", ownerGoals.events.length === 1);
+await ok(admin.from("goal_versions").delete().eq("site", V));
+await ok(admin.from("content_batches").delete().eq("site", V));
+await ok(admin.from("strategy_proposals").delete().eq("id", proposal));
+await ok(admin.from("briefs").delete().eq("id", brief));
+for (const w of [ownerProposals, strangerProposals, ownerBriefs, strangerBriefs, ownerBatches, ownerGoals]) await w.channel.unsubscribe();
 done("REALTIME");
 process.exit();

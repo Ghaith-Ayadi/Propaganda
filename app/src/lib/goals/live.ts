@@ -3,8 +3,11 @@
 // and the plan drop, the content batches and the batching setting.
 //
 // Read live from the server (none of these tables sync to Dexie), once per
-// site and again after every change and every 30 seconds while the page is
-// open (a proposal arrives from the worker). Until the tables are on the
+// site and again after every change. A proposal arrives from the worker: a
+// realtime event says so (lib/realtime.ts through lib/serverChanges.ts), and
+// in case none comes (no realtime on this server, a dropped connection) it
+// reads again every 5 seconds while a Strategist run is in flight, every 30
+// seconds otherwise, and on coming back to the tab. Until the tables are on the
 // server (PostgREST: table not found), lib/goals/adapter.ts keeps serving the
 // placeholder, so the page works either way.
 //
@@ -15,6 +18,7 @@ import { must, newId, sb, BackendError } from "@/lib/supabase";
 import { onScopeReset, siteId } from "@/lib/scope";
 import { coded } from "@/lib/errors";
 import { reportError } from "@/lib/telemetry";
+import { onServerChange, serverChanged } from "@/lib/serverChanges";
 import { quarterEnd, quarterOf, quarterStart, shiftQuarter, toDay, addDays } from "./quarter";
 import type { GoalsAdapter } from "./adapter";
 import type {
@@ -121,16 +125,12 @@ let loading: Promise<void> | null = null;
 let ver = 0;
 const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
-/** How often an open page re-reads: 30 s, or faster while a page waits on the Strategist. */
+let stopEvents: (() => void) | null = null;
+let loadedAt = 0;
+/** How often an open page re-reads: 30 s, 5 s while a Strategist run is in flight, or what a page waiting on it asks for. */
 const POLL_MS = 30_000;
+const RUNNING_POLL_MS = 5_000;
 let pollMs = POLL_MS;
-
-function startTimer() {
-  if (timer) clearInterval(timer);
-  timer = setInterval(() => {
-    if (listeners.size && state && state !== "missing") void refreshGoals();
-  }, pollMs);
-}
 
 /**
  * Re-read every `ms` while someone waits on the Strategist (Getting started),
@@ -138,10 +138,8 @@ function startTimer() {
  */
 export function pollGoalsEvery(ms: number | null): () => void {
   pollMs = ms ?? POLL_MS;
-  if (timer) startTimer();
   return () => {
     pollMs = POLL_MS;
-    if (timer) startTimer();
   };
 }
 
@@ -186,6 +184,7 @@ async function load(site: string): Promise<void> {
       ),
     ]);
     if (siteOrNull() !== site) return; // switched site while loading
+    const was = state && state !== "missing" && state.site === site ? proposalKey(state.proposals) : null;
     state = {
       site,
       proposals: proposals as ProposalRow[],
@@ -196,6 +195,9 @@ async function load(site: string): Promise<void> {
       briefs: briefs as BriefRow[],
       published: new Map((posts as { id: string; published_at: string | null }[]).filter((p) => p.published_at).map((p) => [p.id, p.published_at!.slice(0, 10)])),
     };
+    loadedAt = Date.now();
+    // Noticed here first (a poll, not an event): the Inbox badge reads its own count.
+    if (was !== null && was !== proposalKey(state.proposals)) serverChanged("strategy", "goals");
   } catch (err) {
     // Tables not on this server, or the server didn't answer: the placeholder
     // serves the page, and we ask again in a minute (never in a loop).
@@ -210,6 +212,27 @@ async function load(site: string): Promise<void> {
   }
   emit();
 }
+
+function proposalKey(rows: ProposalRow[]): string {
+  return rows.map((p) => `${p.id}:${p.status}`).join(",");
+}
+
+/** A Strategist run asked for or being written. */
+function running(): boolean {
+  if (!state || state === "missing") return false;
+  const newest = state.proposals[state.proposals.length - 1];
+  return newest?.status === "requested" || newest?.status === "running";
+}
+
+function tick() {
+  if (!listeners.size || !state || state === "missing" || loading) return;
+  if (document.visibilityState !== "visible") return;
+  if (Date.now() - loadedAt >= Math.min(pollMs, running() ? RUNNING_POLL_MS : POLL_MS)) void refreshGoals();
+}
+
+const onVisible = () => {
+  if (document.visibilityState === "visible" && listeners.size && state && state !== "missing") void refreshGoals();
+};
 
 function siteOrNull(): string | null {
   try {
@@ -377,12 +400,21 @@ export const liveAdapter: GoalsAdapter & {
   subscribe(cb) {
     listeners.add(cb);
     ensure();
-    if (!timer) startTimer();
+    if (!timer) {
+      timer = setInterval(tick, 1_000);
+      document.addEventListener("visibilitychange", onVisible);
+      stopEvents = onServerChange("strategy", (from) => {
+        if (from !== "goals" && state !== "missing") void refreshGoals();
+      });
+    }
     return () => {
       listeners.delete(cb);
       if (!listeners.size && timer) {
         clearInterval(timer);
         timer = null;
+        document.removeEventListener("visibilitychange", onVisible);
+        stopEvents?.();
+        stopEvents = null;
       }
     };
   },
