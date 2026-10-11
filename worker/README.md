@@ -263,6 +263,9 @@ design: `onboarding/first-day-flow.md` in the project files, stage 3b):
   is never replaced.
 - **Lite tenants** get none of it (`isLite`: the app's placeholder, Verbatim,
   plus `WORKER_LITE_SITES`), until the plan has a home on the server.
+- **How many.** 10 pitches (`FIRST_PITCHES`); `WORKER_FIRST_PITCHES` lowers
+  it. The dev box sets 3: dev runs test the plumbing on DeepSeek, and Claude
+  models with the full 10 are for UX runs and benchmarks only (Ayadi, 2026-10-11).
 - **Pickup.** Requested proposals are picked up every
   `WORKER_STRATEGIST_PICKUP_SECONDS` (5): one lookup on a partial index.
 - **Progress** for the tenant's own people: `GET /progress/strategist` (below).
