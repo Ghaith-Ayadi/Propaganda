@@ -7,9 +7,9 @@
 // web pages stay stand-ins (free, and the same every run). They cost money, so
 // they run at a release (.github/workflows/release.yml), never on a PR.
 //
-// The Strategist runs on Claude Sonnet 5.5 here, not Fable: the same family and
-// prompt-following at a fifth of the price. The other agents run on their prod
-// model (DeepSeek V4 Pro), which is already cheap.
+// These are plumbing tests, not quality tests (quality is Propaganda Labs), so every
+// agent runs on DeepSeek V4 Pro here, the Strategist included (prod: Fable). Claude
+// models are kept for UX testing and benchmarks (Ayadi, 2026-10-11).
 
 import { appendFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -19,7 +19,7 @@ export const PGURL = process.env.PGURL ?? "postgres://postgres:postgres@localhos
 const SPEND_CAP_USD = Number(process.env.LIVE_SPEND_CAP_USD || 5);
 
 /** The models a release test runs on, where they differ from prod. Read before the agents' code loads. */
-export const TEST_MODELS = { AGENT_MODEL_STRATEGIST: "anthropic/claude-sonnet-5.5" };
+export const TEST_MODELS = { AGENT_MODEL_STRATEGIST: "deepseek/deepseek-v4-pro" };
 
 /**
  * Before anything imports the agents: the test models, and the gateway key. With no key a
