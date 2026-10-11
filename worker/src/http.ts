@@ -6,6 +6,7 @@
 //
 //   GET  /health                 200 "ok"
 //   POST /agents/:name           202 { runId }  body { site, task, requestedBy, conversation, post? }
+//   GET  /progress/strategist?site=  StrategistProgress (src/progress.ts): a member of the site, not a superadmin
 //   GET  /runs?state=&site=&name=&limit=&offset=
 //   GET  /runs/:id
 //   POST /runs/:id/retry         { id, how }   id is the new run's when forked
@@ -27,7 +28,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Pool } from "pg";
-import { HttpError, requireSuperadmin } from "./auth.js";
+import { HttpError, requireMember, requireSuperadmin } from "./auth.js";
+import { strategistProgress } from "./progress.js";
 import { config } from "./config.js";
 import { cancelRun, getRun, listRuns, retryRun, type RunState } from "./runs.js";
 import { dispatchAgent, isAgentName, startForTenant, type DispatchInput } from "./workflows/agents.js";
@@ -127,6 +129,15 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     if (runId === undefined) throw new HttpError(404, `The ${name} agent isn't running yet`);
     if (runId === null) throw new HttpError(422, `The ${name} found nothing to work on: name the post or the thing to look at.`);
     return send(res, 202, { runId });
+  }
+
+  // Day one's progress card: a member of the site, not a superadmin.
+  if (path === "/progress/strategist") {
+    if (method !== "GET") throw new HttpError(405, "Method not allowed");
+    const site = url.searchParams.get("site") ?? "";
+    if (!SITE_RE.test(site)) throw new HttpError(400, "Bad site");
+    await requireMember(db, req.headers.authorization, site, config.jwtSecret());
+    return send(res, 200, await strategistProgress(db, site));
   }
 
   // The Listener's ingest URL, webhooks, OAuth callbacks and Connections routes check their own credentials.

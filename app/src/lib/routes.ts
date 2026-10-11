@@ -25,6 +25,7 @@ import {
   Inbox01,
   Database01,
   MessageChatCircle,
+  Rocket02,
   Settings01,
   Target04,
 } from "@untitledui/icons";
@@ -77,6 +78,15 @@ export interface PageRoute {
 }
 
 export const PAGES: PageRoute[] = [
+  {
+    id: "getting-started",
+    label: "Getting started",
+    icon: Rocket02,
+    path: "getting-started",
+    description: "Your first day: from your answers to your first article.",
+    section: "main",
+    component: lazy(() => import("@/components/gettingStarted/GettingStartedPage").then((m) => ({ default: m.GettingStartedPage }))),
+  },
   {
     id: "home",
     label: "Home",

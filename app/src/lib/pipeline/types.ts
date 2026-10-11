@@ -157,6 +157,8 @@ export interface PipelineItem {
   changed?: string;
   /** Set when web searches were skipped (the search service kept failing): the pitch or draft has less research than usual. */
   research?: string;
+  /** Who pitched it: "agent:pitcher", "agent:strategist" (a tenant's first pitches) or a person's id. */
+  pitchedBy?: string;
   /** Content batch (1-based); null for a bonus post outside the plan. */
   batch: number | null;
   /** The draft post in the editor, once the pitch is approved. */

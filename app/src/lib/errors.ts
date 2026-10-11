@@ -56,6 +56,8 @@
 //   PIPELINE-LOAD       the pipeline couldn't load its pitches, batches or decisions
 //   PIPELINE-SAVE       a decision on a pitch or a draft couldn't be saved
 //   PIPELINE-AGENT      the Writer or the Pitcher couldn't be started from the pipeline
+//   START-PUBLISH       publishing the first article from Getting started failed
+//   START-PROGRESS      the Strategist's progress couldn't be read for Getting started
 
 import { BackendError } from "@/lib/supabase";
 
