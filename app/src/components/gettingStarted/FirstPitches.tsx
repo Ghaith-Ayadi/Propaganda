@@ -49,7 +49,9 @@ export function FirstPitches({ day, progress, continuing }: { day: FirstDay; pro
         lede={
           continuing
             ? "Review the drafts that are ready and decide on the pitches left. Everything you skip waits in the Pipeline."
-            : "The Strategist pitched these with your plan. Approve the ones you'd publish; a reason on a rejection shapes its replacement. The strongest are already being written."
+            : pitches.length === 0 && pitchingEnded
+              ? "Your plan is approved."
+              : "The Strategist pitched these with your plan. Approve the ones you'd publish; a reason on a rejection shapes its replacement. The strongest are already being written."
         }
       />
       <div className="flex flex-wrap gap-2 text-sm">
