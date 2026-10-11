@@ -388,6 +388,8 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
   try {
     const now = new Date(await DBOS.runStep(async () => new Date().toISOString(), { name: "now" }));
     const pack = await DBOS.runStep(() => gather(site, row.request, now, row.quarter), { name: "gather", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 });
+    // A run started before rounds existed replays its recorded gather output after a restart: no rounds yet.
+    pack.rounds ??= { answered: [], previous: null, perMonthAnswer: "" };
     const hasHistory = pack.history.publishedLastQuarter > 0;
     // Nothing to plan from: stop before spending a model call (and say what to answer).
     if (emptyBrief({ website: pack.website, answers: pack.answers, planText: pack.plan.text, planFiles: pack.plan.files.length, published: pack.history.publishedLastQuarter + pack.history.recentTitles.length })) {
