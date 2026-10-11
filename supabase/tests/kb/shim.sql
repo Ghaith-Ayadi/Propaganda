@@ -3,6 +3,7 @@ do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then
     create role anon nologin; create role authenticated nologin;
     create role service_role nologin bypassrls; create role supabase_admin superuser;
+    create role authenticator noinherit login;
   end if;
 end $$;
 create schema extensions; create extension pgcrypto with schema extensions;

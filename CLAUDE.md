@@ -95,8 +95,8 @@ Production moves in numbered releases (`v0.2.0`, `v0.2.1`, ...), cut by the **re
 workflow on `main`, only on Ayadi's word: the free suites, then real-model tests
 (`worker/test/live/`) for the agents whose code changed since the last release (all of them on
 the first release of a month), then the tag, a GitHub Release as the log (PRs, tests, their
-cost), and the app deploy. The box follows the tag in Bedrock's `schema.env`. Tests run the
-Strategist on Sonnet, never Fable. Details: [docs/releases.md](docs/releases.md).
+cost), and the app deploy. The box follows the tag in Bedrock's `schema.env`. Tests are plumbing,
+not quality: every agent runs on DeepSeek in them, never a Claude model. Details: [docs/releases.md](docs/releases.md).
 
 ## Model calls: one logged path
 

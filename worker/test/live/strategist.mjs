@@ -1,4 +1,4 @@
-// The Strategist on a real model (Sonnet 5.5 standing in for Fable, kit.mjs): a
+// The Strategist on a real model (DeepSeek V4 Pro standing in for Fable, kit.mjs): a
 // day-one proposal for a fictional tenant, end to end through the real workflow,
 // its rules and its one retry. Keyword data and the tenant's site are stand-ins.
 

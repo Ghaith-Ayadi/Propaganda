@@ -47,15 +47,14 @@ cost log rows the gateway writes, priced at what the AI Gateway reported.
 
 | Area | Test | Model in the test |
 | --- | --- | --- |
-| Strategist | `strategist.mjs` | Claude Sonnet 5.5 (prod: Fable 5.1) |
+| Strategist | `strategist.mjs` | DeepSeek V4 Pro (prod: Fable 5.1) |
 | Pitcher, Writer, voice guide | `pitch-write.mjs` | DeepSeek V4 Pro, as in prod |
 | Listener, knowledge base agents, Scout, Chat | not written yet | |
 
-The Strategist is the only agent tested on a different model: Sonnet is the same family as
-Fable and follows the same prompt, at a fifth of the price ($2/$10 per million tokens against
-$10/$50). Haiku would be cheaper, but a long plan in JSON is where it fails, and a test that
-fails because of the test model is worse than no test. The other agents already run on a
-cheap model in prod, so their tests use it.
+These are plumbing tests: they check that each agent's workflow, rules and writes hold up
+against a real model's answer, not how good the answer is (that is Propaganda Labs). So every
+test runs on DeepSeek V4 Pro, the Strategist included, though it runs on Fable in prod. Claude
+models are kept for UX testing and benchmarks (Ayadi, 2026-10-11).
 
 Each test stops at $5 of model spend (`LIVE_SPEND_CAP_USD`): the stand-in `cost_gate` reports
 what the test has spent so far against that cap, and the gateway refuses the next call.

@@ -8,13 +8,16 @@
 
 //
 // The Strategist's proposal waiting on approval counts too: one small count
-// query (not the goals adapter, which would join the main chunk), every minute.
+// query (not the goals adapter, which would join the main chunk), read again
+// when the server says a proposal changed (lib/serverChanges.ts), on coming
+// back to the tab, and every minute in case no event came.
 
 import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { activeSite } from "@/lib/scope";
 import { sb } from "@/lib/supabase";
+import { onServerChange } from "@/lib/serverChanges";
 import type { BadgeValue } from "@/lib/routes";
 
 const PROPOSAL_POLL_MS = 60_000;
@@ -30,11 +33,18 @@ function useProposalsWaiting(): number {
       // A failed read leaves the count as it was: the nav is not where errors show.
       if (live && !error) setCount(n ?? 0);
     };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void read();
+    };
     void read();
     const timer = setInterval(() => void read(), PROPOSAL_POLL_MS);
+    const stopEvents = onServerChange("strategy", () => void read());
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       live = false;
       clearInterval(timer);
+      stopEvents();
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [activeSite()?.id]);
   return count;

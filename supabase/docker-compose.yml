@@ -121,6 +121,9 @@ services:
       # Supabase Cloud's cap; the app pages through anything longer.
       PGRST_DB_MAX_ROWS: "1000"
       PGRST_JWT_SECRET: ${JWT_SECRET}
+      # Marks the transaction read-only for the operators' reader role
+      # (migrations/20261010000080_reader_role.sql).
+      PGRST_DB_PRE_REQUEST: private.reader_guard
       PGRST_DB_USE_LEGACY_GUCS: "false"
       PGRST_APP_SETTINGS_JWT_EXP: "3600"
       # The health check (postgrest --ready) asks the admin server on localhost.
