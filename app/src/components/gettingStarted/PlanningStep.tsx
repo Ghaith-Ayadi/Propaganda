@@ -51,7 +51,7 @@ export function PlanningStep({ day, progress }: { day: FirstDay; progress: Strat
         ) : (
           <>
             {revising && st?.request && (
-              <p className="mb-4 text-sm text-secondary">
+              <p className="mb-4 text-sm whitespace-pre-line text-secondary">
                 <span className="font-medium text-primary">What you asked for: </span>
                 {st.request}
               </p>

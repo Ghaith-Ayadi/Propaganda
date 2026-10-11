@@ -117,7 +117,7 @@ export function GettingStartedPage() {
             <div className="flex flex-col gap-10 lg:flex-row lg:items-start">
               <div className="min-w-0 flex-1">
                 {day.step === "business" && <BusinessStep />}
-                {day.step === "strategy" && <StrategyStep />}
+                {day.step === "strategy" && <StrategyStep emptyBrief={day.emptyBrief} />}
                 {day.step === "planning" && <PlanningStep day={day} progress={progress} />}
                 {day.step === "plan" && day.proposal && (
                   <StrategyView proposal={day.proposal} round={day.strategist?.rounds ?? 1} pitches={day.firstPitches} progress={progress} />
@@ -157,13 +157,18 @@ function BusinessStep() {
   );
 }
 
-function StrategyStep() {
+function StrategyStep({ emptyBrief }: { emptyBrief: boolean }) {
   return (
     <section className="max-w-2xl">
       <StepTitle
         title="Your strategy"
         lede="Four questions, then any plan you already have. The Strategist turns it into a plan and your first pitches, in about 3 minutes. You'll set up the rest meanwhile."
       />
+      {emptyBrief && (
+        <p className="mb-5 rounded-lg bg-secondary px-3.5 py-2.5 text-sm text-primary">
+          The Strategist had nothing to plan from. Answer at least what you sell and the searches you want to be found by, then write the plan again.
+        </p>
+      )}
       <StrategistOnboarding submitLabel="Write my plan" submitIcon={Stars01} onDone={() => void refreshGoals()} />
     </section>
   );

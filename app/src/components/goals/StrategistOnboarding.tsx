@@ -121,7 +121,9 @@ export function StrategistOnboarding({
       writeDraft(site.id, {});
       await plan.save();
       // The first proposal: the worker picks the request up within a minute.
-      if (!strategistState()) await goalsActions.askStrategist("onboarding");
+      // Again after a failed run too (an empty brief sends the tenant back here).
+      const st = strategistState();
+      if (!st || st.status === "failed") await goalsActions.askStrategist("onboarding");
       track("strategist_onboarding_saved", { answered, planText: !!plan.text.trim(), planFiles: plan.drop.files.length + plan.pending.length });
       onDone();
     } catch (err) {

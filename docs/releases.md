@@ -13,8 +13,12 @@ Only on Ayadi's word. Run the **release** workflow (`.github/workflows/release.y
 | `bump` | `patch` (default: fixes and small changes), `minor` (a milestone), `major` |
 | `ai_tests` | `changed` (default) or `all` |
 | `deploy_app` | deploy the app to Vercel production once tagged (default yes) |
+| `notes_since` | first release only: the commit to list PRs from (default: GitHub's own list) |
 
-The first release is `v0.2.0`; after that the number is the previous tag bumped.
+The first release is `v0.2.0`; after that the number is the previous tag bumped. `v1.0.0` is
+Verbatim's tag from May 2026 and is not counted. For that first release, `notes_since` (a commit,
+such as the last production deploy) lists the PRs merged after it in the log instead of
+everything since May.
 
 It runs, in order:
 

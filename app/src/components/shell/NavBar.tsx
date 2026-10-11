@@ -6,7 +6,7 @@
 // 0.1 sidebar: the plan's few pages and Analytics on top, then every
 // collection with its posts filling the bar (components/lite).
 
-import { BarChart01, ChevronDown, Eye, SearchLg, SwitchHorizontal01 } from "@untitledui/icons";
+import { BarChart01, ChevronDown, Eye, SearchLg, Shield01, SwitchHorizontal01 } from "@untitledui/icons";
 import { Badge } from "@/components/base/badges/badges";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { useWorkspace } from "@/components/Workspace";
@@ -17,6 +17,7 @@ import { useActiveCollection } from "@/lib/activeCollection";
 import { analyticsHref, pageHref, useRoute, type Route } from "@/lib/route";
 import { badgeOf, type NavNode, type PageRoute } from "@/lib/routes";
 import { sitePublicUrl } from "@/lib/siteUrl";
+import { useSuperadminAccount } from "@/lib/superadmin";
 import { setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
 import { cx } from "@/utils/cx";
 import { activePageOf, toggleFolded, useFolded } from "./nav";
@@ -28,6 +29,8 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
   const pages = usePages();
   const lite = usePlan() === "lite";
   const canSwitch = useCanSwitchPlan();
+  // The server's is_superadmin() answer (lib/superadmin.ts), as in the command menu.
+  const superadmin = useSuperadminAccount();
 
   return (
     <aside className="flex h-full w-[260px] max-w-full shrink-0 flex-col border-r border-secondary bg-secondary max-md:w-[300px]">
@@ -79,6 +82,14 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
           {pages.filter((p) => p.section === "footer").map((p) => (
             <PageItem key={hookKey(p)} page={p} active={active === p.id} route={route} />
           ))}
+          {superadmin && (
+            <li>
+              <a href="#/admin" aria-current={route.view === "admin" ? "page" : undefined} className={rowClass(route.view === "admin")}>
+                <Shield01 className="size-4 shrink-0 text-quaternary" />
+                <span>Admin</span>
+              </a>
+            </li>
+          )}
           <li>
             <a href={sitePublicUrl(site)} target="_blank" rel="noreferrer" className={rowClass(false)}>
               <Eye className="size-4 text-quaternary" />

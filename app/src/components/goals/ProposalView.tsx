@@ -61,6 +61,10 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   };
 
   const answered = proposal.questions.filter((q) => answers[q]?.trim());
+  // Open questions block approval (Ayadi, 2026-10-10): every one is answered, the
+  // answers go back together, and the revision that comes back is the one to approve.
+  const allAnswered = answered.length === proposal.questions.length;
+  const blocked = proposal.questions.length > 0;
   // The answers go back as a revision request, so the next proposal is built on them.
   const answerNote = () =>
     ["Answers to your questions:", ...answered.map((q, i) => `${i + 1}. ${q}\n${answers[q].trim()}`)].join("\n\n");
@@ -122,8 +126,10 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                   ))}
                 </ol>
                 <div className="mt-3 flex items-center justify-end gap-3">
-                  <p className="text-xs text-tertiary">The Strategist revises the proposal with your answers.</p>
-                  <Button size="sm" color="primary" isDisabled={answered.length === 0 || busy} onClick={() => void ask(answerNote())}>
+                  <p className="text-xs text-tertiary">
+                    {allAnswered ? "The Strategist revises the proposal with your answers." : `Answer all ${proposal.questions.length} to send them.`}
+                  </p>
+                  <Button size="sm" color="primary" isDisabled={!allAnswered || busy} onClick={() => void ask(answerNote())}>
                     Send answers
                   </Button>
                 </div>
@@ -251,7 +257,8 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
               <Button size="md" color="secondary" onClick={() => setAsking(true)}>
                 Ask for changes
               </Button>
-              <Button size="md" color="primary" isDisabled={problems.length > 0 || busy} isLoading={busy} onClick={() => void approve()}>
+              {blocked && <p className="text-sm text-tertiary sm:mr-auto">Answer the Strategist's questions above to approve.</p>}
+              <Button size="md" color="primary" isDisabled={blocked || problems.length > 0 || busy} isLoading={busy} onClick={() => void approve()}>
                 {edits.length ? `Approve with ${edits.length} ${edits.length === 1 ? "change" : "changes"}` : "Approve"}
               </Button>
             </div>

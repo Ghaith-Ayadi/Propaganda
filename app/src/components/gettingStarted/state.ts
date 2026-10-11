@@ -55,6 +55,8 @@ export interface FirstDay {
   planning: boolean;
   /** The newest request failed and nothing replaced it. */
   failed: string | null;
+  /** The Strategist had nothing to plan from (no website, answers, plan or posts): back to the questions. */
+  emptyBrief: boolean;
   firstPitches: PipelineItem[];
   /** Post id → the draft has words in it. */
   drafted: Map<string, boolean>;
@@ -87,13 +89,15 @@ export function useFirstDay(): FirstDay {
   return useMemo(() => {
     const running = strategist?.status === "requested" || strategist?.status === "running";
     const failed = strategist?.status === "failed" ? strategist.error || "The Strategist stopped." : null;
+    // worker EMPTY_BRIEF_ERROR: the run stopped before any model call.
+    const emptyBrief = !!failed && failed.startsWith("Nothing to plan from") && !proposal;
     const sent = proposal?.status === "sent";
     const approved = proposal?.status === "approved";
     const planning = running || proposal?.status === "changes_requested";
 
     const done = new Set<StepId>();
     if (business || strategist) done.add("business");
-    if (strategist) done.add("strategy");
+    if (strategist && !emptyBrief) done.add("strategy");
     if ((sent || approved) && !planning) done.add("planning");
     if (approved) done.add("plan");
     const draftsReady = firstPitches.filter((p) => p.postId && drafted.get(p.postId)).length;
@@ -106,7 +110,7 @@ export function useFirstDay(): FirstDay {
     }
 
     let step: StepId;
-    if (!strategist && !proposal) step = business ? "strategy" : "business";
+    if ((!strategist && !proposal) || emptyBrief) step = business ? "strategy" : "business";
     else if (approved) step = firstArticle && after !== "guide" ? "publish" : "pitches";
     else if (sent && !planning) step = "plan";
     else step = "planning";
@@ -123,7 +127,8 @@ export function useFirstDay(): FirstDay {
       strategist,
       proposal,
       planning: !!planning,
-      failed: failed && !sent && !approved ? failed : null,
+      failed: failed && !sent && !approved && !emptyBrief ? failed : null,
+      emptyBrief,
       firstPitches,
       drafted,
       firstArticle,

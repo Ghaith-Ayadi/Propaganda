@@ -5,8 +5,8 @@
 // at the bottom, up to five rounds.
 //
 // Its questions are answered here, all together; the answers go back as a
-// revision. On the first round Approve stays locked until they're sent
-// (E2E thread, 2026-10-10). A revision's questions are optional.
+// revision, and Approve stays locked while any are open (Ayadi, 2026-10-10;
+// the Strategist decides with the answers instead of asking again, #103).
 
 import { useState } from "react";
 import { Label, TextArea, TextField } from "react-aria-components";
@@ -45,7 +45,8 @@ export function StrategyView({
   const [answers, setAnswers] = useState<string[]>(() => proposal.questions.map(() => ""));
   const [busy, setBusy] = useState(false);
   const questions = proposal.questions;
-  const mustAnswer = round === 1 && questions.length > 0;
+  // Open questions block approval, every round (as on Goals, #102).
+  const mustAnswer = questions.length > 0;
   const allAnswered = answers.every((a) => a.trim());
   const pitching = progress?.proposalId === proposal.id ? progress.pitches : null;
   const lastRound = round >= MAX_ROUNDS;
@@ -212,9 +213,7 @@ export function StrategyView({
           <SectionTitle
             title="What it couldn't decide alone"
             lede={
-              mustAnswer
-                ? `Answer ${questions.length === 1 ? "it" : `all ${questions.length}`} and send them together. The Strategist folds your answers into the plan, and approving unlocks then.`
-                : "Optional: send answers and the Strategist revises the plan with them."
+              `Answer ${questions.length === 1 ? "it" : `all ${questions.length}`} and send them together. The Strategist folds your answers into the plan, and approving unlocks then.`
             }
           />
           <div className="flex flex-col gap-4">
