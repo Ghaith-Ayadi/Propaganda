@@ -82,6 +82,9 @@ globalThis.fetch = web;
 process.env.DATAFORSEO_LOGIN = "login";
 process.env.DATAFORSEO_PASSWORD = "password";
 
+// Day one's first pitches are the Pitcher's work, tested in pitch-write.mjs and first-day.mjs;
+// a Lite tenant skips them here, as in ../strategy.mjs.
+process.env.WORKER_LITE_SITES = SITE;
 const rest = await standInRest(db);
 const t = await import("../../dist/agents/testing.js");
 t.setWebFetch(web);
@@ -108,6 +111,8 @@ try {
   const calls = db.model_calls.filter((c) => c.job === "strategist" && !String(c.model).startsWith("dataforseo/"));
   check(calls.length >= 1 && calls.every((c) => c.status === "ok" && c.priced), `every model call logged and priced (${calls.length})`);
   check(calls.length <= 4, `two drafts at most, each with one retry for bad JSON (${calls.length} calls)`);
+  const first = await t.DBOS.retrieveWorkflow(t.firstPitchesId("liveproposal001")).getResult();
+  check(/Lite/.test(first?.skipped ?? ""), `sending started the first pitches (skipped here: ${first?.skipped})`);
 } catch (err) {
   // A run that throws is a failure like any other; the cost so far is still reported.
   check(false, `threw: ${err.message}`);

@@ -155,7 +155,7 @@ export async function launch(t, name) {
   await admin.query(`drop database if exists ${sysDb} with (force)`);
   await admin.end();
   t.wireGateway();
-  t.DBOS.setConfig({ name: `propaganda-live-${name}`, systemDatabaseUrl: `${PGURL}/${sysDb}`, applicationVersion: "live" });
+  t.DBOS.setConfig({ name: `propaganda-live-${name}`, systemDatabaseUrl: `${PGURL}/${sysDb}`, applicationVersion: "live", enablePatching: true });
   await t.DBOS.launch();
   await t.registerQueues();
 }
