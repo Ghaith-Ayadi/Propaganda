@@ -24,6 +24,7 @@ import { assertPublicUrl, readPage, searchWeb, searchConfigured } from "../agent
 import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
 import {
   claimProposal,
+  earlierProposals,
   failProposal,
   getProposal,
   hasApprovedGoals,
@@ -43,11 +44,15 @@ import {
   sitesWithGoals,
 } from "../agents/strategy-store.js";
 import {
+  asksAboutTopics,
   dayOf,
   effectiveKind,
   emptyBrief,
   EMPTY_BRIEF_ERROR,
   finish,
+  keepTopicNames,
+  parseAnswers,
+  perMonthFromAnswers,
   launchFor,
   nextQuarter,
   parseDraft,
@@ -60,6 +65,7 @@ import {
   volumeCap,
   weeklyNotes,
   windowFor,
+  type Answered,
   type Draft,
   type Keyword,
   type ProposalKind,
@@ -108,9 +114,16 @@ interface Pack {
   lastEdits: { field: string; from: string; to: string; reason?: string }[];
   taste: string;
   request: string;
+  /** This quarter's earlier rounds: what was asked and answered, and the last proposal's topics. */
+  rounds: {
+    answered: Answered[];
+    previous: { summary: string; topics: { name: string; low: number; high: number }[]; questions: string[] } | null;
+    /** Review capacity came from an answer in a round ("8", "2 a week"), not from Settings. */
+    perMonthAnswer: string;
+  };
 }
 
-async function gather(site: string, request: string, now: Date): Promise<Pack> {
+async function gather(site: string, request: string, now: Date, quarter = quarterLabelOf(now)): Promise<Pack> {
   const [s, prof, set, taste] = await Promise.all([
     getSite(site),
     profile(site),
@@ -149,18 +162,38 @@ async function gather(site: string, request: string, now: Date): Promise<Pack> {
   }
 
   const last = quarterBounds(quarterLabelOf(new Date(quarterBounds(quarterLabelOf(now)).start.getTime() - 86_400_000)));
-  const [lastPosts, recent, outcomes, approved] = await Promise.all([
+  const [lastPosts, recent, outcomes, approved, earlier] = await Promise.all([
     publishedBetween(site, last.start.toISOString(), last.end.toISOString()),
     publishedPosts(site, 30),
     pitchOutcomes(site, last.start.toISOString()),
     lastApproved(site),
+    earlierProposals(site, quarter),
   ]);
+
+  // The rounds so far: each earlier proposal's questions were answered by the
+  // request that followed it (the next row's, or this run's). Without this
+  // the model saw only the latest answers, re-asked settled questions and
+  // reworded every topic each round (first-day run, 2026-10-11).
+  const answered: Answered[] = [];
+  const asked = new Set<string>();
+  for (const [i, row] of earlier.entries()) {
+    for (const q of row.proposal?.questions ?? []) asked.add(q);
+    const next = earlier[i + 1]?.request ?? request;
+    for (const a of parseAnswers(next)) if (!answered.some((x) => x.question === a.question)) answered.push(a);
+  }
+  const lastProposal = [...earlier].reverse().find((r) => r.proposal)?.proposal ?? null;
+  const previous = lastProposal
+    ? { summary: lastProposal.summary, topics: lastProposal.topics.map((t) => ({ name: t.name, low: t.low, high: t.high })), questions: lastProposal.questions }
+    : null;
+  const settingPerMonth = parseInt(String(set["strategist.reviewPerMonth"] ?? ""), 10);
+  const fromAnswer = Number.isFinite(settingPerMonth) ? null : perMonthFromAnswers(answered);
+  const perMonthAnswer = fromAnswer === null ? "" : (answered.find((a) => perMonthFromAnswers([a]) !== null)?.answer ?? "");
 
   return {
     site: { id: s.id, name: s.name, domain: s.domain ?? "", blog: s.domain || `${s.slug}.propaganda.pub` },
     website,
-    perMonth: reviewPerMonth(set["strategist.reviewPerMonth"]),
-    perMonthAnswered: Number.isFinite(parseInt(String(set["strategist.reviewPerMonth"] ?? ""), 10)),
+    perMonth: fromAnswer ?? reviewPerMonth(set["strategist.reviewPerMonth"]),
+    perMonthAnswered: Number.isFinite(settingPerMonth) || fromAnswer !== null,
     answers: prof?.answers ?? {},
     plan: { text: [prof?.plan_text ?? "", ...planTexts].filter(Boolean).join("\n\n").slice(0, 30_000), files: (prof?.plan_files ?? []).map((f) => f.name) },
     pages,
@@ -175,6 +208,7 @@ async function gather(site: string, request: string, now: Date): Promise<Pack> {
     lastEdits: approved?.edits ?? [],
     taste: taste?.summary ?? "",
     request,
+    rounds: { answered, previous, perMonthAnswer },
   };
 }
 
@@ -266,7 +300,7 @@ const SYSTEM = `You are the Strategist for a company's blog, inside Propaganda (
 
 The rules (code checks them; a proposal that breaks one is sent back):
 1. Volume comes from capacity, never ambition. The cap you're given is a ceiling, not a target: propose less when more would mean a burst and then silence (after a Launch, the rest of the quarter should still carry about a post a week), and say so.
-2. 1 to 4 topics, best first, each a range (low to high). A topic is an angle with a point of view: what this company knows or believes that its competitors don't say, aimed at a named buyer. Name it the way the founder would say it in a sentence, never a product category, never one of their searches pasted back, never "cluster" or "pillar". The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume.
+2. 1 to 4 topics, best first, each a range (low to high). A topic is an angle with a point of view: what this company knows or believes that its competitors don't say, aimed at a named buyer. Name it the way the founder would say it in a sentence, never a product category, never one of their searches pasted back, never "cluster" or "pillar". The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume. In a revision, keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away.
 3. Every topic gets pitched from every source; there is no internal/external split.
 4. 3 to 8 watched sites: regulators, trade press, competitors' blogs, standards bodies, newsletters. Each is a source that keeps publishing (a site, a blog index, a news section: the root or one path segment), never one article, whitepaper or listicle. Each tied to one topic, each with a why. The competitors they named are always in. Use real sites you know or that appear in the data; full https addresses.
 5. 5 to 10 target searches (10 when the data allows, and at least 8 with 6 from the data when the data is rich): all winnable, which means difficulty under 30 with at least 50 searches a month, or a search where they're already on page two. A new domain targets long-tail searches only, never a head term (nothing over 5,000 searches a month), each one a question a post in its topic would literally answer. Each names one of the topics. A search you propose that the data doesn't list gets its numbers looked up before your proposal is checked, so take the best questions from the data first and add your own only when the data has none. A new domain targets at most 2 on page one by quarter end, and no AI-mention target in its first quarter (set it to null and say why).
@@ -294,10 +328,16 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
       o.hasHistory
         ? `last quarter they published ${pack.history.publishedLastQuarter}; at most +20%`
         : pack.perMonthAnswered
-          ? `their team can review ${pack.perMonth} posts a month, and a first quarter is at most 2 a week`
+          ? `their team can review ${pack.perMonth} posts a month${pack.rounds.perMonthAnswer ? ` (their answer to your question: "${pack.rounds.perMonthAnswer}")` : ""}, and a first quarter is at most 2 a week`
           : `they did not answer how many posts a month their team can review, so ${pack.perMonth} a month is assumed; a first quarter is at most 2 a week. Say it is assumed, and ask`
     }).`,
     o.launch ? `They're new: a ${o.launch.target}-post Launch runs first and counts toward the volume.` : "",
+    pack.rounds.previous
+      ? `\nYour previous proposal this quarter (this is a revision of it). Keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away. Summary: ${pack.rounds.previous.summary}\nTopics:\n${pack.rounds.previous.topics.map((t) => `- "${t.name}" (${t.low} to ${t.high})`).join("\n")}`
+      : "",
+    pack.rounds.answered.length
+      ? `\nQuestions you asked in earlier rounds and their answers (settled: decide with them, never ask again):\n${pack.rounds.answered.map((a) => `- Q: ${a.question}\n  A: ${a.answer}`).join("\n")}`
+      : "",
     pack.request ? `\nWhat they asked for:\n${pack.request}` : "",
     `\nTheir onboarding answers:\n- What they sell, who buys: ${a.offer || "(blank)"}\n- Searches they want to be found by: ${a.searches || "(blank)"}\n- Competitors and sites to watch: ${a.watch || "(blank)"}\n- Coming up in the next three months: ${a.upcoming || "(blank)"}`,
     pack.plan.text || pack.plan.files.length
@@ -335,7 +375,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
 
   try {
     const now = new Date(await DBOS.runStep(async () => new Date().toISOString(), { name: "now" }));
-    const pack = await DBOS.runStep(() => gather(site, row.request, now), { name: "gather", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 });
+    const pack = await DBOS.runStep(() => gather(site, row.request, now, row.quarter), { name: "gather", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 });
     const hasHistory = pack.history.publishedLastQuarter > 0;
     // Nothing to plan from: stop before spending a model call (and say what to answer).
     if (emptyBrief({ website: pack.website, answers: pack.answers, planText: pack.plan.text, planFiles: pack.plan.files.length, published: pack.history.publishedLastQuarter + pack.history.recentTitles.length })) {
@@ -357,7 +397,11 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       keywords,
       seedSearches: lines(pack.answers.searches),
       thinAnswers: thinAnswers(pack.answers, pack.perMonthAnswered),
+      answered: pack.rounds.answered,
+      previousTopics: pack.rounds.previous?.topics.map((t) => t.name) ?? [],
+      requestAboutTopics: asksAboutTopics(pack.request),
     };
+    const previousTopics = rules.previousTopics;
 
     const ask = {
       site,
@@ -377,7 +421,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       for (const k of rows) keywords.set(k.keyword.toLowerCase(), k);
       priced += rows.length;
     };
-    let draft: Draft = await askJson("propose", ask, parseDraft);
+    let draft: Draft = keepTopicNames(await askJson("propose", ask, parseDraft), previousTopics);
     await price(draft);
     let errors = validate(draft, rules);
     if (errors.length) {
@@ -385,6 +429,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
         ...ask,
         prompt: `${ask.prompt}\n\nYour proposal broke these rules:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nYour proposal was:\n${JSON.stringify(draft)}\n\nAnswer again with the whole proposal, fixed.`,
       }, parseDraft);
+      draft = keepTopicNames(draft, previousTopics);
       await price(draft);
       errors = validate(draft, rules);
     }

@@ -157,6 +157,14 @@ export async function sitesWithGoals(quarter: string): Promise<string[]> {
   }
 }
 
+/** This quarter's earlier proposals for the site (oldest first): what each asked, and the request that answered it. */
+export async function earlierProposals(site: string, quarter: string): Promise<Pick<ProposalRow, "id" | "kind" | "status" | "request" | "proposal" | "created">[]> {
+  return select(
+    "strategy_proposals",
+    `site=eq.${enc(site)}&quarter=eq.${enc(quarter)}&status=in.(sent,superseded,approved)&select=id,kind,status,request,proposal,created&order=created.asc&limit=20`,
+  );
+}
+
 /** The last proposal the tenant approved, with their edits: how it learns their taste. */
 export async function lastApproved(site: string): Promise<ProposalRow | null> {
   const [row] = await select<ProposalRow>(

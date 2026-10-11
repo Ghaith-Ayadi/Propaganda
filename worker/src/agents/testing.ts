@@ -24,6 +24,6 @@ export { nextQuota, approvalRate, pitchesFor, unassigned } from "./batches.js";
 export { similarity, nearest } from "./taste.js";
 export { voiceSuggest, diffDraft } from "./edits.js";
 // The Strategist.
-export { windowFor, launchFor, volumeCap, validate, parseDraft, finish, weeklyNotes, winnable, batchCount, looksLikeSource, thinAnswers, pickHost, emptyBrief, effectiveKind } from "./strategy.js";
+export { windowFor, launchFor, volumeCap, validate, parseDraft, finish, weeklyNotes, winnable, batchCount, looksLikeSource, thinAnswers, pickHost, emptyBrief, effectiveKind, parseAnswers, sameQuestion, perMonthFromAnswers, keepTopicNames, asksAboutTopics } from "./strategy.js";
 export { strategist, dispatchStrategist, strategistWeeklyCheck, strategistInput } from "../workflows/strategist.js";
 export { readGoals } from "./goals.js";
