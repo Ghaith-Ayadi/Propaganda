@@ -26,6 +26,7 @@ const db = {
   briefs: [],
   agent_ideas: [],
   voice_guides: [],
+  app_settings: [],
   agent_settings: [],
   content_batches: [],
   taste_log: [],
