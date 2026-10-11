@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdmin } from "@/components/admin/AdminContext";
 import { useRoute } from "@/lib/route";
 import { RunNow } from "@/components/admin/RunNow";
+import { tenantNames } from "@/components/admin/tenantNames";
 import {
   cancelRun, getRun, listRuns, retryRun, startDemoRun,
   type Cost, type RunDetail, type RunState, type RunSummary, type StepView,
@@ -89,12 +90,8 @@ export function RunsPage() {
       setRuns(r.runs);
       setCostLog(r.costLog);
       setError(null);
-      // Tenant names: sites are publicly readable.
       const missing = [...new Set(r.runs.map((x) => x.site).filter((s): s is string => !!s))];
-      if (missing.length) {
-        const { data } = await client.from("sites").select("id,name").in("id", missing);
-        if (data) setSites(new Map(data.map((s: { id: string; name: string }) => [s.id, s.name])));
-      }
+      if (missing.length) setSites(await tenantNames(client, missing));
     } catch (err) {
       reportError("RunsPage", err);
       setError(userMessage(err));

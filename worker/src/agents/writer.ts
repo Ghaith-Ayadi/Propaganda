@@ -19,6 +19,7 @@ import {
   getPost,
   getSite,
   insertDraftPost,
+  personVoice,
   pipelineBriefs,
   insertVersion,
   linkDraft,
@@ -157,7 +158,14 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
   const urls: string[] = (brief.sources ?? []).map((s) => s.url);
   const searches = new SearchSession();
   for (const [n, q] of queries.entries()) {
-    const hits = await searchDurably(searches, q, 5, { site, job: "writer:research" }, `search ${n + 1}`);
+    // A search the service refused (not an outage: those wait in searchDurably)
+    // costs this post a few sources, not the draft.
+    let hits: Awaited<ReturnType<typeof searchDurably>> = [];
+    try {
+      hits = await searchDurably(searches, q, 5, { site, job: "writer:research" }, `search ${n + 1}`);
+    } catch (err) {
+      DBOS.logger.warn(`writer research: search "${q}" refused: ${(err as Error).message}`);
+    }
     for (const h of hits) if (!urls.includes(h.url)) urls.push(h.url);
   }
 
@@ -194,15 +202,18 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
   );
   if (target.post && !target.empty) return { status: "skipped", reason: "the post already has writing in it", post: target.post };
 
-  let [guide, tenant, cols] = await DBOS.runStep(() => Promise.all([voiceGuide(site), getSite(site), collections(site)]), {
-    name: "read the voice and the tenant",
-  });
-  if (!guide) {
+  // The 4th value is the voice the person wrote themselves (Getting started,
+  // Settings). A run recorded before it was read replays it as undefined.
+  let [guide, tenant, cols, ownVoice] = await DBOS.runStep(
+    () => Promise.all([voiceGuide(site), getSite(site), collections(site), personVoice(site)]),
+    { name: "read the voice and the tenant" },
+  );
+  if (!guide && !ownVoice) {
     // The Writer's first job on a tenant: its voice guide, before any post.
     await voiceGuideWorkflow({ site, sourceSite: voiceSourceFor(site) });
     guide = await DBOS.runStep(() => voiceGuide(site), { name: "read the new voice guide" });
   }
-  const voice = voiceFor(guide);
+  const voice = ownVoice || voiceFor(guide);
   const { pages, claims, searches } = await research(site, brief);
   const researchGap = searches.notice();
   const edits = await DBOS.runStep(() => reviewerEdits(site, null, 5), { name: "read reviewer edits" });
@@ -351,10 +362,12 @@ export interface ReviseInput {
  */
 async function reviseRun(input: ReviseInput): Promise<WriteResult> {
   const { site, post } = input;
-  const [current, guide] = await DBOS.runStep(() => Promise.all([getPost(site, post), voiceGuide(site)]), { name: "read the post" });
+  const [current, guide, ownVoice] = await DBOS.runStep(() => Promise.all([getPost(site, post), voiceGuide(site), personVoice(site)]), {
+    name: "read the post",
+  });
   if (!current) return { status: "skipped", reason: "no such post" };
   if (current.status === "published") return { status: "skipped", reason: "the post is published" };
-  const voice = voiceFor(guide);
+  const voice = ownVoice || voiceFor(guide);
 
   const revised = await askText("revise", {
     site,

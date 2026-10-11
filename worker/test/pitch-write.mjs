@@ -36,6 +36,7 @@ const db = {
   briefs: [],
   agent_ideas: [],
   voice_guides: [],
+  app_settings: [],
   agent_settings: [],
   content_batches: [],
   taste_log: [],
@@ -112,11 +113,17 @@ const rest = createServer((req, res) => {
     if (path === "model_prices") return out(200, [{ input_per_mtok: "3", output_per_mtok: "15", cache_read_per_mtok: "0", cache_write_per_mtok: "0" }]);
     const table = db[path];
     if (!table) return out(404, { code: "PGRST205", message: `no table ${path}` });
+    if (req.method === "GET" && path === "voice_guides" && hideVoiceOnce) {
+      // Another draft read "no guide" a moment before this one saved its own.
+      hideVoiceOnce = false;
+      return out(200, []);
+    }
     if (req.method === "GET") return out(200, filterRows(path, url.searchParams));
     if (req.method === "POST") {
       // Rows are stamped on the tests' "today", so week and quarter checks don't depend on the real date.
       const row = { created: CLOCK, updated: CLOCK, ...JSON.parse(body) };
       if (path === "briefs" && !row.status) return out(400, { code: "23514", message: "status" });
+      if (path === "voice_guides" && table.some((r) => r.site === row.site)) return out(409, { code: "23505", message: 'duplicate key value violates unique constraint "voice_guides_pkey"' });
       if (url.searchParams.get("on_conflict")) {
         const keys = url.searchParams.get("on_conflict").split(",");
         const found = table.find((r) => keys.every((k) => String(r[k]) === String(row[k])));
@@ -149,12 +156,19 @@ const PAGE = "http://93.184.216.34/temporal-study";
 const fetched = [];
 // How many searches in a row DataForSEO fails on its side, as it did on 2026-10-10.
 let searchOutage = 0;
+// How many searches in a row DataForSEO refuses outright (a 40000 task status, seen on 2026-10-11).
+let searchRefused = 0;
+let hideVoiceOnce = false;
 const web = async (input, init) => {
   const url = String(input);
   fetched.push(url);
   if (url.startsWith("https://api.dataforseo.com/") && searchOutage > 0) {
     searchOutage--;
     return Response.json({ cost: 0, tasks: [{ status_code: 50000, status_message: "Internal SE Server Error.", cost: 0 }] });
+  }
+  if (url.startsWith("https://api.dataforseo.com/") && searchRefused > 0) {
+    searchRefused--;
+    return Response.json({ cost: 0.002, tasks: [{ status_code: 40000, status_message: "Internal SE Server Error." }] });
   }
   if (url.startsWith("https://api.dataforseo.com/")) {
     const [{ keyword }] = JSON.parse(init.body);
@@ -343,6 +357,28 @@ try {
   check(w3.status === "skipped" && db.posts.find((x) => x.id === "humanpost000001").content_md === "My own words.", "skips a post with writing in it");
   const w4 = await (await t.DBOS.startWorkflow(t.writer)({ site: SITE, briefId: brief.id })).getResult();
   check(w4.status === "skipped", "won't draft an unapproved pitch without the launch flag");
+
+  console.log("writer carries on when a search is refused");
+  db.posts.push({ id: "refusedpost0001", site: SITE, title: "", subtitle: "", type: "Test", status: "draft", excerpt: "", slug: "", tags: [], content_md: "", published_at: null, word_count: 0 });
+  db.briefs.push({ ...brief, id: "refusedbrief001", status: "todo", post: "refusedpost0001" });
+  searchRefused = 1;
+  const w5 = await (await t.DBOS.startWorkflow(t.writer)({ site: SITE, briefId: "refusedbrief001" })).getResult();
+  check(searchRefused === 0 && w5.status === "drafted", `a refused search costs sources, not the draft (${w5.status}${w5.reason ? `: ${w5.reason}` : ""})`);
+
+  console.log("writer uses the voice the tenant wrote itself");
+  db.app_settings.push({ site: SITE, key: "tenant.voice.guide", value: "Plain words for school lunch directors. No hype." });
+  db.posts.push({ id: "ownvoicepost001", site: SITE, title: "", subtitle: "", type: "Test", status: "draft", excerpt: "", slug: "", tags: [], content_md: "", published_at: null, word_count: 0 });
+  db.briefs.push({ ...brief, id: "ownvoicebrief01", status: "todo", post: "ownvoicepost001" });
+  const promptsBefore = prompts.length;
+  const w6 = await (await t.DBOS.startWorkflow(t.writer)({ site: SITE, briefId: "ownvoicebrief01" })).getResult();
+  check(w6.status === "drafted" && prompts.slice(promptsBefore).some((x) => x.includes("Plain words for school lunch directors")), "the tenant's own voice wins over the Writer's guide");
+  db.app_settings = db.app_settings.filter((r) => r.key !== "tenant.voice.guide");
+
+  console.log("two first drafts making the voice guide at once");
+  const guides = db.voice_guides.length;
+  hideVoiceOnce = true;
+  const saved = await t.saveVoiceGuide({ site: SITE, body: "A second guide", samples: [], source: "default", source_site: null });
+  check(saved === false && db.voice_guides.length === guides && db.voice_guides[0].body !== "A second guide", "the guide saved first stands; the other draft carries on");
 
   console.log("revision as a suggestion");
   const before = db.posts.find((x) => x.id === "emptypost000001").content_md;
