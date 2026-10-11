@@ -231,7 +231,7 @@ export function StrategyView({
             lede={
               lastRound
                 ? "That was the last round. Approve the plan as it is; you can change it any time on Goals."
-                : `Answer ${questions.length === 1 ? "it" : `all ${questions.length}`} and send them together. The Strategist folds your answers into the plan, and approving unlocks then.`
+                : `Answer ${questions.length === 1 ? "it" : questions.length === 2 ? "both" : `all ${questions.length}`} and send them together. The Strategist folds your answers into the plan, and approving unlocks then.`
             }
           />
           {lastRound ? (
