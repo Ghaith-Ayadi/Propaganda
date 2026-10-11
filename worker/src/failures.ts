@@ -28,6 +28,8 @@ const SWEEP_SECONDS = Number(process.env.WORKER_FAILURE_SWEEP_SECONDS ?? 60);
 /** A group that keeps failing gets at most one note on its ticket this often. */
 const RENOTE_MS = Number(process.env.WORKER_FAILURE_RENOTE_SECONDS ?? 3600) * 1000;
 /** Workflows whose failures are recorded but never filed: the demo fails on purpose. */
+/** A suspended tenant's run stopping at the gateway is the switch working: recorded, never filed. */
+const SUSPENDED = /Model call refused: suspended/;
 const NEVER_FILED = new Set((process.env.WORKER_FAILURE_NEVER_FILED ?? "demo").split(",").map((s) => s.trim()).filter(Boolean));
 
 const SCHEMA = `
@@ -296,7 +298,7 @@ async function record(appDb: Pool, w: WorkflowStatus): Promise<boolean> {
       [
         fingerprint, w.workflowName, stepName, signature, titleOf(w.workflowName, stepName, signature), at,
         site ? [site] : [], spend.models, w.workflowID, error,
-        NEVER_FILED.has(w.workflowName) ? "ignored" : "new",
+        NEVER_FILED.has(w.workflowName) || SUSPENDED.test(error) ? "ignored" : "new",
       ],
     );
     await client.query(
@@ -308,7 +310,7 @@ async function record(appDb: Pool, w: WorkflowStatus): Promise<boolean> {
     );
     await client.query("commit");
     // Once per recorded run: to PostHog with the rest of the app's errors.
-    void reportRunFailure({
+    if (!SUSPENDED.test(error)) void reportRunFailure({
       workflow: w.workflowName, step: stepName, fingerprint, runId: w.workflowID, site, error, stack,
       models: spend.models, environment: environmentOf(), commit: commitOf(),
     });

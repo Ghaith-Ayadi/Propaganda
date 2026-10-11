@@ -30,6 +30,7 @@ import {
 } from "../scout/store.js";
 import { MAX_IDEAS, SYSTEM, buildPrompt, parseIdeas, type Candidate } from "../scout/triage.js";
 import { handOffIdeas, type NewIdea } from "../agents/ideas.js";
+import { suspendedSites } from "../agents/store.js";
 import { MODELS } from "../agents/model.js";
 import { registerAgent, startForDispatch, startForTenantWithId, type DispatchInput } from "./agents.js";
 
@@ -285,7 +286,10 @@ export const weeklyRunId = (site: string, day: string) => `scout-${site}-${day}`
 /** The schedule's run: start each tenant's Scout on the agents queue. */
 async function scoutWeeklyRun(scheduled: Date): Promise<void> {
   const day = scheduled.toISOString().slice(0, 10);
-  const sites = await DBOS.runStep(() => tenantsToScout(day), { name: "tenants" });
+  const sites = await DBOS.runStep(async () => {
+    const off = await suspendedSites();
+    return (await tenantsToScout(day)).filter((s) => !off.has(s));
+  }, { name: "tenants" });
   for (const site of sites) {
     await startForTenantWithId(site, weeklyRunId(site, day), scout, { site, day });
   }

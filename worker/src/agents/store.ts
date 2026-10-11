@@ -352,7 +352,23 @@ export async function sitesWithBatchWork(): Promise<string[]> {
       throw err;
     }),
   ]);
-  return [...new Set([...ideas, ...open].map((r) => r.site))];
+  const off = await suspendedSites();
+  return [...new Set([...ideas, ...open].map((r) => r.site))].filter((s) => !off.has(s));
+}
+
+/**
+ * Suspended tenants (cost_limits.suspended): schedules leave them out. The
+ * gateway refuses their calls anyway, so a failed read here only costs a run
+ * that stops at its first call.
+ */
+export async function suspendedSites(): Promise<Set<string>> {
+  try {
+    const rows = await select<{ scope: string }>("cost_limits", "suspended=is.true&select=scope");
+    return new Set(rows.map((r) => r.scope));
+  } catch (err) {
+    console.warn(`suspended tenants: ${(err as Error).message}`);
+    return new Set();
+  }
 }
 
 // ---- taste ----

@@ -101,6 +101,7 @@ async function failure(err: unknown): Promise<ChatEvent> {
 
 export function failureMessage(err: unknown): string {
   if (err instanceof BudgetError) {
+    if (err.reason === "suspended") return "This tenant is suspended, so its model calls are off.";
     return err.reason === "tenant-budget"
       ? "This tenant's model budget for the month is used up."
       : "Model calls are paused for now (the daily cap or the kill switch). An admin can lift it.";

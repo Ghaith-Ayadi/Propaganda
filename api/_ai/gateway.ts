@@ -155,6 +155,7 @@ async function readGate(site: string): Promise<Gate> {
     globalDayUsd: Number(g.global_day_usd),
     globalDailyLimit: num(g.global_daily_limit),
     killed: g.killed === true,
+    suspended: g.suspended === true,
   };
 }
 
