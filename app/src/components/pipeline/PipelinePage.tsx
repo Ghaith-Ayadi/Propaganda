@@ -216,7 +216,7 @@ function Column({
   };
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-secondary/60 p-2">
+    <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-secondary/60 p-2">
       <div className="flex h-8 items-center justify-between pl-2 type-eyebrow text-tertiary">
         <span>
           {STAGE_LABEL[stage]}{" "}

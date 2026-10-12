@@ -15,10 +15,13 @@ export function FitBadge({ reasons }: { reasons: FitReason[] }) {
   );
 }
 
+/** A topic or collection chip. Long topics end in an ellipsis inside their card; hover shows them whole. */
 export function TopicBadge({ children }: { children: string }) {
   return (
-    <Badge type="pill-color" size="sm" color="gray">
-      {children}
+    <Badge type="pill-color" size="sm" color="gray" className="max-w-full min-w-0">
+      <span className="truncate" title={children}>
+        {children}
+      </span>
     </Badge>
   );
 }
