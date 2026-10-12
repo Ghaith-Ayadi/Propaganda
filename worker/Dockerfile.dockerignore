@@ -11,3 +11,4 @@
 !api/_ai/cost.ts
 !api/_ai/errors.ts
 !api/_ai/modelKeys.ts
+!api/_ai/houseStyle.ts
