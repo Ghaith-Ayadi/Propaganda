@@ -463,7 +463,7 @@ Answer with JSON only:
       },
       parsePitch(allowed, collectionNames),
     );
-    written = await enforceTitle(site, `retitle ${idea.id}`, written, idea);
+    if (await DBOS.patch("pitcher-retitle")) written = await enforceTitle(site, `retitle ${idea.id}`, written, idea);
 
     // The brief's own title can land on something already shown, or on a pitch from this run.
     const again = j.changed ? null : nearest(written.title, [...seen, ...shown]);

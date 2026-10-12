@@ -427,6 +427,8 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       answered: pack.rounds.answered,
       previousTopics: pack.rounds.previous?.topics.map((t) => t.name) ?? [],
       requestAboutTopics: asksAboutTopics(pack.request),
+      // Title rules on topic names (2026-10-12): a run recorded before them keeps its draft.
+      titleRules: await DBOS.patch("strategist-title-rules"),
     };
     const previousTopics = rules.previousTopics;
 

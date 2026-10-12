@@ -37,7 +37,7 @@ import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
 import { readPage, type Page } from "./web.js";
 import { SearchSession, searchDurably } from "./search.js";
-import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit } from "./writing.js";
+import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit } from "./writing.js";
 
 export interface WriteInput {
   site: string;
@@ -123,7 +123,8 @@ function offSourceLinks(markdown: string, allowed: string[]): string[] {
 
 /** Fix house-rule breaks once; whatever is left is reported, never hidden. */
 async function enforceRules(site: string, step: string, voice: string, markdown: string): Promise<string> {
-  const hits = styleHits(markdown);
+  // The wider check (2026-10-12) can fix a draft an older run recorded as clean: replays must match.
+  const hits = (await DBOS.patch("writer-style-hits")) ? styleHits(markdown) : contrastHits(markdown);
   if (hits.length === 0) return markdown;
   const fixed = await askText(step, {
     site,
@@ -281,7 +282,8 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
   );
 
   const markdown = await enforceRules(site, "keep the house rules", voice, draft.markdown);
-  const titled = await enforceTitle(site, voice, draft);
+  // A new step (2026-10-12): runs recorded before it replay without it.
+  const titled = (await DBOS.patch("writer-retitle")) ? await enforceTitle(site, voice, draft) : draft;
   const contrast = styleHits(markdown);
   const unsourced = unsourcedNumbers(markdown);
   const offSource = offSourceLinks(markdown, pages.map((p) => p.url));

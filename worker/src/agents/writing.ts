@@ -107,7 +107,8 @@ const QUIETLY = /\bquietly\b/i;
 // "10:30" and "https://" are not breaks. The first part may be a short name
 // ("Propaganda 2.0", "Q4 goals"): up to three words, so "Propaganda 2.0: social is
 // here" passes and "The writing is the easy part: what a founder..." does not.
-const BREAK = /(?<![\d/])(?::|\s?[—–]\s?|\s-\s|(?<=\S)[?!.])(?!\d|\/)\s*(?=\S)/;
+// An abbreviation's period is not a break: "U.S. tariffs", "Blog vs. newsletter", "e.g.".
+const BREAK = /(?<![\d/])(?<!\b[A-Za-z])(?<!\bvs|\be\.g|\bi\.e|\betc)(?::|\s?[—–]\s?|\s-\s|(?<=\S)[?!.])(?!\d|\/)\s*(?=\S)/;
 const isName = (s: string) => (/^\S+(?:\s+\S+){0,2}$/.test(s) && /\d/.test(s)) || /^\S+\s+[A-Z]\S*$/.test(s);
 // The first word after the break ending in -ing (a verb, not "thing"/"nothing"/"string").
 const ING = /^\W*(?:(?:[a-z]+ing)(?!\w))/i;
