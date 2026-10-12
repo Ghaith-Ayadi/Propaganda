@@ -9,7 +9,7 @@
 
 import { BackendError, enc, insert, isMissing, patch, rest, select } from "./backend.js";
 import { newId, stableId } from "./ids.js";
-import { isLiteById } from "./first-day.js";
+import { isLiteById } from "./lite.js";
 
 // ---- rows ----
 

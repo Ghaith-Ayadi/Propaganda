@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 // A tenant's first run, decided from its own data: opening a full tenant that
-// has no approved goals yet goes to #/getting-started. No tenant
+// has no approved goals and nothing published yet goes to #/getting-started. No tenant
 // is named here; Lite tenants (the CMS alone) never get it.
 //
 // Asked once per tab per tenant, and only on the home page, so a link to a
@@ -39,20 +39,28 @@ export function useNoGoalsYet(): boolean {
   );
 }
 
+/** The first day is over ("I got it"): Getting started leaves the nav now, not at the next load. */
+export function endFirstRun(site: string): void {
+  noGoals.set(site, false);
+  for (const l of listeners) l();
+}
+
 /**
- * A full tenant with no approved goals yet: its first day isn't done. Null
- * when the server couldn't be read.
+ * A full tenant with no approved goals and nothing published yet: its first
+ * day isn't done. Null when the server couldn't be read.
  */
 export async function isFirstRun(site: string): Promise<boolean | null> {
   if (UI_PREVIEW || planOf(site) === "lite") return false;
   try {
-    const [goals, plan] = await Promise.all([
+    const [goals, published, plan] = await Promise.all([
       must(sb.from("goal_versions").select("version").eq("site", site).limit(1)),
+      // A tenant already publishing (Kontra) isn't on its first day, plan or not.
+      must(sb.from("posts").select("id").eq("site", site).eq("status", "published").limit(1)),
       // A tenant that picked Lite on another device (lib/tenantPlan.ts).
       must(sb.from("app_settings").select("value").eq("site", site).eq("key", "tenant.plan").limit(1)),
     ]);
     if ((plan as { value: unknown }[] | null)?.[0]?.value === "lite") return false;
-    const first = !goals?.length;
+    const first = !goals?.length && !published?.length;
     noGoals.set(site, first);
     for (const l of listeners) l();
     return first;

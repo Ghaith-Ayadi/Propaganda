@@ -24,17 +24,7 @@ export const DRAFT_TOP = 3;
 /** The batch day one's pitches belong to; the Pitcher numbers its own from 2. */
 export const FIRST_BATCH = 1;
 
-/**
- * The tenants on Lite by id alone: Verbatim, and WORKER_LITE_SITES
- * (comma-separated ids). A tenant that picked Lite carries `tenant.plan` =
- * "lite" in app_settings as well: `isLite()` in store.ts reads both. Not
- * kb_agent_sites: that list is turned on by hand, so every new tenant would
- * read as Lite on its first day.
- */
-export function isLiteById(site: string): boolean {
-  const extra = (process.env.WORKER_LITE_SITES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  return site === "verbatimsite000" || extra.includes(site);
-}
+export { isLiteById } from "./lite.js";
 
 /** Day one's approvals target: batch 1's quota. The Launch's day-one briefs, at most 5 (3 to 5 approved in one sitting). */
 export function dayOneQuota(launch: LaunchPlan | null | undefined): number {
