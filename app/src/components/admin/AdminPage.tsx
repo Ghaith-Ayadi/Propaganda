@@ -18,6 +18,7 @@ export function AdminPage({ section }: { section: string | null }) {
 
   const current = findSection(section);
   const Section = current.component;
+  const Actions = current.actions;
 
   return (
     <AdminContext.Provider value={api}>
@@ -43,7 +44,10 @@ export function AdminPage({ section }: { section: string | null }) {
         </nav>
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="mx-auto max-w-[1000px]">
-            <h2 className="type-heading text-primary">{current.title}</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="type-heading text-primary">{current.title}</h2>
+              {Actions && <Actions />}
+            </div>
             <p className="mb-6 mt-1 text-sm text-tertiary">{current.description}</p>
             <Section />
           </div>

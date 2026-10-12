@@ -11,6 +11,7 @@ Runs page reads (`app/src/components/admin/RunsPage.tsx`).
 | `src/config.ts` | Settings, all from the environment |
 | `src/limits.ts` | The Claude Max usage limit: `modelStep()` waits it out instead of failing |
 | `src/runs.ts` | Runs, steps, cost, retry and cancel, from DBOS's management API and the cost log |
+| `src/flows.ts` | Runs grouped into flows for the Runs page (children, retries, day one's drafts), and each workflow's kind for its Display chips: add a new workflow's name to `KINDS` (test/flows.mjs fails otherwise) |
 | `src/failures.ts`, `src/tickets.ts` | The failure log: every failed run recorded once (error, run and step, tenant, model, cost), grouped by fingerprint, shown in Admin > Failures, and filed as one ticket per group (GitHub issues and/or the Notion Tasks board); repeats add a note and reopen a closed ticket |
 | `src/http.ts` | The Runs API (superadmins only) and Chat's dispatch route (`/agents/:name`) |
 | `src/auth.ts` | Checks the Supabase access token and `private.superadmins` |
@@ -436,6 +437,7 @@ The lines come from the Strategist run's step names (`planSteps`): `gather`,
 | | |
 |---|---|
 | `GET /runs?state=&site=&name=&limit=&offset=` | Newest first. States: queued, running, stalled, done, failed, cancelled |
+| `GET /flows?site=&hide=&limit=&offset=` | Runs grouped into flows, newest first: each flow's runs in order (children nested, a retry after the run it retried), state, retries, failures, cost. `hide` takes kind ids or category names (`crons`) |
 | `GET /runs/:id` | The run with its steps, error, input, output and cost per step |
 | `POST /runs/:id/retry` | A failed run is **forked** from the failed step: a new run that keeps the steps before it (their model calls aren't paid again). A cancelled run, or one DBOS gave up recovering, **resumes** under its own id |
 | `POST /runs/:id/cancel` | A queued, running or stalled run |

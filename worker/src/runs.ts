@@ -105,7 +105,7 @@ function stateOf(status: string, stall: Stall | null): RunState {
   }
 }
 
-async function stallOf(w: WorkflowStatus): Promise<Stall | null> {
+export async function stallOf(w: WorkflowStatus): Promise<Stall | null> {
   if (w.status !== "PENDING") return null;
   return (await DBOS.getEvent<Stall | null>(w.workflowID, STALL_EVENT, { timeoutSeconds: 0 })) ?? null;
 }
@@ -116,7 +116,7 @@ type CostRow = { workflow_id: string; step_id: number | null; usd: string; calls
  * Cost per workflow (and per step when `bySteps`). null when public.model_calls
  * isn't there yet: the page says "no cost log" instead of showing $0.
  */
-async function costs(db: Pool, ids: string[], bySteps: boolean): Promise<Map<string, Cost> | null> {
+export async function costs(db: Pool, ids: string[], bySteps: boolean): Promise<Map<string, Cost> | null> {
   if (ids.length === 0) return new Map();
   const step = bySteps ? "step_id" : "null::integer";
   try {
@@ -140,7 +140,7 @@ async function costs(db: Pool, ids: string[], bySteps: boolean): Promise<Map<str
 
 const NO_COST: Cost = { usd: 0, calls: 0, unpriced: 0 };
 
-function summary(w: WorkflowStatus, stall: Stall | null, cost: Map<string, Cost> | null): RunSummary {
+export function summary(w: WorkflowStatus, stall: Stall | null, cost: Map<string, Cost> | null): RunSummary {
   const site = w.attributes && typeof w.attributes.site === "string" ? w.attributes.site : null;
   return {
     id: w.workflowID,

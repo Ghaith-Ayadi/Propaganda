@@ -10,6 +10,7 @@ import { ArenaPage } from "@/components/admin/ArenaPage";
 import { ComingSoon } from "@/components/admin/ComingSoon";
 import { ConsumptionPage } from "@/components/admin/ConsumptionPage";
 import { FailuresPage } from "@/components/admin/FailuresPage";
+import { RunNowMenu } from "@/components/admin/RunNow";
 import { RunsPage } from "@/components/admin/RunsPage";
 import { WaitlistPage } from "@/components/admin/WaitlistPage";
 
@@ -19,6 +20,8 @@ export interface AdminSection {
   description: string;
   icon: ComponentType<{ className?: string }>;
   component: ComponentType;
+  /** Buttons on the right of the section's title. */
+  actions?: ComponentType;
 }
 
 export const ADMIN_SECTIONS: AdminSection[] = [
@@ -28,6 +31,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: "Every agent workflow: what ran, for which tenant, and how it ended.",
     icon: Activity,
     component: RunsPage,
+    actions: RunNowMenu,
   },
   {
     id: "failures",

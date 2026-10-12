@@ -161,8 +161,8 @@ async function main() {
     create schema private;
     create table private.superadmins (user_id uuid primary key);
     insert into private.superadmins values ('${admin}');
-    create table public.sites (id text primary key, name text not null default '');
-    insert into public.sites values ('${SITE}', 'Test tenant');
+    create table public.sites (id text primary key, name text not null default '', slug text not null default '');
+    insert into public.sites values ('${SITE}', 'Test tenant', 'test');
   `);
   await startWorker();
 
@@ -232,6 +232,17 @@ async function main() {
   check(forked.site === SITE, `the fork keeps its tenant (${forked.site})`);
   const planOutputs = forked.steps.filter((s) => s.name === "plan");
   check(planOutputs.length === 1, "steps before the failure carried over, not redone");
+
+  console.log("flows: a retry sits in its run's flow");
+  const flows = (await api("/flows?limit=50")).json;
+  const flow = flows.flows.find((f) => f.id === bad);
+  check(flow && flow.runs.map((r) => r.id).join() === `${bad},${retried.id}`, "the fork follows the run it retried, in one flow");
+  check(flow?.runs[1].retryOf === bad && flow?.retries === 1 && flow?.label === "Demo run", "marked as a retry, counted, labelled");
+  check(!flows.flows.some((f) => f.id === retried.id), "the fork is not a flow of its own");
+  const noDemo = (await api("/flows?limit=50&hide=demo")).json;
+  check(!noDemo.flows.some((f) => f.kind === "demo"), "a hidden kind is left out");
+  check(!(await api("/flows?limit=50&hide=agents")).json.flows.some((f) => f.category === "agents"), "a hidden category hides all of its kinds");
+  check(Array.isArray(flows.kinds) && flows.kinds.some((k) => k.category === "crons"), "the kinds come with it, for the Display chips");
 
   console.log("failures: recorded, grouped, filed once, repeats noted");
   check((await api("/failures", { headers: { Authorization: `Bearer ${jwt(stranger)}` } })).status === 403, "failures: not a superadmin: 403");

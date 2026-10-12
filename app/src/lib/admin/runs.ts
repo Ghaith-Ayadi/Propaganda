@@ -120,6 +120,60 @@ export function listRuns(client: Client, f: RunFilter = {}): Promise<{ runs: Run
   return call(client, "RUNS-LOAD", `/runs?${q}`);
 }
 
+/** Runs grouped into flows (worker/src/flows.ts). */
+export type FlowCategory = "agents" | "flows" | "crons";
+
+export interface FlowKind {
+  id: string;
+  label: string;
+  category: FlowCategory;
+}
+
+export interface FlowRun extends RunSummary {
+  label: string;
+  /** 0 for the flow's own steps, 1 for what one of them started, and so on. */
+  depth: number;
+  /** For a retry: the run it tried again. */
+  retryOf: string | null;
+  /** A failed or cancelled run a later retry replaced. */
+  superseded: boolean;
+}
+
+export interface Flow {
+  id: string;
+  kind: string;
+  category: FlowCategory;
+  label: string;
+  site: string | null;
+  state: RunState;
+  startedAt: number;
+  endedAt: number | null;
+  cost: Cost | null;
+  /** Forks of a failed run. */
+  retries: number;
+  /** DBOS's own restarts after the worker restarted mid-run. */
+  restarts: number;
+  failures: number;
+  runs: FlowRun[];
+}
+
+export interface FlowFilter {
+  /** Kind ids, or category names ("crons"), to leave out. */
+  hide?: string[];
+  site?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export function listFlows(client: Client, f: FlowFilter = {}): Promise<{ flows: Flow[]; kinds: FlowKind[]; costLog: boolean; next: number | null }> {
+  const q = new URLSearchParams();
+  if (f.hide?.length) q.set("hide", f.hide.join(","));
+  if (f.site) q.set("site", f.site);
+  q.set("limit", String(f.limit ?? 30));
+  if (f.offset) q.set("offset", String(f.offset));
+  return call(client, "RUNS-LOAD", `/flows?${q}`);
+}
+
 export function getRun(client: Client, id: string): Promise<RunDetail> {
   return call(client, "RUNS-LOAD", `/runs/${encodeURIComponent(id)}`);
 }
@@ -146,7 +200,7 @@ export interface Trigger {
   scope: "tenant" | "all";
 }
 
-export function listTriggers(client: Client): Promise<{ triggers: Trigger[]; tenants: { id: string; name: string }[] }> {
+export function listTriggers(client: Client): Promise<{ triggers: Trigger[]; tenants: { id: string; name: string; slug: string }[] }> {
   return call(client, "RUN-NOW", "/triggers");
 }
 
