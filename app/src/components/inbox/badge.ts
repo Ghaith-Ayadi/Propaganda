@@ -1,10 +1,11 @@
-// The count beside Inbox in the nav: what waits on the person. While flags,
-// pitches and knowledge come from the placeholder (inbox/placeholder.ts), only
-// the live part counts, so no tenant sees example items in the nav. This reads
-// Dexie directly rather than useInbox(), to keep the placeholder out of the
-// main chunk. When the live source lands, count its open items here too, and
-// set `urgent` when any open flag has urgency "high" (the shell turns the chip
-// red then, as the Flags tab does).
+// The count beside Inbox in the nav: what waits on the person, the same sum as
+// the page's "N things need you" (useInbox().total). It reads the live source
+// (inbox/live.ts: pitches waiting on a decision) and Dexie directly rather than
+// useInbox(), to keep the placeholder (inbox/placeholder.ts) out of the main
+// chunk, so no tenant sees example items in the nav. When flags and knowledge
+// items reach the live source they count here with no change; set `urgent` then
+// when any open flag has urgency "high" (the shell turns the chip red, as the
+// Flags tab does).
 
 //
 // The Strategist's proposal waiting on approval counts too: one small count
@@ -12,13 +13,14 @@
 // when the server says a proposal changed (lib/serverChanges.ts), on coming
 // back to the tab, and every minute in case no event came.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { activeSite } from "@/lib/scope";
 import { sb } from "@/lib/supabase";
 import { onServerChange } from "@/lib/serverChanges";
 import type { BadgeValue } from "@/lib/routes";
+import { liveInbox } from "./live";
 
 const PROPOSAL_POLL_MS = 60_000;
 
@@ -53,6 +55,8 @@ function useProposalsWaiting(): number {
 export function useInboxBadge(): BadgeValue {
   const reviews = useLiveQuery(() => db.briefs.where("status").equals("in_review").count(), [], 0);
   const proposals = useProposalsWaiting();
-  const count = reviews + Math.min(proposals, 1);
+  const live = useSyncExternalStore(liveInbox.subscribe, liveInbox.snapshot);
+  const pitches = live.batch?.pitches.filter((p) => !p.decision).length ?? 0;
+  const count = live.flags.length + pitches + live.knowledge.length + reviews + Math.min(proposals, 1);
   return count ? { count, urgent: false } : null;
 }
