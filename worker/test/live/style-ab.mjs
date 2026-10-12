@@ -202,6 +202,41 @@ async function strategistArm(name, system, styled) {
   return { before: c0, after: c1, n: topics.length, usd: costOf(from) };
 }
 
+// ---- the judge alone, on real PPGD sentences the soft lists flag (house-style/twenty-rules.md),
+// mixed with sentences where the flagged word does work. STYLE_AB_JUDGE=1 runs only this. ----
+
+const JUDGE_TEXTS = [
+  "Propaganda really does track AI answers; a post comparing what these tools measure answers it directly.",
+  "a post on keeping the voice true literally answers it",
+  "The hard part is knowing what your company actually believes.",
+  "The lean marketing stack: only the SEO and AI apps that earn their place, a journey every founder knows.",
+  "Lean marketing teams evaluating AI and SEO tools.",
+  "Writing is cheap now. It's worth noting that a new domain won't rank for head terms in its first quarter.",
+  "Paste your Anthropic API key in Settings; the key is stored encrypted and never sent back to the browser.",
+  "Hiring a content agency that publishes opinionated pieces for businesses and organizations is the usual route.",
+  "Our customer's journey from trial to paid took eleven days, and the onboarding email did most of the work.",
+  "Why does this matter? Because your prospects notice.",
+  "The landscape photos on your travel blog are the reason readers stay.",
+  "Most users never open the settings page, so the default voice is the one they get.",
+];
+
+async function judgeArm() {
+  const from = db.model_calls.length;
+  const before = counts(JUDGE_TEXTS);
+  const done = await polish(PITCHER_JUDGE_SYSTEM, JUDGE_TEXTS);
+  const after = counts(done);
+  console.log(`\n## Judge on ${JUDGE_TEXTS.length} sentences: ${before.hard} hard, ${before.soft} soft flags before; ${after.hard} hard, ${after.soft} soft after; $${costOf(from).toFixed(4)}`);
+  done.forEach((x, i) => console.log(`  ${x === JUDGE_TEXTS[i] ? "same" : "new "}\t${x}`));
+  return { before, after, usd: costOf(from) };
+}
+const PITCHER_JUDGE_SYSTEM = t.PITCHER_SYSTEM;
+
+if (process.env.STYLE_AB_JUDGE) {
+  const j = await judgeArm();
+  console.log(`\n## Totals (${MODEL})\n${JSON.stringify({ judgeArm: j, judge: judged }, null, 1)}\ntotal $${costOf(0).toFixed(4)} over ${db.model_calls.length} calls`);
+  process.exit(0);
+}
+
 const newStrat = fx.new_strat.replace("${HOUSE_STYLE}", t.HOUSE_STYLE).replace("${TITLE_RULES}", t.TITLE_RULES);
 const out = {
   pitcherPrev: await pitchArm("main (#139)", fx.prev_pitch, NEW_SPEC, false),
@@ -210,6 +245,7 @@ const out = {
   writerNew: await writerArm("twenty rules + polish", `${t.HOUSE_RULES}\n\n${t.TITLE_RULES}`, true),
   strategistPrev: await strategistArm("main (#139)", fx.prev_strat, false),
   strategistNew: await strategistArm("twenty rules", newStrat, true),
+  judgeArm: await judgeArm(),
   judge: judged,
 };
 console.log(`\n## Totals (${MODEL})`);
