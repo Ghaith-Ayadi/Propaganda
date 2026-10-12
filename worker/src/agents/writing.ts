@@ -192,6 +192,10 @@ function allSentences(text: string): string[] {
   return out;
 }
 
+// Link targets and bare URLs: a "--" in a path is not a dash (desk review of #141).
+const URLS = /(\]\([^)]*\)|<https?:[^>]*>|https?:\/\/[^\s)>\]]+)/g;
+const hasDash = (text: string) => DASH.test(text.replace(URLS, " "));
+
 /**
  * The hard rules the full-post fix doesn't cover, sentence by sentence: an em dash
  * (rule 13) and "the hard part is" and its family (rule 18). Zero tolerance.
@@ -199,7 +203,7 @@ function allSentences(text: string): string[] {
 export function hardHits(text: string): Hit[] {
   const out: Hit[] = [];
   for (const s of allSentences(text)) {
-    if (DASH.test(s)) out.push({ sentence: s, rule: "em-dash" });
+    if (hasDash(s)) out.push({ sentence: s, rule: "em-dash" });
     if (ANNOUNCER.test(s)) out.push({ sentence: s, rule: "announcer" });
   }
   return out;
@@ -209,16 +213,16 @@ export function hardHits(text: string): Hit[] {
 export function houseTitleHits(title: string): Hit[] {
   const t = title.trim();
   const out = titleHits(t);
-  if (DASH.test(t)) out.push({ sentence: t, rule: "em-dash" });
+  if (hasDash(t)) out.push({ sentence: t, rule: "em-dash" });
   if (ANNOUNCER.test(t)) out.push({ sentence: t, rule: "announcer" });
   return out;
 }
 
 /** Rule 13 with no exceptions: every em dash out of a text, code left alone. The last resort after a rewrite. */
 export function noDashes(text: string): string {
-  if (!DASH.test(text)) return text;
+  if (!hasDash(text)) return text;
   return text
-    .split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/g)
+    .split(new RegExp(`(\`\`\`[\\s\\S]*?(?:\`\`\`|$)|\`[^\`\\n]*\`|${URLS.source.slice(1, -1)})`, "g"))
     .map((part, i) => (i % 2 ? part : stripDashes(part)))
     .join("");
 }
@@ -391,7 +395,8 @@ export function applyPolish(texts: string[], items: PolishItem[], answers: Polis
     for (let i = 0; ok && !done && i < out.length; i++) {
       const next = replaceSentence(out[i], item.sentence, rewrite);
       if (next !== null) {
-        out[i] = next.replace(/\n{3,}/g, "\n\n").trim();
+        // A deleted heading or list item leaves no bare "## " or "- " behind.
+        out[i] = next.replace(/^[ \t]*(?:#+|[-*+]|\d+[.)])[ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
         done = true;
       }
     }

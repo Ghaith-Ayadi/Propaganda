@@ -318,6 +318,9 @@ try {
   check(ht("Most startup blogs stop after eight posts") === "" && ht("Propaganda 2.0: social is here") === "", "titles: plain statements and names still pass");
   check(t.noDashes("We'll launch with our own content—posts that stay true—then build.") === "We'll launch with our own content, posts that stay true, then build.", "noDashes: a dash pair becomes commas");
   check(t.noDashes("— Jane\n\nA pause — then more. Ends here—.\n\n`a—b`") === "Jane\n\nA pause, then more. Ends here.\n\n`a—b`", "noDashes: ends and punctuation, code left alone");
+  const link = "Read the [guide](https://example.com/blog/how-to--write) before you start, or https://x.io/a--b.";
+  check(hard(link) === "" && t.noDashes(link) === link, "a \"--\" inside a link target or a bare URL is not a dash (desk review)");
+  check(t.noDashes("Fast--and [true](https://x.io/a--b)") === "Fast, and [true](https://x.io/a--b)", "noDashes: the prose around a link still loses its dash");
   const soft = (x) => t.softHits(x).map((f) => f.rule).join(",");
   check(soft("Propaganda really does track AI answers; a post comparing what these tools measure answers it directly.") === "intensifier", "rule 7: really, directly (PPGD pitch)");
   check(soft("knowing what your company actually believes") === "intensifier" && soft("a post on keeping the voice true literally answers it") === "intensifier", "rule 7: actually, literally (PPGD Strategist)");
@@ -347,6 +350,9 @@ try {
     check(texts[0].startsWith("A machine writes the post in a minute.") && texts[0].includes("Paste your API key") && texts[0].includes("Leverage your existing") && texts[0].endsWith("Your prospects notice.") && !texts[0].includes("Why does"), "applyPolish: the text carries the rewrites and nothing refused");
     const del = t.applyPolish(["It's worth noting that rates rose. We said so."], [{ n: 1, sentence: "It's worth noting that rates rose.", must: false, why: ["\"x\": rule 8, a software-marketing word"] }], [{ n: 1, rewrite: "" }]);
     check(del.texts[0].startsWith("It's worth") && del.stats.refused === 1, "applyPolish: an empty rewrite never deletes a sentence flagged only for a word");
+    const md = "Intro.\n\n## Why does this matter?\n\nBody.";
+    const h = t.applyPolish([md], [{ n: 1, sentence: "Why does this matter?", must: false, why: ["\"x\": rule 14, a drumroll"] }], [{ n: 1, rewrite: "" }]);
+    check(h.texts[0] === "Intro.\n\nBody.", `applyPolish: a deleted heading leaves no bare "## " (desk review) (${JSON.stringify(h.texts[0])})`);
   }
   check(t.noDashes(t.HOUSE_STYLE) === t.HOUSE_STYLE && !/\u2014/.test(t.HOUSE_RULES + t.TITLE_RULES + t.PITCHER_SYSTEM), "the rules themselves carry no em dash");
   {
