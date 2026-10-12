@@ -2,7 +2,7 @@ import { Suspense, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Workspace } from "@/components/Workspace";
-import { Toaster } from "@/components/base/toast/toast";
+import { Toaster, toast } from "@/components/base/toast/toast";
 import { NavBar } from "@/components/shell/NavBar";
 import { PhoneTabs } from "@/components/shell/PhoneTabs";
 import { EmptyPage } from "@/components/shell/EmptyPage";
@@ -51,6 +51,36 @@ document.documentElement.classList.add("ppgd-app");
 // vite-plugin-pwa used to inject into every page (injectRegister: false).
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
+  watchForNewVersion();
+}
+
+/**
+ * The worker serves the app it cached, so the first load after a release runs
+ * the old app while the new worker installs in the background (Ayadi signed up
+ * on the old onboarding that way, 2026-10-12). When the new worker takes over:
+ * a page that just opened reloads into the new app at once; one in use is
+ * offered a reload, so nothing typed is interrupted.
+ */
+function watchForNewVersion() {
+  const sw = navigator.serviceWorker;
+  // No worker yet: this is the first install, and this page is already the new app.
+  if (!sw.controller) return;
+  const opened = performance.now();
+  let handled = false;
+  sw.addEventListener("controllerchange", () => {
+    if (handled) return;
+    handled = true;
+    if (performance.now() - opened < 15_000) {
+      window.location.reload();
+      return;
+    }
+    toast.add({
+      title: "A new version of Propaganda is ready",
+      description: "Reload to use it. Your writing is saved.",
+      timeout: 0,
+      actionProps: { children: "Reload", onClick: () => window.location.reload() },
+    });
+  });
 }
 
 // Custom blog themes are installed from the console for now (lib/customThemes.ts).

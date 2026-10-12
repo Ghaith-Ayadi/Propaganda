@@ -21,10 +21,13 @@ const asked = (site: string) => `propaganda:first-run-asked:${site}`;
 export async function isFirstRun(site: string): Promise<boolean | null> {
   if (UI_PREVIEW || planOf(site) === "lite") return false;
   try {
-    const [done, goals] = await Promise.all([
+    const [done, goals, plan] = await Promise.all([
       must(sb.from("app_settings").select("id").eq("site", site).eq("key", "onboarding.completed").limit(1)),
       must(sb.from("goal_versions").select("version").eq("site", site).limit(1)),
+      // A tenant that picked Lite on another device (lib/tenantPlan.ts).
+      must(sb.from("app_settings").select("value").eq("site", site).eq("key", "tenant.plan").limit(1)),
     ]);
+    if ((plan as { value: unknown }[] | null)?.[0]?.value === "lite") return false;
     return !done?.length && !goals?.length;
   } catch (err) {
     reportError("First run not checked", err);

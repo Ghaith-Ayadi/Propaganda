@@ -5,6 +5,9 @@ import { Input } from "@/components/base/input/input";
 import { clientFor, createSite, isSlugAvailable, type Account, type SiteRef } from "@/lib/accounts";
 import { must } from "@/lib/supabase";
 import { siteHost } from "@/lib/siteUrl";
+import { REVIEW_OPTIONS } from "@/components/onboarding/SetupStep";
+import { NativeSelect } from "@/components/base/select/select-native";
+import { rememberPlan, type Plan } from "@/lib/tenantPlan";
 import { cx } from "@/utils/cx";
 import { coded, userMessage } from "@/lib/errors";
 import { reportError } from "@/lib/telemetry";
@@ -34,9 +37,14 @@ const SLUG_RE = /^[a-z0-9-]{2,40}$/;
 type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 
 /**
- * First-run (or "new site") flow: name a site, say who's writing, seed a
- * couple of collections. A calm three-step form in one card, ending in a
- * `createSite` call plus the starter `app_settings` and `collections` rows.
+ * First-run (or "new site") flow. The first question is which Propaganda
+ * (Ayadi, 2026-10-12):
+ *   full  one screen, the business (name, address, website, posts a month),
+ *         then Getting started picks up at the strategy. Nothing is asked twice.
+ *   lite  the CMS alone, no AI: name the site, say who's writing, seed a couple
+ *         of collections, then the editor.
+ * Either way it ends in a `createSite` call plus the starter `app_settings`
+ * (`tenant.plan` among them, lib/tenantPlan.ts) and `collections` rows.
  */
 export function Onboarding({
   account,
@@ -47,9 +55,16 @@ export function Onboarding({
   account: Account;
   onCancel?: () => void;
   onSignOut: () => void;
-  onDone: (site: SiteRef) => void;
+  onDone: (site: SiteRef, plan: Plan) => void;
 }) {
+  // Step 0 picks the plan; full has one step after it, Lite three.
+  const [plan, setPlan] = useState<Plan | null>(null);
   const [step, setStep] = useState(0);
+  const last = plan === "lite" ? 3 : 1;
+
+  // Full
+  const [website, setWebsite] = useState("");
+  const [review, setReview] = useState("8");
 
   // Step 1
   const [name, setName] = useState("");
@@ -92,10 +107,11 @@ export function Onboarding({
     if (!slugEdited) setSlug(slugify(v));
   };
 
-  const canContinueStep1 = name.trim().length > 0 && slugStatus === "available";
-  const canContinueStep3 = collections.some((c) => c.name.trim());
+  const canContinueName = name.trim().length > 0 && slugStatus === "available";
+  const canContinueCollections = collections.some((c) => c.name.trim());
 
   async function finish() {
+    if (!plan) return;
     setError(null);
     setFinishing(true);
     let site: SiteRef;
@@ -113,11 +129,20 @@ export function Onboarding({
     try {
       const c = clientFor(account);
       const settings: Array<[string, string]> = [
+        ["tenant.plan", plan],
         ["site.title", name.trim()],
         ["author.name", authorName.trim()],
         ["author.tagline", tagline.trim()],
         ["author.bio", bio.trim()],
       ];
+      if (plan === "full") {
+        // Getting started's "Your business" was this screen: it opens on the strategy.
+        settings.push(
+          ["tenant.website", website.trim()],
+          ["strategist.reviewPerMonth", review],
+          ["onboarding.business", new Date().toISOString()],
+        );
+      }
       await Promise.all(
         settings
           .filter(([, value]) => value)
@@ -140,28 +165,82 @@ export function Onboarding({
       reportError("Onboarding: seeding settings/collections failed", coded("SITE-SEED", err));
     }
 
+    rememberPlan(site.id, plan);
     setFinishing(false);
-    onDone(site);
+    onDone(site, plan);
   }
 
   const url = siteHost({ slug: slug || "…", domain: "" });
 
+  // Which screen: 0 the plan; full 1 the business; Lite 1 the site, 2 about you, 3 collections.
+  const screen = step === 0 ? "plan" : plan === "full" ? "business" : (["site", "about", "collections"] as const)[step - 1];
+  const canContinue =
+    screen === "plan" ? plan !== null : screen === "business" || screen === "site" ? canContinueName : screen === "collections" ? canContinueCollections : true;
+
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-primary">
-      <div className="w-[440px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary">
+      <div className="w-[480px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary">
         <div className="flex items-center justify-between">
           <h1 className="type-title text-primary">
-            {step === 0 && "Name your site"}
-            {step === 1 && "About you"}
-            {step === 2 && "Collections"}
+            {screen === "plan" && "Which Propaganda?"}
+            {screen === "business" && "Your business"}
+            {screen === "site" && "Name your site"}
+            {screen === "about" && "About you"}
+            {screen === "collections" && "Collections"}
           </h1>
-          <StepDots step={step} count={3} />
+          {plan && <StepDots step={step} count={last + 1} />}
         </div>
 
         {error && <p className="mt-3 text-sm text-error-primary">{error}</p>}
 
         <div className="mt-5">
-          {step === 0 && (
+          {screen === "plan" && (
+            <div className="space-y-3">
+              <PlanChoice
+                picked={plan === "full"}
+                onPick={() => setPlan("full")}
+                title="Propaganda"
+                body="The agents plan your blog, pitch posts and draft them. You review and publish. Your first article goes out today."
+              />
+              <PlanChoice
+                picked={plan === "lite"}
+                onPick={() => setPlan("lite")}
+                title="Propaganda Lite"
+                body="The editor and your blog, free. You write every word yourself. No AI."
+              />
+            </div>
+          )}
+
+          {screen === "business" && (
+            <div className="space-y-4">
+              <Field label="Your business's name">
+                <Input size="sm" placeholder="Acme" value={name} onChange={onNameChange} />
+              </Field>
+              <Field label="Address" hint={slugHint(slugStatus)}>
+                <Input
+                  size="sm"
+                  value={slug}
+                  onChange={(v) => {
+                    setSlugEdited(true);
+                    setSlug(slugify(v));
+                  }}
+                />
+              </Field>
+              <p className="-mt-2 truncate text-xs text-tertiary">Your blog: {url}</p>
+              <Field label="Your business's website" hint="The site your customers know you by.">
+                <Input size="sm" type="url" placeholder="https://example.com" value={website} onChange={setWebsite} />
+              </Field>
+              <NativeSelect
+                label="How many posts a month can your team review?"
+                hint="We do the writing. The Strategist plans to this number, and you can change it any time."
+                value={review}
+                onChange={(e) => setReview(e.target.value)}
+                options={REVIEW_OPTIONS}
+              />
+            </div>
+          )}
+
+          {screen === "site" && (
             <div className="space-y-4">
               <Field label="Site name">
                 <Input size="sm" placeholder="My Site" value={name} onChange={onNameChange} />
@@ -180,7 +259,7 @@ export function Onboarding({
             </div>
           )}
 
-          {step === 1 && (
+          {screen === "about" && (
             <div className="space-y-4">
               <Field label="Author name">
                 <Input size="sm" value={authorName} onChange={setAuthorName} />
@@ -199,7 +278,7 @@ export function Onboarding({
             </div>
           )}
 
-          {step === 2 && (
+          {screen === "collections" && (
             <div className="space-y-3">
               {collections.map((row, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -258,25 +337,37 @@ export function Onboarding({
                 Back
               </Button>
             )}
-            {step < 2 && (
-              <Button
-                size="sm"
-                color="primary"
-                isDisabled={step === 0 && !canContinueStep1}
-                onClick={() => setStep((s) => s + 1)}
-              >
+            {step < last && (
+              <Button size="sm" color="primary" isDisabled={!canContinue} onClick={() => setStep((s) => s + 1)}>
                 Continue
               </Button>
             )}
-            {step === 2 && (
-              <Button size="sm" color="primary" isDisabled={!canContinueStep3 || finishing} onClick={() => void finish()}>
-                {finishing ? "Creating…" : "Create site"}
+            {step === last && (
+              <Button size="sm" color="primary" isDisabled={!canContinue || finishing} onClick={() => void finish()}>
+                {finishing ? "Creating…" : plan === "full" ? "Start" : "Create site"}
               </Button>
             )}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function PlanChoice({ picked, onPick, title, body }: { picked: boolean; onPick: () => void; title: string; body: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={picked}
+      onClick={onPick}
+      className={cx(
+        "block w-full rounded-lg bg-primary px-4 py-3 text-left shadow-xs ring-1 ring-inset transition",
+        picked ? "ring-2 ring-brand" : "ring-primary hover:bg-primary_hover",
+      )}
+    >
+      <div className="text-sm font-semibold text-primary">{title}</div>
+      <p className="mt-1 text-sm text-tertiary">{body}</p>
+    </button>
   );
 }
 

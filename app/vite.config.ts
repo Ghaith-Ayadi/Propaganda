@@ -288,6 +288,10 @@ export default defineConfig(({ mode }) => {
           // auth server and sign-in hangs.
           navigateFallbackDenylist: [/^\/auth\/v1\//, /^\/rest\/v1\//, /^\/realtime\/v1\//, /^\/api\//, /^\/_\//],
           globPatterns: ["**/*.{js,css,html,svg,ico,woff2}"],
+          // A new release's worker takes over open tabs at once; EditorApp's
+          // watchForNewVersion() then reloads them or offers a reload.
+          skipWaiting: true,
+          clientsClaim: true,
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
       }),
