@@ -302,7 +302,7 @@ try {
     ...GOOD,
     volume: r(40),
     readership: r(5000),
-    topics: [{ name: "Batch job retries", low: 6, high: 9, why: "x", basis: "y" }, ...GOOD.topics.slice(1)],
+    topics: [{ name: "Batch job retries", low: 6, high: 9, why: "x", basis: "y" }, { name: "Retries are the easy part: what a founder should ask before paying", low: 1, high: 2, why: "x", basis: "y" }, ...GOOD.topics.slice(1)],
     ranking: { ...GOOD.ranking, searches: [...GOOD.ranking.searches, { query: "workflow orchestration", topic: "Nope", why: "Big." }], pageOneTarget: r(5), aiMentionTarget: r(2) },
     watchedSites: [...GOOD.watchedSites, { url: `${WEB}/resources/whitepapers/ai-in-your-cms`, topic: "Reliability", why: "An article." }],
     questions: [],
@@ -316,6 +316,7 @@ try {
     ["No AI-mention target", "an AI target in quarter one"],
     ["No Readership target", "a Readership target without data"],
     ["pasted back", "a topic that is a seed search"],
+    ["title rules (two-part)", "a two-part topic name"],
     ["one article, not a source", "a watched site that is an article"],
     ["ask at least one question", "no question on a thin brief"],
   ]) check(errs.some((e) => e.includes(frag)), `catches ${what}`);

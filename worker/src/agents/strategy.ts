@@ -6,6 +6,7 @@
 // in test/strategy.mjs.
 
 import { isoWeek, quarterOf } from "./goals.js";
+import { titleHits } from "./writing.js";
 import { arr, obj, str } from "./model.js";
 
 const DAY = 86_400_000;
@@ -284,6 +285,8 @@ export interface Rules {
   previousTopics?: string[];
   /** The revision's request talks about the topics, so renaming them is what was asked. */
   requestAboutTopics?: boolean;
+  /** Topic names are held to the title rules (false on a run recorded before them: replays must match). */
+  titleRules?: boolean;
 }
 
 /** A new domain can't win a head term in a quarter: searches a month above this need a page-two position already. */
@@ -546,6 +549,10 @@ export function validate(d: Draft, r: Rules): string[] {
   for (const t of d.topics) {
     if (seeds.has(t.name.trim().toLowerCase())) {
       errors.push(`Topic "${t.name}" is one of their searches pasted back. A topic is an angle with a point of view, named the way they'd say it in a sentence (rule 2).`);
+    }
+    // A kept name from the previous proposal is never sent back: pitches hang on it.
+    if (r.titleRules !== false && !(r.previousTopics ?? []).includes(t.name)) {
+      for (const h of titleHits(t.name)) errors.push(`Topic "${t.name}" breaks the title rules (${h.rule}): name it as one plain statement, no colon, no second half, no negation (rule 2).`);
     }
   }
 

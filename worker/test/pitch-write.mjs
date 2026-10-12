@@ -231,7 +231,11 @@ function answer(prompt) {
   if (prompt.includes("Write the full post")) {
     return JSON.stringify({ title: "Why your batch jobs die at 3am", subtitle: "And what to do tonight", excerpt: "Night jobs fail more.", markdown: DRAFT_BODY, missingFacts: ["Kontra's pricing"] });
   }
-  if (prompt.includes("break house rule 1")) {
+  if (prompt.includes("The title of this pitch breaks the title rules")) {
+    // The idea's own title, which is one plain statement in this test.
+    return JSON.stringify({ title: /The idea: (.*)/.exec(prompt)?.[1] ?? "Batch jobs die at night" });
+  }
+  if (prompt.includes("break the house rules")) {
     const post = prompt.split("Answer with the full post in Markdown and nothing else.\n\n").pop();
     return post.replace("That's not bad luck. It's a scheduling problem.", "This is much more of a scheduling problem than it is bad luck.");
   }
@@ -264,7 +268,7 @@ t.setWebFetch(web);
 t.setSearchSleep(async () => {});
 t.setSearchWaits([10, 10, 10, 10]);
 t.wireGateway();
-t.DBOS.setConfig({ name: "propaganda-agents-test", systemDatabaseUrl: `${PGURL}/${SYS_DB}`, applicationVersion: "test" });
+t.DBOS.setConfig({ name: "propaganda-agents-test", systemDatabaseUrl: `${PGURL}/${SYS_DB}`, applicationVersion: "test", enablePatching: true });
 await t.DBOS.launch();
 await t.registerQueues();
 
@@ -282,6 +286,25 @@ try {
   check(t.contrastHits("It isn't about speed, it's about trust.").length === 1, "catches \"It isn't X, it's Y\" in one sentence");
   check(t.contrastHits("This is much more of a maintenance job than it is the ol' art of writing.").length === 0, "lets the comparison through");
   check(t.contrastHits("It's not raining. We went out anyway.").length === 0, "lets an ordinary negation through");
+  // Title rules (Ayadi, 2026-10-12): his own examples.
+  const rule = (title) => t.titleHits(title).map((h) => h.rule).join(",");
+  check(rule("The writing is the easy part: what a founder without a marketing team should ask an AI content tool before paying for it") === "two-part", "a \"Thing: explanation\" title is two-part");
+  check(rule("Your sales calls already contain next month's posts: turning meeting transcripts into content prospects asked for") === "ing-half", "a second half starting with an -ing verb");
+  check(rule("Fast servers on Windows? Turning a machine into a build farm") === "ing-half", "a \"phrase? Verb-ing\" title");
+  check(rule("Consistency isn't a calendar problem. Your blog, newsletter and LinkedIn disagree because they were written three times") === "lead-in", "a negation set up to be knocked down");
+  check(rule("How often should a startup publish? Less than you think") === "two-part", "a question-then-answer title");
+  check(rule("We quietly shipped it") === "quietly", "the word quietly");
+  check(rule("Propaganda 2.0: social is here") === "", "a name and its release passes");
+  check(rule("Meeting at 10:30 is the wrong time") === "", "a clock time is not a break");
+  check(rule("Your blog, newsletter and LinkedIn disagree because they were written three times") === "", "one plain statement passes");
+  check(rule("Nothing to see here: the quiet launch") === "two-part", "\"nothing\" is not an -ing verb, still two parts");
+  check(rule("Temporal news: a field guide") === "two-part" && rule("Speed: why it matters") === "two-part", "a short first part is not a name without a digit or a capital");
+  check(rule("Kontra Cloud: the first week") === "" && rule("Q4 goals: one post a week") === "", "a product name or a quarter and its explanation passes");
+  check(rule("U.S. tariffs and your pricing") === "" && rule("Blog vs. newsletter for a founder") === "" && rule("Tools, e.g. Jasper, invent facts") === "", "an abbreviation's period is not a break");
+  check(rule("One Knowledge Base. Three Posts. Three Different Truths.") === "two-part" && rule("Your AI Writer Will Make Up Product Facts—Unless You Feed It the Truth") === "two-part", "title case is not a name; an em dash with no spaces is a break (seen on DeepSeek, 2026-10-12)");
+  const prose = t.proseHits("Consistency isn't a calendar problem. Your blog disagrees.\n\nWe quietly shipped it.\n\n## Speed: why it matters\n\nIt is not raining. We went out.").map((h) => h.rule);
+  check(prose.join(",") === "lead-in,quietly,two-part", `prose: a lead-in, quietly, a two-part subhead, nothing else (${prose.join(",")})`);
+  check(t.styleHits("That's not art. That's maintenance. We quietly left.").length === 2, "styleHits folds the contrast in");
   check(t.unsourcedNumbers("About 12% of teams do it.").length === 1, "flags a number with no link");
   check(t.unsourcedNumbers("About [12%](https://x.y/z) of teams do it.").length === 0, "accepts a linked number");
   const legacy = t.asAttempt([{ url: "https://x.y", title: "t", snippet: "", position: 1 }]);
@@ -323,6 +346,7 @@ try {
   check(p.pitched.length === 1 && p.waiting.length === 1 && p.rejected.length === 1, `one pitched, one waiting for the next batch, one rejected (${JSON.stringify({ pitched: p.pitched.length, waiting: p.waiting.length, rejected: p.rejected.length })})`);
   const brief = db.briefs[0];
   check(brief?.status === "pitched" && brief.pitched_by === "agent:pitcher" && brief.batch === 1, "the pitch is a pitched brief in batch 1");
+  check(brief?.title && !brief.title.includes(": a field guide") && prompts.some((x) => x.includes("The title of this pitch breaks the title rules")), `a "Thing: explanation" pitch title was asked for again as one statement (${brief?.title})`);
   check(brief?.outline?.length === 4 && brief.angle && brief.audience && brief.sources?.length === 1 && brief.fit?.reasons?.length >= 1, "the pitch is a full brief: outline, angle, audience, sources, fit");
   check(!fetched.some((u) => u.includes("10.0.0.5")), "never fetched the private address a search returned");
   const rejected = db.agent_ideas.find((i) => i.title === "Nothing in particular");

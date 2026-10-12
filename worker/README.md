@@ -156,7 +156,9 @@ learned (`briefs.learned`).
   agent never writes it again.
 - Researches (three searches, up to six pages read), reads the knowledge base
   (`kb_search`; an empty base when it isn't on the server), writes the post
-  (advanced model), fixes "That's not X. It's Y." sentences once, and records
+  (advanced model), fixes house-rule breaks once (`agents/writing.ts`: the "That's not
+  X. It's Y." contrast, "quietly", lead-in sentences, two-part subheads; a title or
+  subtitle that breaks the title rules is asked for again in one small call), and records
   what's left (unsourced numbers, links to pages it didn't read, facts it
   needed and didn't have) on the version for the reviewer.
 - Writes into the empty post the pipeline made on approval, only while it is

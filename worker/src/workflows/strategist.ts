@@ -19,6 +19,7 @@
 // The weekly check (Mondays) is code only and writes drift_notes.
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import { TITLE_RULES } from "../agents/writing.js";
 import { askJson, MODELS } from "../agents/model.js";
 import { assertPublicUrl, readPage, searchWeb, searchConfigured } from "../agents/web.js";
 import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
@@ -312,7 +313,7 @@ const SYSTEM = `You are the Strategist for a company's blog, inside Propaganda (
 
 The rules (code checks them; a proposal that breaks one is sent back):
 1. Volume comes from capacity, never ambition. The cap you're given is a ceiling, not a target: propose less when more would mean a burst and then silence (after a Launch, the rest of the quarter should still carry about a post a week), and say so.
-2. 1 to 4 topics, best first, each a range (low to high). A topic is an angle with a point of view: what this company knows or believes that its competitors don't say, aimed at a named buyer. Name it the way the founder would say it in a sentence, never a product category, never one of their searches pasted back, never "cluster" or "pillar". The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume. In a revision, keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away.
+2. 1 to 4 topics, best first, each a range (low to high). A topic is an angle with a point of view: what this company knows or believes that its competitors don't say, aimed at a named buyer. Name it the way the founder would say it in one plain sentence, under about twelve words, never a product category, never one of their searches pasted back, never "cluster" or "pillar". No two-part names ("Thing: explanation"), no second half that starts with an -ing verb, no negation set up to be knocked down ("X isn't a Y problem"): the title rules below say how. The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume. In a revision, keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away.
 3. Every topic gets pitched from every source; there is no internal/external split.
 4. 3 to 8 watched sites: regulators, trade press, competitors' blogs, standards bodies, newsletters. Each is a source that keeps publishing (a site, a blog index, a news section: the root or one path segment), never one article, whitepaper or listicle. Each tied to one topic, each with a why. The competitors they named are always in. Use real sites you know or that appear in the data; full https addresses.
 5. 5 to 10 target searches (10 when the data allows, and at least 8 with 6 from the data when the data is rich): all winnable, which means difficulty under 30 with at least 50 searches a month, or a search where they're already on page two. A new domain targets long-tail searches only, never a head term (nothing over 5,000 searches a month), each one a question a post in its topic would literally answer. Each names one of the topics. A search you propose that the data doesn't list gets its numbers looked up before your proposal is checked, so take the best questions from the data first and add your own only when the data has none. A new domain targets at most 2 on page one by quarter end, and no AI-mention target in its first quarter (set it to null and say why).
@@ -321,7 +322,9 @@ The rules (code checks them; a proposal that breaks one is sent back):
 8. At most 3 questions: only what you couldn't decide alone. When their answers are thin (a blank, a one-liner, capacity not answered), ask at least one. Anything they said is coming up (a launch, an event, a deadline) gets either a place in the plan or a question, never silence. When what they asked for answers your earlier questions, those questions are settled: decide with their answers, never ask one again, and ask something new only when an answer leaves a choice you truly can't make alone. Where an answer is still vague, pick the sensible reading and say so in the basis.
 9. The summary is the strategy in one sentence the founder would say about the next three months, not a list of the numbers.
 
-Write plainly. No jargon, no hype. Never write "That's not X. It's Y."; say it as a comparison.
+Write plainly. No jargon, no hype. Never write "That's not X. It's Y."; say it as a comparison. Never the word "quietly".
+
+${TITLE_RULES}
 
 Answer with JSON only, in this shape:
 {"summary": "one line", "volume": {"value": 18, "why": "...", "basis": "..."}, "topics": [{"name": "...", "low": 5, "high": 7, "why": "...", "basis": "..."}], "ranking": {"searches": [{"query": "...", "topic": "...", "why": "..."}], "pageOneTarget": {"value": 2, "why": "...", "basis": "..."}, "aiMentionTarget": {"value": null, "why": "...", "basis": "..."}}, "readership": {"value": null, "why": "...", "basis": "..."}, "watchedSites": [{"url": "https://...", "topic": "...", "why": "..."}], "questions": []}`;
@@ -424,6 +427,8 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       answered: pack.rounds.answered,
       previousTopics: pack.rounds.previous?.topics.map((t) => t.name) ?? [],
       requestAboutTopics: asksAboutTopics(pack.request),
+      // Title rules on topic names (2026-10-12): a run recorded before them keeps its draft.
+      titleRules: await DBOS.patch("strategist-title-rules"),
     };
     const previousTopics = rules.previousTopics;
 
