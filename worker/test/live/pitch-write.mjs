@@ -106,7 +106,8 @@ try {
   const post = db.posts.find((x) => x.id === w.post);
   const words = post?.content_md?.split(/\s+/).filter(Boolean).length ?? 0;
   check(post?.status === "draft" && post.type === "Test" && words >= 400, `a draft post in the brief's collection (${words} words)`);
-  check(post && t.contrastHits(post.content_md).length === 0, "house rule 1 held: no \"That's not X. It's Y.\"");
+  check(post && t.contrastHits(post.content_md).length === 0, "rule 2 held: no \"That's not X. It's Y.\"");
+  check(post && !/\u2014/.test(`${post.title} ${post.subtitle ?? ""} ${post.content_md}`), "rule 13 held: no em dash anywhere");
   const ver = db.post_versions.find((x) => x.post === w.post);
   check(ver?.created_by === "agent:writer" && ver.version === 1, "version 1, by the Writer");
   check(brief?.post === w.post, "the brief links the draft");

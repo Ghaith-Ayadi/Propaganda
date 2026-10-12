@@ -36,7 +36,7 @@ import { readTaste, renderTaste } from "../agents/taste.js";
 import { rate } from "../agents/fit.js";
 import { quarterOf, standing, type CountedPost, type Goals } from "../agents/goals.js";
 import { APPROVED } from "../agents/batches.js";
-import { briefBody, thursdayOf } from "../agents/pitcher.js";
+import { briefBody, polishBrief, thursdayOf } from "../agents/pitcher.js";
 import { writer } from "../agents/writer.js";
 import { stableId } from "../agents/ids.js";
 import {
@@ -256,6 +256,8 @@ async function topicPitchesRun(input: TopicInput): Promise<TopicResult> {
   const posts = [...c.counted];
   const researchGap = session.notice();
   const out: TopicResult = { topic: topic.name, written: 0, briefs: [] };
+  // The twenty rules (2026-10-12): one polish call per pitch. Runs recorded before them replay without.
+  const styled = await DBOS.patch("first-pitches-house-style");
   for (const [i, p] of pitches.entries()) {
     const j = { ...p.judgement, topics: [topic.name] };
     const st = standing(posts, c.goals.perWeek, now);
@@ -263,7 +265,8 @@ async function topicPitchesRun(input: TopicInput): Promise<TopicResult> {
     const r = rate(j, "plan", c.goals, st, week);
     const key = replacing ? replacementKey(replacing.briefId) : firstPitchKey(input.proposalId, input.topicIndex, i + 1);
     const briefId = stableId(`brief:${key}`);
-    const written = replacing ? { ...p.written, learned: replacementLearned(replacing.reason) } : p.written;
+    let written = replacing ? { ...p.written, learned: replacementLearned(replacing.reason) } : p.written;
+    if (styled) written = (await polishBrief(site, `polish ${i + 1}`, written)).written;
     const expires = j.timely && DAY.test(j.expiresAt) ? j.expiresAt : null;
     const publishBy = week ? thursdayOf(week) : "";
     const saved = await DBOS.runStep(

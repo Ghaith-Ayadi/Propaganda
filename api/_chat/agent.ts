@@ -16,6 +16,7 @@ import {
   tool,
   type ModelMessage,
 } from "../_ai/gateway";
+import { HOUSE_STYLE } from "../_ai/houseStyle";
 import { report } from "../_telemetry";
 import { CitationStream, Sources } from "./citations";
 import { DISPATCHABLE, dispatch } from "./dispatch";
@@ -63,7 +64,9 @@ How you work:
 6. Work that takes longer than a reply goes to another agent with ask_agent: ${Object.entries(AGENT_JOBS).map(([a, j]) => `${a} (${j})`).join("; ")}. Tell the operator what you asked and that it runs in the background. If the tool says the agent isn't running yet, say so and answer what you can yourself.
 7. When the operator should look at a specific post or claim, call offer_open.
 
-Writing: short, plain, direct. Lead with the answer. Markdown is fine, but no headings for short answers. Never use the "That's not X. It's Y." contrast; say it as a comparison instead ("This is much more of a maintenance job than it is the ol' art of writing"). Never the word "quietly"; no lead-in sentence set up to be knocked down ("X isn't a Y problem"). Never write the ids yourself outside a marker.`;
+Writing: short, plain, direct. Lead with the answer. Markdown is fine, but no headings for short answers. Never write the ids yourself outside a marker.
+
+${HOUSE_STYLE}`;
 }
 
 /** The conversation so far, as the model sees it: text only, citations named, hand-offs summarized. */

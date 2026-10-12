@@ -37,7 +37,8 @@ import { claimsFor, renderClaims } from "./kb.js";
 import { nearest, readTaste, renderTaste, seenLine, type Seen } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
-import { RULE_NAMES, TITLE_RULES, titleHits } from "./writing.js";
+import { HOUSE_STYLE, RULE_NAMES, TITLE_RULES, houseTitleHits, noDashes, titleHits, type PolishStats } from "./writing.js";
+import { polishTexts } from "./polish.js";
 import { type SearchHit } from "./web.js";
 import { SearchSession, searchDurably } from "./search.js";
 import { AGENT_QUEUE, registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
@@ -248,7 +249,9 @@ Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": ""
 export const PITCHER_SYSTEM = `You are the Pitcher for Propaganda, a content team that runs a tenant's blog. You turn ideas into pitches that serve the tenant's goals for the quarter. You are blunt about weak ideas: an idea with no reason to be written now is rejected and kept for later, and that's a good outcome.
 You never write the post. You write briefs a writer can work from.
 Use "tenant" for the business you work for. Never invent facts about the tenant: what it knows is in the knowledge base claims you're given.
-Never write "That's not X. It's Y."; say it as a comparison. Never the word "quietly".
+Everything you write (title, why, angle, audience, outline) follows these:
+
+${HOUSE_STYLE}
 
 ${TITLE_RULES}`;
 
@@ -257,8 +260,8 @@ ${TITLE_RULES}`;
  * (Ayadi, 2026-10-12: "Thing: explanation" and "phrase? Verb-ing..." titles are
  * the signature of machine writing). What comes back is kept only when it passes.
  */
-async function enforceTitle(site: string, step: string, w: Written, idea: IdeaRow): Promise<Written> {
-  const hits = titleHits(w.title);
+async function enforceTitle(site: string, step: string, w: Written, idea: IdeaRow, check = titleHits): Promise<Written> {
+  const hits = check(w.title);
   if (hits.length === 0) return w;
   const again = await askJson(
     step,
@@ -278,7 +281,31 @@ Write the title again as one plain statement of what the post says, under twelve
     },
     (v) => str(obj(v, "The answer").title, "title", { max: 200 }),
   );
-  return titleHits(again).length === 0 ? { ...w, title: again } : w;
+  return check(again).length === 0 ? { ...w, title: again } : w;
+}
+
+/**
+ * The twenty rules on a written brief: one small call judges the flagged
+ * sentences of every field (polish.ts), then every em dash goes. A title the
+ * call changed is kept only when it still passes the title rules.
+ */
+export async function polishBrief(site: string, step: string, w: Written): Promise<{ written: Written; stats: PolishStats }> {
+  const fields = [w.title, w.why, w.angle, w.audience, w.learned, ...w.outline];
+  const { texts, stats } = await polishTexts(step, { site, job: "pitcher:pitch", model: MODELS.base, system: PITCHER_SYSTEM }, fields);
+  const [title, why, angle, audience, learned, ...outline] = texts;
+  return {
+    written: {
+      ...w,
+      title: title && houseTitleHits(title).length === 0 ? title : noDashes(w.title),
+      why,
+      angle,
+      audience,
+      learned,
+      outline: outline.filter(Boolean),
+      sources: w.sources.map((s) => ({ ...s, label: noDashes(s.label) })),
+    },
+    stats,
+  };
 }
 
 // ---- the workflow ----
@@ -463,7 +490,11 @@ Answer with JSON only:
       },
       parsePitch(allowed, collectionNames),
     );
-    if (await DBOS.patch("pitcher-retitle")) written = await enforceTitle(site, `retitle ${idea.id}`, written, idea);
+    // The twenty rules (2026-10-12): hard checks on the title, then one polish
+    // call on the brief. Runs recorded before them replay without either.
+    const styled = await DBOS.patch("pitcher-house-style");
+    if (await DBOS.patch("pitcher-retitle")) written = await enforceTitle(site, `retitle ${idea.id}`, written, idea, styled ? houseTitleHits : titleHits);
+    if (styled) written = (await polishBrief(site, `polish ${idea.id}`, written)).written;
 
     // The brief's own title can land on something already shown, or on a pitch from this run.
     const again = j.changed ? null : nearest(written.title, [...seen, ...shown]);
