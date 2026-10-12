@@ -6,7 +6,8 @@ tests for whatever changed. Its GitHub Release page is the release log.
 
 ## Cutting one
 
-Only on Ayadi's word. Run the **release** workflow (`.github/workflows/release.yml`) on `main`:
+Only on Ayadi's word. First merge the version's **release notes** to `main` (below), then run
+the **release** workflow (`.github/workflows/release.yml`) on `main`:
 
 | Input | Choices |
 | --- | --- |
@@ -27,7 +28,7 @@ It runs, in order:
    The same workflows run on PRs; the release runs all of them whatever changed.
 3. **Real-model tests** (`worker/test/live/`) through the AI Gateway, with the cost of each.
 4. **Tag and release log.** Only when everything above is green: the tag, and a GitHub
-   Release listing its PRs, which real-model tests ran or were skipped and why, and what
+   Release opening with the version's notes and listing its PRs, which real-model tests ran or were skipped and why, and what
    they cost.
 5. **The app** to Vercel production through `deploy-app.yml`.
 
@@ -35,6 +36,22 @@ It runs, in order:
 `compose/propaganda-supabase/schema.env` (schema, migrations, worker). It pins a release
 tag, so moving the box to a release is a one-line Bedrock PR (`SCHEMA_REF=v0.2.1`) that
 deploys on merge. Until the first pin it is `main`, and every Bedrock deploy ships `main`.
+
+## Release notes
+
+Every release has a Markdown file, `release-notes/vX.Y.Z.md`, written before it is cut: a
+`# vX.Y.Z` title, a line with the date and the release's focus, then what changed in plain
+words for the people using Propaganda (not PR titles). Images go in `release-notes/images/` and
+are linked as `images/<file>`. The workflow refuses to release a version without its file.
+
+The same file is shown in two places:
+
+- **GitHub:** the opening of the release's page, above what the workflow adds (tests, costs,
+  PRs). Images are linked from the release commit.
+- **The app:** `app.propaganda.pub/release-notes` lists every release newest first
+  (`app/src/releaseNotes/`, read at build time; public, no sign-in). The editor's command
+  palette (Version) names the current release and links there. The newest file is the release
+  the build carries, so a notes file merges together with, or just before, the release it names.
 
 ## The real-model tests
 

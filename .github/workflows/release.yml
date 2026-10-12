@@ -6,8 +6,8 @@
 #   2. the free suites on this exact commit: api, worker, kb SQL, blog themes;
 #   3. the real-model tests, through the AI Gateway (AI_GATEWAY_API_KEY), with the cost
 #      of each from the cost log;
-#   4. only if all of that is green: the tag and a GitHub Release (the release log), with
-#      its PRs, what ran and what it cost;
+#   4. only if all of that is green: the tag and a GitHub Release (the release log): the
+#      version's notes (release-notes/vX.Y.Z.md, required), its PRs, what ran and what it cost;
 #   5. the app to Vercel production (deploy-app.yml). The box follows the tag through
 #      Bedrock's compose/propaganda-supabase/schema.env.
 name: release
@@ -61,6 +61,8 @@ jobs:
             esac
           fi
           git rev-parse -q --verify "refs/tags/$next" >/dev/null && { echo "::error::$next already exists"; exit 1; }
+          # Its notes come first: they are the release log's opening and the app's /release-notes page.
+          [ -s "release-notes/$next.md" ] || { echo "::error::No release notes for $next: add release-notes/$next.md on main first (docs/releases.md)"; exit 1; }
           echo "previous=$prev" >> "$GITHUB_OUTPUT"
           echo "version=$next" >> "$GITHUB_OUTPUT"
           echo "Releasing $next (previous: ${prev:-none})"
@@ -166,7 +168,13 @@ jobs:
               [ -n "$n" ] && echo "- $n $(git show -s --format=%b "$h" | head -1)"
             done)
           fi
+          # The notes as written, less their "# vX.Y.Z" title (the release's own), with their
+          # images (release-notes/images/) from this commit on GitHub.
+          sed -e '1{/^# /d}' -e "s#](images/#](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/raw/${GITHUB_SHA}/release-notes/images/#g" "release-notes/$VERSION.md" > notes.md
           {
+            echo
+            echo "---"
+            echo
             echo "Released $(date -u +%Y-%m-%dT%H:%MZ) from \`${GITHUB_SHA::7}\` by run [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
             echo
             echo "Free suites passed: api, worker, kb, blog themes."
@@ -178,7 +186,7 @@ jobs:
               echo
               echo "$prs"
             fi
-          } > notes.md
+          } >> notes.md
           gh release create "$VERSION" --target "$GITHUB_SHA" --title "$VERSION" --notes-file notes.md "${generate[@]}"
 
   deploy-app:
