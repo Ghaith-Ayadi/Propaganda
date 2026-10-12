@@ -325,6 +325,7 @@ try {
   check(soft("Leverage your existing content to unlock a robust pipeline.") === "marketing" && t.softHits("Leverage your existing content to unlock a robust pipeline.")[0].word === 'Leverage", "unlock", "robust', "rule 8: every marketing word in the sentence is named");
   check(soft("Paste your API key in Settings.") === "marketing", "rule 8: \"key\" is flagged; the judge keeps it in \"API key\"");
   check(soft("In today's content landscape, founders face a growing challenge.") === "marketing,opener" && soft("In conclusion, consistency matters more than ever.") === "opener", "rule 12: curtain-raiser and curtain call");
+  check(t.softHits("Why does this matter? Because your prospects notice.")[0]?.sentence === "Why does this matter? Because your prospects notice.", "rule 14: a rhetorical question is judged with its answer (seen on DeepSeek: deleting it alone left \"Because ...\")");
   check(soft("Why does this matter? Because your prospects notice.") === "drumroll" && soft("One Knowledge Base. Three Posts. Three Different Truths.") === "drumroll", "rule 14: rhetorical question and staccato (PPGD Pitcher title)");
   check(soft("- **Voice:** your posts should sound like you.\n- **Facts:** every claim should be true.") === "label-list,label-list", "rule 15: bold-label bullets");
   check(soft("It's worth noting that a new domain won't rank for head terms in its first quarter.") === "announce", "rule 18: an announcement");
@@ -334,14 +335,16 @@ try {
     const draft = "Anyone can make a machine write a post; the hard part is knowing what your company believes.\n\nLeverage your existing content to unlock a robust pipeline.\n\nPaste your API key in Settings.\n\nWhy does this matter? Because your prospects notice.";
     const items = t.polishItems(t.hardHits(draft), t.softHits(draft));
     check(items.length === 4 && items[0].must && !items[1].must, "one item per sentence, hard hits first");
+    const q = items.find((i) => i.sentence.startsWith("Why does"));
+    check(q?.sentence === "Why does this matter? Because your prospects notice.", "the question and its answer are one item");
     check(t.polishPrompt(items).includes("[must change]") && !/\u2014/.test(t.polishPrompt(items)), "the judge prompt marks hard hits and has no em dash");
     const { texts, stats } = t.applyPolish([draft], items, t.parsePolish({ rewrites: [
       { n: 1, rewrite: "A machine writes the post in a minute. Finding out what your company believes takes the rest of the week." },
       { n: 2, rewrite: "Leverage what you have—and unlock more." },
-      { n: 4, rewrite: "" },
+      { n: 4, rewrite: "Your prospects notice." },
     ] }));
-    check(stats.rewritten === 2 && stats.kept === 1 && stats.refused === 1, `applyPolish: keeps a good rewrite, deletes the drumroll, keeps the judged API key, refuses a rewrite with a dash (${JSON.stringify(stats)})`);
-    check(texts[0].startsWith("A machine writes the post in a minute.") && texts[0].includes("Paste your API key") && texts[0].includes("Leverage your existing") && !texts[0].includes("Why does"), "applyPolish: the text carries the rewrites and nothing refused");
+    check(stats.rewritten === 2 && stats.kept === 1 && stats.refused === 1, `applyPolish: keeps a good rewrite, rewrites the drumroll pair, keeps the judged API key, refuses a rewrite with a dash (${JSON.stringify(stats)})`);
+    check(texts[0].startsWith("A machine writes the post in a minute.") && texts[0].includes("Paste your API key") && texts[0].includes("Leverage your existing") && texts[0].endsWith("Your prospects notice.") && !texts[0].includes("Why does"), "applyPolish: the text carries the rewrites and nothing refused");
     const del = t.applyPolish(["It's worth noting that rates rose. We said so."], [{ n: 1, sentence: "It's worth noting that rates rose.", must: false, why: ["\"x\": rule 8, a software-marketing word"] }], [{ n: 1, rewrite: "" }]);
     check(del.texts[0].startsWith("It's worth") && del.stats.refused === 1, "applyPolish: an empty rewrite never deletes a sentence flagged only for a word");
   }

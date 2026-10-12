@@ -279,10 +279,13 @@ export function softHits(text: string): Flag[] {
   for (const para of clean.split(/\n{2,}/)) {
     if (/^\s*\|/.test(para)) continue;
     const list = allSentences(para);
-    for (const s of list) {
+    for (const [i, s] of list.entries()) {
       for (const { rule, re } of SOFT) {
         const found = [...new Set(s.match(new RegExp(re.source, "gi")) ?? [])];
-        if (found.length) out.push({ sentence: s, rule, word: found.join('", "') });
+        if (!found.length) continue;
+        // A rhetorical question goes with its answer: deleting the question alone leaves "Because ..." behind.
+        const pair = rule === "drumroll" && /\?$/.test(s) && list[i + 1] ? `${s} ${list[i + 1]}` : s;
+        out.push({ sentence: pair, rule, word: found.join('", "') });
       }
     }
     // Staccato: three or more sentences in a row of three words or fewer ("Fast. Simple. True.").

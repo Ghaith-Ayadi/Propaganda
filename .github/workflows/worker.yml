@@ -31,27 +31,3 @@ jobs:
           echo "POSTGREST_BIN=$RUNNER_TEMP/postgrest" >> "$GITHUB_ENV"
       - run: npm test
         env: { PGURL: "postgres://postgres:postgres@localhost:5432" }
-
-  # Temporary (Human writing rules thread, 2026-10-12): the before/after of the twenty
-  # rules on DeepSeek, from this branch's PR only. Removed before the merge.
-  style-ab:
-    if: github.event_name == 'pull_request' && github.head_ref == 'claude/project-thread-ua8fgn'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults: { run: { working-directory: worker } }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - run: npm ci && npm run build
-      - env:
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
-          LIVE_REQUIRED: "1"
-          LIVE_SPEND_CAP_USD: "3"
-          STYLE_AB_JUDGE: "1" # the full A/B ran on 91b265c; this push measures the judge alone
-        run: set -o pipefail; node test/live/style-ab.mjs | tee "$RUNNER_TEMP/style-ab.txt"
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: style-ab
-          path: ${{ runner.temp }}/style-ab.txt
