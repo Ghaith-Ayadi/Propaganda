@@ -45,6 +45,7 @@ import {
   getSite,
   insertIdea,
   insertPitch,
+  isLite,
   pipelineBriefs,
   publishedPosts,
   quarterBatches,
@@ -69,7 +70,7 @@ import {
   dayOneQuota,
   firstPitchKey,
   goalsFromProposal,
-  isLite,
+  isLiteById,
   parseTopicPitches,
   replacementKey,
   replacementLearned,
@@ -102,7 +103,7 @@ export const DRAFTS_EVENT = "drafts";
  * never get here.
  */
 async function dayOneOf(row: ProposalRow): Promise<{ ok: boolean; why: string; launch: LaunchPlan | null }> {
-  if (isLite(row.site)) return { ok: false, why: "Lite tenant: no AI", launch: null };
+  if (await isLite(row.site)) return { ok: false, why: "Lite tenant: no AI", launch: null };
   if (!row.proposal) return { ok: false, why: "no proposal", launch: null };
   if (row.kind !== "onboarding" && row.kind !== "revision") return { ok: false, why: `a ${row.kind} proposal`, launch: null };
   const [shown, approved] = await Promise.all([shownProposals(row.site, row.quarter), approvedProposals(row.site)]);
@@ -458,7 +459,9 @@ export const firstDrafts = DBOS.registerWorkflow(firstDraftsRun, { name: "strate
 // ---- one replacement for a rejected day-one pitch ----
 
 async function replaceRun(site: string, briefId: string): Promise<TopicResult | { skipped: string }> {
-  if (isLite(site)) return { skipped: "Lite tenant: no AI" };
+  // By id only: a read here would be a new step for runs in flight. The
+  // dispatcher below and the gateway catch a tenant that picked Lite.
+  if (isLiteById(site)) return { skipped: "Lite tenant: no AI" };
   const b = await DBOS.runStep(() => strategistBrief(site, briefId), { name: "read the rejected pitch" });
   if (!b || b.status !== "rejected") return { skipped: `the pitch is ${b?.status ?? "missing"}` };
   if (!b.reject_reason.trim()) return { skipped: "no reason given" };
@@ -510,7 +513,7 @@ export async function dispatchFirstDay(nowMs = Date.now()): Promise<string[]> {
   const since = new Date(nowMs - 2 * 86_400_000).toISOString();
   const started: string[] = [];
   for (const r of await recentlyApproved(since)) {
-    if (isLite(r.site) || !(r.proposal?.launch || r.kind === "revision")) continue;
+    if (!(r.proposal?.launch || r.kind === "revision") || (await isLite(r.site))) continue;
     const id = firstDraftsId(r.id);
     if (askedRecently(id, nowMs)) continue;
     if (await pitchesInFlight(r.site)) continue;
@@ -519,7 +522,7 @@ export async function dispatchFirstDay(nowMs = Date.now()): Promise<string[]> {
     started.push(id);
   }
   for (const b of await recentlyRejected(since)) {
-    if (isLite(b.site) || b.fit?.replaces || !b.reject_reason.trim()) continue;
+    if (b.fit?.replaces || !b.reject_reason.trim() || (await isLite(b.site))) continue;
     const id = replaceId(b.id);
     if (askedRecently(id, nowMs)) continue;
     await startOnceForTenant(b.site, id, replacer, b.site, b.id);

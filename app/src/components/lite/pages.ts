@@ -9,6 +9,7 @@ import { useSetting } from "@/lib/settings";
 import { Calendar, Stars02 } from "@untitledui/icons";
 import { PAGES, type PageRoute } from "@/lib/routes";
 import { usePlan, type Plan } from "@/lib/tenantPlan";
+import { useNoGoalsYet } from "@/lib/firstRun";
 
 /** Lite's take on a page: `false` leaves it out, an object changes it. */
 const LITE: Record<string, false | Partial<PageRoute>> = {
@@ -59,10 +60,14 @@ export function pagesFor(plan: Plan): PageRoute[] {
 
 export function usePages(): PageRoute[] {
   const pages = pagesFor(usePlan());
-  // Getting started is in the nav from the day a tenant starts there until it says "I got it".
+  // Getting started is in the nav from the day a tenant starts there until it
+  // says "I got it", and always while it has no approved goals (a tenant the
+  // pre-0.2 wizard marked completed before any plan existed).
   const started = !!useSetting<string>("onboarding.started", "");
   const completed = !!useSetting<string>("onboarding.completed", "");
-  return useMemo(() => (started && !completed ? pages : pages.filter((p) => p.id !== "getting-started")), [pages, started, completed]);
+  const noGoals = useNoGoalsYet();
+  const show = noGoals || (started && !completed);
+  return useMemo(() => (show ? pages : pages.filter((p) => p.id !== "getting-started")), [pages, show]);
 }
 
 /**

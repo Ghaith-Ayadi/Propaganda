@@ -83,7 +83,8 @@ export function useFirstDay(): FirstDay {
   const business = useSetting<string>("onboarding.business", "");
   const firstArticle = useSetting<string>("onboarding.firstArticle", "") || null;
   const after = useSetting<string>("onboarding.after", "") === "guide" ? "guide" : null;
-  const completed = !!useSetting<string>("onboarding.completed", "");
+  // "I got it" comes after an approved plan; the pre-0.2 wizard wrote the key before any plan existed.
+  const completedSetting = !!useSetting<string>("onboarding.completed", "");
   const strategist = useStrategistState();
   const proposal = useLatestProposal();
   const { items, loading } = usePipeline();
@@ -107,6 +108,7 @@ export function useFirstDay(): FirstDay {
     const emptyBrief = !!failed && failed.startsWith("Nothing to plan from") && !proposal;
     const sent = proposal?.status === "sent";
     const approved = proposal?.status === "approved";
+    const completed = completedSetting && approved;
     const planning = running || proposal?.status === "changes_requested";
 
     const done = new Set<StepId>();
@@ -149,7 +151,7 @@ export function useFirstDay(): FirstDay {
       after,
       completed,
     };
-  }, [business, firstArticle, after, completed, strategist, proposal, firstPitches, drafted, loading]);
+  }, [business, firstArticle, after, completedSetting, strategist, proposal, firstPitches, drafted, loading]);
 }
 
 /** The minutes left on the timeline (an agent's step beside a person's doesn't add). */

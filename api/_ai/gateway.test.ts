@@ -15,6 +15,8 @@ let kills = 0;
 // model_keys rows by site (sealed with encryptKey), and the PATCHes the gateway sends.
 const keyRows: Record<string, Record<string, unknown>> = {};
 const keyMarks: Record<string, unknown>[] = [];
+// Sites whose app_settings say tenant.plan = "lite".
+const liteSites = new Set<string>();
 const server = createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
@@ -24,6 +26,10 @@ const server = createServer((req, res) => {
     if (req.url?.startsWith("/rest/v1/rpc/cost_engage_kill")) { kills++; return void res.end("null"); }
     if (req.url?.startsWith("/rest/v1/model_prices"))
       return void res.end(JSON.stringify([{ input_per_mtok: "1", output_per_mtok: "2", cache_read_per_mtok: "0", cache_write_per_mtok: "0" }]));
+    if (req.url?.startsWith("/rest/v1/app_settings")) {
+      const site = /site=eq\.([a-z0-9]+)/.exec(req.url)?.[1] ?? "";
+      return void res.end(JSON.stringify(liteSites.has(site) ? [{ value: "lite" }] : []));
+    }
     if (req.url?.startsWith("/rest/v1/model_keys")) {
       const site = /site=eq\.([a-z0-9]+)/.exec(req.url)?.[1] ?? "";
       if (req.method === "PATCH") { keyMarks.push(JSON.parse(body)); return void res.end("[]"); }
@@ -202,6 +208,15 @@ test("a suspended tenant is refused on its own key too, before any call", async 
   await assert.rejects(callModel({ ...opts, background: false }), BudgetError);
   assert.equal(calls.length, 0);
   gate = open;
+});
+
+test("a Lite tenant is refused, on its own key too, before any call", async () => {
+  await withKey();
+  liteSites.add(tenantSite); calls.length = 0;
+  await assert.rejects(callModel({ ...opts, site: tenantSite, model: "anthropic/claude-sonnet-5.5" }), (e: Error) => e instanceof BudgetError && e.reason === "lite");
+  await assert.rejects(callModel({ ...opts, site: tenantSite, background: false }), (e: Error) => e instanceof BudgetError && e.reason === "lite");
+  assert.equal(calls.length, 0);
+  liteSites.delete(tenantSite);
 });
 
 test("the kill switch still stops calls on a tenant's key", async () => {

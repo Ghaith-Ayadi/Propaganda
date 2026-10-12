@@ -144,8 +144,14 @@ async function rest(path: string, init: RequestInit = {}): Promise<Response> {
 }
 
 async function readGate(site: string): Promise<Gate> {
-  const res = await rest("/rpc/cost_gate", { method: "POST", body: JSON.stringify({ p_site: site }) });
+  const [res, plan] = await Promise.all([
+    rest("/rpc/cost_gate", { method: "POST", body: JSON.stringify({ p_site: site }) }),
+    // Lite has no AI. The plan's placeholder home (app/src/lib/tenantPlan.ts).
+    rest(`/app_settings?site=eq.${encodeURIComponent(site)}&key=eq.tenant.plan&select=value`),
+  ]);
   if (!res.ok) throw new CostLogUnavailableError(`cost_gate answered ${res.status}`);
+  // Unreadable plan: the tenant is treated as full (every tenant's default).
+  const [planRow] = plan.ok ? ((await plan.json()) as { value: unknown }[]) : [];
   const g = (await res.json()) as Record<string, unknown>;
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return {
@@ -156,6 +162,7 @@ async function readGate(site: string): Promise<Gate> {
     globalDailyLimit: num(g.global_daily_limit),
     killed: g.killed === true,
     suspended: g.suspended === true,
+    lite: planRow?.value === "lite",
   };
 }
 
