@@ -300,6 +300,7 @@ try {
   check(rule("Nothing to see here: the quiet launch") === "two-part", "\"nothing\" is not an -ing verb, still two parts");
   check(rule("Temporal news: a field guide") === "two-part" && rule("Speed: why it matters") === "two-part", "a short first part is not a name without a digit or a capital");
   check(rule("Kontra Cloud: the first week") === "" && rule("Q4 goals: one post a week") === "", "a product name or a quarter and its explanation passes");
+  check(rule("One Knowledge Base. Three Posts. Three Different Truths.") === "two-part" && rule("Your AI Writer Will Make Up Product Facts—Unless You Feed It the Truth") === "two-part", "title case is not a name; an em dash with no spaces is a break (seen on DeepSeek, 2026-10-12)");
   const prose = t.proseHits("Consistency isn't a calendar problem. Your blog disagrees.\n\nWe quietly shipped it.\n\n## Speed: why it matters\n\nIt is not raining. We went out.").map((h) => h.rule);
   check(prose.join(",") === "lead-in,quietly,two-part", `prose: a lead-in, quietly, a two-part subhead, nothing else (${prose.join(",")})`);
   check(t.styleHits("That's not art. That's maintenance. We quietly left.").length === 2, "styleHits folds the contrast in");
