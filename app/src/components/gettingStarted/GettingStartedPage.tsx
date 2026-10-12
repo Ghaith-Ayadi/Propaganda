@@ -24,6 +24,7 @@ import { StrategistOnboarding } from "@/components/goals/StrategistOnboarding";
 import { pollGoalsEvery, refreshGoals } from "@/lib/goals/live";
 import { refresh as refreshPipeline } from "@/lib/pipeline/store";
 import { goPage } from "@/lib/route";
+import { endFirstRun } from "@/lib/firstRun";
 import { setSetting, useSetting } from "@/lib/settings";
 import { siteHost } from "@/lib/siteUrl";
 import { track } from "@/lib/telemetry";
@@ -100,6 +101,7 @@ export function GettingStartedPage() {
       toTop();
     } else {
       await setSetting("onboarding.completed", new Date().toISOString());
+      endFirstRun(site.id);
       goPage("pipeline");
     }
   };
