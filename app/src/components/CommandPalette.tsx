@@ -20,6 +20,7 @@ import { setActiveCollection } from "@/lib/activeCollection";
 import { requestTitleFocus } from "@/lib/postFocus";
 import { formatExactDate, relativeTime } from "@/lib/format";
 import { buildDate, COMMIT_SHA, DEPLOY_ENV } from "@/lib/version";
+import { CURRENT_RELEASE } from "@/releaseNotes/current";
 import { useSuperadminAccount } from "@/lib/superadmin";
 import { ShortcutsPanel } from "@/components/KeyboardShortcuts";
 import type { Collection, Post } from "@/types";
@@ -349,7 +350,7 @@ export function CommandPalette({ currentPostId }: Props) {
       key: "version",
       label: "Version",
       icon: <Tag01 className="size-4" />,
-      hint: COMMIT_SHA || undefined,
+      hint: CURRENT_RELEASE || COMMIT_SHA || undefined,
       onSelect: () => setPage("version"),
     },
   ];
@@ -600,6 +601,11 @@ function VersionPanel() {
   const d = buildDate();
   return (
     <dl className="space-y-3 text-sm">
+      <VersionRow label="Release">
+        <a href="/release-notes" target="_blank" rel="noreferrer" className="text-brand-secondary underline underline-offset-2">
+          {CURRENT_RELEASE ? `${CURRENT_RELEASE} release notes` : "Release notes"}
+        </a>
+      </VersionRow>
       <VersionRow label="Last deployed">
         {d ? (
           <span title={formatExactDate(d.getTime())}>
