@@ -63,7 +63,7 @@ The same file is shown in two places:
 out: the real workflows, a stand-in database (in memory) and stand-in keyword data and web
 pages, and every model call through `callModel()` to the real gateway. They check what a
 real model's answer has to satisfy (a proposal that passes the Strategist's rules, a pitch
-with an outline, a draft that keeps house rule 1), not exact words. Costs come from the
+with an outline, a draft with no "not X, it's Y" contrast and no em dash), not exact words. Costs come from the
 cost log rows the gateway writes, priced at what the AI Gateway reported.
 
 | Area | Test | Model in the test |

@@ -6,7 +6,7 @@
 // in test/strategy.mjs.
 
 import { isoWeek, quarterOf } from "./goals.js";
-import { titleHits } from "./writing.js";
+import { houseTitleHits, noDashes, titleHits } from "./writing.js";
 import { arr, obj, str } from "./model.js";
 
 const DAY = 86_400_000;
@@ -287,6 +287,8 @@ export interface Rules {
   requestAboutTopics?: boolean;
   /** Topic names are held to the title rules (false on a run recorded before them: replays must match). */
   titleRules?: boolean;
+  /** The twenty rules' hard checks (an em dash, "the hard part is") on topic names too (false on a run recorded before them). */
+  houseStyle?: boolean;
 }
 
 /** A new domain can't win a head term in a quarter: searches a month above this need a page-two position already. */
@@ -552,7 +554,7 @@ export function validate(d: Draft, r: Rules): string[] {
     }
     // A kept name from the previous proposal is never sent back: pitches hang on it.
     if (r.titleRules !== false && !(r.previousTopics ?? []).includes(t.name)) {
-      for (const h of titleHits(t.name)) errors.push(`Topic "${t.name}" breaks the title rules (${h.rule}): name it as one plain statement, no colon, no second half, no negation (rule 2).`);
+      for (const h of (r.houseStyle ? houseTitleHits : titleHits)(t.name)) errors.push(`Topic "${t.name}" breaks the title rules (${h.rule}): name it as one plain statement, no colon, no dash, no second half, no negation (rule 2).`);
     }
   }
 
@@ -747,4 +749,19 @@ export function weeklyNotes(t: GoalTargets, f: WeekFacts): Note[] {
   }
 
   return notes.sort((a, b) => SEVERITY[a.severity] - SEVERITY[b.severity]).slice(0, 3);
+}
+
+/**
+ * Rule 13 of the twenty (zero em dashes) on everything a proposal says: the
+ * summary, every why and basis, the questions. Names, searches and addresses are
+ * left as they are: they are matched against data, and validate() already holds
+ * new topic names to the title rules.
+ */
+export function proposalWithoutDashes<T>(value: T, key = ""): T {
+  if (typeof value === "string") return (["name", "topic", "query", "url"].includes(key) ? value : noDashes(value)) as T;
+  if (Array.isArray(value)) return value.map((v) => proposalWithoutDashes(v, key)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, proposalWithoutDashes(v, k)])) as T;
+  }
+  return value;
 }

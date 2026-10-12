@@ -305,6 +305,60 @@ try {
   const prose = t.proseHits("Consistency isn't a calendar problem. Your blog disagrees.\n\nWe quietly shipped it.\n\n## Speed: why it matters\n\nIt is not raining. We went out.").map((h) => h.rule);
   check(prose.join(",") === "lead-in,quietly,two-part", `prose: a lead-in, quietly, a two-part subhead, nothing else (${prose.join(",")})`);
   check(t.styleHits("That's not art. That's maintenance. We quietly left.").length === 2, "styleHits folds the contrast in");
+  // The twenty rules (2026-10-12), on real PPGD output (house-style/twenty-rules.md).
+  const hard = (x) => t.hardHits(x).map((h) => h.rule).join(",");
+  check(hard("We'll launch by proving the product with our own content—posts that stay true to what Propaganda believes—then build a steady readership.") === "em-dash", "an em dash is a hard hit (rule 13)");
+  check(hard("Writing is cheap now – knowing what's true is the job.") === "em-dash" && hard("Cheap now -- true later.") === "em-dash", "a spaced en dash and a double hyphen stand in for one");
+  check(hard("Pages 10–12 cover it. Run `npm --version` first.\n\n```\na — b\n```") === "", "a range, inline code and a code block are not dashes");
+  check(hard("Anyone can make a machine write a post; the hard part is knowing what your company actually believes.") === "announcer", "\"the hard part is\" is a hard hit (rule 18)");
+  check(["The easy part is writing.", "The real problem is trust.", "Here's the thing: nobody reads it.", "The trick is to start.", "The truth is we guessed."].every((x) => hard(x) === "announcer"), "and its siblings");
+  check(hard("A machine writes the post in a minute. Finding out what your company believes takes the rest of the week.") === "", "the rewrite passes");
+  const ht = (x) => t.houseTitleHits(x).map((h) => h.rule).join(",");
+  check(ht("Your AI Writer Will Make Up Product Facts—Unless You Feed It the Truth") === "two-part,em-dash" && ht("The hard part is knowing what's true") === "announcer", "titles: an em dash and an announcer on top of the title rules");
+  check(ht("Most startup blogs stop after eight posts") === "" && ht("Propaganda 2.0: social is here") === "", "titles: plain statements and names still pass");
+  check(t.noDashes("We'll launch with our own content—posts that stay true—then build.") === "We'll launch with our own content, posts that stay true, then build.", "noDashes: a dash pair becomes commas");
+  check(t.noDashes("— Jane\n\nA pause — then more. Ends here—.\n\n`a—b`") === "Jane\n\nA pause, then more. Ends here.\n\n`a—b`", "noDashes: ends and punctuation, code left alone");
+  const link = "Read the [guide](https://example.com/blog/how-to--write) before you start, or https://x.io/a--b.";
+  check(hard(link) === "" && t.noDashes(link) === link, "a \"--\" inside a link target or a bare URL is not a dash (desk review)");
+  check(t.noDashes("Fast--and [true](https://x.io/a--b)") === "Fast, and [true](https://x.io/a--b)", "noDashes: the prose around a link still loses its dash");
+  const soft = (x) => t.softHits(x).map((f) => f.rule).join(",");
+  check(soft("Propaganda really does track AI answers; a post comparing what these tools measure answers it directly.") === "intensifier", "rule 7: really, directly (PPGD pitch)");
+  check(soft("knowing what your company actually believes") === "intensifier" && soft("a post on keeping the voice true literally answers it") === "intensifier", "rule 7: actually, literally (PPGD Strategist)");
+  check(soft("Every company silently contradicts itself.") === "adverb" && soft("Propaganda seamlessly publishes to all three channels.") === "adverb", "rule 6: the quietly family is flagged, not failed");
+  check(soft("Leverage your existing content to unlock a robust pipeline.") === "marketing" && t.softHits("Leverage your existing content to unlock a robust pipeline.")[0].word === 'Leverage", "unlock", "robust', "rule 8: every marketing word in the sentence is named");
+  check(soft("Paste your API key in Settings.") === "marketing", "rule 8: \"key\" is flagged; the judge keeps it in \"API key\"");
+  check(soft("In today's content landscape, founders face a growing challenge.") === "marketing,opener" && soft("In conclusion, consistency matters more than ever.") === "opener", "rule 12: curtain-raiser and curtain call");
+  check(t.softHits("Why does this matter? Because your prospects notice.")[0]?.sentence === "Why does this matter? Because your prospects notice.", "rule 14: a rhetorical question is judged with its answer (seen on DeepSeek: deleting it alone left \"Because ...\")");
+  check(soft("Why does this matter? Because your prospects notice.") === "drumroll" && soft("One Knowledge Base. Three Posts. Three Different Truths.") === "drumroll", "rule 14: rhetorical question and staccato (PPGD Pitcher title)");
+  check(soft("- **Voice:** your posts should sound like you.\n- **Facts:** every claim should be true.") === "label-list,label-list", "rule 15: bold-label bullets");
+  check(soft("It's worth noting that a new domain won't rank for head terms in its first quarter.") === "announce", "rule 18: an announcement");
+  check(soft("A content agency that publishes opinionated pieces for businesses and organizations.") === "crowd", "rule 20: crowd nouns");
+  check(soft("Your blog, newsletter and LinkedIn disagree because they were written three times.") === "" && soft("Most startup blogs stop after eight posts") === "", "clean PPGD sentences flag nothing");
+  {
+    const draft = "Anyone can make a machine write a post; the hard part is knowing what your company believes.\n\nLeverage your existing content to unlock a robust pipeline.\n\nPaste your API key in Settings.\n\nWhy does this matter? Because your prospects notice.";
+    const items = t.polishItems(t.hardHits(draft), t.softHits(draft));
+    check(items.length === 4 && items[0].must && !items[1].must, "one item per sentence, hard hits first");
+    const q = items.find((i) => i.sentence.startsWith("Why does"));
+    check(q?.sentence === "Why does this matter? Because your prospects notice.", "the question and its answer are one item");
+    check(t.polishPrompt(items).includes("[must change]") && !/\u2014/.test(t.polishPrompt(items)), "the judge prompt marks hard hits and has no em dash");
+    const { texts, stats } = t.applyPolish([draft], items, t.parsePolish({ rewrites: [
+      { n: 1, rewrite: "A machine writes the post in a minute. Finding out what your company believes takes the rest of the week." },
+      { n: 2, rewrite: "Leverage what you have—and unlock more." },
+      { n: 4, rewrite: "Your prospects notice." },
+    ] }));
+    check(stats.rewritten === 2 && stats.kept === 1 && stats.refused === 1, `applyPolish: keeps a good rewrite, rewrites the drumroll pair, keeps the judged API key, refuses a rewrite with a dash (${JSON.stringify(stats)})`);
+    check(texts[0].startsWith("A machine writes the post in a minute.") && texts[0].includes("Paste your API key") && texts[0].includes("Leverage your existing") && texts[0].endsWith("Your prospects notice.") && !texts[0].includes("Why does"), "applyPolish: the text carries the rewrites and nothing refused");
+    const del = t.applyPolish(["It's worth noting that rates rose. We said so."], [{ n: 1, sentence: "It's worth noting that rates rose.", must: false, why: ["\"x\": rule 8, a software-marketing word"] }], [{ n: 1, rewrite: "" }]);
+    check(del.texts[0].startsWith("It's worth") && del.stats.refused === 1, "applyPolish: an empty rewrite never deletes a sentence flagged only for a word");
+    const md = "Intro.\n\n## Why does this matter?\n\nBody.";
+    const h = t.applyPolish([md], [{ n: 1, sentence: "Why does this matter?", must: false, why: ["\"x\": rule 14, a drumroll"] }], [{ n: 1, rewrite: "" }]);
+    check(h.texts[0] === "Intro.\n\nBody.", `applyPolish: a deleted heading leaves no bare "## " (desk review) (${JSON.stringify(h.texts[0])})`);
+  }
+  check(t.noDashes(t.HOUSE_STYLE) === t.HOUSE_STYLE && !/\u2014/.test(t.HOUSE_RULES + t.TITLE_RULES + t.PITCHER_SYSTEM), "the rules themselves carry no em dash");
+  {
+    const p = t.proposalWithoutDashes({ summary: "One post a week—then more", topics: [{ name: "A—B", why: "Because—yes" }], ranking: { searches: [{ query: "ai cms — best", topic: "A—B" }] } });
+    check(p.summary === "One post a week, then more" && p.topics[0].why === "Because, yes" && p.topics[0].name === "A—B" && p.ranking.searches[0].query === "ai cms — best", "a proposal loses its dashes, never in names or searches");
+  }
   check(t.unsourcedNumbers("About 12% of teams do it.").length === 1, "flags a number with no link");
   check(t.unsourcedNumbers("About [12%](https://x.y/z) of teams do it.").length === 0, "accepts a linked number");
   const legacy = t.asAttempt([{ url: "https://x.y", title: "t", snippet: "", position: 1 }]);

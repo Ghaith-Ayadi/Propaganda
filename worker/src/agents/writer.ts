@@ -37,7 +37,8 @@ import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
 import { readPage, type Page } from "./web.js";
 import { SearchSession, searchDurably } from "./search.js";
-import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit } from "./writing.js";
+import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, hardHits, houseTitleHits, noDashes, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit, type PolishStats } from "./writing.js";
+import { polishTexts } from "./polish.js";
 
 export interface WriteInput {
   site: string;
@@ -151,8 +152,8 @@ const hitLines = (hits: Hit[]) => hits.map((h) => `- "${h.sentence}" (${RULE_NAM
  * small call; what comes back is checked and kept only when it passes. Both
  * fields go in one call so the pair still reads as one.
  */
-async function enforceTitle(site: string, voice: string, draft: { title: string; subtitle: string }): Promise<{ title: string; subtitle: string }> {
-  const hits = [...titleHits(draft.title), ...titleHits(draft.subtitle)];
+async function enforceTitle(site: string, voice: string, draft: { title: string; subtitle: string }, check = titleHits): Promise<{ title: string; subtitle: string }> {
+  const hits = [...check(draft.title), ...check(draft.subtitle)];
   if (hits.length === 0) return draft;
   const again = await askJson(
     "retitle",
@@ -175,9 +176,24 @@ Write them again as one plain statement each, keeping what the post says. Answer
       return { title: str(o.title, "title", { max: 200 }), subtitle: str(o.subtitle, "subtitle", { optional: true, max: 300 }) };
     },
   );
-  const ok = titleHits(again.title).length === 0 && titleHits(again.subtitle).length === 0;
+  const ok = check(again.title).length === 0 && check(again.subtitle).length === 0;
   return ok ? again : draft;
 }
+
+/**
+ * The twenty rules on a finished draft: one small call judges the flagged
+ * sentences (polish.ts), then every em dash goes. A title the call changed is
+ * kept only when it still passes the title rules.
+ */
+async function polishDraft(site: string, step: string, voice: string, d: { markdown: string; title: string; subtitle: string; excerpt: string }) {
+  const { texts, stats } = await polishTexts(step, { site, job: "writer:rules", model: MODELS.base, system: writerSystem(voice) }, [d.markdown, d.title, d.subtitle, d.excerpt]);
+  const [markdown, title, subtitle, excerpt] = texts;
+  const titled = (t: string, was: string) => (t && houseTitleHits(t).length === 0 ? t : noDashes(was));
+  return { markdown, title: titled(title, d.title), subtitle: d.subtitle ? titled(subtitle, d.subtitle) : "", excerpt, stats };
+}
+
+/** Every house-rule problem left in a draft, for the reviewer. */
+const leftHits = (markdown: string, styled: boolean) => (styled ? [...styleHits(markdown), ...hardHits(markdown)] : styleHits(markdown));
 
 async function research(site: string, brief: BriefRow): Promise<{ pages: Page[]; claims: Claim[]; searches: SearchSession }> {
   const queries = await askJson(
@@ -281,16 +297,27 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
     parseDraft,
   );
 
-  const markdown = await enforceRules(site, "keep the house rules", voice, draft.markdown);
+  let markdown = await enforceRules(site, "keep the house rules", voice, draft.markdown);
+  // The twenty rules (2026-10-12): new hard checks on the title and a polish
+  // call after it. Runs recorded before them replay without either.
+  const styled = await DBOS.patch("writer-house-style");
   // A new step (2026-10-12): runs recorded before it replay without it.
-  const titled = (await DBOS.patch("writer-retitle")) ? await enforceTitle(site, voice, draft) : draft;
-  const contrast = styleHits(markdown);
+  let titled = (await DBOS.patch("writer-retitle")) ? await enforceTitle(site, voice, draft, styled ? houseTitleHits : titleHits) : draft;
+  let excerpt = draft.excerpt;
+  let polish: PolishStats | undefined;
+  if (styled) {
+    const p = await polishDraft(site, "polish the prose", voice, { markdown, title: titled.title, subtitle: titled.subtitle, excerpt });
+    ({ markdown, excerpt } = p);
+    titled = { title: p.title, subtitle: p.subtitle };
+    polish = p.stats;
+  }
+  const contrast = leftHits(markdown, styled);
   const unsourced = unsourcedNumbers(markdown);
   const offSource = offSourceLinks(markdown, pages.map((p) => p.url));
   const words = wordCount(markdown);
 
   const postId = target.post ?? (await DBOS.runStep(() => Promise.resolve(newId()), { name: "mint the post" }));
-  const fields = { title: titled.title, subtitle: titled.subtitle, excerpt: draft.excerpt, content_md: markdown, word_count: words };
+  const fields = { title: titled.title, subtitle: titled.subtitle, excerpt, content_md: markdown, word_count: words };
   const wrote = await DBOS.runStep(
     async () => {
       if (target.post) return fillEmptyPost(site, target.post, fields);
@@ -323,6 +350,7 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
             contrast: contrast.map((h) => h.sentence),
             unsourced: unsourced.map((h) => h.sentence),
             offSourceLinks: offSource,
+            ...(polish ? { polish } : {}),
           },
         },
       }),
@@ -422,7 +450,10 @@ Revise the post to address every note. Keep everything the notes don't touch exa
 
 ${current.content_md}`,
   });
-  const markdown = await enforceRules(site, "keep the house rules", voice, revised.replace(/^```(?:markdown|md)?\s*|\s*```$/g, "").trim());
+  let markdown = await enforceRules(site, "keep the house rules", voice, revised.replace(/^```(?:markdown|md)?\s*|\s*```$/g, "").trim());
+  // The twenty rules (2026-10-12); runs recorded before them replay without.
+  const styled = await DBOS.patch("writer-revise-house-style");
+  if (styled) markdown = (await polishTexts("polish the prose", { site, job: "writer:rules", model: MODELS.base, system: writerSystem(voice) }, [markdown])).texts[0];
 
   const versionId = await DBOS.runStep(() => Promise.resolve(newId()), { name: "mint the version" });
   const version = await DBOS.runStep(
@@ -437,7 +468,7 @@ ${current.content_md}`,
           agent: "writer",
           suggestion: true,
           notes: input.notes.slice(0, 4000),
-          lint: { contrast: styleHits(markdown).map((h) => h.sentence), unsourced: unsourcedNumbers(markdown).map((h) => h.sentence) },
+          lint: { contrast: leftHits(markdown, styled).map((h) => h.sentence), unsourced: unsourcedNumbers(markdown).map((h) => h.sentence) },
         },
       }),
     { name: "save the suggestion" },

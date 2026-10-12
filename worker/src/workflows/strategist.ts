@@ -19,7 +19,7 @@
 // The weekly check (Mondays) is code only and writes drift_notes.
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { TITLE_RULES } from "../agents/writing.js";
+import { HOUSE_STYLE, TITLE_RULES } from "../agents/writing.js";
 import { askJson, MODELS } from "../agents/model.js";
 import { assertPublicUrl, readPage, searchWeb, searchConfigured } from "../agents/web.js";
 import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
@@ -63,6 +63,7 @@ import {
   reviewPerMonth,
   thinAnswers,
   pickHost,
+  proposalWithoutDashes,
   validate,
   volumeCap,
   weeklyNotes,
@@ -322,7 +323,9 @@ The rules (code checks them; a proposal that breaks one is sent back):
 8. At most 3 questions: only what you couldn't decide alone. When their answers are thin (a blank, a one-liner, capacity not answered), ask at least one. Anything they said is coming up (a launch, an event, a deadline) gets either a place in the plan or a question, never silence. When what they asked for answers your earlier questions, those questions are settled: decide with their answers, never ask one again, and ask something new only when an answer leaves a choice you truly can't make alone. Where an answer is still vague, pick the sensible reading and say so in the basis.
 9. The summary is the strategy in one sentence the founder would say about the next three months, not a list of the numbers.
 
-Write plainly. No jargon, no hype. Never write "That's not X. It's Y."; say it as a comparison. Never the word "quietly".
+Write plainly. No jargon, no hype. Everything you write (topic names, whys, bases, the summary, questions) follows these:
+
+${HOUSE_STYLE}
 
 ${TITLE_RULES}
 
@@ -429,6 +432,8 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       requestAboutTopics: asksAboutTopics(pack.request),
       // Title rules on topic names (2026-10-12): a run recorded before them keeps its draft.
       titleRules: await DBOS.patch("strategist-title-rules"),
+      // The twenty rules' hard checks (2026-10-12): same reason.
+      houseStyle: await DBOS.patch("strategist-house-style"),
     };
     const previousTopics = rules.previousTopics;
 
@@ -483,6 +488,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     }, { name: "check watched sites" });
     draft = { ...draft, watchedSites: draft.watchedSites.filter((w) => readable.includes(w.url)) };
 
+    if (rules.houseStyle) draft = proposalWithoutDashes(draft);
     const cadence = await DBOS.runStep(() => batchCadence(site), { name: "batching" });
     const proposal = finish(draft, { kind, window, cadence, launch, keywords });
     const inputs = {
