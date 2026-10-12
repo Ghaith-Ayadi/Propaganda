@@ -25,14 +25,13 @@ export const DRAFT_TOP = 3;
 export const FIRST_BATCH = 1;
 
 /**
- * Lite tenants get no AI. The plan has no home on the server yet (the
- * proposal is a superadmin-only `sites.plan` column), so this is the app's
- * placeholder (app/src/lib/tenantPlan.ts): Verbatim is Lite, every other
- * tenant is full. WORKER_LITE_SITES (comma-separated ids) adds more. Not
+ * The tenants on Lite by id alone: Verbatim, and WORKER_LITE_SITES
+ * (comma-separated ids). A tenant that picked Lite carries `tenant.plan` =
+ * "lite" in app_settings as well: `isLite()` in store.ts reads both. Not
  * kb_agent_sites: that list is turned on by hand, so every new tenant would
  * read as Lite on its first day.
  */
-export function isLite(site: string): boolean {
+export function isLiteById(site: string): boolean {
   const extra = (process.env.WORKER_LITE_SITES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   return site === "verbatimsite000" || extra.includes(site);
 }

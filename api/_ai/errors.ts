@@ -1,6 +1,6 @@
 /** Thrown when the budget rules refuse a call. Nothing was sent to a model. */
 export class BudgetError extends Error {
-  constructor(public readonly reason: "suspended" | "kill-switch" | "global-daily-cap" | "tenant-budget") {
+  constructor(public readonly reason: "lite" | "suspended" | "kill-switch" | "global-daily-cap" | "tenant-budget") {
     super(`Model call refused: ${reason}`);
     this.name = "BudgetError";
   }

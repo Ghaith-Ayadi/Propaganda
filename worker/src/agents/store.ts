@@ -9,6 +9,7 @@
 
 import { BackendError, enc, insert, isMissing, patch, rest, select } from "./backend.js";
 import { newId, stableId } from "./ids.js";
+import { isLiteById } from "./first-day.js";
 
 // ---- rows ----
 
@@ -241,6 +242,17 @@ export async function insertVersion(row: {
  * The voice the tenant wrote in its own words (Getting started's "Your voice",
  * Settings), or "" when it wrote none. It wins over any guide the Writer made.
  */
+/**
+ * Lite tenants get no AI (the gateway refuses their calls too, api/_ai/gateway.ts).
+ * The plan has no server-enforced home yet; the app's placeholder
+ * (app/src/lib/tenantPlan.ts) is Verbatim plus `tenant.plan` = "lite".
+ */
+export async function isLite(site: string): Promise<boolean> {
+  if (isLiteById(site)) return true;
+  const [row] = await select<{ value: unknown }>("app_settings", `site=eq.${enc(site)}&key=eq.tenant.plan&select=value`);
+  return row?.value === "lite";
+}
+
 export async function personVoice(site: string): Promise<string> {
   const [row] = await select<{ value: unknown }>("app_settings", `site=eq.${enc(site)}&key=eq.tenant.voice.guide&select=value`);
   return typeof row?.value === "string" ? row.value.trim() : "";

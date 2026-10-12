@@ -40,14 +40,17 @@ export interface Gate {
   killed: boolean;
   /** The tenant is suspended: nothing paid runs for it. */
   suspended: boolean;
+  /** The tenant is on Lite: no AI at all (app_settings `tenant.plan`, app/src/lib/tenantPlan.ts). */
+  lite?: boolean;
 }
 
 export type Verdict =
   | { allow: true; warn: boolean; engageKill?: false }
-  | { allow: false; reason: "suspended" | "kill-switch" | "global-daily-cap" | "tenant-budget"; engageKill?: boolean };
+  | { allow: false; reason: "lite" | "suspended" | "kill-switch" | "global-daily-cap" | "tenant-budget"; engageKill?: boolean };
 
 /**
  * May this call go ahead?
+ *  - a Lite tenant gets nothing, on any key: Lite has no AI;
  *  - a suspended tenant gets nothing, editor included;
  *  - the kill switch blocks everything until a superadmin lifts it;
  *  - reaching the global daily cap engages the kill switch;
@@ -56,6 +59,7 @@ export type Verdict =
  * With every limit null (the default) the answer is always allow.
  */
 export function decide(gate: Gate, background: boolean): Verdict {
+  if (gate.lite) return { allow: false, reason: "lite" };
   if (gate.suspended) return { allow: false, reason: "suspended" };
   if (gate.killed) return { allow: false, reason: "kill-switch" };
   if (gate.globalDailyLimit !== null && gate.globalDayUsd >= gate.globalDailyLimit) {
