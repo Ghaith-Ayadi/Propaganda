@@ -230,13 +230,9 @@ export function Onboarding({
               <Field label="Your business's website" hint="The site your customers know you by.">
                 <Input size="sm" type="url" placeholder="https://example.com" value={website} onChange={setWebsite} />
               </Field>
-              <NativeSelect
-                label="How many posts a month can your team review?"
-                hint="We do the writing. The Strategist plans to this number, and you can change it any time."
-                value={review}
-                onChange={(e) => setReview(e.target.value)}
-                options={REVIEW_OPTIONS}
-              />
+              <Field label="Posts a month your team can review" hint="We do the writing. The Strategist plans to this number; change it any time.">
+                <NativeSelect size="sm" value={review} onChange={(e) => setReview(e.target.value)} options={REVIEW_OPTIONS} />
+              </Field>
             </div>
           )}
 
