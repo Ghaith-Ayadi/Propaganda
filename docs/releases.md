@@ -26,10 +26,12 @@ It runs, in order:
 1. **Plan.** The next number, and which real-model tests to run (below).
 2. **Free suites** on that exact commit: `api.yml`, `worker.yml`, `kb.yml`, `blog-themes.yml`.
    The same workflows run on PRs; the release runs all of them whatever changed.
-3. **Real-model tests** (`worker/test/live/`) through the AI Gateway, with the cost of each.
+3. **Real-model tests** (`worker/test/live/`) through the AI Gateway, with the cost of each in
+   the run's summary.
 4. **Tag and release log.** Only when everything above is green: the tag, and a GitHub
-   Release opening with the version's notes and listing its PRs, which real-model tests ran or were skipped and why, and what
-   they cost.
+   Release opening with the version's notes and listing its PRs and which real-model tests ran
+   or were skipped and why. Costs never go on a release (Ayadi, 2026-10-12): they are in the
+   run's summary.
 5. **The app** to Vercel production through `deploy-app.yml`.
 
 **The box** runs the Propaganda commit named by `SCHEMA_REF` in Bedrock's
@@ -46,8 +48,10 @@ are linked as `images/<file>`. The workflow refuses to release a version without
 
 The same file is shown in two places:
 
-- **GitHub:** the opening of the release's page, above what the workflow adds (tests, costs,
-  PRs). Images are linked from the release commit.
+- **GitHub:** the opening of the release's page, above what the workflow adds (tests, PRs).
+  Images are linked from the release commit. To change a published release's notes, merge the
+  edit and run the **release-log** workflow (`.github/workflows/release-log.yml`) with its tag:
+  it rewrites that release's page from the file on `main`, without costs.
 - **The app:** `app.propaganda.pub/release-notes` lists every release newest first
   (`app/src/releaseNotes/`, read at build time; public, no sign-in). The editor's command
   palette (Version) names the current release and links there. The newest file is the release

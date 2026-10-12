@@ -1,0 +1,40 @@
+# Rewrites a published release's log (its GitHub Release body) after the fact: the
+# version's notes as they are now on main (release-notes/vX.Y.Z.md), then what the
+# release workflow wrote, without costs (docs/releases.md). For notes edited after a
+# release, and for releases cut before the notes or before costs left the log.
+name: release-log
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release to rewrite, such as v0.2.2"
+        required: true
+permissions:
+  contents: write
+jobs:
+  rewrite:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rewrite the release log
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::$TAG is not a version"; exit 1; }
+          [ -s "release-notes/$TAG.md" ] || { echo "::error::No release-notes/$TAG.md on main"; exit 1; }
+          gh release view "$TAG" --json body -q .body > old.md
+          # As in release.yml: the notes less their title, images from the release's tag.
+          sed -e '1{/^# /d}' -e "s#](images/#](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/raw/${TAG}/release-notes/images/#g" "release-notes/$TAG.md" > notes.md
+          {
+            echo
+            echo "---"
+            echo
+            # What the release workflow wrote starts at "Released ..." (anything above it is
+            # earlier notes), less the costs: "- area: passed, $0.03" and "Total: $0.1".
+            sed -n '/^Released /,$p' old.md | sed -E -e 's/^(- [a-z-]+: (passed|FAILED)), \$[0-9.]+$/\1/' -e '/^Total: \$/d'
+          } >> notes.md
+          grep -q '^Released ' notes.md || { echo "::error::$TAG's log has no \"Released\" line to keep"; exit 1; }
+          gh release edit "$TAG" --notes-file notes.md
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"

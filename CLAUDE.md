@@ -94,8 +94,8 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
 Production moves in numbered releases (`v0.2.0`, `v0.2.1`, ...), cut by the **release**
 workflow on `main`, only on Ayadi's word: the free suites, then real-model tests
 (`worker/test/live/`) for the agents whose code changed since the last release (all of them on
-the first release of a month), then the tag, a GitHub Release as the log (the version's notes, PRs, tests, their
-cost), and the app deploy. Each release's notes are `release-notes/vX.Y.Z.md`, merged before it
+the first release of a month), then the tag, a GitHub Release as the log (the version's notes, PRs, which tests
+ran; never costs), and the app deploy. Each release's notes are `release-notes/vX.Y.Z.md`, merged before it
 is cut, and shown at `/release-notes` in the app. The box follows the tag in Bedrock's `schema.env`. Tests are plumbing,
 not quality: every agent runs on DeepSeek in them, never a Claude model. Details: [docs/releases.md](docs/releases.md).
 
