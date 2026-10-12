@@ -21,7 +21,7 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { HOUSE_STYLE, TITLE_RULES } from "../agents/writing.js";
 import { askJson, MODELS } from "../agents/model.js";
-import { assertPublicUrl, readPage, searchWeb, searchConfigured } from "../agents/web.js";
+import { assertPublicUrl, readPage, readSite, searchWeb, searchConfigured, type SiteClaim } from "../agents/web.js";
 import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
 import {
   claimProposal,
@@ -110,6 +110,8 @@ interface Pack {
   answers: Record<string, string>;
   plan: { text: string; files: string[] };
   pages: { url: string; title: string; text: string }[];
+  /** The site's sentences with how often they repeat across the pages read (agents/web.ts readSite); absent on a run recorded before 2026-10-12. */
+  siteClaims?: SiteClaim[];
   history: {
     lastQuarter: string;
     publishedLastQuarter: number;
@@ -140,17 +142,17 @@ async function gather(site: string, request: string, now: Date, quarter = quarte
   if (!s) throw new Error(`site ${site} not found`);
   const website = String(set["tenant.website"] ?? "").trim();
 
-  // The website as text: home, plus the usual pages when they exist.
-  const pages: Pack["pages"] = [];
+  // The website as text, read the way a visitor skims it: the home page and
+  // the pages its own menu points at, decoration dropped (agents/web.ts).
+  let pages: Pack["pages"] = [];
+  let siteClaims: SiteClaim[] = [];
   if (website) {
-    const base = /^https?:\/\//.test(website) ? website : `https://${website}`;
-    for (const path of ["", "/pricing", "/about", "/product"]) {
-      try {
-        const p = await readPage(new URL(path, base).toString(), path ? 4_000 : 8_000);
-        if (p.text.trim()) pages.push(p);
-      } catch {
-        /* missing or unreadable: skip */
-      }
+    try {
+      const read = await readSite(website, { homeChars: 8_000, pageChars: 3_000, limit: 6 });
+      pages = read.pages;
+      siteClaims = read.claims;
+    } catch {
+      /* unreadable: the model plans from the answers */
     }
   }
 
@@ -204,6 +206,7 @@ async function gather(site: string, request: string, now: Date, quarter = quarte
     answers: prof?.answers ?? {},
     plan: { text: [prof?.plan_text ?? "", ...planTexts].filter(Boolean).join("\n\n").slice(0, 30_000), files: (prof?.plan_files ?? []).map((f) => f.name) },
     pages,
+    siteClaims,
     history: {
       lastQuarter: quarterLabelOf(last.start),
       publishedLastQuarter: lastPosts.length,
@@ -331,7 +334,7 @@ The rules (code checks them; a proposal that breaks one is sent back):
 4. 3 to 8 watched sites: regulators, trade press, competitors' blogs, standards bodies, newsletters. Each is a source that keeps publishing (a site, a blog index, a news section: the root or one path segment), never one article, whitepaper or listicle. Each tied to one topic, each with a why. The competitors they named are always in. Use real sites you know or that appear in the data; full https addresses.
 5. 5 to 10 target searches (10 when the data allows, and at least 8 with 6 from the data when the data is rich): all winnable, which means difficulty under 30 with at least 50 searches a month, or a search where they're already on page two. A new domain targets long-tail searches only, never a head term (nothing over 5,000 searches a month), each one a question a post in its topic would literally answer. Each names one of the topics. A search you propose that the data doesn't list gets its numbers looked up before your proposal is checked, so take the best questions from the data first and add your own only when the data has none. A new domain targets at most 2 on page one by quarter end, and no AI-mention target in its first quarter (set it to null and say why).
 6. No Readership target without 4 weeks of reader data: value null, and say a target comes after 4 weeks of readers.
-7. Every number has a why (one line a person would say out loud, adding something they didn't already know) and a basis (what it came from). A basis quotes only what they actually said or a number from the data: "your answer: 8 posts a month", "DataForSEO: 320 searches/month, difficulty 12". Never put words in their mouth: a default is called a default ("review capacity not answered; assumed 8 a month"), and anything you had to assume becomes a question.
+7. Every number has a why (one line a person would say out loud, adding something they didn't already know) and a basis (what it came from). A basis quotes only what they actually said, what their site says, or a number from the data: "your answer: 8 posts a month", "their site says: no link farms", "DataForSEO: 320 searches/month, difficulty 12". Their site is not them talking to you: it is marketing copy, so a sentence from it is "their site says", never "you said" or "your answer", and a sentence the site repeats is repeated by the layout (a header, a footer, a card on every page), not because it is what the company cares about most. Never put words in their mouth: a default is called a default ("review capacity not answered; assumed 8 a month"), and anything you had to assume becomes a question.
 8. At most 3 questions: only what you couldn't decide alone. When their answers are thin (a blank, a one-liner, capacity not answered), ask at least one. Anything they said is coming up (a launch, an event, a deadline) gets either a place in the plan or a question, never silence. When what they asked for answers your earlier questions, those questions are settled: decide with their answers, never ask one again, and ask something new only when an answer leaves a choice you truly can't make alone. Where an answer is still vague, pick the sensible reading and say so in the basis.
 9. The summary is the strategy in one sentence the founder would say about the next three months, not a list of the numbers.
 
@@ -373,7 +376,14 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
     pack.plan.text || pack.plan.files.length
       ? `\nTheir own plan (follow it where it fits the rules; say where you changed it):\n${pack.plan.text}${pack.plan.files.length ? `\nFiles they attached: ${pack.plan.files.join(", ")}` : ""}`
       : "",
-    pack.pages.length ? `\nTheir website, as text:\n${pack.pages.map((p) => `## ${p.url}\n${p.text}`).join("\n\n")}` : "",
+    pack.pages.length ? `\nTheir website, as text (marketing copy, not their answers: quote it as "their site says"):\n${pack.pages.map((p) => `## ${p.url}\n${p.text}`).join("\n\n")}` : "",
+    pack.siteClaims?.some((c) => c.count > 1)
+      ? `\nSentences their site repeats (how many times; that is the layout repeating them, not the company's priority, and none of them is a topic or a thesis):\n${pack.siteClaims
+          .filter((c) => c.count > 1)
+          .slice(0, 12)
+          .map((c) => `- ${c.count}x: ${c.text}`)
+          .join("\n")}`
+      : "",
     pack.history.recentTitles.length ? `\nRecent posts:\n${pack.history.recentTitles.map((t) => `- ${t}`).join("\n")}` : "\nNo posts yet.",
     pack.history.approved || pack.history.rejected
       ? `\nPitches last quarter: ${pack.history.approved} approved, ${pack.history.rejected} rejected.${pack.history.rejectReasons.length ? ` Reasons given:\n${pack.history.rejectReasons.map((r) => `- ${r}`).join("\n")}` : ""}`
@@ -448,7 +458,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       houseStyle: await DBOS.patch("strategist-house-style"),
       // A short name plus a thesis, and the site's own sentences banned as either (2026-10-12): same reason.
       thesis: await DBOS.patch("strategist-thesis"),
-      siteSentences: siteSentences(pack.pages.map((p) => p.text)),
+      siteSentences: pack.siteClaims?.length ? pack.siteClaims.map((c) => c.text) : siteSentences(pack.pages.map((p) => p.text)),
     };
     const previousTopics = rules.previousTopics;
 
