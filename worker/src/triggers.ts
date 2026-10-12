@@ -165,8 +165,8 @@ export function listTriggers(): Trigger[] {
 }
 
 /** Every tenant, for the picker (the read-only pool; sites are public anyway). */
-export async function listTenants(db: Pool): Promise<{ id: string; name: string }[]> {
-  const r = await db.query<{ id: string; name: string }>("select id, name from public.sites order by name");
+export async function listTenants(db: Pool): Promise<{ id: string; name: string; slug: string }[]> {
+  const r = await db.query<{ id: string; name: string; slug: string }>("select id, name, slug from public.sites order by slug");
   return r.rows;
 }
 

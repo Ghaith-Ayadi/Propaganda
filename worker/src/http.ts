@@ -8,6 +8,7 @@
 //   POST /agents/:name           202 { runId }  body { site, task, requestedBy, conversation, post? }
 //   GET  /progress/strategist?site=  StrategistProgress (src/progress.ts): a member of the site, not a superadmin
 //   GET  /runs?state=&site=&name=&limit=&offset=
+//   GET  /flows?site=&hide=&limit=&offset=  { flows, kinds, costLog, next }: runs grouped into flows (src/flows.ts)
 //   GET  /runs/:id
 //   POST /runs/:id/retry         { id, how }   id is the new run's when forked
 //   POST /runs/:id/cancel        { ok: true }
@@ -32,6 +33,7 @@ import { HttpError, requireMember, requireSuperadmin } from "./auth.js";
 import { strategistProgress } from "./progress.js";
 import { config } from "./config.js";
 import { cancelRun, getRun, listRuns, retryRun, type RunState } from "./runs.js";
+import { listFlows } from "./flows.js";
 import { dispatchAgent, isAgentName, startForTenant, type DispatchInput } from "./workflows/agents.js";
 import { demo } from "./workflows/demo.js";
 import { scout } from "./workflows/scout.js";
@@ -225,6 +227,22 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
         site,
         name: url.searchParams.get("name") ?? undefined,
         limit: Number(url.searchParams.get("limit") ?? 50) || 50,
+        offset: Number(url.searchParams.get("offset") ?? 0) || 0,
+      }),
+    );
+  }
+
+  if (path === "/flows" && method === "GET") {
+    const site = url.searchParams.get("site") ?? undefined;
+    if (site && !SITE_RE.test(site)) throw new HttpError(400, "Bad site");
+    const hide = (url.searchParams.get("hide") ?? "").split(",").filter((k) => /^[a-z-]{1,40}$/.test(k));
+    return send(
+      res,
+      200,
+      await listFlows(db, {
+        site,
+        hide,
+        limit: Number(url.searchParams.get("limit") ?? 30) || 30,
         offset: Number(url.searchParams.get("offset") ?? 0) || 0,
       }),
     );
