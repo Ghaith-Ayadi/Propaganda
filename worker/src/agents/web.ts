@@ -199,6 +199,11 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
 
 /** Fetches a page and returns its readable text (at most `maxChars`). Follows up to 4 redirects, each checked. */
 export async function readPage(raw: string, maxChars = 12_000): Promise<Page> {
+  return (await readPageWithHtml(raw, maxChars)).page;
+}
+
+/** readPage plus the raw HTML, for the links a site's home page carries. */
+async function readPageWithHtml(raw: string, maxChars: number): Promise<{ page: Page; html: string }> {
   let url = await assertPublicUrl(raw);
   let res: Response | null = null;
   for (let hop = 0; hop < 5; hop++) {
@@ -215,21 +220,184 @@ export async function readPage(raw: string, maxChars = 12_000): Promise<Page> {
   const type = res.headers.get("content-type") ?? "";
   if (!/text\/html|text\/plain|application\/xhtml/.test(type)) throw new Error(`not a text page (${type || "no type"})`);
   const body = (await res.text()).slice(0, MAX_BYTES);
-  if (type.includes("text/plain")) return { url: url.toString(), title: url.hostname, text: tidy(body).slice(0, maxChars) };
+  if (type.includes("text/plain")) return { page: { url: url.toString(), title: url.hostname, text: tidy(body).slice(0, maxChars) }, html: "" };
   const title = decode(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(body)?.[1] ?? url.hostname).trim();
-  return { url: url.toString(), title, text: htmlToText(body).slice(0, maxChars) };
+  return { page: { url: url.toString(), title, text: htmlToText(body).slice(0, maxChars) }, html: body };
 }
 
-/** Good enough for reading: the main text, paragraphs kept, scripts and chrome dropped. */
+/**
+ * Good enough for reading: the main text, paragraphs kept, scripts and chrome
+ * dropped. Decoration goes too: anything hidden from assistive tech
+ * (aria-hidden, role img/presentation), figures, pictures, and elements whose
+ * class or id says they are an illustration, a mockup, a screenshot or a
+ * testimonial. Those are what a page *shows*, written as HTML; read as text
+ * they become the company's words (propaganda.pub's demo of a fictional
+ * company was 68% of what the Strategist read as "their website", 2026-10-12).
+ * Headings keep their level as Markdown (`## Why`), so a model sees a heading
+ * where a reader does, instead of a bare sentence standing alone.
+ */
 export function htmlToText(html: string): string {
   let h = html.replace(/<!--[\s\S]*?-->/g, " ");
-  h = h.replace(/<(script|style|noscript|svg|nav|footer|header|aside|form|iframe)\b[\s\S]*?<\/\1>/gi, " ");
+  h = h.replace(/<(script|style|noscript|svg|nav|footer|header|aside|form|iframe|template|dialog|select|picture|figure)\b[\s\S]*?<\/\1>/gi, " ");
+  h = dropDecoration(h);
   const main = /<(article|main)\b[\s\S]*?<\/\1>/i.exec(h)?.[0];
   if (main && main.length > 500) h = main;
+  h = h.replace(/<h([1-6])\b[^>]*>/gi, (_, n) => `\n${"#".repeat(Number(n))} `);
   h = h.replace(/<\/(p|div|section|li|h[1-6]|tr|blockquote|pre)>/gi, "\n").replace(/<br\s*\/?>/gi, "\n");
   h = h.replace(/<li\b[^>]*>/gi, "- ");
   h = h.replace(/<[^>]+>/g, " ");
   return tidy(decode(h));
+}
+
+/** An opening tag whose attributes mark the element as decoration. */
+const DECORATION = /\baria-hidden\s*=\s*["']?true|\brole\s*=\s*["']?(img|presentation|none)\b|\b(class|id|data-slot|data-role)\s*=\s*["'][^"']*\b(illo|illustration|mockup|mock-ui|screenshot|testimonials?|logo-wall|logos|marquee)\b/i;
+
+/**
+ * Removes every element marked as decoration together with its subtree. A
+ * regex can't match a balanced element, so this walks the tags and counts
+ * depth per element name; void elements (img, br, input...) have no subtree.
+ */
+export function dropDecoration(html: string): string {
+  const open = /<([a-zA-Z][\w:-]*)\b([^>]*)>/g;
+  let out = "";
+  let at = 0;
+  let m: RegExpExecArray | null;
+  while ((m = open.exec(html))) {
+    const [tag, name, attrs] = m;
+    if (!DECORATION.test(attrs)) continue;
+    const lower = name.toLowerCase();
+    const start = m.index;
+    let end = start + tag.length;
+    if (!VOID.has(lower) && !tag.endsWith("/>")) {
+      const same = new RegExp(`<(/?)${lower}\\b[^>]*>`, "gi");
+      same.lastIndex = end;
+      let depth = 1;
+      let t: RegExpExecArray | null;
+      while (depth > 0 && (t = same.exec(html))) {
+        depth += t[1] ? -1 : 1;
+        end = t.index + t[0].length;
+      }
+      if (depth > 0) end = html.length;
+    }
+    out += html.slice(at, start) + " ";
+    at = end;
+    open.lastIndex = end;
+  }
+  return out + html.slice(at);
+}
+
+const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+
+// ---- reading a whole site ----
+
+export interface SiteClaim {
+  /** A sentence as it appears on the site, trimmed of whitespace and trailing punctuation. */
+  text: string;
+  /** How many times it appears across the pages read: layout, not priority. */
+  count: number;
+}
+
+export interface SiteRead {
+  pages: Page[];
+  /** The site's sentences, deduplicated, most repeated first. */
+  claims: SiteClaim[];
+  /** Pages tried and not read, with why. */
+  skipped: { url: string; reason: string }[];
+}
+
+/** Paths that are never about what the company sells or believes. */
+const SKIP_PATH = /^\/(blog|news|changelog|docs?|help|support|legal|privacy|terms|policies|security|careers|jobs|contact|login|log-in|signin|sign-in|signup|sign-up|register|download|status|press|events|cookies?|sitemap|search|app|admin|account|cdn-cgi)(\/|$)|\.(pdf|zip|xml|json|png|jpe?g|svg|webp)$/i;
+
+/** The four pages read before 2026-10-12, tried when the home page links to nothing readable. */
+const FALLBACK_PATHS = ["/pricing", "/about", "/product"];
+
+/**
+ * The home page's links, as the site's own menu ranks them: a path linked
+ * from several places (nav and footer) comes first, then shorter paths. Same
+ * host only, at most two path segments, none of the SKIP_PATH kinds.
+ */
+export function sitePaths(homeHtml: string, base: URL, limit: number): string[] {
+  const counts = new Map<string, number>();
+  for (const m of homeHtml.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#?]+)[^"']*["']/gi)) {
+    let u: URL;
+    try {
+      u = new URL(decode(m[1]), base);
+    } catch {
+      continue;
+    }
+    if (u.hostname.replace(/^www\./, "") !== base.hostname.replace(/^www\./, "")) continue;
+    const path = u.pathname.replace(/\/+$/, "") || "/";
+    if (path === "/" || path.split("/").length > 3 || SKIP_PATH.test(path)) continue;
+    counts.set(path, (counts.get(path) ?? 0) + 1);
+  }
+  return [...counts]
+    .sort((a, b) => b[1] - a[1] || a[0].length - b[0].length || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([p]) => p);
+}
+
+/**
+ * Reads a company's website the way a visitor skims it: the home page, then
+ * the pages its own menu points at (`limit` of them, `pageChars` each), with
+ * decoration dropped and headings kept. Also returns the site's sentences
+ * with their repetition counts, so a model can be told that a sentence
+ * repeated five times is layout, not the company's priority.
+ */
+export async function readSite(website: string, opts: { homeChars?: number; pageChars?: number; limit?: number } = {}): Promise<SiteRead> {
+  const { homeChars = 8_000, pageChars = 3_000, limit = 6 } = opts;
+  const base = new URL(/^https?:\/\//.test(website) ? website : `https://${website}`);
+  const out: SiteRead = { pages: [], claims: [], skipped: [] };
+  let home: { page: Page; html: string };
+  try {
+    home = await readPageWithHtml(base.toString(), homeChars);
+  } catch (err) {
+    out.skipped.push({ url: base.toString(), reason: (err as Error).message });
+    return out;
+  }
+  if (home.page.text.trim()) out.pages.push(home.page);
+  const paths = sitePaths(home.html, base, limit);
+  const seen = new Set([new URL(home.page.url).pathname.replace(/\/+$/, "") || "/"]);
+  for (const path of paths.length ? paths : FALLBACK_PATHS) {
+    if (seen.has(path)) continue;
+    seen.add(path);
+    const url = new URL(path, base).toString();
+    try {
+      const p = await readPage(url, pageChars);
+      if (p.text.trim()) out.pages.push(p);
+      else out.skipped.push({ url, reason: "no text" });
+    } catch (err) {
+      out.skipped.push({ url, reason: (err as Error).message });
+    }
+  }
+  out.claims = siteClaims(out.pages.map((p) => p.text));
+  return out;
+}
+
+/**
+ * Every sentence of the texts, deduplicated after trimming whitespace and
+ * trailing punctuation, with how often it appears; most repeated first, then
+ * in page order. Headings count as sentences; menu items and prices (under
+ * 20 characters, no letters, or over 300) don't.
+ */
+export function siteClaims(texts: string[], limit = 120): SiteClaim[] {
+  const counts = new Map<string, { text: string; count: number; order: number }>();
+  let order = 0;
+  for (const text of texts) {
+    for (const line of text.split("\n")) {
+      for (const raw of line.replace(/^(#+|-)\s+/, "").split(/(?<=[.!?])\s+(?=[A-Z"“(])/)) {
+        const s = raw.trim().replace(/[\s.!?:;,]+$/, "");
+        if (s.length < 20 || s.length > 300 || !/[a-z]{3}/i.test(s)) continue;
+        const key = s.toLowerCase();
+        const row = counts.get(key);
+        if (row) row.count++;
+        else counts.set(key, { text: s, count: 1, order: order++ });
+      }
+    }
+  }
+  return [...counts.values()]
+    .sort((a, b) => b.count - a.count || a.order - b.order)
+    .slice(0, limit)
+    .map(({ text, count }) => ({ text, count }));
 }
 
 function tidy(s: string): string {
