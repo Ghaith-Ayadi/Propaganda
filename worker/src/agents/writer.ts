@@ -37,7 +37,7 @@ import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
 import { readPage, type Page } from "./web.js";
 import { SearchSession, searchDurably } from "./search.js";
-import { HOUSE_RULES, contrastHits, unsourcedNumbers, wordCount } from "./writing.js";
+import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit } from "./writing.js";
 
 export interface WriteInput {
   site: string;
@@ -52,7 +52,7 @@ export interface WriteResult {
   post?: string;
   version?: number;
   words?: number;
-  /** House-rule and sourcing problems left in the draft, for the reviewer. */
+  /** House-rule (contrast, lead-ins, "quietly", two-part subheads) and sourcing problems left in the draft, for the reviewer. */
   left?: { contrast: number; unsourced: number; offSourceLinks: number };
 }
 
@@ -85,6 +85,8 @@ function writerSystem(voice: string): string {
   return `You are the Writer for Propaganda: you write blog posts for a tenant, in the tenant's voice, from an approved brief. Your three concerns are tone, voice and veracity.
 
 ${HOUSE_RULES}
+
+${TITLE_RULES}
 
 The tenant's voice guide (follow it closely):
 
@@ -121,7 +123,7 @@ function offSourceLinks(markdown: string, allowed: string[]): string[] {
 
 /** Fix house-rule breaks once; whatever is left is reported, never hidden. */
 async function enforceRules(site: string, step: string, voice: string, markdown: string): Promise<string> {
-  const hits = contrastHits(markdown);
+  const hits = styleHits(markdown);
   if (hits.length === 0) return markdown;
   const fixed = await askText(step, {
     site,
@@ -129,16 +131,51 @@ async function enforceRules(site: string, step: string, voice: string, markdown:
     model: MODELS.base,
     maxOutputTokens: 12000,
     system: writerSystem(voice),
-    prompt: `These sentences break house rule 1 (the "That's not X. It's Y." contrast):
-${hits.map((h) => `- ${h.sentence}`).join("\n")}
+    prompt: `These sentences break the house rules:
+${hitLines(hits)}
 
-Rewrite only those sentences as comparisons ("This is much more X than it is Y"), keeping the meaning and the voice. Change nothing else. Answer with the full post in Markdown and nothing else.
+Rewrite only those sentences so they keep the rules (a contrast becomes a comparison, "This is much more X than it is Y"; a lead-in is deleted and the sentence after it carries the point; a two-part subhead becomes one statement), keeping the meaning and the voice. Change nothing else. Answer with the full post in Markdown and nothing else.
 
 ${markdown}`,
   });
   const cleaned = fixed.replace(/^```(?:markdown|md)?\s*|\s*```$/g, "").trim();
   // A rewrite that lost most of the post is worse than the rule break.
   return wordCount(cleaned) > wordCount(markdown) * 0.8 ? cleaned : markdown;
+}
+
+const hitLines = (hits: Hit[]) => hits.map((h) => `- "${h.sentence}" (${RULE_NAMES[h.rule]})`).join("\n");
+
+/**
+ * A title or subtitle that breaks the title rules is asked for again, once, in a
+ * small call; what comes back is checked and kept only when it passes. Both
+ * fields go in one call so the pair still reads as one.
+ */
+async function enforceTitle(site: string, voice: string, draft: { title: string; subtitle: string }): Promise<{ title: string; subtitle: string }> {
+  const hits = [...titleHits(draft.title), ...titleHits(draft.subtitle)];
+  if (hits.length === 0) return draft;
+  const again = await askJson(
+    "retitle",
+    {
+      site,
+      job: "writer:rules",
+      model: MODELS.base,
+      maxOutputTokens: 400,
+      system: writerSystem(voice),
+      prompt: `The title or subtitle of the post breaks the title rules:
+${hitLines(hits)}
+
+Title: ${draft.title}
+Subtitle: ${draft.subtitle || "(none)"}
+
+Write them again as one plain statement each, keeping what the post says. Answer with JSON only: {"title": "...", "subtitle": "..."}`,
+    },
+    (v) => {
+      const o = obj(v, "The answer");
+      return { title: str(o.title, "title", { max: 200 }), subtitle: str(o.subtitle, "subtitle", { optional: true, max: 300 }) };
+    },
+  );
+  const ok = titleHits(again.title).length === 0 && titleHits(again.subtitle).length === 0;
+  return ok ? again : draft;
 }
 
 async function research(site: string, brief: BriefRow): Promise<{ pages: Page[]; claims: Claim[]; searches: SearchSession }> {
@@ -244,13 +281,14 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
   );
 
   const markdown = await enforceRules(site, "keep the house rules", voice, draft.markdown);
-  const contrast = contrastHits(markdown);
+  const titled = await enforceTitle(site, voice, draft);
+  const contrast = styleHits(markdown);
   const unsourced = unsourcedNumbers(markdown);
   const offSource = offSourceLinks(markdown, pages.map((p) => p.url));
   const words = wordCount(markdown);
 
   const postId = target.post ?? (await DBOS.runStep(() => Promise.resolve(newId()), { name: "mint the post" }));
-  const fields = { title: draft.title, subtitle: draft.subtitle, excerpt: draft.excerpt, content_md: markdown, word_count: words };
+  const fields = { title: titled.title, subtitle: titled.subtitle, excerpt: draft.excerpt, content_md: markdown, word_count: words };
   const wrote = await DBOS.runStep(
     async () => {
       if (target.post) return fillEmptyPost(site, target.post, fields);
@@ -274,7 +312,7 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
         attributes: {
           agent: "writer",
           brief: brief.id,
-          title: draft.title,
+          title: titled.title,
           sources: pages.map((p) => ({ url: p.url, label: p.title })),
           claims: claims.map((c) => c.id),
           missingFacts: draft.missingFacts,
@@ -397,7 +435,7 @@ ${current.content_md}`,
           agent: "writer",
           suggestion: true,
           notes: input.notes.slice(0, 4000),
-          lint: { contrast: contrastHits(markdown).map((h) => h.sentence), unsourced: unsourcedNumbers(markdown).map((h) => h.sentence) },
+          lint: { contrast: styleHits(markdown).map((h) => h.sentence), unsourced: unsourcedNumbers(markdown).map((h) => h.sentence) },
         },
       }),
     { name: "save the suggestion" },

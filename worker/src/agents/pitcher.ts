@@ -37,6 +37,7 @@ import { claimsFor, renderClaims } from "./kb.js";
 import { nearest, readTaste, renderTaste, seenLine, type Seen } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
+import { RULE_NAMES, TITLE_RULES, titleHits } from "./writing.js";
 import { type SearchHit } from "./web.js";
 import { SearchSession, searchDurably } from "./search.js";
 import { AGENT_QUEUE, registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
@@ -246,7 +247,39 @@ Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": ""
 
 export const PITCHER_SYSTEM = `You are the Pitcher for Propaganda, a content team that runs a tenant's blog. You turn ideas into pitches that serve the tenant's goals for the quarter. You are blunt about weak ideas: an idea with no reason to be written now is rejected and kept for later, and that's a good outcome.
 You never write the post. You write briefs a writer can work from.
-Use "tenant" for the business you work for. Never invent facts about the tenant: what it knows is in the knowledge base claims you're given.`;
+Use "tenant" for the business you work for. Never invent facts about the tenant: what it knows is in the knowledge base claims you're given.
+Never write "That's not X. It's Y."; say it as a comparison. Never the word "quietly".
+
+${TITLE_RULES}`;
+
+/**
+ * A title that breaks the title rules is asked for again, once, in a small call
+ * (Ayadi, 2026-10-12: "Thing: explanation" and "phrase? Verb-ing..." titles are
+ * the signature of machine writing). What comes back is kept only when it passes.
+ */
+async function enforceTitle(site: string, step: string, w: Written, idea: IdeaRow): Promise<Written> {
+  const hits = titleHits(w.title);
+  if (hits.length === 0) return w;
+  const again = await askJson(
+    step,
+    {
+      site,
+      job: "pitcher:pitch",
+      model: MODELS.base,
+      maxOutputTokens: 300,
+      system: PITCHER_SYSTEM,
+      prompt: `The title of this pitch breaks the title rules:
+${hits.map((h) => `- "${h.sentence}" (${RULE_NAMES[h.rule]})`).join("\n")}
+
+The idea: ${idea.title}
+The angle: ${w.angle}
+
+Write the title again as one plain statement of what the post says, under twelve words. Answer with JSON only: {"title": "..."}`,
+    },
+    (v) => str(obj(v, "The answer").title, "title", { max: 200 }),
+  );
+  return titleHits(again).length === 0 ? { ...w, title: again } : w;
+}
 
 // ---- the workflow ----
 
@@ -397,7 +430,7 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     const allowed = new Set([...evidenceUrls.map((e) => e.url), ...hits.map((h) => h.url)]);
 
     // 5. The brief.
-    const written = await askJson(
+    let written = await askJson(
       `pitch ${idea.id}`,
       {
         site,
@@ -426,10 +459,11 @@ ${renderTaste(taste)}
 ${input.topUp ? `\nThis is a top-up: ${input.topUp}\n` : ""}${j.changed ? `\nThis is close to something pitched before (${seenLine(close.get(idea.id)!)}). What changed since: ${j.changed} Make the brief about what changed.\n` : ""}
 
 Answer with JSON only:
-{"title": "a specific, slightly provocative title", "why": "one sentence: why this, why now", "angle": "the argument this post makes that the ranking pages don't", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the decision or note that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,
+{"title": "a specific, slightly provocative title: one plain statement under twelve words, by the title rules", "why": "one sentence: why this, why now", "angle": "the argument this post makes that the ranking pages don't", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the decision or note that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,
       },
       parsePitch(allowed, collectionNames),
     );
+    written = await enforceTitle(site, `retitle ${idea.id}`, written, idea);
 
     // The brief's own title can land on something already shown, or on a pitch from this run.
     const again = j.changed ? null : nearest(written.title, [...seen, ...shown]);

@@ -1,0 +1,27 @@
+# Temporary: the house style before/after on DeepSeek (worker/test/live/style-ab.mjs).
+# Removed before the PR merges.
+name: style-ab
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults: { run: { working-directory: worker } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run build
+      - env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          LIVE_REQUIRED: "1"
+          LIVE_SPEND_CAP_USD: "3"
+        run: node test/live/style-ab.mjs | tee "$RUNNER_TEMP/style-ab.txt"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: style-ab
+          path: ${{ runner.temp }}/style-ab.txt

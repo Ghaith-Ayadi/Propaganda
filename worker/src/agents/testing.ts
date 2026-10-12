@@ -12,7 +12,9 @@ export { newId, stableId } from "./ids.js";
 export { passages, links, numbersMatch } from "./text.js";
 export { cleanChecks, decide, severityOf } from "./verdict.js";
 // The Pitcher and the Writer.
-export { contrastHits, unsourcedNumbers } from "./writing.js";
+export { contrastHits, proseHits, styleHits, titleHits, unsourcedNumbers, HOUSE_RULES, TITLE_RULES } from "./writing.js";
+export { callModel } from "../../../api/_ai/gateway";
+export { PITCHER_SYSTEM } from "./pitcher.js";
 export { rate, fitGrade } from "./fit.js";
 export { standing, isoWeek } from "./goals.js";
 export { handOffIdeas } from "./ideas.js";
