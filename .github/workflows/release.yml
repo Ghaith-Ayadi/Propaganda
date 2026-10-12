@@ -5,9 +5,10 @@
 #      release; all of them on the first release of a month);
 #   2. the free suites on this exact commit: api, worker, kb SQL, blog themes;
 #   3. the real-model tests, through the AI Gateway (AI_GATEWAY_API_KEY), with the cost
-#      of each from the cost log;
+#      of each from the cost log (in the run's summary);
 #   4. only if all of that is green: the tag and a GitHub Release (the release log): the
-#      version's notes (release-notes/vX.Y.Z.md, required), its PRs, what ran and what it cost;
+#      version's notes (release-notes/vX.Y.Z.md, required), its PRs and which tests ran. No
+#      costs on it (Ayadi, 2026-10-12): they stay in this run's summary;
 #   5. the app to Vercel production (deploy-app.yml). The box follows the tag through
 #      Bedrock's compose/propaganda-supabase/schema.env.
 name: release
@@ -122,13 +123,21 @@ jobs:
             node "../$t" || failed=1
             echo "::endgroup::"
           done
+          # This run's summary has the costs; the release log only what ran and how it went.
           {
             echo "### Real-model tests"
             echo '```'
             echo "$PLAN"
             echo '```'
             jq -rs 'if length == 0 then "None ran." else (map("- \(.area): \(if .ok then "passed" else "FAILED" end), $\(.usd)") | join("\n")) + "\n\nTotal: $\(map(.usd) | add * 10000 | round / 10000)" end' "$LIVE_COST_FILE"
-          } | tee -a "$GITHUB_STEP_SUMMARY" > "$RUNNER_TEMP/ai-summary.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Real-model tests"
+            echo '```'
+            echo "$PLAN"
+            echo '```'
+            jq -rs 'if length == 0 then "None ran." else map("- \(.area): \(if .ok then "passed" else "FAILED" end)") | join("\n") end' "$LIVE_COST_FILE"
+          } > "$RUNNER_TEMP/ai-summary.md"
           exit "$failed"
       - if: always()
         uses: actions/upload-artifact@v4
