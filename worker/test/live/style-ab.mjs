@@ -14,12 +14,12 @@ import { readFileSync } from "node:fs";
 import { liveEnv, standInRest } from "./kit.mjs";
 
 liveEnv("style-ab");
-const t = await import("../../dist/agents/testing.js");
-const fx = JSON.parse(readFileSync(new URL("./style-ab.fixtures.json", import.meta.url), "utf8"));
-
 const SITE = "livestyle000001";
 const db = { model_calls: [], model_keys: [], app_settings: [] };
+// Before the gateway loads: it reads SUPABASE_URL at import.
 await standInRest(db);
+const t = await import("../../dist/agents/testing.js");
+const fx = JSON.parse(readFileSync(new URL("./style-ab.fixtures.json", import.meta.url), "utf8"));
 t.wireGateway();
 const MODEL = process.env.AGENT_MODEL_BASE || "deepseek/deepseek-v4-pro";
 

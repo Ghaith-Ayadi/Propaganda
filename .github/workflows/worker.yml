@@ -48,7 +48,7 @@ jobs:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
           LIVE_REQUIRED: "1"
           LIVE_SPEND_CAP_USD: "3"
-        run: node test/live/style-ab.mjs | tee "$RUNNER_TEMP/style-ab.txt"
+        run: set -o pipefail; node test/live/style-ab.mjs | tee "$RUNNER_TEMP/style-ab.txt"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
