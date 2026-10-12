@@ -8,6 +8,7 @@ node test/limits.mjs
 node test/failures.mjs
 node test/shared.mjs
 node test/agents.mjs
+node test/lite.mjs
 node test/pitch-write.mjs
 node test/e2e.mjs
 node test/strategy.mjs

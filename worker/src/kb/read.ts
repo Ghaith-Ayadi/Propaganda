@@ -218,7 +218,8 @@ export interface Work {
 
 /**
  * Everything the agents should pick up now, oldest first, for the sites that
- * turned them on (kb_agent_sites).
+ * turned them on (kb_agent_sites) and aren't on Lite (no AI on Lite; a tenant
+ * that picked it carries app_settings `tenant.plan` = "lite", app/src/lib/tenantPlan.ts).
  *   check     the newest version of a post in done or published, written since
  *             the site turned the Checker on, left alone for `settleSeconds`,
  *             and not read yet
@@ -236,6 +237,7 @@ export async function pendingWork(settleSeconds: number, limit = 20, site: strin
        where a.checker and v.created >= a.since
          and v.created < now() - make_interval(secs => $1)
          and ($3::text is null or a.site = $3)
+         and not exists (select 1 from public.app_settings ls where ls.site = a.site and ls.key = 'tenant.plan' and ls.value = '"lite"'::jsonb)
          and not exists (select 1 from public.kb_checks k where k.post_version = v.id)
        order by v.created limit $2)
      union all
@@ -243,12 +245,14 @@ export async function pendingWork(settleSeconds: number, limit = 20, site: strin
         from public.kb_flags f join public.kb_agent_sites a on a.site = f.site and a.checker
        where f.kind = 'recheck' and f.status in ('open', 'snoozed') and f.checked is null
          and ($3::text is null or f.site = $3)
+         and not exists (select 1 from public.app_settings ls where ls.site = a.site and ls.key = 'tenant.plan' and ls.value = '"lite"'::jsonb)
        order by f.created limit $2)
      union all
      (select 'contest', p.site, p.id, 0, p.created
         from public.kb_proposals p join public.kb_agent_sites a on a.site = p.site and a.checker
        where p.origin = 'contest' and p.status = 'draft' and p.flag is not null
          and ($3::text is null or p.site = $3)
+         and not exists (select 1 from public.app_settings ls where ls.site = a.site and ls.key = 'tenant.plan' and ls.value = '"lite"'::jsonb)
          and not exists (select 1 from public.kb_changes c where c.proposal = p.id)
        order by p.created limit $2)
      union all
@@ -257,6 +261,7 @@ export async function pendingWork(settleSeconds: number, limit = 20, site: strin
         from public.kb_proposals p join public.kb_agent_sites a on a.site = p.site and a.guardian
        where p.status = 'open'
          and ($3::text is null or p.site = $3)
+         and not exists (select 1 from public.app_settings ls where ls.site = a.site and ls.key = 'tenant.plan' and ls.value = '"lite"'::jsonb)
        order by p.updated limit $2)
      order by at`,
     [settleSeconds, limit, site],

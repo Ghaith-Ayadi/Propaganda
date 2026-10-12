@@ -299,9 +299,9 @@ export function Workspace({ children }: { children: React.ReactNode }) {
           // whoever is still signed in.
           if (open?.account.userId !== account.userId) cancel();
         }}
-        onDone={(site) => {
-          // The new tenant opens on its first day (components/gettingStarted).
-          window.location.hash = "#/getting-started";
+        onDone={(site, plan) => {
+          // A full tenant opens on its first day (components/gettingStarted), Lite on Home.
+          window.location.hash = plan === "full" ? "#/getting-started" : "#/home";
           leaveThen(account, site);
         }}
       />

@@ -32,3 +32,5 @@ export { readGoals } from "./goals.js";
 export { splitPitches, topicChanges, strongest, planSteps, dayOneQuota, isLite, replacementLearned, searchesFor, goalsFromProposal, parseTopicPitches, PLAN_STEPS } from "./first-day.js";
 export { firstPitches, firstDrafts, replacer, dispatchFirstDay, forgetAsked, firstPitchesId, firstDraftsId, replaceId, topicPitchesId } from "../workflows/first-day.js";
 export { strategistProgress } from "../progress.js";
+// Lite tenants get no KB agents (test/lite.mjs).
+export { pendingWork, setAppDb } from "../kb/read.js";
