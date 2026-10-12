@@ -147,7 +147,8 @@ async function web(input, init) {
   const url = String(input);
   if (url.startsWith("https://api.dataforseo.com/")) {
     calls.push(url);
-    if (url.includes("keyword_ideas")) return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: KEYWORDS.map(labsItem) }] }] });
+    if (url.includes("keyword_suggestions")) return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: KEYWORDS.map(labsItem) }] }] });
+    if (url.includes("related_keywords")) return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: [{ keyword_data: labsItem({ keyword: "ai image generator", vol: 500000, kd: 90 }) }] }] }] });
     if (url.includes("ranked_keywords")) return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: [] }] }] });
     if (url.includes("keyword_overview")) {
       const asked = JSON.parse(init.body)[0].keywords;
@@ -176,8 +177,8 @@ const GOOD = {
   summary: "Start steady: reliability first, two posts a week.",
   volume: r(18, "What your team can review.", "Your answer: 8 posts a month"),
   topics: [
-    { name: "Reliability", low: 6, high: 9, why: "What you sell.", basis: "Your website" },
-    { name: "Scraping at scale", low: 3, high: 5, why: "A search you named.", basis: "DataForSEO: 210/month" },
+    { name: "Reliability", thesis: "A batch job that retries on its own is worth more to a platform team than a faster one.", low: 6, high: 9, why: "What you sell.", basis: "Your website" },
+    { name: "Scraping at scale", thesis: "Scrapers fail on volume long before they fail on parsing, and nobody plans for that.", low: 3, high: 5, why: "A search you named.", basis: "DataForSEO: 210/month" },
   ],
   ranking: {
     searches: ["batch job retries", "durable batch jobs", "retry failed cron job", "nightly etl failures", "run scrapers at scale", "cron job alerting"].map((q, i) => ({
@@ -289,6 +290,45 @@ try {
   check(!t.asksAboutTopics(REQUEST), "but a question echoed back in the answers block is not the tenant asking about topics");
   const draft = t.parseDraft(GOOD);
   const rules = { volumeCap: 22, hasHistory: false, readerWeeks: 0, keywords: kw(KEYWORDS) };
+
+  console.log("names, theses and claims");
+  const SITE_TEXT = "# Durable batch jobs for platform teams\nWriting the job is the easy part. The hard part is knowing it ran.\nEvery company is quietly losing a nightly job and doesn't know which.\nPricing | Docs | Blog";
+  const sentences = t.siteSentences([SITE_TEXT]);
+  check(sentences.includes("Writing the job is the easy part.") && sentences.includes("Durable batch jobs for platform teams") && !sentences.some((x) => /Pricing \|/.test(x)), `a site's text splits into its sentences and headings (${JSON.stringify(sentences)})`);
+  check(t.siteSentences([SITE_TEXT, SITE_TEXT]).length === sentences.length, "repeated once however often the site repeats it");
+  check(t.echoesSite("Writing the job is the easy part", sentences) && t.echoesSite("Writing the job is the easy part, knowing it ran is not", sentences), "a name or thesis that repeats a site sentence, trimmed or reworded, echoes it");
+  check(!t.echoesSite("Scraping at scale", sentences) && !t.echoesSite("Scrapers fail on volume long before they fail on parsing", sentences), "a short label or a claim of its own does not");
+  check(t.sameClaim({ name: "Retries", thesis: "A job that retries on its own beats a faster one." }, { name: "Self-healing jobs", thesis: "Jobs that retry on their own beat faster jobs." }) && !t.sameClaim(GOOD.topics[0], GOOD.topics[1]), "two topics saying one thing are the same claim; two different ones are not");
+  const claims = { ...rules, thesis: true, siteSentences: sentences };
+  check(t.validate(draft, claims).length === 0, `a good proposal with theses passes (${t.validate(draft, claims).join(" | ")})`);
+  const noThesis = t.validate(t.parseDraft({ ...GOOD, topics: GOOD.topics.map(({ thesis, ...x }) => x) }), claims);
+  check(noThesis.length === 2 && noThesis.every((e) => /has no thesis/.test(e)), `a topic without a thesis is sent back (${noThesis.join(" | ")})`);
+  check(t.validate(draft, { ...rules, siteSentences: sentences }).length === 0, "and not on a run recorded before theses existed");
+  const longName = "Anyone can make a machine write a post but the hard part is knowing what your company believes";
+  const named = t.validate(t.parseDraft({ ...GOOD, topics: [{ ...GOOD.topics[0], name: longName }, GOOD.topics[1]], ranking: { ...GOOD.ranking, searches: GOOD.ranking.searches.map((x) => ({ ...x, topic: x.topic === "Reliability" ? longName : x.topic })) }, watchedSites: GOOD.watchedSites.map((w) => ({ ...w, topic: w.topic === "Reliability" ? longName : w.topic })) }), claims);
+  check(named.some((e) => /label of 2 to 6 words/.test(e)) && t.parseDraft({ ...GOOD, topics: [{ ...GOOD.topics[0], name: longName }] }).topics[0].name === longName, `a long name is sent back whole, never cut (${named.join(" | ")})`);
+  check(t.validate(t.parseDraft({ ...GOOD, topics: [{ ...GOOD.topics[0], name: longName }, GOOD.topics[1]], ranking: { ...GOOD.ranking, searches: GOOD.ranking.searches.map((x) => ({ ...x, topic: x.topic === "Reliability" ? longName : x.topic })) }, watchedSites: GOOD.watchedSites.map((w) => ({ ...w, topic: w.topic === "Reliability" ? longName : w.topic })) }), { ...claims, previousTopics: [longName] }).length === 0, "unless it is a name kept from the previous proposal");
+  const slogan = t.validate(t.parseDraft({ ...GOOD, topics: [{ ...GOOD.topics[0], thesis: "Writing the job is the easy part; the hard part is knowing it ran." }, GOOD.topics[1]] }), claims);
+  check(slogan.length === 1 && /repeats a sentence from their own site/.test(slogan[0]), `a thesis that is the site's slogan is sent back (${slogan.join(" | ")})`);
+  const twice = t.validate(t.parseDraft({ ...GOOD, topics: [GOOD.topics[0], { ...GOOD.topics[1], thesis: "A batch job that retries on its own is worth more than a faster batch job." }] }), claims);
+  check(twice.length === 1 && /make the same claim/.test(twice[0]), `two topics with one claim are sent back (${twice.join(" | ")})`);
+  const colon = t.validate(t.parseDraft({ ...GOOD, topics: [{ ...GOOD.topics[0], thesis: "Retries are the easy part: what a founder should ask before paying." }, GOOD.topics[1]] }), claims);
+  check(colon.some((e) => /the thesis breaks the title rules/.test(e)), `a thesis is held to the title rules too (${colon.join(" | ")})`);
+
+  console.log("search seeds and the keyword pull");
+  check(t.searchSeeds(["I don't know what searches I want to be found by. It has to be something about AI content publishing", "AI CMS", "AI blogging and social posting... you tell me", "ai cms"]).join("|") === "AI CMS", `a sentence typed as a search is no seed; a phrase is, once (${JSON.stringify(t.searchSeeds(["I don't know what searches I want to be found by", "AI CMS", "ai cms"]))})`);
+  const pulled = [
+    { keyword: "ai", volume: 5000000 },
+    { keyword: "character ai", volume: 2000000 },
+    { keyword: "headless ai cms", volume: 90 },
+    { keyword: "ai cms", volume: 320 },
+    { keyword: "AI CMS", volume: 320 },
+    { keyword: "content marketing automation", volume: 1900 },
+    { keyword: "best cms for blogs", volume: 2400 },
+  ];
+  const keptRows = t.relevantKeywords(pulled, ["AI CMS"], "An AI content platform that writes and publishes a company's blog.", 100).map((k) => k.keyword);
+  check(keptRows.join("|") === "ai cms|headless ai cms|best cms for blogs", `rows made of the seed's words, or one of them and a word from the offer, stay; seed words first, then volume, once each; "character ai" and "content marketing automation" go (${keptRows.join("|")})`);
+  check(t.relevantKeywords(pulled, ["AI CMS"], "", 2).length === 2, "and the limit holds");
   const reask = t.validate(draft, { ...rules, answered: parsed });
   check(reask.length === 1 && reask[0].includes("You already asked") && reask[0].includes("Yes, give it one."), `a question they already answered is an error (${reask.join(" | ")})`);
   const allNew = t.validate(t.parseDraft({ ...GOOD, questions: [] }), { ...rules, previousTopics: ["Pricing pages", "Hiring"], requestAboutTopics: false });
@@ -363,7 +403,8 @@ try {
   check(p.batches.value >= 1 && /Weekly/.test(p.batches.why), "and the batch count from the cadence");
   check(db.tenant_profile[0].plan_read_at, "the plan is marked read");
   check(db.model_calls.some((c) => c.job === "strategist") && db.model_calls.some((c) => String(c.model).startsWith("dataforseo/")), "model calls and DataForSEO are in the cost log");
-  check(calls.some((u) => u.includes("keyword_ideas")) && calls.filter((u) => u.includes("serp/google")).length === 2, "it asked DataForSEO for keyword ideas and searched both of the tenant's searches");
+  check(calls.filter((u) => u.includes("keyword_suggestions")).length === 2 && calls.filter((u) => u.includes("related_keywords")).length === 2 && calls.filter((u) => u.includes("serp/google")).length === 2, `it asked DataForSEO for suggestions and related searches per seed and searched both of the tenant's searches (${calls.filter((u) => u.includes("dataforseo_labs")).length} labs calls)`);
+  check(row.inputs?.keywords === 4 && !prompts[0].includes("ai image generator"), `the keyword list kept the rows that share a word with a seed or the offer and dropped the rest (${row.inputs?.keywords} kept)`);
   const stepNames = ((await t.DBOS.listWorkflowSteps(ids[0])) ?? []).map((s) => s.name);
   check(stepNames.includes("keyword data") && stepNames.indexOf("who ranks") > stepNames.indexOf("keyword data"), `searches, then who ranks, as two steps (${stepNames.join(", ")})`);
   const first = await t.DBOS.retrieveWorkflow(t.firstPitchesId("proposal0000001")).getResult();

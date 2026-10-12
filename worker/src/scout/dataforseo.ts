@@ -289,6 +289,44 @@ export async function keywordIdeas(w: Where, job: string, seeds: string[], limit
 }
 
 /**
+ * Searches that contain `seed` ("ai cms" gives "headless ai cms", "best ai cms
+ * for blogs"), with volume and difficulty, biggest first. One seed per request.
+ */
+export async function keywordSuggestions(w: Where, job: string, seed: string, limit = 50): Promise<KeywordRow[]> {
+  if (!seed.trim()) return [];
+  const result = await callPaidApi({ site: w.site, job, service: "dataforseo/keyword-suggestions", background: true }, () =>
+    live("/v3/dataforseo_labs/google/keyword_suggestions/live", {
+      keyword: seed.trim(),
+      location_code: w.locationCode,
+      language_code: w.languageCode,
+      include_seed_keyword: true,
+      limit,
+      order_by: ["keyword_info.search_volume,desc"],
+    }),
+  );
+  return items(result).map(keywordOf).filter((k) => k.keyword);
+}
+
+/**
+ * Searches Google's "searches related to" chain reaches from `seed` in two
+ * steps: the phrases next to theirs that don't contain the seed's words.
+ */
+export async function relatedKeywords(w: Where, job: string, seed: string, limit = 30): Promise<KeywordRow[]> {
+  if (!seed.trim()) return [];
+  const result = await callPaidApi({ site: w.site, job, service: "dataforseo/related-keywords", background: true }, () =>
+    live("/v3/dataforseo_labs/google/related_keywords/live", {
+      keyword: seed.trim(),
+      location_code: w.locationCode,
+      language_code: w.languageCode,
+      depth: 2,
+      limit,
+      order_by: ["keyword_data.keyword_info.search_volume,desc"],
+    }),
+  );
+  return items(result).map(keywordOf).filter((k) => k.keyword);
+}
+
+/**
  * Volume and difficulty for exact `keywords` (at most 700): the Strategist
  * prices the searches the model proposed that the ideas pull never covered.
  * A keyword DataForSEO has no row for is left out.

@@ -321,6 +321,7 @@ function TopicList({ topics, editable, onChange }: { topics: ProposedTopic[]; ed
               )}
             </div>
             <div className="pl-8">
+              {t.thesis && <p className="text-sm text-secondary">{t.thesis}</p>}
               <Reason why={t.why} basis={t.basis} origin={t.origin} />
             </div>
           </li>

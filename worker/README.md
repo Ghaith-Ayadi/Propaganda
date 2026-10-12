@@ -209,8 +209,11 @@ by hand (for Admin's "Run now").
    (`tenant_profile`; Markdown, text and CSV files are read, other files are
    listed by name), the website as text (home, /pricing, /about, /product),
    last quarter's posts and pitch outcomes, the last approved proposal's edits,
-   the taste summary, keyword ideas and ranked keywords from DataForSEO Labs,
-   and who ranks for the tenant's own searches (at most 5 searches);
+   the taste summary, the searches that contain or sit next to the tenant's own
+   (DataForSEO Labs `keyword_suggestions` and `related_keywords` per seed, short
+   phrases only, kept when they carry the seed's words or the offer's, 100 at
+   most) and ranked keywords, and who ranks for the tenant's own searches (at
+   most 5 searches);
 2. sizes the window in code (`windowFor`: the join-week rule, weeks 9 to 13
    plan next quarter), the volume cap (`volumeCap`: review capacity and 2 a
    week on day one, last quarter +20% after) and, for a new tenant, the Launch
