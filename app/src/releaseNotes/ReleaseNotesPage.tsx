@@ -3,49 +3,55 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { cx } from "@/utils/cx";
+import { loadAppFonts } from "@/lib/appFonts";
+import { Page } from "@/components/shell/PageHeader";
 import { imageUrl, RELEASE_NOTES } from "./notes";
+
+loadAppFonts();
 
 export function ReleaseNotesPage() {
   return (
     <div className="min-h-dvh bg-primary">
-      <main className="mx-auto w-full max-w-2xl px-4 py-12 md:py-16">
-        <header className="mb-10">
-          <p className="font-mono text-xs uppercase tracking-wide text-quaternary">Propaganda</p>
-          <h1 className="mt-2 text-display-sm font-semibold text-primary">Release notes</h1>
-        </header>
-        <div className="divide-y divide-secondary">
+      <Page title="Release notes" description="What changed in each release of Propaganda.">
+        <div className="max-w-2xl divide-y divide-secondary">
           {RELEASE_NOTES.map((n) => (
-            <article key={n.version} id={n.version} className="py-10 first:pt-0">
-              <div
-                className={cx(
-                  "text-md text-secondary",
-                  "[&_h1]:text-display-xs [&_h1]:font-semibold [&_h1]:text-primary",
-                  "[&_h1+p]:mt-1 [&_h1+p]:text-sm [&_h1+p]:text-tertiary",
-                  "[&_h2]:mt-8 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-primary",
-                  "[&_p]:mt-4 [&_ul]:mt-4 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-5 [&_ol]:mt-4 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-5",
-                  "[&_strong]:font-semibold [&_strong]:text-primary [&_code]:rounded [&_code]:bg-secondary [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm",
-                  "[&_img]:mt-4 [&_img]:rounded-lg [&_img]:border [&_img]:border-secondary",
-                )}
+            // Its first line after the title is the date and focus: UI type, not content.
+            <article
+              key={n.version}
+              id={n.version}
+              className="py-8 first:pt-0 [&>h2+p]:mt-1 [&>h2+p]:font-body [&>h2+p]:text-sm [&>h2+p]:text-tertiary"
+            >
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  // The file's "# vX.Y.Z" title.
+                  h1: ({ children }) => <h2 className="type-heading text-primary">{children}</h2>,
+                  h2: ({ children }) => <h3 className="mt-6 text-sm font-medium text-primary">{children}</h3>,
+                  p: ({ children }) => <p className="mt-4 font-serif text-md text-secondary">{children}</p>,
+                  ul: ({ children }) => <ul className="mt-4 list-disc space-y-2 pl-5 font-serif text-md text-secondary">{children}</ul>,
+                  ol: ({ children }) => <ol className="mt-4 list-decimal space-y-2 pl-5 font-serif text-md text-secondary">{children}</ol>,
+                  strong: ({ children }) => <strong className="font-semibold text-primary">{children}</strong>,
+                  img: ({ src, alt }) => (
+                    <img
+                      src={imageUrl(typeof src === "string" ? src : undefined)}
+                      alt={alt ?? ""}
+                      loading="lazy"
+                      className="mt-4 rounded-lg border border-secondary"
+                    />
+                  ),
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noreferrer" className="text-brand-secondary underline underline-offset-2">
+                      {children}
+                    </a>
+                  ),
+                }}
               >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    img: ({ src, alt }) => <img src={imageUrl(typeof src === "string" ? src : undefined)} alt={alt ?? ""} loading="lazy" />,
-                    a: ({ href, children }) => (
-                      <a href={href} target="_blank" rel="noreferrer" className="text-brand-secondary underline underline-offset-2">
-                        {children}
-                      </a>
-                    ),
-                  }}
-                >
-                  {n.markdown}
-                </ReactMarkdown>
-              </div>
+                {n.markdown}
+              </ReactMarkdown>
             </article>
           ))}
         </div>
-      </main>
+      </Page>
     </div>
   );
 }
