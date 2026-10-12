@@ -473,10 +473,12 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     // Searches the model proposed that the data never priced get their numbers
     // now, so the winnable check sees them and the proposal carries them.
     let priced = 0;
-    // A search DataForSEO has no row for is asked once: the fix draft doesn't pay for it again.
+    // A search DataForSEO has no row for is asked once: the fix draft doesn't
+    // pay for it again (2026-10-12; a run recorded before asks twice, as it did).
+    const priceOnce = await DBOS.patch("strategist-price-once");
     const asked = new Set<string>();
     const price = async (d: Draft) => {
-      const missing = d.ranking.searches.map((s) => s.query.toLowerCase()).filter((q) => !keywords.has(q) && !asked.has(q));
+      const missing = d.ranking.searches.map((s) => s.query.toLowerCase()).filter((q) => !keywords.has(q) && !(priceOnce && asked.has(q)));
       if (!missing.length) return;
       for (const q of missing) asked.add(q);
       const rows = await DBOS.runStep(() => priceSearches(site, missing), { name: "price proposed searches" });
