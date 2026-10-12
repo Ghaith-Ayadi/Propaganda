@@ -189,7 +189,7 @@ export interface TopicPitchPrompt {
   website: string;
   offer: string;
   summary: string;
-  topic: { name: string; low: number; high: number; why: string };
+  topic: { name: string; thesis?: string; low: number; high: number; why: string };
   otherTopics: string[];
   targets: { query: string; volume?: number; difficulty?: number | null; position?: number | null }[];
   n: number;
@@ -207,7 +207,7 @@ export function topicPitchPrompt(p: TopicPitchPrompt): string {
   return [
     `Company: ${p.tenantName}${p.website ? ` (${p.website})` : ""}.${p.offer ? ` What they sell and who buys: ${p.offer}` : ""}`,
     `Your plan for the quarter, in one line: ${p.summary}`,
-    `\nThe topic: ${p.topic.name} (${p.topic.low} to ${p.topic.high} posts this quarter). Why: ${p.topic.why}`,
+    `\nThe topic: ${p.topic.name} (${p.topic.low} to ${p.topic.high} posts this quarter).${p.topic.thesis ? ` Its thesis, which every pitch here argues from: ${p.topic.thesis}` : ""} Why: ${p.topic.why}`,
     p.otherTopics.length ? `The plan's other topics (someone else pitches those; don't stray into them): ${p.otherTopics.join("; ")}.` : "",
     p.targets.length ? `\nThe plan's target searches for this topic:\n${p.targets.map(target).join("\n")}` : "\nThis topic has no target search in the plan.",
     `\nWhat the tenant knows (knowledge base):\n${p.claims}`,

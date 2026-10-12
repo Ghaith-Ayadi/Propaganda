@@ -156,7 +156,10 @@ export interface Reasoned<T> {
 }
 
 export interface ProposedTopic {
+  /** A label of a few words (at most TOPIC_NAME_MAX characters): the key pitches and goals hang on. */
   name: string;
+  /** The point of view in one sentence: what the company knows about the buyer, the market or a mechanism. Absent on proposals from before 2026-10-12. */
+  thesis?: string;
   low: number;
   high: number;
   why: string;
@@ -228,7 +231,9 @@ export function parseDraft(value: unknown): Draft {
     topics: arr(o.topics, "topics").map((t, i) => {
       const x = obj(t, `topics[${i}]`);
       return {
-        name: str(x.name, `topics[${i}].name`, { max: 120 }),
+        // Not cut here: validate() sends a long name back with the rule, so the model shortens it instead of a trim losing the end.
+        name: str(x.name, `topics[${i}].name`, { max: 400 }).trim(),
+        thesis: str(x.thesis, `topics[${i}].thesis`, { optional: true, max: 600 }).trim(),
         low: int(x.low, `topics[${i}].low`),
         high: int(x.high, `topics[${i}].high`),
         why: str(x.why, `topics[${i}].why`, { max: 400 }),
@@ -289,7 +294,17 @@ export interface Rules {
   titleRules?: boolean;
   /** The twenty rules' hard checks (an em dash, "the hard part is") on topic names too (false on a run recorded before them). */
   houseStyle?: boolean;
+  /** A topic is a short name plus a thesis (2026-10-12); false on a run recorded before, whose draft has no thesis. */
+  thesis?: boolean;
+  /** Sentences and headings from the tenant's own site: a name or thesis that repeats one is their slogan, not an angle. */
+  siteSentences?: string[];
 }
+
+/** A topic name is a label: this many characters at most, and at most TOPIC_NAME_MAX_WORDS words. */
+export const TOPIC_NAME_MAX = 60;
+export const TOPIC_NAME_MAX_WORDS = 8;
+/** A thesis is one sentence. */
+export const THESIS_MAX = 220;
 
 /** A new domain can't win a head term in a quarter: searches a month above this need a page-two position already. */
 export const NEW_DOMAIN_MAX_VOLUME = 5_000;
@@ -474,6 +489,134 @@ export function perMonthFromAnswers(answered: Answered[]): number | null {
 
 const normTopic = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
 
+// ---- claims: a site's sentences, a repeated slogan, two topics saying one thing ----
+
+/** Lower-cased letters, digits and single spaces: what "the same words" means here. */
+const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** A word's rough stem (jobs, job; retries, retry; writing, write), so a plural or a tense is the same word. */
+function stem(w: string): string {
+  if (w.length <= 3) return w;
+  return w.replace(/ies$/, "y").replace(/(sses|shes|ches|xes)$/, (m) => m.slice(0, -2)).replace(/ing$/, "").replace(/ed$/, "").replace(/s$/, "");
+}
+
+/** The content words of `s` as stems, two letters at least ("ai" counts), stop words out. */
+function stems(s: string): Set<string> {
+  return new Set(
+    plain(s)
+      .split(" ")
+      .filter((w) => w.length > 1 && !STOP.has(w))
+      .map(stem),
+  );
+}
+
+/**
+ * The sentences and headings of a site's pages as text, 4 to 40 words each,
+ * once each however often the site repeats them. What a topic name or thesis
+ * is held against: marketing copy carries its emphasis into the text, and a
+ * headline read as the company's one belief is the tar pit this guards.
+ */
+export function siteSentences(texts: string[]): string[] {
+  const out = new Map<string, string>();
+  for (const text of texts) {
+    for (const raw of String(text ?? "").split(/(?<=[.!?])\s+|\n+|\s+\|\s+|\s+·\s+/)) {
+      const sentence = raw.replace(/^#+\s*/, "").replace(/\s+/g, " ").trim();
+      const n = sentence.split(" ").length;
+      if (n < 4 || n > 40) continue;
+      const key = plain(sentence);
+      if (key && !out.has(key)) out.set(key, sentence);
+    }
+  }
+  return [...out.values()];
+}
+
+/**
+ * True when `text` repeats one of the site's sentences: the normalised text
+ * contains a sentence or is contained in one, or shares four fifths of its
+ * content words with one. Three content words at least, so a short label
+ * made of ordinary words ("Pricing pages") never trips it.
+ */
+export function echoesSite(text: string, sentences: string[]): boolean {
+  const norm = plain(text);
+  const words = contentWords(text);
+  if (words.size < 3) return false;
+  for (const s of sentences) {
+    const sn = plain(s);
+    if (!sn) continue;
+    if (sn.length >= 20 && (norm.includes(sn) || sn.includes(norm))) return true;
+    const sw = contentWords(s);
+    let shared = 0;
+    for (const w of words) if (sw.has(w)) shared++;
+    if (shared / words.size >= 0.8) return true;
+  }
+  return false;
+}
+
+/** Two topics whose name and thesis share most of their content words are one claim said twice. */
+export function sameClaim(a: { name: string; thesis?: string }, b: { name: string; thesis?: string }): boolean {
+  const wa = stems(`${a.name} ${a.thesis ?? ""}`);
+  const wb = stems(`${b.name} ${b.thesis ?? ""}`);
+  if (wa.size < 3 || wb.size < 3) return false;
+  let shared = 0;
+  for (const w of wa) if (wb.has(w)) shared++;
+  return shared / Math.min(wa.size, wb.size) >= 0.6;
+}
+
+// ---- search seeds and the keyword pull ----
+
+/**
+ * The searches a tenant typed, as seeds a keyword endpoint can use: short
+ * phrases only. A sentence ("I don't know what searches I want... something
+ * about AI content publishing") seeds a category dump, so it is dropped.
+ */
+export function searchSeeds(lines: string[], max = 5): string[] {
+  const out: string[] = [];
+  for (const raw of lines) {
+    const seed = raw.replace(/[.!?…]+$/g, "").trim();
+    const words = seed.split(/\s+/).filter(Boolean);
+    if (!words.length || words.length > 5) continue;
+    if (/\b(i|we|you|know|want|tell|maybe|don't|dont)\b/i.test(seed)) continue;
+    const key = seed.toLowerCase();
+    if (out.some((s) => s.toLowerCase() === key)) continue;
+    out.push(seed);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/**
+ * The rows of a keyword pull worth showing: each carries two of the seeds'
+ * words, or one of them and a word from what the tenant sells, or two words
+ * from the offer; ordered by how many seed words it carries, then volume, once
+ * each. A pull around "AI CMS" otherwise comes back as every "ai" search there
+ * is ("character ai", 2,000,000 a month), which no new domain can use.
+ */
+export function relevantKeywords<K extends { keyword: string; volume: number }>(rows: K[], seeds: string[], offer = "", limit = 100): K[] {
+  const seedWords = new Set<string>();
+  for (const s of seeds) for (const w of stems(s)) seedWords.add(w);
+  const offerWords = stems(offer);
+  const seen = new Set<string>();
+  const scored: { row: K; score: number }[] = [];
+  for (const row of rows) {
+    const key = row.keyword.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    let fromSeeds = 0;
+    let fromOffer = 0;
+    for (const w of stems(key)) {
+      if (seedWords.has(w)) fromSeeds++;
+      else if (offerWords.has(w)) fromOffer++;
+    }
+    // A one-word seed ("cms") is matched whole; two seed words otherwise.
+    const enough = fromSeeds >= Math.min(2, seedWords.size) || (fromSeeds >= 1 && fromOffer >= 1) || fromOffer >= 2;
+    if (enough) scored.push({ row, score: fromSeeds * 2 + fromOffer });
+  }
+  return scored
+    .sort((a, b) => b.score - a.score || b.row.volume - a.row.volume)
+    .slice(0, limit)
+    .map((x) => x.row);
+}
+
 /**
  * The previous proposal's name for each topic the revision kept. Pitches
  * hang on a topic's exact name, so a reworded name withdraws and re-pitches
@@ -553,8 +696,30 @@ export function validate(d: Draft, r: Rules): string[] {
       errors.push(`Topic "${t.name}" is one of their searches pasted back. A topic is an angle with a point of view, named the way they'd say it in a sentence (rule 2).`);
     }
     // A kept name from the previous proposal is never sent back: pitches hang on it.
-    if (r.titleRules !== false && !(r.previousTopics ?? []).includes(t.name)) {
+    const kept = (r.previousTopics ?? []).includes(t.name);
+    if (r.titleRules !== false && !kept) {
       for (const h of (r.houseStyle ? houseTitleHits : titleHits)(t.name)) errors.push(`Topic "${t.name}" breaks the title rules (${h.rule}): name it as one plain statement, no colon, no dash, no second half, no negation (rule 2).`);
+    }
+    if (r.thesis) {
+      const words = t.name.split(/\s+/).filter(Boolean).length;
+      if (!kept && (t.name.length > TOPIC_NAME_MAX || words > TOPIC_NAME_MAX_WORDS)) {
+        errors.push(`Topic "${t.name}" is ${t.name.length} characters and ${words} words. A topic's name is a label of 2 to 6 words, at most ${TOPIC_NAME_MAX} characters; the point of view goes in its thesis (rule 2).`);
+      }
+      const thesis = (t.thesis ?? "").trim();
+      if (!thesis) errors.push(`Topic "${t.name}" has no thesis. Give one sentence: what this company knows about the buyer, the market or how things work that a quarter of posts can show (rule 2).`);
+      else {
+        if (thesis.length > THESIS_MAX) errors.push(`Topic "${t.name}": the thesis is ${thesis.length} characters; one sentence, at most ${THESIS_MAX} (rule 2).`);
+        if (r.titleRules !== false) for (const h of (r.houseStyle ? houseTitleHits : titleHits)(thesis)) errors.push(`Topic "${t.name}": the thesis breaks the title rules (${h.rule}): one plain sentence, no colon, no dash, no second half, no negation (rule 2).`);
+        if (echoesSite(thesis, r.siteSentences ?? [])) errors.push(`Topic "${t.name}": the thesis repeats a sentence from their own site. That is their positioning, not a thesis; say what they know about the buyer or the market that the site only implies (rule 2).`);
+      }
+      if (!kept && echoesSite(t.name, r.siteSentences ?? [])) errors.push(`Topic "${t.name}" is a sentence from their own site. Their slogan is never a topic; name the angle in a few words (rule 2).`);
+    }
+  }
+  if (r.thesis) {
+    for (let i = 0; i < d.topics.length; i++) {
+      for (let j = i + 1; j < d.topics.length; j++) {
+        if (sameClaim(d.topics[i], d.topics[j])) errors.push(`Topics "${d.topics[i].name}" and "${d.topics[j].name}" make the same claim. Each topic is a different thing they know; merge these or replace one (rule 2).`);
+      }
     }
   }
 

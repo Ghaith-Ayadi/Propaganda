@@ -145,6 +145,8 @@ export interface Reasoned<T> {
 }
 
 export interface ProposedTopic extends TopicTarget {
+  /** The point of view in one sentence (proposals from 2026-10-12 on). */
+  thesis?: string;
   why: string;
   basis: string;
   origin?: PlanOrigin;

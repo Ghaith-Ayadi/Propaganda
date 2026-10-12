@@ -59,7 +59,8 @@ const realFetch = globalThis.fetch;
 async function web(input, init) {
   const url = String(input);
   if (url.startsWith("https://api.dataforseo.com/")) {
-    if (url.includes("keyword_ideas")) return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items: KEYWORDS.map(labsItem) }] }] });
+    if (url.includes("keyword_suggestions")) return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items: KEYWORDS.map(labsItem) }] }] });
+    if (url.includes("related_keywords")) return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items: [] }] }] });
     if (url.includes("ranked_keywords")) return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items: [] }] }] });
     if (url.includes("serp/google/organic")) {
       return Response.json({ cost: 0, tasks: [{ status_code: 20000, result: [{ items: [
