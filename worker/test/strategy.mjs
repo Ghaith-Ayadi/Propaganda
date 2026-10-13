@@ -392,7 +392,10 @@ try {
   check(res.status === "sent" && row.status === "sent" && row.sent_at, `sent (${JSON.stringify(res)}, ${row.error ?? ""})`);
   check(prompts.length === 2 && prompts[1].includes("most allowed is"), "a draft over the cap went back once with the error");
   check(prompts[0].includes("Durable batch jobs for platform teams") && prompts[0].includes("Focus on reliability first") && prompts[0].includes("Rejects listicles"), "the prompt carries the answers, the plan and the taste summary");
-  check(prompts[0].includes("batch job retries: 320/month, difficulty 12") && prompts[0].includes("Volume cap: 22"), "and keyword data and the cap");
+  // The cap follows the weeks left in the quarter, so it depends on today's date.
+  const weeks = Number(/\((\d+) weeks\)/.exec(prompts[0])?.[1]);
+  const cap = t.volumeCap({ weeks, perMonth: 8, lastQuarterPublished: null });
+  check(prompts[0].includes("batch job retries: 320/month, difficulty 12") && prompts[0].includes(`Volume cap: ${cap} posts`), `and keyword data and the cap (${weeks} weeks, cap ${cap})`);
   const p = row.proposal;
   check(p.quarter === "2026-Q4" && p.covers.from && p.kind === "onboarding" && p.launch?.target === 15, "with its window and the Launch");
   check(p.watchedSites.length === 3 && !p.watchedSites.some((w) => w.url.includes("dead")), "the watched site that didn't answer was dropped");
