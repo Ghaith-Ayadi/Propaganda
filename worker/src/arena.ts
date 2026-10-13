@@ -27,8 +27,8 @@ import { getSource, readTenant, recentSources } from "./listener/store.js";
 export const ARENA_AGENTS = ["pitcher", "listener"] as const;
 export type ArenaAgent = (typeof ARENA_AGENTS)[number];
 
-/** The current default, the dark horse, and a top-tier model (/mnt/project-files/models/candidates.md). */
-export const ARENA_DEFAULT_MODELS = ["deepseek/deepseek-v4-pro", "xiaomi/mimo-v2.6-pro", "openai/gpt-6-sol"];
+/** The current default, its cheaper Qwen rival, and a top-tier model (/mnt/project-files/models/candidates.md). */
+export const ARENA_DEFAULT_MODELS = ["deepseek/deepseek-v4-pro", "alibaba/qwen3.7-plus", "openai/gpt-6-sol"];
 
 const ROUND_CAP_USD = Number(process.env.ARENA_ROUND_CAP_USD ?? 1);
 const ARENA_SITE = process.env.ARENA_SITE ?? "verbatimsite000";

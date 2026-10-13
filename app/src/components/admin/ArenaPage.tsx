@@ -26,7 +26,21 @@ const AGENTS: { id: ArenaAgent; label: string; detail: string }[] = [
   { id: "pitcher", label: "Pitcher: judging", detail: "Judges the tenant's waiting ideas (up to 25) against its goals and what it already has, with the Pitcher's own prompt." },
   { id: "listener", label: "Listener: a call", detail: "Reads one call with the Listener's own prompt and pulls out content gaps and candidate facts." },
 ];
-const FALLBACK_MODELS = ["deepseek/deepseek-v4-pro", "xiaomi/mimo-v2.6-pro", "openai/gpt-6-sol"];
+const FALLBACK_MODELS = ["deepseek/deepseek-v4-pro", "alibaba/qwen3.7-plus", "openai/gpt-6-sol"];
+/** Offered in the model fields; any AI Gateway id still works. */
+const SUGGESTED_MODELS = [
+  "deepseek/deepseek-v4-pro",
+  "deepseek/deepseek-v4-flash",
+  "alibaba/qwen3.7-plus",
+  "alibaba/qwen3.7-flash",
+  "alibaba/qwen3.8-max",
+  "xiaomi/mimo-v2.6-pro",
+  "moonshotai/kimi-k3",
+  "openai/gpt-6-sol",
+  "openai/gpt-6.1-sol",
+  "anthropic/claude-opus-5.5",
+  "anthropic/claude-fable-5.1",
+];
 const LETTERS = ["A", "B", "C"];
 const usd = (n: number) => `$${n < 0.01 ? n.toFixed(4) : n.toFixed(3)}`;
 const field = "rounded-lg border border-secondary bg-primary px-2 py-1.5 text-sm text-secondary";
@@ -167,12 +181,18 @@ export function ArenaPage() {
               <input
                 key={i}
                 aria-label={`Model ${i + 1}`}
+                list="arena-models"
                 value={models[i] ?? ""}
                 onChange={(e) => setModels((m) => Object.assign([...m], { [i]: e.target.value }))}
                 className={`${field} font-mono text-xs`}
               />
             ))}
           </div>
+          <datalist id="arena-models">
+            {SUGGESTED_MODELS.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
         </div>
         <div className="flex items-center gap-3">
           <button
