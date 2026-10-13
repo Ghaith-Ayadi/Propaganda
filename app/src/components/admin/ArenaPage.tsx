@@ -35,7 +35,10 @@ const SUGGESTED_MODELS = [
   "alibaba/qwen3.7-flash",
   "alibaba/qwen3.8-max",
   "xiaomi/mimo-v2.6-pro",
+  "moonshotai/kimi-k3",
   "openai/gpt-6-sol",
+  "openai/gpt-6.1-sol",
+  "anthropic/claude-opus-5.5",
   "anthropic/claude-fable-5.1",
 ];
 const LETTERS = ["A", "B", "C"];
