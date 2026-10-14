@@ -47,7 +47,10 @@ function SignIn() {
     try {
       if (!sent) {
         const { error } = await client.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false } });
-        if (error) throw new ArenaError("ARENA-AUTH", "Couldn't send the code. Check the address.");
+        if (error) {
+          const noAccount = (error as { code?: string }).code === "otp_disabled";
+          throw new ArenaError("ARENA-AUTH", noAccount ? "No account for that address. Use the email you sign in to Propaganda with." : "Couldn't send the code. Try again.");
+        }
         setSent(true);
       } else {
         const { error } = await client.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "email" });
