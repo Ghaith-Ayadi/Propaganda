@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths: ["arena/**", "app/src/styles/**", ".github/workflows/deploy-arena.yml"]
   workflow_dispatch:
+permissions: { contents: read }
 concurrency: { group: deploy-arena, cancel-in-progress: false }
 jobs:
   check:

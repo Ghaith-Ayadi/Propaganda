@@ -1,4 +1,4 @@
-// The Arena app (arena/): the same real task on two or three models, for a blind vote.
+// Admin > Arena: the same real task on two or three models, for a blind vote.
 //
 // A round asks each model exactly what the agent would ask it (the Pitcher's
 // judging prompt over a tenant's waiting ideas, or the Listener's reading of a
