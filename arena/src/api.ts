@@ -56,7 +56,8 @@ const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?
 const ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
 
 export const client: Client = createClient(SUPABASE_URL, ANON_KEY, {
-  auth: { storageKey: "arena-session", persistSession: true, autoRefreshToken: true },
+  // PKCE and detectSessionInUrl: Google sign-in comes back to this page with ?code=, which the client exchanges itself.
+  auth: { storageKey: "arena-session", persistSession: true, autoRefreshToken: true, flowType: "pkce", detectSessionInUrl: true },
 });
 
 /** A failure with a stable code, shown as "sentence (CODE)". */
@@ -146,4 +147,21 @@ export function standings(votes: ArenaVote[], agent: ArenaAgent): Standing[] {
   return [...by]
     .map(([model, s]) => ({ model, rounds: s.rounds, wins: s.wins, avgCost: s.rounds ? s.cost / s.rounds : 0 }))
     .sort((a, b) => b.wins - a.wins || a.avgCost - b.avgCost);
+}
+
+/** Whether the server can email sign-in codes (it can only once SMTP is set up). */
+export async function emailCodesEnabled(): Promise<boolean> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: ANON_KEY } });
+    const settings = (await res.json()) as { external?: { email?: boolean } };
+    return Boolean(settings.external?.email);
+  } catch {
+    return false;
+  }
+}
+
+/** Google sign-in by redirect: this page goes to Google and comes back here with a code. */
+export async function signInWithGoogle(): Promise<void> {
+  const { error } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/` } });
+  if (error) throw new ArenaError("ARENA-AUTH", "Google sign-in isn't available right now.");
 }
