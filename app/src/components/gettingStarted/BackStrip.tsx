@@ -53,8 +53,8 @@ export function BackStrip({ postId }: { postId: string }) {
         <ArrowLeft className="size-4" /> Back to Getting started
       </button>
       {canPublish && (
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-tertiary max-sm:hidden">Read it as a reader would. The Review tab has the checks.</span>
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1.5">
+          <span className="min-w-0 text-sm text-tertiary max-sm:hidden">Read it as a reader would. The Review tab has the checks.</span>
           <Button size="sm" iconLeading={Rocket02} isLoading={busy} onClick={() => void publish()}>
             Approve and publish now
           </Button>
