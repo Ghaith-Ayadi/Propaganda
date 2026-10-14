@@ -1,0 +1,41 @@
+name: deploy-arena
+# The Arena (arena/) ships on its own, apart from numbered product releases. A change under
+# arena/ is checked on every PR and deployed to its own Vercel project when it lands on main.
+# Rounds still run in the product's worker; this deploys only the page. See docs/arena.md.
+on:
+  pull_request:
+    paths: ["arena/**", ".github/workflows/deploy-arena.yml"]
+  push:
+    branches: [main]
+    paths: ["arena/**", "app/src/styles/**", ".github/workflows/deploy-arena.yml"]
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: deploy-arena, cancel-in-progress: false }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: arena
+      - run: npm run build
+        working-directory: arena
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: arena } }
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_ARENA_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --global vercel@63.1.2
+      - run: vercel pull --yes --environment=production
+      - run: vercel build --prod
+      - run: vercel deploy --prebuilt --prod

@@ -1,11 +1,9 @@
-// Admin > Arena: the same real agent task on two or three models, answers shown
+// The Arena: the same real agent task on two or three models, answers shown
 // blind (A, B, C in a shuffled order), and Ayadi picks the best. The vote and
 // what each answer cost are saved (public.arena_votes); the standings below sum
-// them per agent. Mounted by lib/admin/sections.tsx as "arena" (#/admin/arena).
+// them per agent. Its own app (docs/arena.md), deployed apart from product releases.
 
 import { useEffect, useMemo, useState } from "react";
-import { useAdmin } from "@/components/admin/AdminContext";
-import { toast } from "@/components/base/toast/toast";
 import {
   arenaSources,
   arenaTenants,
@@ -13,14 +11,13 @@ import {
   runRound,
   saveVote,
   standings,
+  userMessage,
   type ArenaAgent,
   type ArenaEntry,
   type ArenaRound,
   type ArenaSource,
   type ArenaVote,
-} from "@/lib/admin/arena";
-import { userMessage } from "@/lib/errors";
-import { reportError } from "@/lib/telemetry";
+} from "./api";
 
 const AGENTS: { id: ArenaAgent; label: string; detail: string }[] = [
   { id: "pitcher", label: "Pitcher: judging", detail: "Judges the tenant's waiting ideas (up to 25) against its goals and what it already has, with the Pitcher's own prompt." },
@@ -46,7 +43,6 @@ const usd = (n: number) => `$${n < 0.01 ? n.toFixed(4) : n.toFixed(3)}`;
 const field = "rounded-lg border border-secondary bg-primary px-2 py-1.5 text-sm text-secondary";
 
 export function ArenaPage() {
-  const { client } = useAdmin();
   const [agent, setAgent] = useState<ArenaAgent>("pitcher");
   const [tenants, setTenants] = useState<{ id: string; name: string }[]>([]);
   const [site, setSite] = useState("");
@@ -63,26 +59,25 @@ export function ArenaPage() {
   const [error, setError] = useState<string | null>(null);
 
   const fail = (where: string) => (err: unknown) => {
-    reportError(where, err);
+    console.error(where, err);
     setError(userMessage(err));
   };
 
   useEffect(() => {
-    arenaTenants(client).then((t) => {
+    arenaTenants().then((t) => {
       setTenants(t);
       setSite((s) => s || (t[0]?.id ?? ""));
     }, fail("ArenaPage.tenants"));
-    listVotes(client).then(setVotes, fail("ArenaPage.votes"));
-  }, [client]);
+    listVotes().then(setVotes, fail("ArenaPage.votes"));
+  }, []);
 
   useEffect(() => {
     if (!site) return;
     setSource("");
-    arenaSources(client, site).then((r) => {
+    arenaSources(site).then((r) => {
       setSources(r.sources);
-      if (r.defaultModels?.length) setModels((m) => (m === FALLBACK_MODELS ? r.defaultModels : m));
     }, fail("ArenaPage.sources"));
-  }, [client, site]);
+  }, [site]);
 
   const picked = models.map((m) => m.trim()).filter(Boolean);
   const ready = !!site && picked.length >= 2 && (agent === "pitcher" || !!source || !!transcript.trim());
@@ -96,7 +91,7 @@ export function ArenaPage() {
     setNote("");
     try {
       setRound(
-        await runRound(client, {
+        await runRound({
           agent,
           site,
           models: picked,
@@ -114,10 +109,9 @@ export function ArenaPage() {
     if (!round) return;
     setBusy("vote");
     try {
-      await saveVote(client, round, winner, note);
+      await saveVote(round, winner, note);
       setVoted(winner);
-      toast.add({ type: "success", title: "Vote saved", description: winner ? `You picked ${winner}.` : "None was good enough." });
-      listVotes(client).then(setVotes, fail("ArenaPage.votes"));
+      listVotes().then(setVotes, fail("ArenaPage.votes"));
     } catch (err) {
       fail("ArenaPage.vote")(err);
     } finally {
@@ -126,6 +120,7 @@ export function ArenaPage() {
   };
 
   const revealed = voted !== undefined;
+  const saved = revealed ? (voted ? `Vote saved: you picked ${voted}.` : "Vote saved: none was good enough.") : null;
 
   return (
     <div className="flex flex-col gap-6 text-sm">
@@ -243,6 +238,7 @@ export function ArenaPage() {
               </article>
             ))}
           </div>
+          {saved && <p className="text-success-primary">{saved}</p>}
           {!revealed && (
             <div className="flex flex-wrap items-center gap-2">
               <input aria-label="Note" placeholder="Why (optional, saved with the vote)" value={note} onChange={(e) => setNote(e.target.value)} className={`${field} min-w-0 flex-1`} />
