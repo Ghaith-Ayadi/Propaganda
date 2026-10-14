@@ -34,6 +34,7 @@ import { rate, type FitReason, type Judgement } from "./fit.js";
 import { APPROVED, approvalRate, isOpen, nextQuota, pitchesFor, targetMet, type BatchCount, type QuarterView } from "./batches.js";
 import { isoWeek, quarterOf, readGoals, standing, type CountedPost, type Goals } from "./goals.js";
 import { claimsFor, renderClaims } from "./kb.js";
+import { overusedIdeas, overusedLine } from "./motifs.js";
 import { nearest, readTaste, renderTaste, seenLine, type Seen } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
@@ -374,6 +375,14 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     ...ctx.titles.map((p) => ({ title: p.title, kind: "published" as const, date: (p.at ?? "").slice(0, 10), reason: "" })),
   ];
   const close = new Map(pending.map((i) => [i.id, nearest(i.title, seen)]));
+  // Ideas the pipeline already leans on: one example repeated in every pitch is how a tenant's site becomes its whole blog.
+  const lean = (await DBOS.patch("pitcher-lean"))
+    ? overusedIdeas(
+        seen.filter((s) => s.kind !== "rejected").map((s) => s.title),
+        // The tenant's own subject is expected in every title: its name, its goal topics and target searches, its collections.
+        [ctx.tenant?.name ?? "", ...(goals?.volume.topics.map((t) => t.name) ?? []), ...(goals?.searches.map((s) => s.query) ?? []), ...collectionNames],
+      )
+    : [];
 
   // 1. Judge every idea in one call: topics, timeliness, gaps, overlaps.
   const existing = [
@@ -497,7 +506,7 @@ Collections on this blog: ${collectionNames.join(", ") || "(none)"}.
 
 What this tenant has decided before (learn from it; their own words win):
 ${renderTaste(taste)}
-${input.topUp ? `\nThis is a top-up: ${input.topUp}\n` : ""}${j.changed ? `\nThis is close to something pitched before (${seenLine(close.get(idea.id)!)}). What changed since: ${j.changed} Make the brief about what changed.\n` : ""}
+${lean.length ? `\nIdeas the pipeline already leans on: ${overusedLine(lean)} (how many titles carry each). Don't build this pitch around one of them; if it comes up, give it a clause, not the argument.\n` : ""}${input.topUp ? `\nThis is a top-up: ${input.topUp}\n` : ""}${j.changed ? `\nThis is close to something pitched before (${seenLine(close.get(idea.id)!)}). What changed since: ${j.changed} Make the brief about what changed.\n` : ""}
 
 Answer with JSON only:
 {"title": "a specific, slightly provocative title: one plain statement under twelve words, by the title rules", "why": "one sentence: why this, why now", "angle": "the claim this post makes that the person searching needs and the ranking pages don't give them; never a rebuttal of a page or a format", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the decision or note that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,

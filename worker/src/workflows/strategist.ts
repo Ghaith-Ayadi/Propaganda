@@ -21,6 +21,7 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { HOUSE_STYLE, TITLE_RULES } from "../agents/writing.js";
 import { askJson, MODELS } from "../agents/model.js";
+import { sharedIdeas } from "../agents/motifs.js";
 import { assertPublicUrl, readPage, readSite, searchWeb, searchConfigured, type SiteClaim } from "../agents/web.js";
 import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
 import {
@@ -332,7 +333,7 @@ const SYSTEM = `You are the Strategist for a company's blog, inside Propaganda (
 
 The rules (code checks them; a proposal that breaks one is sent back):
 1. Volume comes from capacity, never ambition. The cap you're given is a ceiling, not a target: propose less when more would mean a burst and then silence (after a Launch, the rest of the quarter should still carry about a post a week), and say so.
-2. 1 to 4 topics, best first, each a range (low to high). A topic has a name and a thesis. The name is a label of 2 to 6 words, at most 60 characters, a plain noun phrase or statement the founder would say in a meeting ("Knowing what's true before writing", "One message across three channels"): never a product category, never one of their searches pasted back, never "cluster" or "pillar", and never a whole sentence. No two-part names ("Thing: explanation"), no second half that starts with an -ing verb, no negation set up to be knocked down ("X isn't a Y problem"): the title rules below say how. The thesis is one plain sentence, the point of view: what this company knows about its buyer, its market or how things work that its competitors don't say, and that a quarter of posts can show. Three kinds of claim exist and only one makes a thesis: what the company says about itself (its headline, its slogan, any sentence from its site) is positioning, never a topic and never a thesis, at most the voice the posts are written in; a number or a customer result is proof, which goes in a post, not in a topic; what is true about the buyer or the market is knowledge, and that is what a thesis is made of. Each topic is a different thing they know: no two topics restate one claim. A thesis is about the buyer and the market, never an argument with the pages that rank today or with a competitor's claim: what ranks is context for the posts, never their cast. The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume. In a revision, keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away.
+2. 1 to 4 topics, best first, each a range (low to high). A topic has a name and a thesis. The name is a label of 2 to 6 words, at most 60 characters, a plain noun phrase or statement the founder would say in a meeting ("Knowing what's true before writing", "One message across three channels"): never a product category, never one of their searches pasted back, never "cluster" or "pillar", and never a whole sentence. No two-part names ("Thing: explanation"), no second half that starts with an -ing verb, no negation set up to be knocked down ("X isn't a Y problem"): the title rules below say how. The thesis is one plain sentence, the point of view: what this company knows about its buyer, its market or how things work that its competitors don't say, and that a quarter of posts can show. Three kinds of claim exist and only one makes a thesis: what the company says about itself (its headline, its slogan, any sentence from its site) is positioning, never a topic and never a thesis, at most the voice the posts are written in; a number or a customer result is proof, which goes in a post, not in a topic; what is true about the buyer or the market is knowledge, and that is what a thesis is made of. Each topic is a different thing they know: no two topics restate one claim, and no one idea (a price, a customer, an example from their site) runs through more than one topic. A thesis is about the buyer and the market, never an argument with the pages that rank today or with a competitor's claim: what ranks is context for the posts, never their cast. The first topic is the buying-intent one (what a buyer reads before they buy); then the long-tail topics a new domain can win. The first topic gets the biggest range. The low ends add up to at most the volume. In a revision, keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away.
 3. Every topic gets pitched from every source; there is no internal/external split.
 4. 3 to 8 watched sites: regulators, trade press, competitors' blogs, standards bodies, newsletters. Each is a source that keeps publishing (a site, a blog index, a news section: the root or one path segment), never one article, whitepaper or listicle. Each tied to one topic, each with a why. The competitors they named are always in. Use real sites you know or that appear in the data; full https addresses. A site earns its place by authority in this niche (a known company, a study, a regulator, the trade press these buyers read), never by ranking for a search today; the why says in a few words who they are.
 5. 5 to 10 target searches (10 when the data allows, and at least 8 with 6 from the data when the data is rich): all winnable, which means difficulty under 30 with at least 50 searches a month, or a search where they're already on page two. A new domain targets long-tail searches only, never a head term (nothing over 5,000 searches a month), each one a question a post in its topic would literally answer. Each names one of the topics. A search you propose that the data doesn't list gets its numbers looked up before your proposal is checked, so take the best questions from the data first and add your own only when the data has none. A search whose page one is lists of tools ("best X", "top X tools", "X software") tempts every post into arguing with those lists, which readers notice. These are buyer searches and stay eligible, new domain or not: the why says the post answers the buyer's question behind the search and never argues with the lists or the format. A new domain targets at most 2 on page one by quarter end, and no AI-mention target in its first quarter (set it to null and say why).
@@ -350,6 +351,15 @@ ${TITLE_RULES}
 
 Answer with JSON only, in this shape:
 {"summary": "one line", "volume": {"value": 18, "why": "...", "basis": "..."}, "topics": [{"name": "...", "thesis": "...", "low": 5, "high": 7, "why": "...", "basis": "..."}], "ranking": {"searches": [{"query": "...", "topic": "...", "why": "..."}], "pageOneTarget": {"value": 2, "why": "...", "basis": "..."}, "aiMentionTarget": {"value": null, "why": "...", "basis": "..."}}, "readership": {"value": null, "why": "...", "basis": "..."}, "watchedSites": [{"url": "https://...", "topic": "...", "why": "..."}], "questions": []}`;
+
+/** Ideas the site carries in four or more different sentences, minus the words of what they sell and search for. */
+function siteIdeas(pack: Pack, a: Pack["answers"]): string[] {
+  const claims = pack.siteClaims ?? [];
+  if (claims.length < 8) return [];
+  return sharedIdeas(claims.map((c) => c.text), { max: 3, own: [String(a.offer ?? ""), String(a.searches ?? ""), String(a.watch ?? "")] })
+    .slice(0, 5)
+    .map((m) => `"${m.word}" in ${m.items.length}`);
+}
 
 function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: string; covers: { from: string; to: string; weeks: number }; cap: number; hasHistory: boolean; launch: { target: number } | null; today: string }): string {
   const kw = (list: Keyword[], n: number) =>
@@ -387,6 +397,9 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
           .slice(0, 12)
           .map((c) => `- ${c.count}x: ${c.text}`)
           .join("\n")}`
+      : "",
+    siteIdeas(pack, a).length
+      ? `\nIdeas their site returns to in different sentences (${siteIdeas(pack, a).join(", ")}): an example repeated across the copy is an example, not their strategy. None of them is the centre of more than one topic.`
       : "",
     pack.history.recentTitles.length ? `\nRecent posts:\n${pack.history.recentTitles.map((t) => `- ${t}`).join("\n")}` : "\nNo posts yet.",
     pack.history.approved || pack.history.rejected
@@ -470,6 +483,8 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       houseStyle: await DBOS.patch("strategist-house-style"),
       // A short name plus a thesis, and the site's own sentences banned as either (2026-10-12): same reason.
       thesis: await DBOS.patch("strategist-thesis"),
+      // One idea in one topic (2026-10-14): same reason.
+      motifs: await DBOS.patch("strategist-motifs"),
       siteSentences: pack.siteClaims?.length ? pack.siteClaims.map((c) => c.text) : siteSentences(pack.pages.map((p) => p.text)),
     };
     const previousTopics = rules.previousTopics;

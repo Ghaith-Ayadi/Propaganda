@@ -39,3 +39,5 @@ export { firstPitches, firstDrafts, replacer, dispatchFirstDay, forgetAsked, fir
 export { strategistProgress } from "../progress.js";
 // Lite tenants get no KB agents (test/lite.mjs).
 export { pendingWork, setAppDb } from "../kb/read.js";
+
+export { sharedIdeas, overusedIdeas, mentions, root as ideaRoot } from "./motifs.js";

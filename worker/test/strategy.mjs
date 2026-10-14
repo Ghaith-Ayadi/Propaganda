@@ -315,6 +315,21 @@ try {
   const colon = t.validate(t.parseDraft({ ...GOOD, topics: [{ ...GOOD.topics[0], thesis: "Retries are the easy part: what a founder should ask before paying." }, GOOD.topics[1]] }), claims);
   check(colon.some((e) => /the thesis breaks the title rules/.test(e)), `a thesis is held to the title rules too (${colon.join(" | ")})`);
 
+  console.log("one idea, one budget");
+  const PRICE = ["Posts that outlive the price. Every post stops being true the day a price changes.", "Why AI blog tools get cancelled. A founder cancels a writer the first time a post states a wrong price.", "Your calls hold the posts. A fumbled answer on a sales call is a post nobody has written.", "ChatGPT describes you from old pricing pages. A founder who never checked is described by stale prices."];
+  const lean = t.sharedIdeas(PRICE, { max: 1, own: ["AI blog", "AI CMS"] });
+  check(lean.length === 1 && lean[0].idea === t.ideaRoot("price") && lean[0].items.length === 3, `price, prices and pricing are one idea, carried by three of four topics (${JSON.stringify(lean.map((m) => [m.word, m.items.length]))})`);
+  check(t.sharedIdeas(PRICE, { max: 1, own: ["AI blog", "price"] }).length === 0, "the tenant's own subject is never flagged");
+  check(t.overusedIdeas(PRICE.slice(0, 5)).length === 0 && t.overusedIdeas([...PRICE, "Posts that outlive the price", "Prices change on Tuesday", "Retries are cheap"]).some((m) => m.idea === t.ideaRoot("price")), "a pipeline is judged from six titles on, then one idea in more than a quarter of them is flagged");
+  const three = (a, b, c) => t.parseDraft({ ...GOOD, topics: [{ ...GOOD.topics[0], thesis: a }, { ...GOOD.topics[1], thesis: b }, { ...GOOD.topics[1], name: "Hiring slowdowns", low: 2, high: 3, thesis: c }] });
+  const motif = (d, flags, prev = []) => t.validate(d, { ...claims, ...flags, previousTopics: prev }).filter((e) => /runs through/.test(e));
+  const loud = three("A platform team loses a night to a failed scraper before anyone notices.", "A scraper fails on volume long before it fails on parsing, and nobody plans for that.", "Hiring slows down the week a scraper breaks and nobody owns it.");
+  const calm = three("A batch job that retries on its own is worth more than a faster one.", "Volume breaks collection long before parsing, and nobody plans for that.", "Hiring slows down the week something breaks and nobody owns it.");
+  check(motif(loud, { motifs: true }).length === 1 && /"scraper" runs through 3 topics/.test(motif(loud, { motifs: true })[0]), `one idea in all three topics is sent back (${motif(loud, { motifs: true }).join(" | ")})`);
+  check(motif(calm, { motifs: true }).length === 0, "three topics about different things pass");
+  check(motif(loud, {}).length === 0, "and the rule is off on a run recorded before it");
+  check(motif(loud, { motifs: true }, ["Reliability", "Scraping at scale", "Hiring slowdowns"]).length === 0, "and never aimed at names kept from the previous proposal");
+
   console.log("search seeds and the keyword pull");
   check(t.searchSeeds(["I don't know what searches I want to be found by. It has to be something about AI content publishing", "AI CMS", "AI blogging and social posting... you tell me", "ai cms"]).join("|") === "AI CMS", `a sentence typed as a search is no seed; a phrase is, once (${JSON.stringify(t.searchSeeds(["I don't know what searches I want to be found by", "AI CMS", "ai cms"]))})`);
   const pulled = [
