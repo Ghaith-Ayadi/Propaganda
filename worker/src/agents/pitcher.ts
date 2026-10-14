@@ -34,6 +34,7 @@ import { rate, type FitReason, type Judgement } from "./fit.js";
 import { APPROVED, approvalRate, isOpen, nextQuota, pitchesFor, targetMet, type BatchCount, type QuarterView } from "./batches.js";
 import { isoWeek, quarterOf, readGoals, standing, type CountedPost, type Goals } from "./goals.js";
 import { claimsFor, renderClaims } from "./kb.js";
+import { ideas, overusedIdeas, overusedLine } from "./motifs.js";
 import { nearest, readTaste, renderTaste, seenLine, type Seen } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
@@ -360,6 +361,13 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     ...ctx.titles.map((p) => ({ title: p.title, kind: "published" as const, date: (p.at ?? "").slice(0, 10), reason: "" })),
   ];
   const close = new Map(pending.map((i) => [i.id, nearest(i.title, seen)]));
+  // Ideas the pipeline already leans on: one example repeated in every pitch is how a tenant's site becomes its whole blog.
+  const lean = (await DBOS.patch("pitcher-lean"))
+    ? overusedIdeas(
+        seen.filter((s) => s.kind !== "rejected").map((s) => s.title),
+        [ctx.tenant?.name ?? ""],
+      )
+    : [];
 
   // 1. Judge every idea in one call: topics, timeliness, gaps, overlaps.
   const existing = [
@@ -483,7 +491,7 @@ Collections on this blog: ${collectionNames.join(", ") || "(none)"}.
 
 What this tenant has decided before (learn from it; their own words win):
 ${renderTaste(taste)}
-${input.topUp ? `\nThis is a top-up: ${input.topUp}\n` : ""}${j.changed ? `\nThis is close to something pitched before (${seenLine(close.get(idea.id)!)}). What changed since: ${j.changed} Make the brief about what changed.\n` : ""}
+${lean.length ? `\nIdeas the pipeline already leans on: ${overusedLine(lean)} (how many titles carry each). Don't build this pitch around one of them; if it comes up, give it a clause, not the argument.\n` : ""}${input.topUp ? `\nThis is a top-up: ${input.topUp}\n` : ""}${j.changed ? `\nThis is close to something pitched before (${seenLine(close.get(idea.id)!)}). What changed since: ${j.changed} Make the brief about what changed.\n` : ""}
 
 Answer with JSON only:
 {"title": "a specific, slightly provocative title: one plain statement under twelve words, by the title rules", "why": "one sentence: why this, why now", "angle": "the argument this post makes that the ranking pages don't", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the decision or note that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,
@@ -501,6 +509,14 @@ Answer with JSON only:
     if (again) {
       const reason = `Came out as "${written.title}", too close to something already ${seenLine(again)}.`;
       await DBOS.runStep(() => settleIdea(site, idea.id, "rejected", reason, null), { name: `reject ${idea.id} as written` });
+      result.rejected.push({ idea: idea.id, reason });
+      continue;
+    }
+    // A pitch that comes out centred on an idea the pipeline already leans on goes back to the queue.
+    const centred = lean.find((m) => ideas(written.title).has(m.idea));
+    if (centred && !j.changed) {
+      const reason = `Came out as "${written.title}", which is about "${centred.word}" again; ${centred.items.length} titles in the pipeline already are.`;
+      await DBOS.runStep(() => settleIdea(site, idea.id, "rejected", reason, null), { name: `reject ${idea.id} as leaning` });
       result.rejected.push({ idea: idea.id, reason });
       continue;
     }
