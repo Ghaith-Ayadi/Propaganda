@@ -1,5 +1,6 @@
 # A numbered release to production (docs/releases.md). Started by hand on main, and only
-# on Ayadi's word:
+# on Ayadi's word. A hotfix runs the same workflow on a branch named hotfix/<next version>
+# (the last release plus the fix, nothing else; see the checks in the plan job):
 #   1. plan: the next version (v0.2.0, v0.2.1, ...) and which real-model tests to run
 #      (worker/test/live/affected.mjs: the agents whose code changed since the last
 #      release; all of them on the first release of a month);
@@ -37,7 +38,7 @@ permissions:
   contents: read
 jobs:
   plan:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/hotfix/')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -62,8 +63,18 @@ jobs:
             esac
           fi
           git rev-parse -q --verify "refs/tags/$next" >/dev/null && { echo "::error::$next already exists"; exit 1; }
+          # A hotfix (docs/releases.md): the last release plus the fix, never main's unreleased work.
+          if [[ "$GITHUB_REF" == refs/heads/hotfix/* ]]; then
+            fail() { echo "::error::Hotfix branch: $1"; exit 1; }
+            [ "$BUMP" = patch ] || fail "a hotfix is a patch release"
+            [ -n "$prev" ] || fail "there is no release to fix yet"
+            [ "$GITHUB_REF_NAME" = "hotfix/$next" ] || fail "the branch must be named hotfix/$next"
+            git merge-base --is-ancestor "$prev" HEAD || fail "it is not cut from $prev, the last release"
+            [ -z "$(git rev-list --merges "$prev..HEAD")" ] || fail "it has merge commits since $prev: cherry-pick the fix, never merge main in"
+            [ -z "$(git diff --name-only "$prev" HEAD -- supabase/migrations)" ] || fail "a migration never rides a hotfix: it waits for a full release and Ayadi's yes to its file"
+          fi
           # Its notes come first: they are the release log's opening and the app's /release-notes page.
-          [ -s "release-notes/$next.md" ] || { echo "::error::No release notes for $next: add release-notes/$next.md on main first (docs/releases.md)"; exit 1; }
+          [ -s "release-notes/$next.md" ] || { echo "::error::No release notes for $next: add release-notes/$next.md on the branch you release from first (docs/releases.md)"; exit 1; }
           echo "previous=$prev" >> "$GITHUB_OUTPUT"
           echo "version=$next" >> "$GITHUB_OUTPUT"
           echo "Releasing $next (previous: ${prev:-none})"

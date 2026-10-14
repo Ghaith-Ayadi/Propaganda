@@ -35,9 +35,32 @@ It runs, in order:
 5. **The app** to Vercel production through `deploy-app.yml`.
 
 **The box** runs the Propaganda commit named by `SCHEMA_REF` in Bedrock's
-`compose/propaganda-supabase/schema.env` (schema, migrations, worker). It pins a release
-tag, so moving the box to a release is a one-line Bedrock PR (`SCHEMA_REF=v0.2.1`) that
-deploys on merge. Until the first pin it is `main`, and every Bedrock deploy ships `main`.
+`compose/propaganda-supabase/schema.env` (schema, migrations, worker). It pins the last release
+tag (v0.2.4 from 2026-10-14), so a box deploy ships released code only. Moving the box to a new
+release is a one-line Bedrock PR (`SCHEMA_REF=vX.Y.Z`) that deploys on merge: make it after every
+release, and merge it right after the release's app deploy.
+
+## Hotfix
+
+A fix that must reach production before the next full release. A normal release ships all of
+`main`, so unreleased work and its 25-minute model tests ride along; a hotfix ships the last
+release plus the fix and nothing else. It is still a numbered release (the next patch, v0.2.5
+after v0.2.4), only on Ayadi's word, with notes and a log.
+
+1. The fix merges to `main` as always (desk, then merge).
+2. Cut `hotfix/<next version>` from the last release tag, cherry-pick the fix onto it, and add
+   `release-notes/<next version>.md` there (one or two lines, no costs).
+3. Run the **release** workflow on that branch (`bump: patch`). The plan job refuses it unless the
+   branch is named for the next version, descends from the last release, has no merge commits since
+   it (cherry-pick, never merge `main` in) and adds no migration: a migration waits for a full
+   release and Ayadi's yes to its file.
+4. Everything else is the normal release: the free suites on that commit, real-model tests only
+   for agents whose code the fix touches since the last release (usually none; all of them on the first release of a month), the tag and log,
+   the app to Vercel from the branch.
+5. Bedrock PR `SCHEMA_REF=<next version>` for the box, as after any release. The worker is built
+   from that tag, so a worker fix reaches the box only this way.
+6. The notes file also goes to `main` in a notes PR, so `/release-notes` and the next release's
+   log carry it. The next release on `main` numbers from the highest tag, so it is v0.2.6.
 
 ## Release notes
 
