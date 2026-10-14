@@ -25,6 +25,14 @@ jobs:
       VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
+      # The plan checks (release.yml) are what make a hotfix branch safe to ship, and the release
+      # run tags the commit only after they pass: a hand-run deploy of a hotfix branch has no tag.
+      - name: A hotfix branch deploys only a commit a release run tagged
+        if: startsWith(github.ref, 'refs/heads/hotfix/')
+        run: |
+          git fetch --tags -q origin
+          git tag --points-at HEAD | grep -qx 'v[0-9]\+\.[0-9]\+\.[0-9]\+' \
+            || { echo "::error::This commit has no release tag: a hotfix is deployed by the release workflow, never by hand"; exit 1; }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm install --global vercel@63.1.2
