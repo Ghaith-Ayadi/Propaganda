@@ -9,6 +9,8 @@
 //
 // VITE_PLATFORM_DOMAIN overrides the platform domain. Set to "localhost" in dev,
 // blogs open at http://<slug>.localhost:<port> and the editor at localhost.
+// VITE_APP_HOST puts the editor on a host of its own instead of app.<platform
+// domain> (the dev box serves it at its bare domain, which has no marketing site).
 
 import { postPath } from "@/lib/slug";
 
@@ -23,6 +25,8 @@ export const PLATFORM_DOMAIN = (
 
 const DEV_PLATFORM = PLATFORM_DOMAIN === "localhost";
 
+const APP_HOST = ((import.meta.env.VITE_APP_HOST as string | undefined) || "").toLowerCase();
+
 /** The platform subdomain that serves the editor and the API. */
 const APP_LABEL = "app";
 
@@ -36,6 +40,7 @@ function platformOrigin(label: string): string {
 
 /** Where the editor lives: https://app.propaganda.pub (the dev server itself in dev). */
 export function appOrigin(): string {
+  if (APP_HOST && !DEV_PLATFORM) return `https://${APP_HOST}`;
   return platformOrigin(DEV_PLATFORM ? "" : APP_LABEL);
 }
 
