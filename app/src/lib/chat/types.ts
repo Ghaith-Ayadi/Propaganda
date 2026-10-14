@@ -20,7 +20,7 @@ export type AgentName =
   | "guardian";
 
 /** Something a reply can point at. `id` is the object's own id in its table. */
-export type RefKind = "claim" | "post" | "pitch" | "flag" | "goal" | "run";
+export type RefKind = "claim" | "post" | "pitch" | "brief" | "idea" | "flag" | "goal" | "run";
 
 export interface Ref {
   kind: RefKind;

@@ -12,6 +12,7 @@ export function hrefFor(ref: Ref): string | null {
     case "post":
       return postHref(ref.id);
     case "pitch":
+    case "brief":
       // An approved pitch is a brief; the Pipeline page will take over pitches.
       return briefHref(ref.id);
     case "run":
