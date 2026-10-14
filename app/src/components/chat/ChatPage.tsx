@@ -11,7 +11,8 @@ import { BadgeWithDot } from "@/components/base/badges/badges";
 import { useConversation, useConversations } from "@/lib/chat/useChat";
 import type { Conversation } from "@/lib/chat/types";
 import { activeSite } from "@/lib/scope";
-import { goPage, usePageRest } from "@/lib/route";
+import { goPage, pageHref, usePageRest } from "@/lib/route";
+import { lastOpenConversation, rememberOpenConversation } from "@/lib/chat/lastOpen";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { useIsMobile } from "@/lib/mobile";
 import { cx } from "@/utils/cx";
@@ -29,7 +30,8 @@ const SUGGESTIONS = [
 export function ChatPage() {
   const site = activeSite();
   const rest = usePageRest();
-  const activeId = rest && /^[a-z0-9]+$/.test(rest) ? rest : null;
+  // #/chat/new is a deliberate new chat; plain #/chat reopens the last conversation.
+  const activeId = rest && rest !== "new" && /^[a-z0-9]+$/.test(rest) ? rest : null;
   const siteId = site?.id ?? "";
 
   const { conversations, create, remove, touch, placeholder } = useConversations(siteId);
@@ -41,9 +43,23 @@ export function ChatPage() {
   const isMobile = useIsMobile();
   const [listOpen, setListOpen] = useState(false);
 
+  // Coming back from another page lands on #/chat: reopen the conversation that was open.
+  // (replace, so Back doesn't return to the bare address and bounce forward again.)
+  useEffect(() => {
+    if (rest !== null || !conversations || !siteId) return;
+    const last = lastOpenConversation(siteId);
+    if (last && conversations.some((c) => c.id === last)) window.location.replace(pageHref("chat", last));
+  }, [rest, conversations, siteId]);
+
+  useEffect(() => {
+    if (!siteId) return;
+    if (activeId) rememberOpenConversation(siteId, activeId);
+    else if (rest === "new") rememberOpenConversation(siteId, null);
+  }, [siteId, activeId, rest]);
+
   // A link to a conversation that isn't there (deleted, another site) goes back to a new chat.
   useEffect(() => {
-    if (activeId && conversations && !conversations.some((c) => c.id === activeId)) goPage("chat");
+    if (activeId && conversations && !conversations.some((c) => c.id === activeId)) goPage("chat", "new");
   }, [activeId, conversations]);
 
   const ask = (text: string) => void send(text);
@@ -58,11 +74,11 @@ export function ChatPage() {
       }}
       onNew={() => {
         setListOpen(false);
-        goPage("chat");
+        goPage("chat", "new");
       }}
       onDelete={async (id) => {
         await remove(id);
-        if (id === activeId) goPage("chat");
+        if (id === activeId) goPage("chat", "new");
       }}
     />
   );
@@ -82,7 +98,7 @@ export function ChatPage() {
             {isMobile && (
               <ButtonUtility size="sm" color="secondary" icon={Menu01} tooltip="Conversations" onClick={() => setListOpen((o) => !o)} />
             )}
-            <Button size="sm" color="secondary" iconLeading={Plus} onClick={() => goPage("chat")}>
+            <Button size="sm" color="secondary" iconLeading={Plus} onClick={() => goPage("chat", "new")}>
               New chat
             </Button>
           </>
