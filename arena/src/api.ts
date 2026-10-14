@@ -42,6 +42,7 @@ export interface ArenaSource {
 }
 
 export interface ArenaVote {
+  entries?: ArenaEntry[];
   id: string;
   agent: ArenaAgent;
   site: string;
@@ -118,7 +119,7 @@ export async function saveVote(round: ArenaRound, winner: string | null, note: s
 export async function listVotes(): Promise<ArenaVote[]> {
   const { data, error } = await client
     .from("arena_votes")
-    .select("id,agent,site,task,models,winner,costs,cost_usd,note,created")
+    .select("id,agent,site,task,models,winner,costs,cost_usd,note,created,entries")
     .order("created", { ascending: false })
     .limit(500);
   if (error) throw new ArenaError("ARENA-LOAD", `Couldn't load the votes: ${error.message}`);

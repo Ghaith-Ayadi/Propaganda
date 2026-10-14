@@ -25,7 +25,7 @@ const AGENTS: { id: ArenaAgent; label: string; detail: string }[] = [
   { id: "listener", label: "Listener: a call", detail: "Reads one call with the Listener's own prompt and pulls out content gaps and candidate facts." },
 ];
 const FALLBACK_MODELS = ["deepseek/deepseek-v4-pro", "alibaba/qwen3.7-plus", "openai/gpt-6-sol"];
-const WRITER_MODELS = ["openai/gpt-6.1-sol", "alibaba/qwen3.8-max", "deepseek/deepseek-v4-pro", "anthropic/claude-opus-5.5"];
+const WRITER_MODELS = ["deepseek/deepseek-v4-pro", "openai/gpt-6.1-sol", "moonshotai/kimi-k3", "alibaba/qwen3.8-max"];
 /** A writing round is this many pieces. */
 const PIECES = 5;
 /** Offered in the model fields; any AI Gateway id still works. */
@@ -95,6 +95,8 @@ export function ArenaPage() {
   const picked = models.map((m) => m.trim()).filter(Boolean);
   const pieces = sources.slice(0, PIECES);
   const ready = !!site && picked.length >= 2 && (agent === "pitcher" || (agent === "writer" ? piece < pieces.length : !!source || !!transcript.trim()));
+  const [open, setOpen] = useState<string | null>(null);
+  const past = useMemo(() => (votes ?? []).filter((v) => v.agent === agent), [votes, agent]);
   const table = useMemo(() => (votes ? standings(votes, agent) : []), [votes, agent]);
 
   const run = async () => {
@@ -300,6 +302,35 @@ export function ArenaPage() {
             </tbody>
           </table>
         </div>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h3 className="font-medium text-primary">Past rounds: {AGENTS.find((a) => a.id === agent)!.label}</h3>
+        {votes && past.length === 0 && <p className="text-tertiary">None yet.</p>}
+        {past.map((v) => (
+          <div key={v.id} className="rounded-xl border border-secondary">
+            <button type="button" onClick={() => setOpen(open === v.id ? null : v.id)} className="flex w-full flex-wrap items-baseline justify-between gap-2 px-4 py-2.5 text-left hover:bg-secondary">
+              <span className="font-medium text-primary">{v.task}</span>
+              <span className="text-xs text-tertiary">{v.created.slice(0, 10)} · {v.winner ? `winner ${v.winner}` : "no winner"} · {usd(Number(v.cost_usd))}</span>
+            </button>
+            {open === v.id && (
+              <div className="flex flex-col gap-3 border-t border-secondary p-3">
+                {v.note && <p className="text-secondary">Your note: {v.note}</p>}
+                <div className={`grid gap-3 ${(v.entries?.length ?? 0) >= 4 ? "lg:grid-cols-2 xl:grid-cols-4" : "lg:grid-cols-3"}`}>
+                  {(v.entries ?? []).map((e, i) => (
+                    <article key={i} className={`flex min-w-0 flex-col rounded-lg border ${v.winner === e.model ? "border-brand" : "border-secondary"}`}>
+                      <header className="border-b border-secondary px-3 py-2 font-mono text-xs text-tertiary">
+                        {LETTERS[i]} · {e.model}{v.winner === e.model ? " · winner" : ""} · {usd(e.costUsd)} · {(e.ms / 1000).toFixed(1)}s
+                      </header>
+                      <div className="max-h-[420px] overflow-y-auto px-3 py-2">
+                        {e.error ? <p className="text-error-primary">This model failed: {e.error}</p> : <Answer agent={v.agent} entry={e} ideas={[]} />}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
       </section>
     </div>
   );

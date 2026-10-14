@@ -34,7 +34,7 @@ export type ArenaAgent = (typeof ARENA_AGENTS)[number];
 /** The current default, its cheaper Qwen rival, and a top-tier model (/mnt/project-files/models/candidates.md). */
 export const ARENA_DEFAULT_MODELS = ["deepseek/deepseek-v4-pro", "alibaba/qwen3.7-plus", "openai/gpt-6-sol"];
 /** Writing rounds (Ayadi 2026-10-14): four rivals, each writing the same piece. */
-export const ARENA_WRITER_MODELS = ["openai/gpt-6.1-sol", "alibaba/qwen3.8-max", "deepseek/deepseek-v4-pro", "anthropic/claude-opus-5.5"];
+export const ARENA_WRITER_MODELS = ["deepseek/deepseek-v4-pro", "openai/gpt-6.1-sol", "moonshotai/kimi-k3", "alibaba/qwen3.8-max"];
 /** A writing round is one piece by every rival: a full post each, so it gets its own cap. */
 const WRITER_ROUND_CAP_USD = Number(process.env.ARENA_WRITER_ROUND_CAP_USD ?? 2);
 const WRITER_OUTPUT_TOKENS = 8000;

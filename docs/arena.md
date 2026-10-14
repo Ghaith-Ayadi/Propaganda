@@ -30,7 +30,7 @@ Nothing else is shared. The Arena has no product code in it and the product Admi
 
 ## Writing rounds
 
-A writing round (Ayadi, 2026-10-14) is five pieces. Each piece is one of the tenant's approved briefs, written in full by every rival (default GPT-6.1 Sol, Qwen3.8 Max, DeepSeek V4 Pro, Opus 5.5) with the Writer's own system prompt and draft prompt, minus the web research and reviewer edits so the input is identical. The page shows the four drafts as A to D in a shuffled order with no model names; the names and costs appear after the vote, then the next piece starts. Nothing is saved as a post. Each piece's call is capped by `ARENA_WRITER_ROUND_CAP_USD` (default 2).
+A writing round (Ayadi, 2026-10-14) is five pieces. Each piece is one of the tenant's approved briefs, written in full by every rival (default DeepSeek V4 Pro, GPT-6.1 Sol, Kimi K3, Qwen3.8 Max) with the Writer's own system prompt and draft prompt, minus the web research and reviewer edits so the input is identical. The page shows the four drafts as A to D in a shuffled order with no model names; the names and costs appear after the vote, then the next piece starts. Past rounds stay on the page: open any vote to see every answer with its model and cost. Nothing is saved as a post. Each piece's call is capped by `ARENA_WRITER_ROUND_CAP_USD` (default 2).
 
 ## Which tenants
 
