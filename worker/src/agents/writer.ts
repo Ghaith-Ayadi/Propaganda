@@ -154,7 +154,7 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
       job: "writer:research",
       model: MODELS.base,
       maxOutputTokens: 800,
-      system: "You plan web research for a blog post. Prefer primary sources: studies, official docs, the people involved.",
+      system: "You plan web research for a blog post. Prefer primary sources: studies, official docs, the people involved. The brief's own sources are already read, so never search inside their sites (no site: filters on them) and never build a search around a competitor or a page the brief mentions.",
       prompt: `${briefBlock(brief)}\n\nGive three web searches that would find the facts, numbers and quotes this post needs. Answer with JSON only: {"searches": ["...", "...", "..."]}`,
     },
     (v) => strs(obj(v, "The answer").searches, "searches").slice(0, 3),
