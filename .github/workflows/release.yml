@@ -1,7 +1,8 @@
 # A numbered release to production (docs/releases.md). Started by hand on main, and only
 # on Ayadi's word. A hotfix runs the same workflow on a branch named hotfix/<next version>
 # (the last release plus the fix, nothing else; see the checks in the plan job):
-#   1. plan: the next version (v0.2.0, v0.2.1, ...) and which real-model tests to run
+#   1. plan: the next version (a full release is the next minor, v0.3.0, v0.4.0, ...v0.12.0;
+#      a hotfix is the next patch) and which real-model tests to run
 #      (worker/test/live/affected.mjs: the agents whose code changed since the last
 #      release; all of them on the first release of a month);
 #   2. the free suites on this exact commit: api, worker, kb SQL, blog themes;
@@ -17,10 +18,10 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: "patch (fixes and small changes), minor (a milestone), major"
+        description: "minor: a full release from main (v0.3.0, v0.4.0, ... v0.12.0); major; patch: only a hotfix, on its hotfix/ branch"
         type: choice
-        options: [patch, minor, major]
-        default: patch
+        options: [minor, major, patch]
+        default: minor
       ai_tests:
         description: "changed: only the agents whose code changed; all: every real-model test"
         type: choice
@@ -63,6 +64,10 @@ jobs:
             esac
           fi
           git rev-parse -q --verify "refs/tags/$next" >/dev/null && { echo "::error::$next already exists"; exit 1; }
+          # A full release from main is the next minor (or major); only a hotfix is a patch.
+          if [[ "$GITHUB_REF" != refs/heads/hotfix/* && "$BUMP" = patch ]]; then
+            echo "::error::A patch is a hotfix: run it on its hotfix/ branch. A full release from main is minor (or major)"; exit 1
+          fi
           # A hotfix (docs/releases.md): the last release plus the fix, never main's unreleased work.
           if [[ "$GITHUB_REF" == refs/heads/hotfix/* ]]; then
             fail() { echo "::error::Hotfix branch: $1"; exit 1; }
