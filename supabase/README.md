@@ -38,6 +38,18 @@ hooks (`pb/`) are in git history, its final data in R2
   there; the token is a cloud environment secret, never in a repo or a chat).
   PostgREST's pre-request hook makes its transactions read-only. A migration
   that adds a table holding secrets revokes it from `propaganda_reader` too.
+- **Writing production for a hotfix**: the role `propaganda_hotfix`
+  (`20261010000120_propaganda_hotfix_role.sql`) reads like the reader and
+  inserts and updates only the content, agent and chat tables listed in that
+  file (never sites, members, settings, keys, model calls; never a delete or an
+  `rpc()` call). Its token (`scripts/propaganda-hotfix-key.sh` in Bedrock) lasts
+  7 days and is used only when Ayadi asks for a specific fix. Each write
+  carries an `X-Hotfix-Reason` header (10+ characters) and is logged, old and
+  new row, in `public.hotfix_audit` in the same transaction. `revoke
+  propaganda_hotfix from authenticator` switches it off. A migration that adds
+  a table holding secrets revokes it from `propaganda_hotfix` too; a table the
+  role should write is added to the list in that migration's pattern (a new
+  migration, grant plus the `zz_hotfix_audit` trigger).
 - **Hooks** are triggers (numbers, slugs, redirects, a version's site) and
   functions called through `rpc()`: `create_site`, `update_site`,
   `delete_site`, `increment_writing_activity`, `tls_check` (Caddy's on-demand
