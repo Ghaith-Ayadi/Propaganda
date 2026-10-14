@@ -149,7 +149,7 @@ export function standings(votes: ArenaVote[], agent: ArenaAgent): Standing[] {
     .sort((a, b) => b.wins - a.wins || a.avgCost - b.avgCost);
 }
 
-/** Whether the server can email sign-in codes (it can only once SMTP is set up). */
+/** Whether the server can email sign-in codes (the provider is on and mail can be sent). */
 export async function emailCodesEnabled(): Promise<boolean> {
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: ANON_KEY } });
