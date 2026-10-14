@@ -2,7 +2,7 @@
 // their site). The knowledge base is searched, never loaded whole: a question
 // pulls the dozen nearest claims (public.kb_search, keyword and meaning merged).
 
-import { BackendError, asUser, eq } from "./db";
+import { BackendError, asUser, eq } from "./db.js";
 
 export interface ClaimHit {
   id: string;

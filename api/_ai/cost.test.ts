@@ -1,7 +1,7 @@
 // tsx --test _ai/cost.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { costUsd, decide, type Gate } from "./cost";
+import { costUsd, decide, type Gate } from "./cost.js";
 
 const price = { inputPerMtok: 3, outputPerMtok: 15, cacheReadPerMtok: 0.3, cacheWritePerMtok: 3.75 };
 

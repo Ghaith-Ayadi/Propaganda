@@ -10,13 +10,13 @@
 // logged as well.
 
 import { waitUntil } from "@vercel/functions";
-import { createUIMessageStream, createUIMessageStreamResponse } from "../_ai/gateway";
-import { report, withTelemetry } from "../_telemetry";
-import { runChat } from "../_chat/agent";
-import { ID_RE, backendFailure, json, member } from "../_chat/http";
-import { deleteMessage, getConversation, listMessages, saveMessage, touchConversation } from "../_chat/store";
-import type { ChatChunk, ChatUIMessage } from "../_chat/types";
-import { UiReply } from "../_chat/ui";
+import { createUIMessageStream, createUIMessageStreamResponse } from "../_ai/gateway.js";
+import { report, withTelemetry } from "../_telemetry.js";
+import { runChat } from "../_chat/agent.js";
+import { ID_RE, backendFailure, json, member } from "../_chat/http.js";
+import { deleteMessage, getConversation, listMessages, saveMessage, touchConversation } from "../_chat/store.js";
+import type { ChatChunk, ChatUIMessage } from "../_chat/types.js";
+import { UiReply } from "../_chat/ui.js";
 
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 function newId(): string {

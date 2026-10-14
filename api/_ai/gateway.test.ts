@@ -43,14 +43,14 @@ const server = createServer((req, res) => {
     res.statusCode = 404; res.end("{}");
   });
 });
-type Gateway = typeof import("./gateway");
+type Gateway = typeof import("./gateway.js");
 let g: Gateway;
 before(async () => {
   await new Promise<void>((r) => server.listen(0, r));
   process.env.SUPABASE_URL = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test";
   process.env.MODEL_KEY_SECRET = "a-test-secret-that-is-long-enough-for-aes";
-  g = await import("./gateway"); // reads SUPABASE_URL at import time
+  g = await import("./gateway.js"); // reads SUPABASE_URL at import time
   g.setModelResolver(() => ok);
 });
 const callModel: Gateway["callModel"] = (o) => g.callModel(o);
@@ -168,12 +168,12 @@ const failing = (statusCode: number, message: string, responseHeaders: Record<st
   new MockLanguageModelV3({ doGenerate: async () => { throw Object.assign(new Error(message), { statusCode, responseHeaders }); } });
 
 async function withKey(status = "ok") {
-  const { encryptKey } = await import("./modelKeys");
+  const { encryptKey } = await import("./modelKeys.js");
   keyRows[tenantSite] = { secret: encryptKey(tenantSite, KEY), last4: "1234", status, error: "", checked: "2026-10-08T00:00:00Z" };
 }
 
 test("a sealed key opens only for its own site", async () => {
-  const { encryptKey, decryptKey, KeysUnavailableError } = await import("./modelKeys");
+  const { encryptKey, decryptKey, KeysUnavailableError } = await import("./modelKeys.js");
   const sealed = encryptKey(tenantSite, KEY);
   assert.ok(!sealed.includes(KEY.slice(7)));
   assert.equal(decryptKey(tenantSite, sealed), KEY);

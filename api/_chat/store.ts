@@ -3,8 +3,8 @@
 // exactly as it streamed. Server writes only; every query carries the site and
 // the account.
 
-import { asServer, eq } from "./db";
-import type { ChatUIMessage, Conversation } from "./types";
+import { asServer, eq } from "./db.js";
+import type { ChatUIMessage, Conversation } from "./types.js";
 
 interface ConversationRow {
   id: string;

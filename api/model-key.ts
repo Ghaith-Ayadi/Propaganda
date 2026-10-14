@@ -11,10 +11,10 @@
 // POST   /api/model-key { site, action: "test" } -> re-test the saved key: { ok, error?, key }
 // DELETE /api/model-key?site=<id>             -> { key: null } (back to our AI Gateway)
 
-import { requireMember, requireOwner } from "./_auth";
-import { withTelemetry } from "./_telemetry";
-import { KeysUnavailableError, tenantKeys, testTenantKey } from "./_ai/gateway";
-import { looksLikeKey } from "./_ai/modelKeys";
+import { requireMember, requireOwner } from "./_auth.js";
+import { withTelemetry } from "./_telemetry.js";
+import { KeysUnavailableError, tenantKeys, testTenantKey } from "./_ai/gateway.js";
+import { looksLikeKey } from "./_ai/modelKeys.js";
 
 async function member(request: Request, site: string, owner = false): Promise<Response | null> {
   try {

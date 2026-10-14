@@ -9,9 +9,9 @@
 // Body: { site: string; postId: string; content: string }
 // Returns: { quotes: string[] }   (0–3 items; only verbatim matches included)
 
-import { requireMember } from "./_auth";
-import { withTelemetry } from "./_telemetry";
-import { BudgetError, CostLogUnavailableError, callModel } from "./_ai/gateway";
+import { requireMember } from "./_auth.js";
+import { withTelemetry } from "./_telemetry.js";
+import { BudgetError, CostLogUnavailableError, callModel } from "./_ai/gateway.js";
 
 const MODEL = "google/gemini-2.5-flash-lite";
 

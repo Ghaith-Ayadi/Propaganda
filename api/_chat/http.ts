@@ -1,7 +1,7 @@
 // Shared bits of the api/chat/* handlers.
 
-import { requireMember, type AuthedUser } from "../_auth";
-import { BackendError } from "./db";
+import { requireMember, type AuthedUser } from "../_auth.js";
+import { BackendError } from "./db.js";
 
 export const ID_RE = /^[a-z0-9]{15}$/;
 

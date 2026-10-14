@@ -10,7 +10,7 @@
 // A database without the table (before the migration) answers 404 and the
 // capture is skipped quietly; any other failure is reported once per process.
 
-import { scrub } from "./modelKeys";
+import { scrub } from "./modelKeys.js";
 
 /** Above this, a request or response is cut and the row marked truncated. Chat transcripts can be long. */
 export const CAPTURE_MAX_CHARS = Number(process.env.MODEL_CAPTURE_MAX_CHARS ?? 2_000_000);

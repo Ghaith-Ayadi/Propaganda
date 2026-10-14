@@ -4,7 +4,7 @@
 // this reply can be cited: a marker for anything else is dropped, so a
 // made-up id never reaches the reader.
 
-import type { Citation, ChatEvent, Ref } from "./types";
+import type { Citation, ChatEvent, Ref } from "./types.js";
 
 const MARKER = /^\[\[([a-z]+):([a-z0-9]{1,40})\]\]/;
 // What a marker can look like before it is complete.

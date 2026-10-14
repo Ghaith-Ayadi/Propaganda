@@ -32,9 +32,9 @@ import {
 } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { errorOf, newCallId, writeCapture } from "./capture";
-import { costUsd, decide, type Gate, type Price, type Usage } from "./cost";
-import { BudgetError, CostLogUnavailableError, EmptyAnswerError, UsageLimitError } from "./errors";
+import { errorOf, newCallId, writeCapture } from "./capture.js";
+import { costUsd, decide, type Gate, type Price, type Usage } from "./cost.js";
+import { BudgetError, CostLogUnavailableError, EmptyAnswerError, UsageLimitError } from "./errors.js";
 import {
   markTenantKey,
   readKeyInfo,
@@ -44,10 +44,10 @@ import {
   scrub,
   TenantKeyError,
   type TenantKey,
-} from "./modelKeys";
+} from "./modelKeys.js";
 
-export { BudgetError, CostLogUnavailableError, EmptyAnswerError, UsageLimitError } from "./errors";
-export { KeysUnavailableError, TenantKeyError } from "./modelKeys";
+export { BudgetError, CostLogUnavailableError, EmptyAnswerError, UsageLimitError } from "./errors.js";
+export { KeysUnavailableError, TenantKeyError } from "./modelKeys.js";
 // Tool definitions and the UI message stream are plain data, not model calls:
 // callers (Chat) use these instead of importing the SDK, which
 // check-model-paths.mjs allows only in this file.

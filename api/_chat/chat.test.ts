@@ -5,9 +5,9 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
-import { CitationStream, Sources } from "./citations";
-import type { ChatChunk, ChatEvent } from "./types";
-import { UiReply } from "./ui";
+import { CitationStream, Sources } from "./citations.js";
+import type { ChatChunk, ChatEvent } from "./types.js";
+import { UiReply } from "./ui.js";
 
 // ---- citations, no I/O ----
 
@@ -81,8 +81,8 @@ function scripted(delayMs = 0) {
   });
 }
 
-type Agent = typeof import("./agent");
-type Gateway = typeof import("../_ai/gateway");
+type Agent = typeof import("./agent.js");
+type Gateway = typeof import("../_ai/gateway.js");
 let agent: Agent;
 let gateway: Gateway;
 before(async () => {
@@ -90,8 +90,8 @@ before(async () => {
   process.env.SUPABASE_URL = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service";
   process.env.SUPABASE_ANON_KEY = "anon";
-  gateway = await import("../_ai/gateway");
-  agent = await import("./agent");
+  gateway = await import("../_ai/gateway.js");
+  agent = await import("./agent.js");
 });
 
 const turn = (signal: AbortSignal) => ({

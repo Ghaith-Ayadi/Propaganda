@@ -28,8 +28,8 @@
 import { createHmac } from "node:crypto";
 import { Resolver } from "node:dns/promises";
 import { connect } from "node:tls";
-import { backendGet, requireMember } from "./_auth";
-import { withTelemetry } from "./_telemetry";
+import { backendGet, requireMember } from "./_auth.js";
+import { withTelemetry } from "./_telemetry.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
