@@ -11,12 +11,17 @@ the **release** workflow (`.github/workflows/release.yml`) on `main`:
 
 | Input | Choices |
 | --- | --- |
-| `bump` | `patch` (default: fixes and small changes), `minor` (a milestone), `major` |
+| `bump` | `minor` (default: every full release, from `main`), `major`; `patch` only for a hotfix on its `hotfix/` branch |
 | `ai_tests` | `changed` (default) or `all` |
 | `deploy_app` | deploy the app to Vercel production once tagged (default yes) |
 | `notes_since` | first release only: the commit to list PRs from (default: GitHub's own list) |
 
-The first release is `v0.2.0`; after that the number is the previous tag bumped. `v1.0.0` is
+**Version numbers (Ayadi, 2026-10-14).** A full release is the next minor version: v0.3.0, v0.4.0,
+and on to v0.12.0 and beyond (0.12 is later than 0.2: the numbers count, they are not decimals).
+Every hotfix is a patch on the release it fixes (v0.2.5, v0.2.6, then v0.3.1 after v0.3.0).
+The workflow refuses a patch from `main` and a minor or major from a hotfix branch.
+
+The first release was `v0.2.0`; after that the number is the highest tag, bumped. `v1.0.0` is
 Verbatim's tag from May 2026 and is not counted. For that first release, `notes_since` (a commit,
 such as the last production deploy) lists the PRs merged after it in the log instead of
 everything since May.
@@ -44,8 +49,8 @@ release, and merge it right after the release's app deploy.
 
 A fix that must reach production before the next full release. A normal release ships all of
 `main`, so unreleased work and its 25-minute model tests ride along; a hotfix ships the last
-release plus the fix and nothing else. It is still a numbered release (the next patch, v0.2.5
-after v0.2.4), only on Ayadi's word, with notes and a log.
+release plus the fix and nothing else. It is still a numbered release (always the next patch,
+v0.2.5 after v0.2.4), only on Ayadi's word, with notes and a log.
 
 1. The fix merges to `main` as always (desk, then merge).
 2. Cut `hotfix/<next version>` from the last release tag, cherry-pick the fix onto it, and add
@@ -64,7 +69,7 @@ after v0.2.4), only on Ayadi's word, with notes and a log.
    workflows enforce; `deploy-app.yml` refuses a hotfix branch commit that has no release tag, so
    a hand-run deploy cannot skip the plan checks.
 6. The notes file also goes to `main` in a notes PR, so `/release-notes` and the next release's
-   log carry it. The next release on `main` numbers from the highest tag, so it is v0.2.6. That
+   log carry it. The next release on `main` numbers from the highest tag, so it is the next minor (v0.3.0 after v0.2.x hotfixes). That
    hotfix tag is not an ancestor of `main`: the "what changed" test comparison is by tree, which
    already holds the fix, and GitHub's PR list for that release starts at the hotfix tag, so it
    may repeat the fix's PR.

@@ -91,7 +91,8 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
 
 ## Releases
 
-Production moves in numbered releases (`v0.2.0`, `v0.2.1`, ...), cut by the **release**
+Production moves in numbered releases (a full release is the next minor: `v0.3.0`, `v0.4.0`, ... `v0.12.0`;
+a hotfix is always a patch: `v0.2.5`), cut by the **release**
 workflow on `main`, only on Ayadi's word: the free suites, then real-model tests
 (`worker/test/live/`) for the agents whose code changed since the last release (all of them on
 the first release of a month), then the tag, a GitHub Release as the log (the version's notes, PRs, which tests
