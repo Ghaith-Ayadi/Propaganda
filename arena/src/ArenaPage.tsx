@@ -42,6 +42,40 @@ const SUGGESTED_MODELS = [
   "anthropic/claude-opus-5.5",
   "anthropic/claude-fable-5.1",
 ];
+/**
+ * Writing rounds are not saved to the server yet (arena_votes does not accept
+ * the Writer until its migration ships): the vote and all four answers stay in
+ * this browser. Every call is also in the cost log as arena:writer.
+ */
+const LOCAL_KEY = "arena-writer-rounds";
+function readLocal(): ArenaVote[] {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? "[]") as ArenaVote[];
+  } catch {
+    return [];
+  }
+}
+function saveLocal(round: ArenaRound, winner: string | null, note: string): ArenaVote {
+  const v: ArenaVote = {
+    id: `local-${Date.now()}`,
+    agent: round.agent,
+    site: round.site,
+    task: round.task,
+    models: round.entries.map((e) => e.model),
+    costs: round.entries.map((e) => e.costUsd),
+    winner,
+    entries: round.entries,
+    cost_usd: round.costUsd,
+    note,
+    created: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify([v, ...readLocal()].slice(0, 200)));
+  } catch {
+    // Storage blocked: the vote still shows on the page this visit.
+  }
+  return v;
+}
 const LETTERS = ["A", "B", "C", "D"];
 const usd = (n: number) => `$${n < 0.01 ? n.toFixed(4) : n.toFixed(3)}`;
 const field = "rounded-lg border border-secondary bg-primary px-2 py-1.5 text-sm text-secondary";
@@ -61,6 +95,7 @@ export function ArenaPage() {
   const [voted, setVoted] = useState<string | null | undefined>(undefined);
   const [note, setNote] = useState("");
   const [votes, setVotes] = useState<ArenaVote[] | null>(null);
+  const [local, setLocal] = useState<ArenaVote[]>(() => readLocal());
   const [busy, setBusy] = useState<"run" | "vote" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,7 +131,7 @@ export function ArenaPage() {
   const pieces = sources.slice(0, PIECES);
   const ready = !!site && picked.length >= 2 && (agent === "pitcher" || (agent === "writer" ? piece < pieces.length : !!source || !!transcript.trim()));
   const [open, setOpen] = useState<string | null>(null);
-  const past = useMemo(() => (votes ?? []).filter((v) => v.agent === agent), [votes, agent]);
+  const past = useMemo(() => (agent === "writer" ? local : (votes ?? []).filter((v) => v.agent === agent)), [votes, local, agent]);
   const table = useMemo(() => (votes ? standings(votes, agent) : []), [votes, agent]);
 
   const run = async () => {
@@ -126,13 +161,18 @@ export function ArenaPage() {
     if (!round) return;
     setBusy("vote");
     try {
-      await saveVote(round, winner, note);
+      if (agent === "writer") {
+        saveLocal(round, winner, note);
+        setLocal(readLocal());
+      } else {
+        await saveVote(round, winner, note);
+      }
       setVoted(winner);
       if (agent === "writer") {
         setCostSoFar((c) => c + round.costUsd);
         setPiece((p) => p + 1);
       }
-      listVotes().then(setVotes, fail("ArenaPage.votes"));
+      if (agent !== "writer") listVotes().then(setVotes, fail("ArenaPage.votes"));
     } catch (err) {
       fail("ArenaPage.vote")(err);
     } finally {
@@ -272,6 +312,7 @@ export function ArenaPage() {
         </section>
       )}
 
+      {agent !== "writer" && (
       <section className="flex flex-col gap-2">
         <h3 className="font-medium text-primary">Standings: {AGENTS.find((a) => a.id === agent)!.label}</h3>
         <div className="overflow-x-auto rounded-xl border border-secondary">
@@ -303,9 +344,11 @@ export function ArenaPage() {
           </table>
         </div>
       </section>
+      )}
       <section className="flex flex-col gap-2">
         <h3 className="font-medium text-primary">Past rounds: {AGENTS.find((a) => a.id === agent)!.label}</h3>
-        {votes && past.length === 0 && <p className="text-tertiary">None yet.</p>}
+        {agent === "writer" && <p className="text-xs text-tertiary">Writing votes are kept in this browser for now. The models and costs of every call are also in the cost log as arena:writer.</p>}
+        {(agent === "writer" || votes) && past.length === 0 && <p className="text-tertiary">None yet.</p>}
         {past.map((v) => (
           <div key={v.id} className="rounded-xl border border-secondary">
             <button type="button" onClick={() => setOpen(open === v.id ? null : v.id)} className="flex w-full flex-wrap items-baseline justify-between gap-2 px-4 py-2.5 text-left hover:bg-secondary">
