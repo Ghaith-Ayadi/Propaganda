@@ -12,7 +12,7 @@ the **release** workflow (`.github/workflows/release.yml`) on `main`:
 | Input | Choices |
 | --- | --- |
 | `bump` | `minor` (default: every full release, from `main`), `major`; `patch` only for a hotfix on its `hotfix/` branch |
-| `ai_tests` | `changed` (default) or `all` |
+| `ai_tests` | `changed` (default), `all`, or `none` (skip the real-model tests, only on Ayadi's word; the release log says they were skipped) |
 | `deploy_app` | deploy the app to Vercel production once tagged (default yes) |
 | `notes_since` | first release only: the commit to list PRs from (default: GitHub's own list) |
 

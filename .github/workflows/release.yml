@@ -4,7 +4,7 @@
 #   1. plan: the next version (a full release is the next minor, v0.3.0, v0.4.0, ...v0.12.0;
 #      a hotfix is the next patch) and which real-model tests to run
 #      (worker/test/live/affected.mjs: the agents whose code changed since the last
-#      release; all of them on the first release of a month);
+#      release; all of them on the first release of a month; none when Ayadi says to skip them);
 #   2. the free suites on this exact commit: api, worker, kb SQL, blog themes;
 #   3. the real-model tests, through the AI Gateway (AI_GATEWAY_API_KEY), with the cost
 #      of each from the cost log (in the run's summary);
@@ -23,9 +23,9 @@ on:
         options: [minor, major, patch]
         default: minor
       ai_tests:
-        description: "changed: only the agents whose code changed; all: every real-model test"
+        description: "changed: only the agents whose code changed; all: every real-model test; none: skip them (only on Ayadi's word)"
         type: choice
-        options: [changed, all]
+        options: [changed, all, none]
         default: changed
       deploy_app:
         description: "Deploy the app to Vercel production after tagging"
@@ -92,7 +92,15 @@ jobs:
         env:
           PREV: ${{ steps.version.outputs.previous }}
           ALL: ${{ inputs.ai_tests == 'all' && '--all' || '' }}
-        run: node test/live/affected.mjs ${PREV:+--since "$PREV"} $ALL
+          SKIP: ${{ inputs.ai_tests == 'none' }}
+        run: |
+          if [ "$SKIP" = true ]; then
+            # No test runs, and the release log says so (the ai job prints this plan).
+            echo 'tests=[]' >> "$GITHUB_OUTPUT"
+            echo "plan=real-model tests skipped on Ayadi's word (ai_tests: none)" >> "$GITHUB_OUTPUT"
+          else
+            node test/live/affected.mjs ${PREV:+--since "$PREV"} $ALL
+          fi
 
   api:
     needs: plan
