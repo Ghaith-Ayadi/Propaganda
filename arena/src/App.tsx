@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { ArenaPage } from "./ArenaPage";
-import { ArenaError, client, userMessage } from "./api";
+import { ArenaError, client, emailCodesEnabled, signInWithGoogle, userMessage } from "./api";
 
-// Sign-in is an emailed one-time code, the same accounts as the product. No
-// redirect, so it needs nothing configured on the auth server for this host.
+// Sign-in is Google (the product's accounts), plus an emailed one-time code when the server can
+// send one. Google comes back to this page, so the auth server must allow this origin as a
+// redirect URL (ADDITIONAL_REDIRECT_URLS in Bedrock).
 // Only superadmins can run a round or read the votes; anyone else sees empty
 // pages and refusals.
 
@@ -33,12 +34,28 @@ export function App() {
   );
 }
 
+const field = "rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary";
+
 function SignIn() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailOn, setEmailOn] = useState(false);
+
+  useEffect(() => {
+    void emailCodesEnabled().then(setEmailOn);
+  }, []);
+
+  const google = async () => {
+    setError(null);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setError(userMessage(err));
+    }
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -63,17 +80,23 @@ function SignIn() {
     }
   };
 
-  const field = "rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary";
   return (
-    <form onSubmit={(e) => void submit(e)} className="mx-auto flex max-w-sm flex-col gap-3 pt-16 text-sm">
-      <input aria-label="Email" type="email" required placeholder="Email" value={email} disabled={sent} onChange={(e) => setEmail(e.target.value)} className={field} />
-      {sent && (
-        <input aria-label="Code" inputMode="numeric" autoComplete="one-time-code" required placeholder="Code from the email" value={code} onChange={(e) => setCode(e.target.value)} className={field} />
-      )}
-      <button type="submit" disabled={busy} className="rounded-lg bg-primary-solid px-3 py-2 font-medium text-white hover:opacity-90 disabled:opacity-50">
-        {sent ? "Sign in" : "Send me a code"}
+    <div className="mx-auto flex max-w-sm flex-col gap-3 pt-16 text-sm">
+      <button type="button" onClick={() => void google()} className="rounded-lg bg-primary-solid px-3 py-2 font-medium text-white hover:opacity-90">
+        Continue with Google
       </button>
+      {emailOn && (
+        <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
+          <input aria-label="Email" type="email" required placeholder="Email" value={email} disabled={sent} onChange={(e) => setEmail(e.target.value)} className={field} />
+          {sent && (
+            <input aria-label="Code" inputMode="numeric" autoComplete="one-time-code" required placeholder="Code from the email" value={code} onChange={(e) => setCode(e.target.value)} className={field} />
+          )}
+          <button type="submit" disabled={busy} className="rounded-lg border border-secondary px-3 py-2 font-medium text-secondary hover:bg-secondary disabled:opacity-50">
+            {sent ? "Sign in" : "Email me a code"}
+          </button>
+        </form>
+      )}
       {error && <p className="text-error-primary">{error}</p>}
-    </form>
+    </div>
   );
 }
