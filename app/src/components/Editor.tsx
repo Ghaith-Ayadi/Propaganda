@@ -127,7 +127,7 @@ export function Editor({ post }: Props) {
   }, [editor, post.id]);
 
   const editorRootRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLInputElement | null>(null);
+  const titleRef = useRef<HTMLTextAreaElement | null>(null);
   const subtitleRef = useRef<HTMLTextAreaElement | null>(null);
   const [titleVisible, setTitleVisible] = useState(true);
 
@@ -162,6 +162,14 @@ export function Editor({ post }: Props) {
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   }, [post.id, subtitleDraft]);
+
+  // The title wraps instead of running off the edge; same auto-size.
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [post.id, titleDraft]);
   const editorCss = useEditorStyles();
 
   // When the article title scrolls out of view, the sticky nav switches to
@@ -234,9 +242,10 @@ export function Editor({ post }: Props) {
       <style>{REVIEW_MARK_CSS}</style>
       <PostNav post={post} showTitle={!titleVisible} />
       <div className="pt-8 md:pt-12">
-        <input
+        <textarea
           ref={titleRef}
           value={titleDraft}
+          rows={1}
           onChange={(e) => {
             setTitleDraft(e.target.value);
             void updatePost(post.id, { title: e.target.value });
@@ -248,7 +257,7 @@ export function Editor({ post }: Props) {
             }
           }}
           placeholder="Untitled"
-          className="w-full bg-transparent font-serif text-3xl leading-tight md:text-4xl text-primary outline-none placeholder:text-quaternary"
+          className="block w-full resize-none overflow-hidden bg-transparent font-serif text-3xl leading-tight md:text-4xl text-primary outline-none placeholder:text-quaternary"
         />
         <textarea
           ref={subtitleRef}
