@@ -3,8 +3,8 @@ import type { Session } from "@supabase/supabase-js";
 import { ArenaPage } from "./ArenaPage";
 import { ArenaError, client, emailCodesEnabled, signInWithGoogle, userMessage } from "./api";
 
-// Sign-in is Google (the product's accounts), plus an emailed one-time code when the server can
-// send one. Google comes back to this page, so the auth server must allow this origin as a
+// Sign-in is Google (the product's accounts). Production is Google-only; an emailed one-time code
+// shows only in builds with VITE_EMAIL_SIGNIN=1 (dev) and when the server can send one. Google comes back to this page, so the auth server must allow this origin as a
 // redirect URL (GOTRUE_URI_ALLOW_LIST in Bedrock).
 // Only superadmins can run a round or read the votes; anyone else sees empty
 // pages and refusals.
