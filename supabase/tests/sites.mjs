@@ -43,4 +43,8 @@ await ok(stranger.from("posts").insert({ id: newId(), title: "a draft", site: ke
 check("a site with one draft can't be deleted", (await del(stranger, kept.id)) === 400);
 check("…and keeps everything", (await left(kept.id)) >= 3);
 
+// Reserved: arena.propaganda.pub is the Arena app, so no site may take the slug.
+const arenaTry = await stranger.rpc("create_site", { site_name: "Arena", site_slug: "arena" });
+check("the slug arena is reserved for the Arena app", !!arenaTry.error && /slug: invalid/.test(arenaTry.error.details ?? ""));
+
 done("SITES");
