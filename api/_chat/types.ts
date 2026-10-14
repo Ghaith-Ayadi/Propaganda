@@ -8,7 +8,7 @@
 import type { UIMessage, UIMessageChunk } from "../_ai/gateway.js";
 
 export type AgentName = "chat" | "strategist" | "listener" | "scout" | "pitcher" | "writer" | "checker" | "guardian";
-export type RefKind = "claim" | "post" | "pitch" | "flag" | "goal" | "run";
+export type RefKind = "claim" | "post" | "pitch" | "brief" | "idea" | "flag" | "goal" | "run";
 
 export interface Ref {
   kind: RefKind;

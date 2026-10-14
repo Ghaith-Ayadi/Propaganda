@@ -34,6 +34,7 @@ test("an unknown source is dropped; plain brackets stay text", () => {
 // ---- the agent ----
 
 const calls: Record<string, unknown>[] = [];
+const urls: string[] = [];
 const server = createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
@@ -45,6 +46,17 @@ const server = createServer((req, res) => {
     if (u.startsWith("/rest/v1/model_prices"))
       return void res.end(JSON.stringify([{ input_per_mtok: "3", output_per_mtok: "15", cache_read_per_mtok: "0", cache_write_per_mtok: "0" }]));
     if (u.startsWith("/rest/v1/model_calls")) { calls.push(JSON.parse(body)); res.statusCode = 201; return void res.end(""); }
+    urls.push(decodeURIComponent(u));
+    if (u.startsWith("/rest/v1/briefs"))
+      return void res.end(JSON.stringify([{ id: "briefaaaaaaaaaa", title: "Best AI blog writer lists never ask the tool about your company", status: "pitched", angle: "Lists rank different winners.", body: `${"Filler. ".repeat(80)}Three lists rank three different winners because each tests one shared prompt on a topic nobody owns, where no claim can be wrong. More text after.` }]));
+    if (u.startsWith("/rest/v1/agent_ideas"))
+      return void res.end(JSON.stringify([{ id: "ideaaaaaaaaaaaa", title: "Lists never ask the tool", summary: "An idea.", status: "new", brief: null }]));
+    if (u.startsWith("/rest/v1/kb_claims")) return void res.end("[]");
+    if (u.startsWith("/rest/v1/posts"))
+      return void res.end(JSON.stringify([
+        { id: "postaaaaaaaaaaa", title: "Other lists", status: "draft", type: "Blog", published_at: null, excerpt: "", content_md: `lists lists ${"x ".repeat(300)}` },
+        { id: "postbbbbbbbbbbb", title: "Prompt post", status: "draft", type: "Blog", published_at: null, excerpt: "", content_md: `${"y ".repeat(300)}each tests one shared prompt on a topic nobody owns, where no claim can be wrong. ${"z ".repeat(50)}` },
+      ]));
     if (u.startsWith("/rest/v1/sites")) return void res.end(JSON.stringify([{ name: "Kontra" }]));
     if (u.startsWith("/rest/v1/rpc/kb_search"))
       return void res.end(JSON.stringify([{ id: "claimaaaaaaaaaa", text: "The starter plan includes 5 seats.", status: "settled", topics: ["Pricing"] }]));
@@ -203,6 +215,78 @@ test("a stopped reply keeps what arrived, marked stopped; an error is sent as th
   const e: ChatChunk[] = [];
   new UiReply((c) => e.push(c), () => "t2", "reply0000000003").push({ type: "error", message: "No." });
   assert.deepEqual(e.slice(-1), [{ type: "error", errorText: "No." }]);
+});
+
+// ---- lookups ----
+
+test("an excerpt is cut around the whole phrase, else around the densest cluster of words", async () => {
+  const { passage, searchWords } = await import("./lookups.js");
+  const text = `${"alpha ".repeat(100)}omega beta gamma delta${" filler".repeat(100)} gamma alpha`;
+  const q = "gamma delta beta";
+  assert.match(passage(text, q, searchWords(q)), /beta gamma delta/);
+  assert.match(passage(text, "omega beta", searchWords("omega beta")), /omega beta/);
+});
+
+test("search_posts puts the post that holds the sentence first and shows that sentence", async () => {
+  const { searchPosts } = await import("./lookups.js");
+  urls.length = 0;
+  const q = "each tests one shared prompt on a topic nobody owns";
+  const hits = await searchPosts("t", "siteaaaaaaaaaaa", q);
+  assert.equal(hits[0].id, "postbbbbbbbbbbb");
+  assert.equal(hits[0].exact, true);
+  assert.match(hits[0].excerpt, /shared prompt on a topic nobody owns/);
+  // Every word is asked for first, so a sentence does not match on one word alone.
+  assert.match(urls[0], /and=\(/);
+});
+
+test("search_pitches finds a pitch by a sentence in its body and an idea by its title", async () => {
+  const { searchPitches } = await import("./lookups.js");
+  const hits = await searchPitches("t", "siteaaaaaaaaaaa", "three different winners because each tests one shared prompt");
+  const brief = hits.find((h) => h.kind === "brief");
+  assert.equal(brief?.id, "briefaaaaaaaaaa");
+  assert.equal(brief?.exact, true);
+  assert.match(brief?.excerpt ?? "", /three different winners/);
+  assert.ok(hits.some((h) => h.kind === "idea"));
+});
+
+test("an empty knowledge base reports a count of zero", async () => {
+  const { searchKnowledge } = await import("./lookups.js");
+  const full = await searchKnowledge("t", "siteaaaaaaaaaaa", "starter seats");
+  assert.ok(full.available && full.claims.length === 1 && full.total === null);
+});
+
+test("offer_open says a button shows, and the prompt does not let Chat claim it opened anything", async () => {
+  calls.length = 0;
+  let step = 0;
+  gateway.setModelResolver(
+    () =>
+      new MockLanguageModelV3({
+        doStream: async () => {
+          step++;
+          const chunks = (
+            step === 1
+              ? [
+                  { type: "stream-start" as const, warnings: [] },
+                  { type: "tool-call" as const, toolCallId: "c1", toolName: "search_pitches", input: JSON.stringify({ query: "different winners" }) },
+                  finish("tool-calls"),
+                ]
+              : step === 2
+                ? [
+                    { type: "stream-start" as const, warnings: [] },
+                    { type: "tool-call" as const, toolCallId: "c2", toolName: "offer_open", input: JSON.stringify({ kind: "brief", id: "briefaaaaaaaaaa" }) },
+                    finish("tool-calls"),
+                  ]
+                : [{ type: "stream-start" as const, warnings: [] }, { type: "text-start" as const, id: "t" }, { type: "text-delta" as const, id: "t", delta: "It is the pitch below." }, { type: "text-end" as const, id: "t" }, finish("stop")]
+          ) as never[];
+          return { stream: simulateReadableStream({ initialDelayInMs: 0, chunkDelayInMs: 0, chunks }) };
+        },
+      }),
+  );
+  const es: ChatEvent[] = [];
+  for await (const e of agent.runChat(turn(new AbortController().signal))) es.push(e);
+  const action = es.find((e) => e.type === "action");
+  assert.ok(action?.type === "action" && action.action.kind === "open" && action.action.target?.kind === "brief");
+  assert.ok(es.some((e) => e.type === "handoff" && e.handoff.agent === "pitcher"));
 });
 
 test.after(() => server.close());
