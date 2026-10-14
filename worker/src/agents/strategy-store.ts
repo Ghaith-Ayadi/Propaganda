@@ -65,6 +65,15 @@ export async function runningProposals(limit = 50): Promise<{ id: string; run_id
   }
 }
 
+/** Proposals written or being written for a quarter, failed ones left out: the plan's round count, this run's own row included. */
+export async function roundsOf(site: string, quarter: string): Promise<number> {
+  const rows = await select<{ id: string }>(
+    "strategy_proposals",
+    `site=eq.${enc(site)}&quarter=eq.${enc(quarter)}&status=neq.failed&select=id`,
+  );
+  return rows.length;
+}
+
 /** A proposal the worker asks for itself (a quarterly run, Chat). Returns its id. */
 export async function requestProposal(site: string, quarter: string, kind: ProposalKind, request: string, by: string): Promise<string> {
   const [waiting] = await select<{ id: string }>(

@@ -28,7 +28,7 @@ export function stopReason(error: string | null | undefined): string {
   if (e.includes("Model call refused: tenant-budget")) return "This month's AI budget is spent, so we couldn't start. Your answers are saved; ask again once the budget is raised.";
   if (e.includes("Model call refused: suspended")) return "AI is switched off for this workspace, so we couldn't start. Your answers are saved; ask again once it's back on.";
   if (e.includes("Model call refused:") || e.includes("budget exceeded")) return "AI is paused on our side right now, so we couldn't start. Your answers are saved; ask again a little later.";
-  if (e.startsWith("Nothing to plan from") || e.startsWith("The Strategist stopped")) return e;
+  if (e.startsWith("Nothing to plan from") || e.startsWith("The Strategist stopped") || e.startsWith("This plan has been revised")) return e;
   return "Nothing was lost. Ask it again; your answers are saved.";
 }
 
@@ -53,7 +53,7 @@ export const TIMELINE: TimelineStep[] = [
   { id: "publish", label: "Publish your first article", minutes: 5 },
 ];
 
-/** A safety limit on revisions, never shown: the plan has no preset number of rounds. */
+/** A safety limit on revisions, never shown: the plan has no preset number of rounds. The worker holds the same number (agents/strategy.ts MAX_PLAN_ROUNDS): keep them equal. */
 export const MAX_ROUNDS = 12;
 export const STRATEGIST = "agent:strategist";
 

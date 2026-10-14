@@ -2,7 +2,7 @@
 // one sentence, the three numbers that matter (each with its reason), the
 // topics with the first pitches under each, the Launch, the searches and the
 // watched sites, then its questions. Approve or ask for changes from the bar
-// at the bottom, up to five rounds.
+// at the bottom, with as many rounds as it takes.
 //
 // Its questions are answered here, all together; the answers go back as a
 // revision, and Approve stays locked while any are open (Ayadi, 2026-10-10;

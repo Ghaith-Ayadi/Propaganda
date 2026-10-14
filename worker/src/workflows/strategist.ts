@@ -27,6 +27,7 @@ import {
   claimProposal,
   earlierProposals,
   failProposal,
+  roundsOf,
   getProposal,
   hasApprovedGoals,
   lastApproved,
@@ -51,6 +52,8 @@ import {
   effectiveKind,
   emptyBrief,
   EMPTY_BRIEF_ERROR,
+  MAX_PLAN_ROUNDS,
+  ROUND_LIMIT_ERROR,
   finish,
   keepTopicNames,
   parseAnswers,
@@ -414,6 +417,14 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
   if (!(await DBOS.runStep(() => claimProposal(proposalId, runId), { name: "claim" }))) return { status: "skipped" };
 
   try {
+    // Before any paid call: a quarter's plan takes a fixed number of revisions (the UI stops earlier; this holds for a direct call too).
+    if (await DBOS.patch("strategist-round-limit")) {
+      const rounds = row.kind === "revision" ? await DBOS.runStep(() => roundsOf(site, row.quarter), { name: "rounds" }) : 0;
+      if (rounds > MAX_PLAN_ROUNDS) {
+        await DBOS.runStep(() => failProposal(proposalId, ROUND_LIMIT_ERROR), { name: "fail" });
+        return { status: "failed", errors: [ROUND_LIMIT_ERROR] };
+      }
+    }
     const now = new Date(await DBOS.runStep(async () => new Date().toISOString(), { name: "now" }));
     const pack = await DBOS.runStep(() => gather(site, row.request, now, row.quarter), { name: "gather", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 });
     // A run started before rounds existed replays its recorded gather output after a restart: no rounds yet.

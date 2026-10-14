@@ -5,7 +5,7 @@
 //   1. Your business     website, name, posts a month        (onboarding/SetupStep)
 //   2. Your strategy     the Strategist's four questions     (goals/StrategistOnboarding)
 //   3. Planning          the Strategist writes; the rest of the setup meanwhile
-//   4. The plan          read it, answer its questions, approve or ask again (5 rounds)
+//   4. The plan          read it, answer its questions, approve or ask again
 //   5-6. First pitches   the Strategist's first pitches; the Writer drafts the strongest 3
 //   7. Publish           the first draft opens in the editor; "Approve and publish now"
 //
