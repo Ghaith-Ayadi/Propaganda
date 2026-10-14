@@ -112,6 +112,7 @@ export async function replayChat(opts: { c: ChatCase; site: string; arenaSite: s
   const token = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   const tools = chatTools({
     site: opts.site,
+    tenant: c.tenant,
     userId: "arena",
     token,
     conversationId: "arena",

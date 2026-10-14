@@ -18,9 +18,9 @@ import { report } from "../_telemetry.js";
 import { CitationStream, Sources } from "./citations.js";
 import { siteName } from "./lookups.js";
 import { chatTools, historyMessages, systemPrompt } from "./toolkit.js";
+import type { AgentName, ChatEvent, ChatUIMessage, Handoff, QuickAction } from "./types.js";
 
 export { historyMessages };
-import type { AgentName, ChatEvent, ChatUIMessage, Handoff, QuickAction } from "./types.js";
 
 /**
  * The gateway's DEFAULT_MODEL (on a tenant's own key, BYOK_MODEL: Sonnet);
@@ -77,22 +77,23 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
   const handoffs = new Map<string, Handoff>();
   const pending: QuickAction[] = [];
 
-  const tools = chatTools({ ...turn, sources, pending });
+  let tenant = "this site";
+  try {
+    tenant = await siteName(turn.token, turn.site);
+  } catch {
+    // The name only colours the prompt and the tool descriptions.
+  }
+
+  const tools = chatTools({ ...turn, tenant, sources, pending });
 
   // Which agent a lookup shows as, and how its task reads.
   const shown: Record<string, (input: Record<string, string>) => { agent: AgentName; task: string } | null> = {
     search_knowledge: (i) => ({ agent: "guardian", task: `Search the knowledge base for “${i.query}”` }),
     search_posts: (i) => ({ agent: "chat", task: `Search posts for “${i.query}”` }),
+    search_pitches: (i) => ({ agent: "pitcher", task: `Search pitches and ideas for “${i.query}”` }),
     read_goals: () => ({ agent: "strategist", task: "Read the approved goals" }),
     ask_agent: (i) => ({ agent: i.agent as AgentName, task: i.task }),
   };
-
-  let tenant = "this tenant";
-  try {
-    tenant = await siteName(turn.token, turn.site);
-  } catch {
-    // The name only colours the prompt.
-  }
 
   let stream;
   try {
