@@ -8,7 +8,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type Client = SupabaseClient;
-export type ArenaAgent = "pitcher" | "listener";
+export type ArenaAgent = "pitcher" | "listener" | "writer";
 
 export interface ArenaEntry {
   model: string;
@@ -31,15 +31,18 @@ export interface ArenaRound {
   costUsd: number;
 }
 
+/** A call (Listener rounds) or an approved brief (writing rounds). */
 export interface ArenaSource {
   id: string;
-  kind: string;
+  kind?: string;
   title: string;
-  occurred: string | null;
-  created: string;
+  status?: string;
+  occurred?: string | null;
+  created?: string;
 }
 
 export interface ArenaVote {
+  entries?: ArenaEntry[];
   id: string;
   agent: ArenaAgent;
   site: string;
@@ -92,10 +95,10 @@ async function call<T>(code: string, path: string, init: RequestInit = {}): Prom
 
 export const arenaTenants = () => call<{ tenants: { id: string; name: string }[] }>("ARENA-LOAD", "/arena/tenants").then((r) => r.tenants);
 
-export const arenaSources = (site: string) =>
-  call<{ sources: ArenaSource[]; defaultModels: string[] }>("ARENA-LOAD", `/arena/sources?site=${encodeURIComponent(site)}`);
+export const arenaSources = (site: string, agent: ArenaAgent = "listener") =>
+  call<{ sources: ArenaSource[]; defaultModels: string[] }>("ARENA-LOAD", `/arena/sources?site=${encodeURIComponent(site)}&agent=${agent}`);
 
-export const runRound = (body: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string }) =>
+export const runRound = (body: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string; brief?: string }) =>
   call<ArenaRound>("ARENA-RUN", "/arena", { method: "POST", body: JSON.stringify(body) });
 
 export async function saveVote(round: ArenaRound, winner: string | null, note: string): Promise<void> {
@@ -116,7 +119,7 @@ export async function saveVote(round: ArenaRound, winner: string | null, note: s
 export async function listVotes(): Promise<ArenaVote[]> {
   const { data, error } = await client
     .from("arena_votes")
-    .select("id,agent,site,task,models,winner,costs,cost_usd,note,created")
+    .select("id,agent,site,task,models,winner,costs,cost_usd,note,created,entries")
     .order("created", { ascending: false })
     .limit(500);
   if (error) throw new ArenaError("ARENA-LOAD", `Couldn't load the votes: ${error.message}`);

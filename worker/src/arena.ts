@@ -23,12 +23,21 @@ import { nearest, type Seen } from "./agents/taste.js";
 import { extractJson } from "./agents/model.js";
 import { CHUNK_CHARS, systemPrompt as listenerSystem, userPrompt as listenerPrompt } from "./listener/extract.js";
 import { getSource, readTenant, recentSources } from "./listener/store.js";
+import { briefBlock, parseDraft, writerSystem } from "./agents/writer-prompt.js";
+import { claimsFor, renderClaims } from "./agents/kb.js";
+import { getBrief, personVoice, voiceGuide } from "./agents/store.js";
+import { voiceFor } from "./agents/voice.js";
 
-export const ARENA_AGENTS = ["pitcher", "listener"] as const;
+export const ARENA_AGENTS = ["pitcher", "listener", "writer"] as const;
 export type ArenaAgent = (typeof ARENA_AGENTS)[number];
 
 /** The current default, its cheaper Qwen rival, and a top-tier model (/mnt/project-files/models/candidates.md). */
 export const ARENA_DEFAULT_MODELS = ["deepseek/deepseek-v4-pro", "alibaba/qwen3.7-plus", "openai/gpt-6-sol"];
+/** Writing rounds (Ayadi 2026-10-14): four rivals, each writing the same piece. */
+export const ARENA_WRITER_MODELS = ["deepseek/deepseek-v4-pro", "openai/gpt-6.1-sol", "moonshotai/kimi-k3", "alibaba/qwen3.8-max"];
+/** A writing round is one piece by every rival: a full post each, so it gets its own cap. */
+const WRITER_ROUND_CAP_USD = Number(process.env.ARENA_WRITER_ROUND_CAP_USD ?? 2);
+const WRITER_OUTPUT_TOKENS = 8000;
 
 const ROUND_CAP_USD = Number(process.env.ARENA_ROUND_CAP_USD ?? 1);
 const ARENA_SITE = process.env.ARENA_SITE ?? "verbatimsite000";
@@ -37,16 +46,37 @@ const MAX_OUTPUT_TOKENS = 6000;
 const IDEAS_PER_ROUND = 25;
 const MODEL_RE = /^[a-z0-9-]+\/[a-z0-9.:-]+$/;
 /**
- * The tenants a round may read: Ayadi's own (Verbatim, PPGD). A customer's
- * ideas and calls never go to models it didn't agree to.
+ * The tenants a round may read: Ayadi's own. Named by site slug, so a tenant
+ * that signs up again (PPGD, 2026-10-14) is still his; ARENA_TENANTS adds ids.
+ * A customer's ideas and calls never go to models it didn't agree to, so a slug
+ * counts only while a superadmin is a member of that site.
  */
-export const ARENA_TENANTS = (process.env.ARENA_TENANTS ?? "verbatimsite000,ppgdsite0000000")
+const ARENA_TENANT_IDS = (process.env.ARENA_TENANTS ?? "verbatimsite000")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const ARENA_TENANT_SLUGS = (process.env.ARENA_TENANT_SLUGS ?? "verbatim,ppgd")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-function checkTenant(site: string): void {
-  if (!ARENA_TENANTS.includes(site)) throw new HttpError(403, "The Arena runs only on your own tenants (Verbatim, PPGD).");
+/** The ids a round may read now. Without a database (the in-process test) only the ids. */
+export async function arenaTenantIds(db: Pool | null): Promise<string[]> {
+  if (!db || !ARENA_TENANT_SLUGS.length) return ARENA_TENANT_IDS;
+  const { rows } = await db.query<{ id: string }>(`select s.id from public.sites s
+      where s.slug = any($1)
+        and exists (select 1 from public.site_members m join private.superadmins a on a.user_id = m.user_id where m.site = s.id)`,
+    [ARENA_TENANT_SLUGS]);
+  return [...new Set([...ARENA_TENANT_IDS, ...rows.map((r) => r.id)])];
+}
+
+export async function arenaTenants(db: Pool): Promise<{ id: string; name: string }[]> {
+  const { rows } = await db.query<{ id: string; name: string }>("select id, name from public.sites where id = any($1) order by name", [await arenaTenantIds(db)]);
+  return rows;
+}
+
+async function checkTenant(db: Pool | null, site: string): Promise<void> {
+  if (!(await arenaTenantIds(db)).includes(site)) throw new HttpError(403, "The Arena runs only on your own tenants (Verbatim, PPGD).");
 }
 
 export interface ArenaEntry {
@@ -92,14 +122,14 @@ async function listPrices(): Promise<Map<string, { input: number; output: number
 }
 
 /** The most a round can cost: the whole prompt in and every allowed output token out, at list price. */
-export function worstCase(promptChars: number, models: string[], byId: Map<string, { input: number; output: number }>): number {
+export function worstCase(promptChars: number, models: string[], byId: Map<string, { input: number; output: number }>, outputTokens = MAX_OUTPUT_TOKENS): number {
   const inTokens = Math.ceil(promptChars / 3);
   let total = 0;
   for (const m of models) {
     const p = byId.get(m);
     if (!p) throw new HttpError(422, `The AI Gateway has no price for ${m}`);
     // The gateway lets a call think on top of its answer budget: count all of it.
-    total += inTokens * p.input + thinkingBudget(MAX_OUTPUT_TOKENS)! * p.output;
+    total += inTokens * p.input + thinkingBudget(outputTokens)! * p.output;
   }
   return total;
 }
@@ -111,6 +141,8 @@ interface Task {
   ideas: { id: string; title: string }[];
   system: string;
   prompt: string;
+  maxOutputTokens?: number;
+  capUsd?: number;
   /** Throws a sentence when the answer can't be used as is. */
   check: (answer: unknown) => void;
 }
@@ -175,6 +207,39 @@ async function listenerTask(db: Pool, site: string, input: { source?: string; tr
   };
 }
 
+async function writerTask(site: string, briefId: string | undefined): Promise<Task> {
+  if (!briefId) throw new HttpError(400, "Pick a brief to write.");
+  const brief = await getBrief(site, briefId);
+  if (!brief) throw new HttpError(404, "No such brief for this tenant");
+  const [tenant, guide, own, claims] = await Promise.all([
+    getSite(site),
+    voiceGuide(site),
+    personVoice(site),
+    claimsFor(site, [brief.title, brief.angle, ...(brief.outline ?? []).map((l) => l.text)].filter(Boolean), 8),
+  ]);
+  const voice = own || voiceFor(guide);
+  return {
+    task: `Write: ${brief.title}`,
+    ideas: [],
+    system: writerSystem(voice),
+    // The Writer's own draft prompt (agents/writer.ts) without its web research
+    // or reviewer edits, so every rival gets the same input and nothing varies by search.
+    prompt: `Write the full post for ${tenant?.name ?? "the tenant"} from this brief.
+
+${briefBlock(brief)}
+
+What the tenant knows (knowledge base; the only source for facts about the tenant):
+${renderClaims(claims)}
+
+Write the whole post in Markdown: no H1 (the title is separate), H2 subheads. Use no outside sources or links. Then list the facts about the tenant you needed and didn't have.
+
+Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or two sentences for listings", "markdown": "...", "missingFacts": ["..."]}`,
+    maxOutputTokens: WRITER_OUTPUT_TOKENS,
+    capUsd: WRITER_ROUND_CAP_USD,
+    check: (a) => void parseDraft(a),
+  };
+}
+
 // ---- a round ----
 
 function shuffle<T>(xs: T[]): T[] {
@@ -198,7 +263,7 @@ async function runOne(model: string, t: Task, agent: ArenaAgent): Promise<ArenaE
       background: true,
       system: t.system,
       prompt: t.prompt,
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      maxOutputTokens: t.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
     });
     entry.raw = r.text;
     entry.costUsd = r.costUsd;
@@ -218,31 +283,49 @@ async function runOne(model: string, t: Task, agent: ArenaAgent): Promise<ArenaE
   return entry;
 }
 
-export function checkModels(v: unknown): string[] {
-  const models = Array.isArray(v) && v.length ? v : ARENA_DEFAULT_MODELS;
-  if (models.length < 2 || models.length > 3) throw new HttpError(400, "Pick two or three models.");
+export function checkModels(v: unknown, agent: ArenaAgent = "pitcher"): string[] {
+  const writing = agent === "writer";
+  const models = Array.isArray(v) && v.length ? v : writing ? ARENA_WRITER_MODELS : ARENA_DEFAULT_MODELS;
+  const most = writing ? 4 : 3;
+  if (models.length < 2 || models.length > most) throw new HttpError(400, `Pick two to ${most === 4 ? "four" : "three"} models.`);
   for (const m of models) if (typeof m !== "string" || !MODEL_RE.test(m)) throw new HttpError(400, `Bad model id: ${String(m)}`);
   if (new Set(models).size !== models.length) throw new HttpError(400, "Pick different models.");
   return models as string[];
 }
 
 export async function runRound(
-  db: Pool,
-  input: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string },
+  db: Pool | null,
+  input: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string; brief?: string },
 ): Promise<ArenaRound> {
-  checkTenant(input.site);
-  const t = input.agent === "pitcher" ? await pitcherTask(input.site) : await listenerTask(db, input.site, input);
-  const worst = worstCase(t.system.length + t.prompt.length, input.models, await listPrices());
-  if (worst > ROUND_CAP_USD) {
-    throw new HttpError(422, `This round could cost up to $${worst.toFixed(2)}, over the $${ROUND_CAP_USD.toFixed(2)} cap. Drop the priciest model or pick a shorter call.`);
+  await checkTenant(db, input.site);
+  const t =
+    input.agent === "pitcher"
+      ? await pitcherTask(input.site)
+      : input.agent === "writer"
+        ? await writerTask(input.site, input.brief)
+        : await listenerTask(db!, input.site, input);
+  const worst = worstCase(t.system.length + t.prompt.length, input.models, await listPrices(), t.maxOutputTokens);
+  const cap = t.capUsd ?? ROUND_CAP_USD;
+  if (worst > cap) {
+    throw new HttpError(422, `This round could cost up to $${worst.toFixed(2)}, over the $${cap.toFixed(2)} cap. Drop the priciest model or pick a shorter call.`);
   }
   const entries = shuffle(await Promise.all(input.models.map((m) => runOne(m, t, input.agent))));
   const costUsd = Math.round(entries.reduce((s, e) => s + e.costUsd, 0) * 1e6) / 1e6;
   return { agent: input.agent, site: input.site, task: t.task, ideas: t.ideas, entries, costUsd };
 }
 
-/** The calls a superadmin can pick for a Listener round: the tenant's latest. */
-export async function arenaSources(site: string) {
-  checkTenant(site);
+/** The calls a superadmin can pick for a Listener round (the tenant's latest), or the briefs for a writing round. */
+export async function arenaSources(db: Pool, site: string, agent: ArenaAgent = "listener") {
+  await checkTenant(db, site);
+  if (agent === "writer") return writerBriefs(site);
   return recentSources(site, 20);
+}
+
+/** The pieces a writing round can use: the tenant's approved briefs, oldest first. */
+export async function writerBriefs(site: string): Promise<{ id: string; title: string; status: string }[]> {
+  const briefs = await pipelineBriefs(site);
+  return briefs
+    .filter((b) => b.status === "todo" || b.status === "in_progress")
+    .reverse()
+    .map((b) => ({ id: b.id, title: b.title, status: b.status }));
 }

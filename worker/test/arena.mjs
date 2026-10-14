@@ -25,7 +25,7 @@ const db = {
     { id: "idea00000000002", site: SITE, status: "new", title: "Temporal vs cron", summary: "A comparison.", origin: "listener", evidence: [], created: "2026-10-02" },
     { id: "idea00000000003", site: SITE, status: "pitched", title: "Already pitched", summary: "", origin: "scout", evidence: [], created: "2026-10-03" },
   ],
-  briefs: [{ id: "brief0000000001", site: SITE, title: "Retries, explained", status: "todo", created: "2026-09-01", reject_reason: "" }],
+  briefs: [{ id: "brief0000000001", site: SITE, title: "Retries, explained", status: "todo", created: "2026-09-01", reject_reason: "", angle: "Why retries need budgets", outline: [{ id: "l1", text: "What a retry storm is" }], body: "" }],
   posts: [],
   goal_versions: [],
   daily_facts: [],
@@ -108,6 +108,8 @@ setModelResolver((id) =>
         // cheap/b forgets an idea: the agent couldn't use its answer.
         const judged = (id === "cheap/b" ? ids.slice(1) : ids).map((i) => ({ id: i, topics: [], targetSearch: "", timely: false, expiresAt: "", answersGap: `gap from ${id}`, demand: "", duplicateOf: "", replacesFlagged: "", searches: [] }));
         answer = JSON.stringify({ ideas: judged });
+      } else if (text.includes("Write the full post")) {
+        answer = JSON.stringify({ title: `Retries from ${id}`, subtitle: "", excerpt: "x", markdown: Array(320).fill("word").join(" "), missingFacts: [] });
       } else {
         answer = JSON.stringify({ ideas: [{ title: "SSO", kind: "question", why: "asked", quote: "Do you support SSO?", speaker: "Guest" }], facts: [] });
       }
@@ -162,6 +164,22 @@ check(prompts.every((p) => p.text.includes("Do you support SSO?") && p.text.incl
 check(call.entries.every((e) => e.problem === "" && e.answer.ideas.length === 1), "both answers are usable");
 const pasted = await runRound(fakeDb, { agent: "listener", site: SITE, models: ["cheap/a", "cheap/b"], transcript: "Hello there.", title: "Pasted one" });
 check(pasted.task === "Call: Pasted one", "a pasted transcript works too");
+
+// ---- the Writer ----
+
+console.log("Writer round");
+prompts.length = 0;
+const wrote = await runRound(null, { agent: "writer", site: SITE, models: ["cheap/a", "cheap/b"], brief: "brief0000000001" });
+check(wrote.task === "Write: Retries, explained" && wrote.entries.length === 2, `a piece is written by every rival: ${wrote.task}`);
+check(wrote.entries.every((e) => e.problem === "" && e.answer.markdown), "both drafts are usable");
+check(prompts.length === 2 && prompts[0].text === prompts[1].text && prompts[0].text.includes("Why retries need budgets"), "every rival gets the same brief prompt");
+check(db.model_calls.filter((c) => c.job === "arena:writer").length === 2, "every call is logged as arena:writer");
+check(checkModels(["a/b", "c/d", "e/f", "g/h"], "writer").length === 4, "a writing round takes four models");
+check(checkModels(undefined, "writer").length === 4, "no models means the four writing rivals");
+await runRound(null, { agent: "writer", site: SITE, models: ["cheap/a", "cheap/b"] }).then(
+  () => check(false, "a writing round needs a brief"),
+  (err) => check(err.status === 400, "a writing round needs a brief"),
+);
 
 // ---- guards ----
 

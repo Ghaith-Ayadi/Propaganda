@@ -16,7 +16,7 @@
 //   POST /runs/scout             { id }        body { site, day? }: a Scout run now
 //   GET  /triggers               { triggers, tenants }: Admin's Run now (src/triggers.ts)
 //   POST /triggers/:id           { runs }      body { site? }
-//   GET  /arena/tenants          { tenants }   the tenants a round may read (ARENA_TENANTS)
+//   GET  /arena/tenants          { tenants }   the tenants a round may read (src/arena.ts: Ayadi's own, by slug)
 //   GET  /arena/sources?site=    { sources }   a tenant's latest calls, for a Listener round
 //   POST /arena                  ArenaRound    body { agent, site, models?, source?, transcript?, title? } (src/arena.ts)
 //   GET  /failures?status=       { groups, sinks, environment }: failed runs grouped by fingerprint (src/failures.ts)
@@ -41,7 +41,7 @@ import { listenerRoute } from "./listener/index.js";
 import { listTenants, listTriggers, runTrigger } from "./triggers.js";
 import { getFailureGroup, listFailureGroups, processFailures, reportOf, setIgnored, sweepFailures, environmentOf, type FailureGroup } from "./failures.js";
 import { ticketSinks } from "./tickets.js";
-import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, ARENA_TENANTS, arenaSources, checkModels, runRound, type ArenaAgent } from "./arena.js";
+import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, ARENA_WRITER_MODELS, arenaSources, arenaTenants, checkModels, runRound, type ArenaAgent } from "./arena.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
 const SITE_RE = /^[a-z0-9]{15}$/;
@@ -159,13 +159,13 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
   }
 
   if (path === "/arena/tenants" && method === "GET") {
-    const { rows } = await db.query<{ id: string; name: string }>("select id, name from public.sites where id = any($1) order by name", [ARENA_TENANTS]);
-    return send(res, 200, { tenants: rows });
+    return send(res, 200, { tenants: await arenaTenants(db) });
   }
   if (path === "/arena/sources" && method === "GET") {
     const site = url.searchParams.get("site") ?? "";
     if (!SITE_RE.test(site)) throw new HttpError(400, "Bad site");
-    return send(res, 200, { sources: await arenaSources(site), defaultModels: ARENA_DEFAULT_MODELS });
+    const agent = url.searchParams.get("agent") === "writer" ? "writer" : "listener";
+    return send(res, 200, { sources: await arenaSources(db, site, agent), defaultModels: agent === "writer" ? ARENA_WRITER_MODELS : ARENA_DEFAULT_MODELS });
   }
   if (path === "/arena" && method === "POST") {
     // A pasted transcript: up to the Listener's one read (CHUNK_CHARS) and some.
@@ -178,7 +178,8 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     const source = typeof body.source === "string" && SITE_RE.test(body.source) ? body.source : undefined;
     const transcript = typeof body.transcript === "string" ? body.transcript : undefined;
     const title = typeof body.title === "string" ? body.title.slice(0, 300) : undefined;
-    return send(res, 200, await runRound(db, { agent, site: body.site, models: checkModels(body.models), source, transcript, title }));
+    const brief = typeof body.brief === "string" && SITE_RE.test(body.brief) ? body.brief : undefined;
+    return send(res, 200, await runRound(db, { agent, site: body.site, models: checkModels(body.models, agent), source, transcript, title, brief }));
   }
 
   if (path === "/failures" && method === "GET") {
