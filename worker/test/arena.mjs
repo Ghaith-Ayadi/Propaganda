@@ -3,7 +3,7 @@
 // a stand-in price list. Nothing here talks to a real model.
 
 import { createServer } from "node:http";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
 
 const SITE = "testsite0000000";
 const ARENA_SITE = "verbatimsite000";
@@ -32,6 +32,12 @@ const db = {
   app_settings: [],
   kb_sources: [{ id: "source000000001", site: SITE, kind: "call", tier: 2, title: "Kontra demo", uri: "", body: "Ana: Our Pro plan includes 3 seats.\nGuest: Do you support SSO?", sha256: "", occurred: null, status: "done", created: "2026-10-05" }],
   model_calls: [],
+  chat_conversations: [{ id: "convaaaaaaaaaaa", site: SITE, title: "Lists" }],
+  chat_messages: [
+    { id: "m1", site: SITE, conversation: "convaaaaaaaaaaa", role: "user", parts: [{ type: "text", text: "Why are so many posts about lists?" }], metadata: {}, created: "2026-10-14T13:15:00Z" },
+    { id: "m2", site: SITE, conversation: "convaaaaaaaaaaa", role: "assistant", parts: [{ type: "text", text: "I find no post about lists." }], metadata: { costUsd: 0.004 }, created: "2026-10-14T13:15:20Z" },
+  ],
+  strategy_proposals: [],
 };
 
 function rows(table, params) {
@@ -99,6 +105,16 @@ const prompts = [];
 const usage = { inputTokens: { total: 1000, noCache: 1000, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 200, text: 200, reasoning: 0 } };
 setModelResolver((id) =>
   new MockLanguageModelV3({
+    doStream: async ({ prompt }) => {
+      const text = prompt.map((m) => (typeof m.content === "string" ? m.content : m.content.map((c) => c.text ?? JSON.stringify(c.output ?? "")).join(""))).join("\n");
+      prompts.push({ id, text });
+      const fin = (unified) => ({ type: "finish", finishReason: { unified, raw: unified }, usage });
+      const sawGoals = text.includes("Approved goals for 2026-Q4");
+      const chunks = sawGoals
+        ? [{ type: "stream-start", warnings: [] }, { type: "text-start", id: "t" }, { type: "text-delta", id: "t", delta: `${id} read the goals: best ai blog writer.` }, { type: "text-end", id: "t" }, fin("stop")]
+        : [{ type: "stream-start", warnings: [] }, { type: "tool-call", toolCallId: "c1", toolName: "read_goals", input: "{}" }, fin("tool-calls")];
+      return { stream: simulateReadableStream({ initialDelayInMs: 0, chunkDelayInMs: 0, chunks }) };
+    },
     doGenerate: async ({ prompt }) => {
       const text = prompt.map((m) => (typeof m.content === "string" ? m.content : m.content.map((c) => c.text ?? "").join(""))).join("\n");
       prompts.push({ id, text });
@@ -180,6 +196,21 @@ await runRound(null, { agent: "writer", site: SITE, models: ["cheap/a", "cheap/b
   () => check(false, "a writing round needs a brief"),
   (err) => check(err.status === 400, "a writing round needs a brief"),
 );
+
+// ---- the Chat replay ----
+
+console.log("Chat replay");
+db.goal_versions.push({ site: SITE, quarter: "2026-Q4", version: 1, targets: { volume: { total: 21, topics: [{ name: "Why AI blog tools get cancelled", low: 8, high: 10 }] }, ranking: { pageOneTarget: 2, searches: [{ query: "best ai blog writer", topic: "x" }] } } });
+const { chatCases } = await import("../dist/testkit.js");
+const cases = await chatCases(SITE);
+check(cases.length === 1 && cases[0].id === "convaaaaaaaaaaa-1", `a captured turn is a case: ${JSON.stringify(cases)}`);
+const chat = await runRound(null, { agent: "chat", site: SITE, models: ["cheap/a", "cheap/b"], turn: "convaaaaaaaaaaa-1" });
+check(chat.input === "Why are so many posts about lists?", "the models get the operator's message");
+check(chat.before?.text === "I find no post about lists." && chat.before.costUsd === 0.004, "the captured reply is the Before");
+check(chat.entries.every((e) => e.calls?.[0]?.tool === "read_goals" && /Approved goals for 2026-Q4/.test(e.calls[0].result)), "Chat's real read_goals tool answers from the tenant's data");
+check(chat.entries.every((e) => /read the goals: best ai blog writer/.test(e.raw)), `each model answers after the tool result: ${JSON.stringify(chat.entries.map((e) => [e.raw, e.error, e.problem]))}`);
+check(db.model_calls.filter((c) => c.job === "arena:chat").length >= 4, "every step is logged as arena:chat");
+check(checkModels(undefined, "chat").length === 5, "no models means the five Chat rivals");
 
 // ---- guards ----
 

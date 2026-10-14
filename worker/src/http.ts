@@ -41,7 +41,7 @@ import { listenerRoute } from "./listener/index.js";
 import { listTenants, listTriggers, runTrigger } from "./triggers.js";
 import { getFailureGroup, listFailureGroups, processFailures, reportOf, setIgnored, sweepFailures, environmentOf, type FailureGroup } from "./failures.js";
 import { ticketSinks } from "./tickets.js";
-import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, ARENA_WRITER_MODELS, arenaSources, arenaTenants, checkModels, runRound, type ArenaAgent } from "./arena.js";
+import { ARENA_AGENTS, ARENA_DEFAULT_MODELS, ARENA_CHAT_MODELS, ARENA_WRITER_MODELS, arenaSources, arenaTenants, checkModels, runRound, type ArenaAgent } from "./arena.js";
 
 const RUN_STATES = new Set<RunState>(["queued", "running", "stalled", "done", "failed", "cancelled"]);
 const SITE_RE = /^[a-z0-9]{15}$/;
@@ -164,8 +164,9 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
   if (path === "/arena/sources" && method === "GET") {
     const site = url.searchParams.get("site") ?? "";
     if (!SITE_RE.test(site)) throw new HttpError(400, "Bad site");
-    const agent = url.searchParams.get("agent") === "writer" ? "writer" : "listener";
-    return send(res, 200, { sources: await arenaSources(db, site, agent), defaultModels: agent === "writer" ? ARENA_WRITER_MODELS : ARENA_DEFAULT_MODELS });
+    const asked = url.searchParams.get("agent");
+    const agent = asked === "writer" || asked === "chat" ? asked : "listener";
+    return send(res, 200, { sources: await arenaSources(db, site, agent), defaultModels: agent === "chat" ? ARENA_CHAT_MODELS : agent === "writer" ? ARENA_WRITER_MODELS : ARENA_DEFAULT_MODELS });
   }
   if (path === "/arena" && method === "POST") {
     // A pasted transcript: up to the Listener's one read (CHUNK_CHARS) and some.
@@ -179,7 +180,8 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
     const transcript = typeof body.transcript === "string" ? body.transcript : undefined;
     const title = typeof body.title === "string" ? body.title.slice(0, 300) : undefined;
     const brief = typeof body.brief === "string" && SITE_RE.test(body.brief) ? body.brief : undefined;
-    return send(res, 200, await runRound(db, { agent, site: body.site, models: checkModels(body.models, agent), source, transcript, title, brief }));
+    const turn = typeof body.turn === "string" && /^[a-z0-9]{15}-\d{1,3}$/.test(body.turn) ? body.turn : undefined;
+    return send(res, 200, await runRound(db, { agent, site: body.site, models: checkModels(body.models, agent), source, transcript, title, brief, turn }));
   }
 
   if (path === "/failures" && method === "GET") {

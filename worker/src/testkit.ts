@@ -14,3 +14,5 @@ export { scoutDb } from "./scout/store.js";
 export { fetchPage } from "./scout/pages.js";
 export { runRound, worstCase, checkModels, ARENA_DEFAULT_MODELS } from "./arena.js";
 export { judgePrompt } from "./agents/pitcher.js";
+
+export { chatCases } from "./arena-chat.js";

@@ -23,12 +23,13 @@ import { nearest, type Seen } from "./agents/taste.js";
 import { extractJson } from "./agents/model.js";
 import { CHUNK_CHARS, systemPrompt as listenerSystem, userPrompt as listenerPrompt } from "./listener/extract.js";
 import { getSource, readTenant, recentSources } from "./listener/store.js";
+import { CHAT_MAX_STEPS, CHAT_OUTPUT_TOKENS, chatCases, loadChatCase, replayChat, type ChatBefore, type ChatCase } from "./arena-chat.js";
 import { briefBlock, parseDraft, writerSystem } from "./agents/writer-prompt.js";
 import { claimsFor, renderClaims } from "./agents/kb.js";
 import { getBrief, personVoice, voiceGuide } from "./agents/store.js";
 import { voiceFor } from "./agents/voice.js";
 
-export const ARENA_AGENTS = ["pitcher", "listener", "writer"] as const;
+export const ARENA_AGENTS = ["pitcher", "listener", "writer", "chat"] as const;
 export type ArenaAgent = (typeof ARENA_AGENTS)[number];
 
 /** The current default, its cheaper Qwen rival, and a top-tier model (/mnt/project-files/models/candidates.md). */
@@ -38,6 +39,10 @@ export const ARENA_WRITER_MODELS = ["deepseek/deepseek-v4-pro", "openai/gpt-6.1-
 /** A writing round is one piece by every rival: a full post each, so it gets its own cap. */
 const WRITER_ROUND_CAP_USD = Number(process.env.ARENA_WRITER_ROUND_CAP_USD ?? 2);
 const WRITER_OUTPUT_TOKENS = 8000;
+/** Chat replays (Ayadi, 2026-10-14): the model Chat runs on, and the ones to weigh it against. */
+export const ARENA_CHAT_MODELS = ["deepseek/deepseek-v4-pro", "anthropic/claude-sonnet-5.5", "openai/gpt-6.1-sol", "moonshotai/kimi-k3", "alibaba/qwen3.8-max"];
+/** A replayed turn takes up to CHAT_MAX_STEPS model calls per rival. */
+const CHAT_ROUND_CAP_USD = Number(process.env.ARENA_CHAT_ROUND_CAP_USD ?? 6);
 
 const ROUND_CAP_USD = Number(process.env.ARENA_ROUND_CAP_USD ?? 1);
 const ARENA_SITE = process.env.ARENA_SITE ?? "verbatimsite000";
@@ -91,6 +96,8 @@ export interface ArenaEntry {
   inputTokens: number;
   outputTokens: number;
   ms: number;
+  /** Chat replays: what the model looked up and offered, in order. */
+  calls?: { tool: string; input: unknown; result: string }[];
 }
 
 export interface ArenaRound {
@@ -102,6 +109,10 @@ export interface ArenaRound {
   ideas: { id: string; title: string }[];
   entries: ArenaEntry[];
   costUsd: number;
+  /** Chat replays: the operator's message the models were given. */
+  input?: string;
+  /** Chat replays: the reply as it ran when captured. */
+  before?: ChatBefore | null;
 }
 
 // ---- prices, for the cap ----
@@ -122,14 +133,14 @@ async function listPrices(): Promise<Map<string, { input: number; output: number
 }
 
 /** The most a round can cost: the whole prompt in and every allowed output token out, at list price. */
-export function worstCase(promptChars: number, models: string[], byId: Map<string, { input: number; output: number }>, outputTokens = MAX_OUTPUT_TOKENS): number {
+export function worstCase(promptChars: number, models: string[], byId: Map<string, { input: number; output: number }>, outputTokens = MAX_OUTPUT_TOKENS, steps = 1): number {
   const inTokens = Math.ceil(promptChars / 3);
   let total = 0;
   for (const m of models) {
     const p = byId.get(m);
     if (!p) throw new HttpError(422, `The AI Gateway has no price for ${m}`);
     // The gateway lets a call think on top of its answer budget: count all of it.
-    total += inTokens * p.input + thinkingBudget(outputTokens)! * p.output;
+    total += steps * (inTokens * p.input + thinkingBudget(outputTokens)! * p.output);
   }
   return total;
 }
@@ -143,6 +154,11 @@ interface Task {
   prompt: string;
   maxOutputTokens?: number;
   capUsd?: number;
+  steps?: number;
+  /** Chat replays: the captured turn, run with Chat's tools. */
+  chat?: { site: string; c: ChatCase };
+  input?: string;
+  before?: ChatBefore | null;
   /** Throws a sentence when the answer can't be used as is. */
   check: (answer: unknown) => void;
 }
@@ -240,6 +256,24 @@ Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or tw
   };
 }
 
+async function chatTask(site: string, caseId: string | undefined): Promise<Task> {
+  if (!caseId) throw new HttpError(400, "Pick a conversation turn to replay.");
+  const c = await loadChatCase(site, caseId);
+  return {
+    task: `Chat: ${c.user.slice(0, 80)}`,
+    ideas: [],
+    system: c.system,
+    prompt: [...c.history.map((m) => String(m.content)), c.user].join("\n"),
+    maxOutputTokens: CHAT_OUTPUT_TOKENS,
+    steps: CHAT_MAX_STEPS,
+    capUsd: CHAT_ROUND_CAP_USD,
+    chat: { site, c },
+    input: c.user,
+    before: c.before,
+    check: () => {},
+  };
+}
+
 // ---- a round ----
 
 function shuffle<T>(xs: T[]): T[] {
@@ -254,6 +288,20 @@ function shuffle<T>(xs: T[]): T[] {
 async function runOne(model: string, t: Task, agent: ArenaAgent): Promise<ArenaEntry> {
   const started = Date.now();
   const entry: ArenaEntry = { model, answer: null, raw: "", problem: "", error: "", costUsd: 0, inputTokens: 0, outputTokens: 0, ms: 0 };
+  if (t.chat) {
+    try {
+      const r = await replayChat({ c: t.chat.c, site: t.chat.site, arenaSite: ARENA_SITE, model });
+      entry.raw = r.text;
+      entry.answer = r.text;
+      entry.calls = r.calls;
+      entry.costUsd = r.costUsd;
+      if (!r.text) entry.problem = "The model ended its turn without a reply.";
+    } catch (err) {
+      entry.error = String((err as Error)?.message ?? err).slice(0, 500);
+    }
+    entry.ms = Date.now() - started;
+    return entry;
+  }
   try {
     const r = await callModel({
       site: ARENA_SITE,
@@ -284,10 +332,9 @@ async function runOne(model: string, t: Task, agent: ArenaAgent): Promise<ArenaE
 }
 
 export function checkModels(v: unknown, agent: ArenaAgent = "pitcher"): string[] {
-  const writing = agent === "writer";
-  const models = Array.isArray(v) && v.length ? v : writing ? ARENA_WRITER_MODELS : ARENA_DEFAULT_MODELS;
-  const most = writing ? 4 : 3;
-  if (models.length < 2 || models.length > most) throw new HttpError(400, `Pick two to ${most === 4 ? "four" : "three"} models.`);
+  const most = agent === "chat" ? 5 : agent === "writer" ? 4 : 3;
+  const models = Array.isArray(v) && v.length ? v : agent === "chat" ? ARENA_CHAT_MODELS : agent === "writer" ? ARENA_WRITER_MODELS : ARENA_DEFAULT_MODELS;
+  if (models.length < 2 || models.length > most) throw new HttpError(400, `Pick two to ${["", "", "two", "three", "four", "five"][most]} models.`);
   for (const m of models) if (typeof m !== "string" || !MODEL_RE.test(m)) throw new HttpError(400, `Bad model id: ${String(m)}`);
   if (new Set(models).size !== models.length) throw new HttpError(400, "Pick different models.");
   return models as string[];
@@ -295,7 +342,7 @@ export function checkModels(v: unknown, agent: ArenaAgent = "pitcher"): string[]
 
 export async function runRound(
   db: Pool | null,
-  input: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string; brief?: string },
+  input: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string; brief?: string; turn?: string },
 ): Promise<ArenaRound> {
   await checkTenant(db, input.site);
   const t =
@@ -303,21 +350,24 @@ export async function runRound(
       ? await pitcherTask(input.site)
       : input.agent === "writer"
         ? await writerTask(input.site, input.brief)
-        : await listenerTask(db!, input.site, input);
-  const worst = worstCase(t.system.length + t.prompt.length, input.models, await listPrices(), t.maxOutputTokens);
+        : input.agent === "chat"
+          ? await chatTask(input.site, input.turn)
+          : await listenerTask(db!, input.site, input);
+  const worst = worstCase(t.system.length + t.prompt.length, input.models, await listPrices(), t.maxOutputTokens, t.steps);
   const cap = t.capUsd ?? ROUND_CAP_USD;
   if (worst > cap) {
     throw new HttpError(422, `This round could cost up to $${worst.toFixed(2)}, over the $${cap.toFixed(2)} cap. Drop the priciest model or pick a shorter call.`);
   }
   const entries = shuffle(await Promise.all(input.models.map((m) => runOne(m, t, input.agent))));
   const costUsd = Math.round(entries.reduce((s, e) => s + e.costUsd, 0) * 1e6) / 1e6;
-  return { agent: input.agent, site: input.site, task: t.task, ideas: t.ideas, entries, costUsd };
+  return { agent: input.agent, site: input.site, task: t.task, ideas: t.ideas, entries, costUsd, ...(t.chat ? { input: t.input, before: t.before } : {}) };
 }
 
 /** The calls a superadmin can pick for a Listener round (the tenant's latest), or the briefs for a writing round. */
 export async function arenaSources(db: Pool, site: string, agent: ArenaAgent = "listener") {
   await checkTenant(db, site);
   if (agent === "writer") return writerBriefs(site);
+  if (agent === "chat") return chatCases(site);
   return recentSources(site, 20);
 }
 

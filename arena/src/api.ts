@@ -8,7 +8,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type Client = SupabaseClient;
-export type ArenaAgent = "pitcher" | "listener" | "writer";
+export type ArenaAgent = "pitcher" | "listener" | "writer" | "chat";
 
 export interface ArenaEntry {
   model: string;
@@ -20,6 +20,8 @@ export interface ArenaEntry {
   inputTokens: number;
   outputTokens: number;
   ms: number;
+  /** Chat replays: what the model looked up and offered, in order. */
+  calls?: { tool: string; input: unknown; result: string }[];
 }
 
 export interface ArenaRound {
@@ -29,6 +31,9 @@ export interface ArenaRound {
   ideas: { id: string; title: string }[];
   entries: ArenaEntry[];
   costUsd: number;
+  /** Chat replays: the message the models were given, and the reply as it ran when captured. */
+  input?: string;
+  before?: { text: string; model: string; costUsd: number; at: string } | null;
 }
 
 /** A call (Listener rounds) or an approved brief (writing rounds). */
@@ -43,6 +48,8 @@ export interface ArenaSource {
 
 export interface ArenaVote {
   entries?: ArenaEntry[];
+  input?: string;
+  before?: ArenaRound["before"];
   id: string;
   agent: ArenaAgent;
   site: string;
@@ -98,7 +105,7 @@ export const arenaTenants = () => call<{ tenants: { id: string; name: string }[]
 export const arenaSources = (site: string, agent: ArenaAgent = "listener") =>
   call<{ sources: ArenaSource[]; defaultModels: string[] }>("ARENA-LOAD", `/arena/sources?site=${encodeURIComponent(site)}&agent=${agent}`);
 
-export const runRound = (body: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string; brief?: string }) =>
+export const runRound = (body: { agent: ArenaAgent; site: string; models: string[]; source?: string; transcript?: string; title?: string; brief?: string; turn?: string }) =>
   call<ArenaRound>("ARENA-RUN", "/arena", { method: "POST", body: JSON.stringify(body) });
 
 export async function saveVote(round: ArenaRound, winner: string | null, note: string): Promise<void> {
