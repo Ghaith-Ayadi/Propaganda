@@ -14,6 +14,7 @@
     "paths": {
       "ai": ["./node_modules/ai"],
       "ai/*": ["./node_modules/ai/*"],
+      "zod": ["./node_modules/zod"],
       "@ai-sdk/google": ["./node_modules/@ai-sdk/google"],
       "@ai-sdk/anthropic": ["./node_modules/@ai-sdk/anthropic"]
     }

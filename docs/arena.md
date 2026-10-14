@@ -35,3 +35,7 @@ A writing round (Ayadi, 2026-10-14) is five pieces. Each piece is one of the ten
 ## Which tenants
 
 A round reads only Ayadi's own tenants, found by site slug (`ARENA_TENANT_SLUGS`, default `verbatim,ppgd`) when a superadmin is a member of the site, so a tenant that signs up again keeps working. `ARENA_TENANTS` adds ids.
+
+## Chat replay
+
+A Chat replay (Ayadi, 2026-10-14) takes one operator turn from a tenant's real conversation (`chat_messages`) and gives it to up to five models (default DeepSeek V4 Pro, Sonnet 5.5, GPT-6.1 Sol, Kimi K3, Qwen3.8 Max). Each runs with Chat's own system prompt and tools (`api/_chat/toolkit.ts`, the code that shipped), so the tools answer from the tenant's data, read only. `ask_agent` starts nothing in a replay. The page shows the input, the reply as it ran when captured ("Before"), and the new replies blind, each with the lookups it made. Cost is capped per round (`ARENA_CHAT_ROUND_CAP_USD`, default 6); like writing rounds, the vote stays in the browser. After a Chat change ships, running the same turn again shows the new tools next to the captured reply.
