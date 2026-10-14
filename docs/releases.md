@@ -59,8 +59,15 @@ after v0.2.4), only on Ayadi's word, with notes and a log.
    the app to Vercel from the branch.
 5. Bedrock PR `SCHEMA_REF=<next version>` for the box, as after any release. The worker is built
    from that tag, so a worker fix reaches the box only this way.
+   The checks cannot tell a fix from other changes: only cherry-pick the fix and its notes onto
+   the branch. Who may create or push `hotfix/**` is a repository setting, not something these
+   workflows enforce; `deploy-app.yml` refuses a hotfix branch commit that has no release tag, so
+   a hand-run deploy cannot skip the plan checks.
 6. The notes file also goes to `main` in a notes PR, so `/release-notes` and the next release's
-   log carry it. The next release on `main` numbers from the highest tag, so it is v0.2.6.
+   log carry it. The next release on `main` numbers from the highest tag, so it is v0.2.6. That
+   hotfix tag is not an ancestor of `main`: the "what changed" test comparison is by tree, which
+   already holds the fix, and GitHub's PR list for that release starts at the hotfix tag, so it
+   may repeat the fix's PR.
 
 ## Release notes
 
