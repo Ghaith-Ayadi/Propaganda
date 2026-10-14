@@ -91,12 +91,15 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
 
 ## Releases
 
-Production moves in numbered releases (`v0.2.0`, `v0.2.1`, ...), cut by the **release**
+Production moves in numbered releases (a full release is the next minor: `v0.3.0`, `v0.4.0`, ... `v0.12.0`;
+a hotfix is always a patch: `v0.2.5`), cut by the **release**
 workflow on `main`, only on Ayadi's word: the free suites, then real-model tests
 (`worker/test/live/`) for the agents whose code changed since the last release (all of them on
 the first release of a month), then the tag, a GitHub Release as the log (the version's notes, PRs, which tests
 ran; never costs), and the app deploy. Each release's notes are `release-notes/vX.Y.Z.md`, merged before it
-is cut, and shown at `/release-notes` in the app. The box follows the tag in Bedrock's `schema.env`. Tests are plumbing,
+is cut, and shown at `/release-notes` in the app. The box follows the tag in Bedrock's `schema.env`
+(a one-line PR after each release). A hotfix ships the last release plus one fix from a `hotfix/<version>`
+branch, without main's unreleased work or the full model tests. Tests are plumbing,
 not quality: every agent runs on DeepSeek in them, never a Claude model. Details: [docs/releases.md](docs/releases.md).
 
 ## Model calls: one logged path

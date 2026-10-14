@@ -7,6 +7,8 @@ WORKDIR /src/worker
 COPY worker/package.json worker/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY api/_ai/gateway.ts api/_ai/capture.ts api/_ai/cost.ts api/_ai/errors.ts api/_ai/modelKeys.ts api/_ai/houseStyle.ts /src/api/_ai/
+# Chat's prompt and tools, which the Arena replays (worker/src/arena-chat.ts).
+COPY api/_chat/toolkit.ts api/_chat/lookups.ts api/_chat/db.ts api/_chat/citations.ts api/_chat/dispatch.ts api/_chat/types.ts /src/api/_chat/
 COPY worker/tsconfig.json worker/build.mjs ./
 COPY worker/src ./src
 # The commit this was built from (the box checks it out detached, so HEAD is the

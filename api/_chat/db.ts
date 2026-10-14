@@ -5,7 +5,8 @@
 //    write. Every query through it filters by site and user itself.
 
 const URL_ = () => process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const ANON = () => process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+// The worker has no anon key: it reads with the service role, whose key also opens the API.
+const ANON = () => process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export class BackendError extends Error {
   constructor(public readonly status: number, detail: string) {

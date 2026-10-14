@@ -8,6 +8,7 @@
 import { isoWeek, quarterOf } from "./goals.js";
 import { houseTitleHits, noDashes, titleHits } from "./writing.js";
 import { arr, obj, str } from "./model.js";
+import { sharedIdeas } from "./motifs.js";
 
 const DAY = 86_400_000;
 
@@ -296,6 +297,8 @@ export interface Rules {
   houseStyle?: boolean;
   /** A topic is a short name plus a thesis (2026-10-12); false on a run recorded before, whose draft has no thesis. */
   thesis?: boolean;
+  /** One idea in one topic at most (2026-10-14); false on a run recorded before. */
+  motifs?: boolean;
   /** Sentences and headings from the tenant's own site: a name or thesis that repeats one is their slogan, not an angle. */
   siteSentences?: string[];
 }
@@ -721,6 +724,13 @@ export function validate(d: Draft, r: Rules): string[] {
         if (echoesSite(thesis, r.siteSentences ?? [])) errors.push(`Topic "${t.name}": the thesis repeats a sentence from their own site. That is their positioning, not a thesis; say what they know about the buyer or the market that the site only implies (rule 2).`);
       }
       if (!kept && echoesSite(t.name, r.siteSentences ?? [])) errors.push(`Topic "${t.name}" is a sentence from their own site. Their slogan is never a topic; name the angle in a few words (rule 2).`);
+    }
+  }
+  if (r.motifs && d.topics.length >= 3) {
+    const kept = (t: { name: string }) => (r.previousTopics ?? []).includes(t.name);
+    for (const m of sharedIdeas(d.topics.map((t) => `${t.name}. ${t.thesis ?? ""}`), { max: Math.max(2, Math.floor(d.topics.length / 2)), own: r.seedSearches ?? [] })) {
+      if (!m.items.some((i) => !kept(d.topics[i]))) continue;
+      errors.push(`The idea "${m.word}" runs through ${m.items.length} topics (${m.items.map((i) => `"${d.topics[i].name}"`).join(", ")}). One idea belongs to one topic, and it is in most of them: keep it in the strongest and make the others about something else the buyer needs (rule 2).`);
     }
   }
   if (r.thesis) {

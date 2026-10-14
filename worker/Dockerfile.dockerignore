@@ -12,3 +12,9 @@
 !api/_ai/errors.ts
 !api/_ai/modelKeys.ts
 !api/_ai/houseStyle.ts
+!api/_chat/toolkit.ts
+!api/_chat/lookups.ts
+!api/_chat/db.ts
+!api/_chat/citations.ts
+!api/_chat/dispatch.ts
+!api/_chat/types.ts

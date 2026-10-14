@@ -1,6 +1,6 @@
 # Arena
 
-The Arena puts the same real agent task to two or three models, shows the answers blind, and records which one won and what each cost. It is its own app in `arena/`, deployed on its own, so it never waits for a numbered product release.
+The Arena puts the same real agent task to two to four models, shows the answers blind, and records which one won and what each cost. It is its own app in `arena/`, deployed on its own, so it never waits for a numbered product release.
 
 ## What it shares with the product
 
@@ -27,3 +27,15 @@ Nothing else is shared. The Arena has no product code in it and the product Admi
 ## Local
 
 `cd arena && npm install && npm run dev` serves on 5174 and proxies the same three paths to `ARENA_BACKEND` (default `https://app.dev.propaganda.pub`). Set `VITE_SUPABASE_ANON_KEY` for that host.
+
+## Writing rounds
+
+A writing round (Ayadi, 2026-10-14) is five pieces. Each piece is one of the tenant's approved briefs, written in full by every rival (default DeepSeek V4 Pro, GPT-6.1 Sol, Kimi K3, Qwen3.8 Max) with the Writer's own system prompt and draft prompt, minus the web research and reviewer edits so the input is identical. The page shows the four drafts as A to D in a shuffled order with no model names; the names and costs appear after the vote, then the next piece starts. Until the migration for writer votes ships (`arena_votes` takes only the Pitcher and the Listener, and two or three models), a writing round is not saved on the server: its vote and all four answers stay in the browser under Past rounds, and every call is in the cost log as `arena:writer`. Nothing is saved as a post. Each piece's call is capped by `ARENA_WRITER_ROUND_CAP_USD` (default 2).
+
+## Which tenants
+
+A round reads only Ayadi's own tenants, found by site slug (`ARENA_TENANT_SLUGS`, default `verbatim,ppgd`) when a superadmin is a member of the site, so a tenant that signs up again keeps working. `ARENA_TENANTS` adds ids.
+
+## Chat replay
+
+A Chat replay (Ayadi, 2026-10-14) takes one operator turn from a tenant's real conversation (`chat_messages`) and gives it to up to five models (default DeepSeek V4 Pro, Sonnet 5.5, GPT-6.1 Sol, Kimi K3, Qwen3.8 Max). Each runs with Chat's own system prompt and tools (`api/_chat/toolkit.ts`, the code that shipped), so the tools answer from the tenant's data, read only. `ask_agent` starts nothing in a replay. The page shows the input, the reply as it ran when captured ("Before"), and the new replies blind, each with the lookups it made. Cost is capped per round (`ARENA_CHAT_ROUND_CAP_USD`, default 6); like writing rounds, the vote stays in the browser. After a Chat change ships, running the same turn again shows the new tools next to the captured reply.
