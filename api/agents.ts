@@ -9,9 +9,9 @@
 // Members only. The worker does the rest (worker/src/http.ts /agents/:name),
 // the same hand-off Chat uses (_chat/dispatch.ts).
 
-import { requireMember } from "./_auth";
-import { withTelemetry } from "./_telemetry";
-import { dispatch } from "./_chat/dispatch";
+import { requireMember } from "./_auth.js";
+import { withTelemetry } from "./_telemetry.js";
+import { dispatch } from "./_chat/dispatch.js";
 
 const POST_RE = /^[a-z0-9]{15}$/;
 

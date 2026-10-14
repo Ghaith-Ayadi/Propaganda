@@ -1,9 +1,9 @@
 // GET  /api/chat/conversations?site=<site>   The account's conversations in that tenant, newest first
 // POST /api/chat/conversations  { site, id }  Starts one (the id is minted by the client)
 
-import { withTelemetry } from "../../_telemetry";
-import { ID_RE, backendFailure, json, member, siteParam } from "../../_chat/http";
-import { createConversation, listConversations } from "../../_chat/store";
+import { withTelemetry } from "../../_telemetry.js";
+import { ID_RE, backendFailure, json, member, siteParam } from "../../_chat/http.js";
+import { createConversation, listConversations } from "../../_chat/store.js";
 
 async function list(request: Request): Promise<Response> {
   const site = siteParam(request);

@@ -73,10 +73,10 @@ function model(delayMs: number) {
   });
 }
 
-let chat: typeof import("../chat/index");
-let conversations: typeof import("../chat/conversations/index");
-let messages: typeof import("../chat/conversations/[id]/messages");
-let gateway: typeof import("../_ai/gateway");
+let chat: typeof import("../chat/index.js");
+let conversations: typeof import("../chat/conversations/index.js");
+let messages: typeof import("../chat/conversations/[id]/messages.js");
+let gateway: typeof import("../_ai/gateway.js");
 const settle = () => new Promise((r) => setTimeout(r, 50));
 
 before(async () => {
@@ -84,10 +84,10 @@ before(async () => {
   process.env.SUPABASE_URL = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   process.env.SUPABASE_ANON_KEY = "anon";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service";
-  gateway = await import("../_ai/gateway");
-  chat = await import("../chat/index");
-  conversations = await import("../chat/conversations/index");
-  messages = await import("../chat/conversations/[id]/messages");
+  gateway = await import("../_ai/gateway.js");
+  chat = await import("../chat/index.js");
+  conversations = await import("../chat/conversations/index.js");
+  messages = await import("../chat/conversations/[id]/messages.js");
 });
 
 const req = (path: string, init: RequestInit = {}) =>

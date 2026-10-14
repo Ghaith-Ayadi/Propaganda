@@ -11,8 +11,8 @@
 //   ANALYTICS_URL          — the Worker's base URL
 //   ANALYTICS_QUERY_KEY    — the Worker's shared secret (x-analytics-key)
 
-import { backendGet, requireMember } from "./_auth";
-import { withTelemetry } from "./_telemetry";
+import { backendGet, requireMember } from "./_auth.js";
+import { withTelemetry } from "./_telemetry.js";
 
 // Only forward requests to worker paths/metrics we know about — this is a
 // proxy with an upstream secret attached, not an open relay.

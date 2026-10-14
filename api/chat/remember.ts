@@ -3,9 +3,9 @@
 // person who pressed the button (a Remember is theirs, never the agent's).
 // Only the Guardian admits it into the knowledge base.
 
-import { withTelemetry } from "../_telemetry";
-import { json, member } from "../_chat/http";
-import { remember } from "../_chat/lookups";
+import { withTelemetry } from "../_telemetry.js";
+import { json, member } from "../_chat/http.js";
+import { remember } from "../_chat/lookups.js";
 
 async function handle(request: Request): Promise<Response> {
   let body: { site?: unknown; statement?: unknown };

@@ -1,8 +1,8 @@
 // GET /api/chat/conversations/<id>/messages?site=<site>   The conversation's messages, oldest first
 
-import { withTelemetry } from "../../../_telemetry";
-import { ID_RE, backendFailure, json, member, segmentAfter, siteParam } from "../../../_chat/http";
-import { listMessages } from "../../../_chat/store";
+import { withTelemetry } from "../../../_telemetry.js";
+import { ID_RE, backendFailure, json, member, segmentAfter, siteParam } from "../../../_chat/http.js";
+import { listMessages } from "../../../_chat/store.js";
 
 async function list(request: Request): Promise<Response> {
   const site = siteParam(request);

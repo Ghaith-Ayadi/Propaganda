@@ -5,7 +5,7 @@
 // packages: change both together). The agent itself speaks ChatEvent, and
 // _chat/ui.ts turns those into the SDK's UI message chunks.
 
-import type { UIMessage, UIMessageChunk } from "../_ai/gateway";
+import type { UIMessage, UIMessageChunk } from "../_ai/gateway.js";
 
 export type AgentName = "chat" | "strategist" | "listener" | "scout" | "pitcher" | "writer" | "checker" | "guardian";
 export type RefKind = "claim" | "post" | "pitch" | "flag" | "goal" | "run";

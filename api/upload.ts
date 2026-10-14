@@ -9,8 +9,8 @@
 // Env: BLOB_READ_WRITE_TOKEN  (set in Vercel dashboard → Storage → Connect Blob store)
 
 import { put } from "@vercel/blob";
-import { requireMember } from "./_auth";
-import { withTelemetry } from "./_telemetry";
+import { requireMember } from "./_auth.js";
+import { withTelemetry } from "./_telemetry.js";
 
 // Node.js runtime required — @vercel/blob uses Node streams (not Edge-compatible).
 

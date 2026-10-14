@@ -15,13 +15,13 @@ import {
   streamModel,
   tool,
   type ModelMessage,
-} from "../_ai/gateway";
-import { HOUSE_STYLE } from "../_ai/houseStyle";
-import { report } from "../_telemetry";
-import { CitationStream, Sources } from "./citations";
-import { DISPATCHABLE, dispatch } from "./dispatch";
-import { readGoals, searchKnowledge, searchPosts, siteName } from "./lookups";
-import type { AgentName, ChatEvent, ChatUIMessage, Handoff, QuickAction } from "./types";
+} from "../_ai/gateway.js";
+import { HOUSE_STYLE } from "../_ai/houseStyle.js";
+import { report } from "../_telemetry.js";
+import { CitationStream, Sources } from "./citations.js";
+import { DISPATCHABLE, dispatch } from "./dispatch.js";
+import { readGoals, searchKnowledge, searchPosts, siteName } from "./lookups.js";
+import type { AgentName, ChatEvent, ChatUIMessage, Handoff, QuickAction } from "./types.js";
 
 /**
  * The gateway's DEFAULT_MODEL (on a tenant's own key, BYOK_MODEL: Sonnet);

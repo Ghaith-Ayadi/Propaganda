@@ -1,8 +1,8 @@
 // DELETE /api/chat/conversations/<id>?site=<site>   Deletes the conversation and its messages
 
-import { withTelemetry } from "../../_telemetry";
-import { ID_RE, backendFailure, json, member, segmentAfter, siteParam } from "../../_chat/http";
-import { deleteConversation } from "../../_chat/store";
+import { withTelemetry } from "../../_telemetry.js";
+import { ID_RE, backendFailure, json, member, segmentAfter, siteParam } from "../../_chat/http.js";
+import { deleteConversation } from "../../_chat/store.js";
 
 async function remove(request: Request): Promise<Response> {
   const site = siteParam(request);

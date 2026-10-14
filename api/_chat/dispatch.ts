@@ -10,7 +10,7 @@
 //   404 the agent isn't registered yet, 422 no tenant or nothing to work on,
 //   503 the worker has no secret set
 
-import type { AgentName } from "./types";
+import type { AgentName } from "./types.js";
 
 /** The agents Chat can hand work to (agents.md). The Guardian is reached through Remember only. */
 export const DISPATCHABLE = ["strategist", "listener", "scout", "pitcher", "writer", "checker"] as const;

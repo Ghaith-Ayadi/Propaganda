@@ -5,7 +5,7 @@
 // A data part re-sent with the same id replaces the earlier one: that is how a
 // hand-off moves from running to done.
 
-import type { ChatChunk, ChatEvent, ChatUIMessage } from "./types";
+import type { ChatChunk, ChatEvent, ChatUIMessage } from "./types.js";
 
 export class UiReply {
   readonly message: ChatUIMessage;

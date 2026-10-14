@@ -15,4 +15,5 @@ jobs:
       - run: npm ci
       - run: npm run check:model-paths
       - run: npm run check:functions
+      - run: npm run check:function-load
       - run: npm test
