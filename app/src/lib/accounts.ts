@@ -314,11 +314,14 @@ export async function addAccountWithGoogle(): Promise<Account> {
 }
 
 /**
- * Whether the server can email sign-in codes: email sign-in is on only once
- * SMTP is configured (Bedrock compose/propaganda-supabase). Without it, asking
- * for a code would fail, so the sign-in screen doesn't offer it.
+ * Whether the sign-in screen offers emailed codes. Production is Google-only:
+ * this is off unless the build sets VITE_EMAIL_SIGNIN=1 (dev box, for Claude's
+ * own user) or runs under the Vite dev server (laptop stack, codes in Mailpit).
+ * Even then the server must say it can send email (SMTP configured in Bedrock
+ * compose/propaganda-supabase), or asking for a code would fail.
  */
 export async function emailCodesEnabled(): Promise<boolean> {
+  if (!import.meta.env.DEV && import.meta.env.VITE_EMAIL_SIGNIN !== "1") return false;
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: SUPABASE_ANON_KEY } });
     const settings = (await res.json()) as { external?: { email?: boolean } };

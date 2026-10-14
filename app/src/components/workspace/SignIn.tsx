@@ -16,7 +16,7 @@ import { reportError } from "@/lib/telemetry";
 
 /**
  * Sign-in screen: add an account to this browser. Google (a popup, no
- * password), plus an emailed one-time code when the server can send email.
+ * password). An emailed one-time code appears only in dev builds (see emailCodesEnabled).
  * Reused whenever Workspace needs an account: first run, an expired session,
  * or "add another account". Signing in for the first time creates the account;
  * Workspace then starts onboarding.

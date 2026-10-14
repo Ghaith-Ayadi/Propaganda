@@ -149,8 +149,9 @@ export function standings(votes: ArenaVote[], agent: ArenaAgent): Standing[] {
     .sort((a, b) => b.wins - a.wins || a.avgCost - b.avgCost);
 }
 
-/** Whether the server can email sign-in codes (the provider is on and mail can be sent). */
+/** Email codes are off in production (Google only). On with VITE_EMAIL_SIGNIN=1 or the Vite dev server, and only if the server can send mail. */
 export async function emailCodesEnabled(): Promise<boolean> {
+  if (!import.meta.env.DEV && import.meta.env.VITE_EMAIL_SIGNIN !== "1") return false;
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: ANON_KEY } });
     const settings = (await res.json()) as { external?: { email?: boolean } };
