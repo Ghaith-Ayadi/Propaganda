@@ -37,6 +37,8 @@ export interface GoalsAdapter {
   quarterGoals(quarter: QuarterKey): QuarterGoals;
   /** The latest proposal for a quarter that isn't superseded, if any. */
   proposal(quarter: QuarterKey): Proposal | null;
+  /** The proposal the latest one replaced (the round before), if any. */
+  previousProposal(quarter: QuarterKey): Proposal | null;
   launch(): Launch | null;
   batchPlan(quarter: QuarterKey): BatchPlan | null;
   planDrop(): PlanDrop;
@@ -86,6 +88,7 @@ export const goalsAdapter: GoalsAdapter = {
   quarters: () => pick().quarters(),
   quarterGoals: (q) => pick().quarterGoals(q),
   proposal: (q) => pick().proposal(q),
+  previousProposal: (q) => pick().previousProposal(q),
   launch: () => pick().launch(),
   batchPlan: (q) => pick().batchPlan(q),
   planDrop: () => pick().planDrop(),

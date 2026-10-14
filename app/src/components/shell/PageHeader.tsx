@@ -38,7 +38,7 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className="border-b border-secondary">
+    <header data-intro="top" className="border-b border-secondary">
       <div className={cx(contained ? CONTAINER : FULL, "pt-6 md:pt-8", tabs ? "pb-0" : "pb-5 md:pb-6")}>
         {breadcrumbs && <div className="mb-3 text-sm text-tertiary">{breadcrumbs}</div>}
         <div className="flex flex-wrap items-start justify-between gap-4">

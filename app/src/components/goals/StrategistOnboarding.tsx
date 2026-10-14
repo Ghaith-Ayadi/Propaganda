@@ -36,7 +36,7 @@ const QUESTIONS: { id: keyof StrategyAnswers; label: string; hint: string; examp
   {
     id: "watch",
     label: "Competitors and sites worth watching",
-    hint: "Names or addresses, one per line. Scout follows them.",
+    hint: "Names or addresses, one per line. We follow them.",
     example: "airflow.apache.org\nprefect.io\ndagster.io",
     rows: 4,
   },
@@ -137,7 +137,7 @@ export function StrategistOnboarding({
   return (
     <div className="flex flex-col gap-6">
       <p className="rounded-lg bg-secondary px-3.5 py-2.5 text-sm text-secondary">
-        The Strategist plans around the {reviewLine(review)} you said you can review.
+        We plan around the {reviewLine(review)} you said you can review.
       </p>
 
       {QUESTIONS.map((q, i) => (
@@ -166,7 +166,7 @@ export function StrategistOnboarding({
       <div className="flex flex-col gap-1.5 border-t border-secondary pt-6">
         <p className="text-sm font-medium text-secondary">Already have a plan?</p>
         <p className="text-sm text-tertiary">
-          Paste it or drop the files. Every item shows up in the Strategist's proposal: kept, changed with a reason, or moved to the backlog.
+          Paste it or drop the files. Every item shows up in your plan: kept, changed with a reason, or moved to the backlog.
         </p>
         <div className="mt-2">
           <PlanDropFields draft={plan} compact label="Your plan, notes or a list of titles" />
@@ -175,7 +175,7 @@ export function StrategistOnboarding({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-tertiary">
-          {answered} of {QUESTIONS.length} answered. The Strategist drafts your goals and first briefs from these.
+          {answered} of {QUESTIONS.length} answered. We draft your goals and first briefs from these.
         </p>
         <Button color="primary" iconTrailing={submitIcon} isLoading={saving} isDisabled={saving} onClick={() => void save()}>
           {submitLabel}

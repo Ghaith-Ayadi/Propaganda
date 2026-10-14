@@ -74,6 +74,7 @@ html.ppgd-app .bn-editor.bn-default-styles {
      type-title    page titles, 20/28, 600
      type-heading  card and section titles, dialog titles, 16/24
      type-figure   the big number on a stat, 24/32, tabular
+     type-numeral  the hero number on a plan card, 40/44, Inter's open digits and tabular figures
      type-eyebrow  the small uppercase label above a block, 12/16
    Post and knowledge-base text adds font-serif. */
 @utility type-title {
@@ -97,6 +98,16 @@ html.ppgd-app .bn-editor.bn-default-styles {
   font-weight: 500;
   letter-spacing: -0.019em;
   font-variant-numeric: tabular-nums;
+}
+@utility type-numeral {
+  font-family: var(--font-body);
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "ss01" 1, "cv05" 1;
+  font-optical-sizing: auto;
 }
 @utility type-eyebrow {
   font-size: 12px;
@@ -210,4 +221,32 @@ a {
   .bn-side-menu {
     display: none !important;
   }
+}
+
+/* The first-day reveal: the screen arrives in pieces (shell parts from their
+   own edge, then the plan's sections from the top down) instead of all at once.
+   Onboarding sets data-intro-play on <html> for the first few seconds;
+   [data-reveal] sections fade in whenever they mount, in order of --i. */
+@keyframes intro-from-left { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+@keyframes intro-from-top { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+@keyframes intro-from-right { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes reveal-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes skeleton-sweep { to { transform: translateX(100%); } }
+html[data-intro-play] [data-intro="left"] { animation: intro-from-left 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+html[data-intro-play] [data-intro="top"] { animation: intro-from-top 700ms cubic-bezier(0.2, 0.7, 0.2, 1) 250ms both; }
+html[data-intro-play] [data-intro="right"] { animation: intro-from-right 700ms cubic-bezier(0.2, 0.7, 0.2, 1) 500ms both; }
+[data-reveal] { animation: reveal-rise 600ms cubic-bezier(0.2, 0.7, 0.2, 1) calc(var(--i, 0) * 180ms + 120ms) both; }
+/* A loading box: a soft band sweeps across it. */
+.skeleton { position: relative; overflow: hidden; }
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-bg-primary) 75%, transparent), transparent);
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-intro-play] [data-intro], [data-reveal] { animation: none; }
+  .skeleton::after { animation: none; }
 }

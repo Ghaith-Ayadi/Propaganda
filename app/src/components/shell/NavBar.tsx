@@ -33,7 +33,7 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
   const superadmin = useSuperadminAccount();
 
   return (
-    <aside className="flex h-full w-[260px] max-w-full shrink-0 flex-col border-r border-secondary bg-secondary max-md:w-[300px]">
+    <aside data-intro="left" className="flex h-full w-[260px] max-w-full shrink-0 flex-col border-r border-secondary bg-secondary max-md:w-[300px]">
       <div className="px-3 pt-3 pb-2">
         <SiteSwitcher />
       </div>

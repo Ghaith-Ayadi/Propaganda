@@ -301,6 +301,13 @@ export function Workspace({ children }: { children: React.ReactNode }) {
         }}
         onDone={(site, plan) => {
           // A full tenant opens on its first day (components/gettingStarted), Lite on Home.
+          if (plan === "full") {
+            try {
+              sessionStorage.setItem("propaganda:intro", "1"); // Getting started plays its reveal once (GettingStartedPage)
+            } catch {
+              /* no storage: it simply opens without the reveal */
+            }
+          }
           window.location.hash = plan === "full" ? "#/getting-started" : "#/home";
           leaveThen(account, site);
         }}

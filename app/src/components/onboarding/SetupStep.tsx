@@ -69,7 +69,7 @@ export function SetupStep() {
       />
       <NativeSelect
         label="How many posts a month can your team review?"
-        hint="We do the writing. The Strategist plans to this number, and you can change it any time."
+        hint="We do the writing and plan to this number. You can change it any time."
         value={review}
         onChange={(e) => void setSetting("strategist.reviewPerMonth", e.target.value)}
         options={REVIEW_OPTIONS}

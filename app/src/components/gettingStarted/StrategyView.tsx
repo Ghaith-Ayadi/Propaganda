@@ -15,7 +15,8 @@ import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { toast } from "@/components/base/toast/toast";
 import { Card, CardBody, CardFooter, CardHeader } from "@/components/shell/Card";
-import { goalsActions } from "@/lib/goals/useGoals";
+import { goalsActions, usePreviousProposal } from "@/lib/goals/useGoals";
+import { describeChanges } from "@/lib/goals/diff";
 import { quarterLabel } from "@/lib/goals/quarter";
 import type { LaunchPlan, Proposal } from "@/lib/goals/types";
 import type { PipelineItem } from "@/lib/pipeline/types";
@@ -25,6 +26,15 @@ import { cx } from "@/utils/cx";
 import { SectionTitle, Spinner } from "./bits";
 import type { StrategistProgress } from "./progress";
 import { MAX_ROUNDS } from "./state";
+
+/** A section that fades in on its own turn, top to bottom (index.css, data-reveal). */
+function Reveal({ i, children, className }: { i: number; children: React.ReactNode; className?: string }) {
+  return (
+    <div data-reveal style={{ "--i": i } as React.CSSProperties} className={className}>
+      {children}
+    </div>
+  );
+}
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 
@@ -46,7 +56,9 @@ export function StrategyView({
   const [asking, setAsking] = useState(false);
   const [ask, setAsk] = useState("");
   const [answers, setAnswers] = useState<string[]>(() => proposal.questions.map(() => ""));
+  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const previous = usePreviousProposal(proposal);
   const questions = proposal.questions;
   const lastRound = round >= MAX_ROUNDS;
   // Open questions block approval, every round (as on Goals, #102), except the
@@ -81,7 +93,12 @@ export function StrategyView({
     }
   };
 
-  const answerNote = () => ["Answers to your questions:", ...questions.map((q, i) => `${i + 1}. ${q}\n${answers[i].trim()}`)].join("\n\n");
+  const answerNote = () =>
+    [
+      "Answers to your questions:",
+      ...questions.map((q, i) => `${i + 1}. ${q}\n${answers[i].trim()}`),
+      ...(notes.trim() ? [`Anything else:\n${notes.trim()}`] : []),
+    ].join("\n\n");
 
   const numbers = [
     proposal.launch && {
@@ -104,34 +121,24 @@ export function StrategyView({
     },
   ].filter(Boolean) as { value: string; label: string; why: string; basis: string }[];
 
-  return (
-    <div className="flex flex-col gap-8">
-      {failedAsk && (
-        <div className="flex flex-col gap-3 rounded-lg bg-secondary px-4 py-3 text-sm text-primary sm:flex-row sm:items-center">
-          <p className="flex-1">
-            <span className="font-medium">Your last request didn't go through.</span> {failedAsk.error} This is still the plan from before.
-          </p>
-          <Button size="sm" color="secondary" iconLeading={RefreshCw01} isDisabled={busy || lastRound} onClick={() => void revise(failedAsk.request, "retry")}>
-            Send it again
-          </Button>
-        </div>
-      )}
-      <div>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+  const planBody = (
+    <>
+      <Reveal i={0}>
+        <div className="mb-3">
           <Badge color="gray" size="sm">{quarterLabel(proposal.quarter)} plan</Badge>
-          <Badge color="gray" size="sm">Round {round} of {MAX_ROUNDS}</Badge>
         </div>
+        <SectionTitle title="Summary" lede="What we're going to do, why, and how, in a nutshell." />
         <p className="font-serif text-2xl leading-snug text-primary md:text-[28px] md:leading-[36px]">{proposal.summary}</p>
-      </div>
+      </Reveal>
 
-      <div className={cx("grid gap-4", numbers.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2")}>
+      <Reveal i={1} className={cx("grid gap-4", numbers.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2")}>
         {numbers.map((n) => (
           <NumberTile key={n.label} {...n} />
         ))}
-      </div>
+      </Reveal>
 
-      <section>
-        <SectionTitle title="Your topics" lede="Up to four, so readers and Google can tell what you're about. Under each, the first posts the Strategist pitched." />
+      <Reveal i={2}>
+        <SectionTitle title="Your topics" lede="Up to four, so readers and Google can tell what you're about. Under each, the first posts we pitched." />
         <div className="grid gap-4 md:grid-cols-2">
           {proposal.topics.map((t, i) => {
             const mine = pitches.filter((p) => p.topics[0] === t.name);
@@ -152,11 +159,11 @@ export function StrategyView({
                         ))}
                       </ul>
                     ) : pitching && pitching.topics > 0 && pitching.topicsDone >= pitching.topics ? (
-                      <p className="text-sm text-tertiary">No first pitches here. The Pitcher writes for this topic in its next batch, once you approve.</p>
+                      <p className="text-sm text-tertiary">No first pitches here. We write for this topic in the next batch, once you approve.</p>
                     ) : (
                       <div className="flex flex-col gap-2">
                         <p className="flex items-center gap-2 text-sm text-tertiary">
-                          <Spinner /> The Strategist is pitching this topic…
+                          <Spinner /> We are pitching this topic…
                         </p>
                         <div className="h-3 w-4/5 animate-pulse rounded bg-secondary" />
                         <div className="h-3 w-3/5 animate-pulse rounded bg-secondary" />
@@ -168,38 +175,53 @@ export function StrategyView({
             );
           })}
         </div>
-      </section>
+      </Reveal>
 
       {proposal.launch && (
-        <section>
+        <Reveal i={3}>
           <SectionTitle
             title={`Your Launch, the first ${proposal.launch.publishOverDays} days`}
             lede={`${proposal.launch.target} posts written in ${proposal.launch.produceByDay} days and published over ${proposal.launch.publishOverDays}, so the blog is never quiet for long.`}
           />
           <LaunchLine launch={proposal.launch} />
-        </section>
+        </Reveal>
       )}
 
       {proposal.ranking.searches.length > 0 && (
-        <section>
+        <Reveal i={4}>
           <SectionTitle title="Searches to win" lede="Long-tail first: a new blog ranks slowly." />
           <Card>
+            <CardBody className="grid gap-3 border-b border-secondary text-sm text-secondary md:grid-cols-3">
+              <p>
+                <span className="font-medium text-primary">Volume.</span> How many times a month people search it.
+              </p>
+              <p>
+                <span className="font-medium text-primary">Difficulty.</span> 0 to 100. Under 30 is winnable for a new blog; 30 to 60 is contested; above 60 belongs to the big sites.
+              </p>
+              <p>
+                <span className="font-medium text-primary">Position.</span> Where you appear on Google today. New blogs start outside the top 100.
+              </p>
+            </CardBody>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b border-secondary text-left text-xs text-tertiary">
                   <tr>
-                    <th className="px-5 py-2.5 font-medium">Search</th>
-                    <th className="px-3 py-2.5 font-medium">A month</th>
-                    <th className="px-3 py-2.5 font-medium">You today</th>
-                    <th className="px-5 py-2.5 font-medium">Why</th>
+                    <th className="px-5 py-2.5 font-medium">Target search term</th>
+                    <th className="px-3 py-2.5 font-medium">Volume</th>
+                    <th className="px-3 py-2.5 font-medium">Difficulty</th>
+                    <th className="px-3 py-2.5 font-medium">Position</th>
+                    <th className="px-5 py-2.5 font-medium">Why this one</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-secondary">
                   {proposal.ranking.searches.map((s) => (
                     <tr key={s.query}>
-                      <td className="px-5 py-2.5 text-primary">{s.query}</td>
+                      <td className="px-5 py-2.5">
+                        <code className="rounded bg-brand-primary px-1.5 py-0.5 font-mono text-[13px] text-brand-secondary">{s.query}</code>
+                      </td>
                       <td className="px-3 py-2.5 text-secondary tabular-nums">{s.volume != null ? fmt(s.volume) : "–"}</td>
-                      <td className="px-3 py-2.5 text-tertiary">{s.position != null ? `#${s.position}` : "Not in the top 100"}</td>
+                      <td className="px-3 py-2.5 text-secondary tabular-nums">{s.difficulty != null ? s.difficulty : "–"}</td>
+                      <td className="px-3 py-2.5 text-tertiary tabular-nums">{s.position != null ? `#${s.position}` : "Not in the top 100"}</td>
                       <td className="px-5 py-2.5 text-tertiary">{s.why}</td>
                     </tr>
                   ))}
@@ -208,12 +230,12 @@ export function StrategyView({
             </div>
             <CardFooter>Volumes and rankings from DataForSEO, this week.</CardFooter>
           </Card>
-        </section>
+        </Reveal>
       )}
 
       {proposal.watchedSites.length > 0 && (
-        <section>
-          <SectionTitle title="Sites the Scout watches" />
+        <Reveal i={5}>
+          <SectionTitle title="Sites we watch" />
           <div className="flex flex-wrap gap-2">
             {proposal.watchedSites.map((w) => (
               <Badge key={w.url} color="gray" size="md">
@@ -221,7 +243,52 @@ export function StrategyView({
               </Badge>
             ))}
           </div>
-        </section>
+        </Reveal>
+      )}
+
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-8">
+      {failedAsk && (
+        <div className="flex flex-col gap-3 rounded-lg bg-secondary px-4 py-3 text-sm text-primary sm:flex-row sm:items-center">
+          <p className="flex-1">
+            <span className="font-medium">Your last request didn't go through.</span> {failedAsk.error} This is still the plan from before.
+          </p>
+          <Button size="sm" color="secondary" iconLeading={RefreshCw01} isDisabled={busy || lastRound} onClick={() => void revise(failedAsk.request, "retry")}>
+            Send it again
+          </Button>
+        </div>
+      )}
+      {previous && (
+        <Reveal i={0}>
+          <Card>
+            <CardHeader title="What changed" description="Compared with the plan before." />
+            <CardBody>
+              <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-secondary">
+                {describeChanges(previous, proposal).map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </CardBody>
+          </Card>
+        </Reveal>
+      )}
+      {previous ? (
+        <details className="group rounded-xl ring-1 ring-secondary ring-inset">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-medium text-primary">
+            Your plan in full
+            <ChevronDown className="size-4 text-quaternary transition group-open:rotate-180" />
+          </summary>
+          <div className="flex flex-col gap-8 border-t border-secondary p-5">
+            {planBody}
+          </div>
+        </details>
+      ) : (
+        <>
+          {planBody}
+        </>
       )}
 
       {questions.length > 0 && (
@@ -231,7 +298,7 @@ export function StrategyView({
             lede={
               lastRound
                 ? "That was the last round. Approve the plan as it is; you can change it any time on Goals."
-                : `Answer ${questions.length === 1 ? "it" : questions.length === 2 ? "both" : `all ${questions.length}`} and send them together. The Strategist folds your answers into the plan, and approving unlocks then.`
+                : `Answer ${questions.length === 1 ? "it" : questions.length === 2 ? "both" : `all ${questions.length}`} and send them together. We fold your answers into the plan, and approving unlocks then.`
             }
           />
           {lastRound ? (
@@ -262,6 +329,28 @@ export function StrategyView({
         </section>
       )}
 
+      <section>
+        <SectionTitle
+          title="Anything else we should know?"
+          lede={questions.length > 0 && !lastRound ? "Optional. Sent with your answers." : "Optional. Tell us what to change or keep, in your own words."}
+        />
+        <TextField value={notes} onChange={setNotes} className="flex flex-col gap-1.5">
+          <Label className="sr-only">Notes for the plan</Label>
+          <TextArea
+            rows={3}
+            placeholder="For example: keep the topics, but make the first posts shorter."
+            className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-md text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+          />
+        </TextField>
+        {!(questions.length > 0 && !lastRound) && (
+          <div className="mt-3">
+            <Button size="sm" color="secondary" isDisabled={!notes.trim() || busy || lastRound} isLoading={busy} onClick={() => void revise(notes.trim(), "notes").then(() => setNotes(""))}>
+              Send notes
+            </Button>
+          </div>
+        )}
+      </section>
+
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-secondary bg-primary/95 backdrop-blur md:-mx-8 lg:mr-0">
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-8 lg:pr-0">
           {asking ? (
@@ -278,19 +367,18 @@ export function StrategyView({
                 Cancel
               </Button>
               <Button size="sm" isDisabled={!ask.trim() || busy} isLoading={busy} onClick={() => void revise(ask.trim(), "changes")}>
-                Send to the Strategist
+                Send changes
               </Button>
             </>
           ) : (
             <>
               <span className="text-sm text-tertiary">
-                Round {round} of {MAX_ROUNDS}
                 {pitches.length > 0
-                  ? ` · ${pitches.length} pitches ready`
+                  ? `${pitches.length} pitches ready`
                   : pitching
-                    ? ` · pitching topic ${Math.min(pitching.topicsDone + 1, pitching.topics)} of ${pitching.topics}`
-                    : " · pitches on their way"}
-                {mustAnswer && ` · Answer its ${questions.length === 1 ? "question" : `${questions.length} questions`} to approve`}
+                    ? `Pitching topic ${Math.min(pitching.topicsDone + 1, pitching.topics)} of ${pitching.topics}`
+                    : "Pitches on their way"}
+                {mustAnswer && ` · Answer our ${questions.length === 1 ? "question" : `${questions.length} questions`} to approve`}
               </span>
               <div className="ml-auto flex gap-2">
                 <Button color="secondary" size="sm" isDisabled={lastRound || busy} onClick={() => setAsking(true)}>
@@ -312,19 +400,19 @@ function NumberTile({ value, label, why, basis }: { value: string; label: string
   const [open, setOpen] = useState(false);
   return (
     <Card>
-      <CardBody className="flex flex-col gap-1">
-        <span className="type-figure text-primary">{value}</span>
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex w-full cursor-pointer flex-col gap-1 rounded-xl p-5 text-left outline-none transition hover:bg-primary_hover focus-visible:ring-2 focus-visible:ring-brand">
+        <span className="type-numeral text-primary">{value}</span>
         <span className="text-sm text-secondary">{label}</span>
-        <button type="button" onClick={() => setOpen((o) => !o)} className="mt-2 flex items-center gap-1 self-start text-xs text-tertiary hover:text-secondary">
+        <span className="mt-2 flex items-center gap-1 self-start text-xs text-tertiary">
           Why <ChevronDown className={cx("size-3.5 transition", open && "rotate-180")} />
-        </button>
+        </span>
         {open && (
-          <div className="mt-1 flex flex-col gap-1.5 text-sm">
-            <p className="text-secondary">{why}</p>
-            {basis && <p className="text-xs text-quaternary">From: {basis}</p>}
-          </div>
+          <span className="mt-1 flex flex-col gap-1.5 text-sm">
+            <span className="text-secondary">{why}</span>
+            {basis && <span className="text-xs text-quaternary">From: {basis}</span>}
+          </span>
         )}
-      </CardBody>
+      </button>
     </Card>
   );
 }

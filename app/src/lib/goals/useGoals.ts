@@ -88,6 +88,12 @@ export function useStrategistState() {
   return useMemo(() => strategistState(), [v]);
 }
 
+/** The round before `proposal` (what it replaced), or null on a first plan. */
+export function usePreviousProposal(proposal: Proposal | null): Proposal | null {
+  const v = useVersion();
+  return useMemo(() => (proposal ? goalsAdapter.previousProposal(proposal.quarter) : null), [v, proposal?.id, proposal?.quarter]);
+}
+
 /** The newest proposal in any quarter the app shows (sent, being revised or approved), or null. */
 export function useLatestProposal(): Proposal | null {
   const v = useVersion();
