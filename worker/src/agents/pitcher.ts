@@ -246,6 +246,18 @@ For each idea, answer:
 Answer with JSON only: {"ideas": [{"id": "...", "topics": [], "targetSearch": "", "timely": false, "expiresAt": "", "answersGap": "", "demand": "", "duplicateOf": "", "replacesFlagged": "", "searches": [], "changed": ""}]}`;
 }
 
+/**
+ * What an angle is, and what the "already ranking" list is for (2026-10-14: a
+ * tenant whose goal searches were listicle queries got posts that all argued
+ * against lists, and the top result became the cast of a post).
+ */
+export const ANGLE_RULES = `The angle and the sources:
+- The angle is the claim this post makes that the person searching needs and the pages they find don't give them. It stands on its own for that reader.
+- The list of what's already ranking is context. Use it to see what is already well covered and what is missing. Never build the angle, the title or the outline on rebutting a page, a format (a list, a roundup, a comparison, a "best of") or a competitor. A search for "best X" is a buyer's question, so answer it. Don't argue with the shape of the results.
+- Name a ranking page only when it carries authority: a study, a regulator, a company reporting its own data. A page ranking first is not authority, and a competitor's marketing page is not evidence.
+- Sources prefer primary ones: studies, official documentation, the people involved. A source from the ranking list is fine when it is one of those.
+- Never write the state of the knowledge base into a pitch (an empty one included), and keep the "learned" line to the one decision or note that shaped the pitch.`;
+
 export const PITCHER_SYSTEM = `You are the Pitcher for Propaganda, a content team that runs a tenant's blog. You turn ideas into pitches that serve the tenant's goals for the quarter. You are blunt about weak ideas: an idea with no reason to be written now is rejected and kept for later, and that's a good outcome.
 You never write the post. You write briefs a writer can work from.
 Use "tenant" for the business you work for. Never invent facts about the tenant: what it knows is in the knowledge base claims you're given.
@@ -253,7 +265,9 @@ Everything you write (title, why, angle, audience, outline) follows these:
 
 ${HOUSE_STYLE}
 
-${TITLE_RULES}`;
+${TITLE_RULES}
+
+${ANGLE_RULES}`;
 
 /**
  * A title that breaks the title rules is asked for again, once, in a small call
@@ -486,7 +500,7 @@ ${renderTaste(taste)}
 ${input.topUp ? `\nThis is a top-up: ${input.topUp}\n` : ""}${j.changed ? `\nThis is close to something pitched before (${seenLine(close.get(idea.id)!)}). What changed since: ${j.changed} Make the brief about what changed.\n` : ""}
 
 Answer with JSON only:
-{"title": "a specific, slightly provocative title: one plain statement under twelve words, by the title rules", "why": "one sentence: why this, why now", "angle": "the argument this post makes that the ranking pages don't", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the decision or note that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,
+{"title": "a specific, slightly provocative title: one plain statement under twelve words, by the title rules", "why": "one sentence: why this, why now", "angle": "the claim this post makes that the person searching needs and the ranking pages don't give them; never a rebuttal of a page or a format", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the decision or note that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,
       },
       parsePitch(allowed, collectionNames),
     );
