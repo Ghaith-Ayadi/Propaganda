@@ -1,0 +1,10 @@
+@import "tailwindcss";
+@import "../../app/src/styles/theme.css";
+@import "../../app/src/styles/typography.css";
+
+@custom-variant dark (&:where(.dark-mode, .dark-mode *));
+
+html,
+body {
+  font-family: var(--font-body);
+}

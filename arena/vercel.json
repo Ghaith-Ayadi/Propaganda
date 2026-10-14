@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/auth/v1/:path*", "destination": "https://app.propaganda.pub/auth/v1/:path*" },
+    { "source": "/rest/v1/:path*", "destination": "https://app.propaganda.pub/rest/v1/:path*" },
+    { "source": "/worker/v1/:path*", "destination": "https://app.propaganda.pub/worker/v1/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
