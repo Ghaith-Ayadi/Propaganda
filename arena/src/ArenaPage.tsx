@@ -20,10 +20,14 @@ import {
 } from "./api";
 
 const AGENTS: { id: ArenaAgent; label: string; detail: string }[] = [
+  { id: "writer", label: "Writer: writing", detail: "Five pieces from the tenant's approved briefs, one at a time. Every rival writes each piece with the Writer's own prompt. You vote blind on each; the models show after your vote. Nothing is saved as a post." },
   { id: "pitcher", label: "Pitcher: judging", detail: "Judges the tenant's waiting ideas (up to 25) against its goals and what it already has, with the Pitcher's own prompt." },
   { id: "listener", label: "Listener: a call", detail: "Reads one call with the Listener's own prompt and pulls out content gaps and candidate facts." },
 ];
 const FALLBACK_MODELS = ["deepseek/deepseek-v4-pro", "alibaba/qwen3.7-plus", "openai/gpt-6-sol"];
+const WRITER_MODELS = ["openai/gpt-6.1-sol", "alibaba/qwen3.8-max", "deepseek/deepseek-v4-pro", "anthropic/claude-opus-5.5"];
+/** A writing round is this many pieces. */
+const PIECES = 5;
 /** Offered in the model fields; any AI Gateway id still works. */
 const SUGGESTED_MODELS = [
   "deepseek/deepseek-v4-pro",
@@ -38,19 +42,21 @@ const SUGGESTED_MODELS = [
   "anthropic/claude-opus-5.5",
   "anthropic/claude-fable-5.1",
 ];
-const LETTERS = ["A", "B", "C"];
+const LETTERS = ["A", "B", "C", "D"];
 const usd = (n: number) => `$${n < 0.01 ? n.toFixed(4) : n.toFixed(3)}`;
 const field = "rounded-lg border border-secondary bg-primary px-2 py-1.5 text-sm text-secondary";
 
 export function ArenaPage() {
-  const [agent, setAgent] = useState<ArenaAgent>("pitcher");
+  const [agent, setAgent] = useState<ArenaAgent>("writer");
   const [tenants, setTenants] = useState<{ id: string; name: string }[]>([]);
   const [site, setSite] = useState("");
   const [sources, setSources] = useState<ArenaSource[]>([]);
   const [source, setSource] = useState("");
   const [transcript, setTranscript] = useState("");
   const [title, setTitle] = useState("");
-  const [models, setModels] = useState<string[]>(FALLBACK_MODELS);
+  const [models, setModels] = useState<string[]>(WRITER_MODELS);
+  const [piece, setPiece] = useState(0);
+  const [costSoFar, setCostSoFar] = useState(0);
   const [round, setRound] = useState<ArenaRound | null>(null);
   const [voted, setVoted] = useState<string | null | undefined>(undefined);
   const [note, setNote] = useState("");
@@ -74,13 +80,21 @@ export function ArenaPage() {
   useEffect(() => {
     if (!site) return;
     setSource("");
-    arenaSources(site).then((r) => {
+    arenaSources(site, agent).then((r) => {
       setSources(r.sources);
     }, fail("ArenaPage.sources"));
-  }, [site]);
+  }, [site, agent]);
+
+  useEffect(() => {
+    setModels(agent === "writer" ? WRITER_MODELS : FALLBACK_MODELS);
+    setPiece(0);
+    setCostSoFar(0);
+    setRound(null);
+  }, [agent]);
 
   const picked = models.map((m) => m.trim()).filter(Boolean);
-  const ready = !!site && picked.length >= 2 && (agent === "pitcher" || !!source || !!transcript.trim());
+  const pieces = sources.slice(0, PIECES);
+  const ready = !!site && picked.length >= 2 && (agent === "pitcher" || (agent === "writer" ? piece < pieces.length : !!source || !!transcript.trim()));
   const table = useMemo(() => (votes ? standings(votes, agent) : []), [votes, agent]);
 
   const run = async () => {
@@ -96,6 +110,7 @@ export function ArenaPage() {
           site,
           models: picked,
           ...(agent === "listener" ? (source ? { source } : { transcript, title }) : {}),
+          ...(agent === "writer" ? { brief: pieces[piece]!.id } : {}),
         }),
       );
     } catch (err) {
@@ -111,6 +126,10 @@ export function ArenaPage() {
     try {
       await saveVote(round, winner, note);
       setVoted(winner);
+      if (agent === "writer") {
+        setCostSoFar((c) => c + round.costUsd);
+        setPiece((p) => p + 1);
+      }
       listVotes().then(setVotes, fail("ArenaPage.votes"));
     } catch (err) {
       fail("ArenaPage.vote")(err);
@@ -150,7 +169,7 @@ export function ArenaPage() {
             <select aria-label="Call" value={source} onChange={(e) => setSource(e.target.value)} className={field}>
               <option value="">Paste a transcript…</option>
               {sources.map((s) => (
-                <option key={s.id} value={s.id}>{`${s.title || "untitled"} (${(s.occurred ?? s.created).slice(0, 10)})`}</option>
+                <option key={s.id} value={s.id}>{`${s.title || "untitled"} (${(s.occurred ?? s.created ?? "").slice(0, 10)})`}</option>
               ))}
             </select>
           )}
@@ -170,9 +189,9 @@ export function ArenaPage() {
         )}
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-tertiary">Models (AI Gateway ids; leave the third empty for two)</span>
-          <div className="grid gap-2 md:grid-cols-3">
-            {[0, 1, 2].map((i) => (
+          <span className="text-xs font-medium text-tertiary">Models (AI Gateway ids; leave the last ones empty for fewer)</span>
+          <div className="grid gap-2 md:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
               <input
                 key={i}
                 aria-label={`Model ${i + 1}`}
@@ -196,8 +215,9 @@ export function ArenaPage() {
             onClick={() => void run()}
             className="rounded-lg bg-primary-solid px-3 py-1.5 font-medium text-white hover:opacity-90 disabled:opacity-50"
           >
-            {busy === "run" ? "Asking the models…" : "Run a round"}
+            {busy === "run" ? "Asking the models…" : agent === "writer" ? (piece >= pieces.length && pieces.length ? "Round finished" : `Write piece ${piece + 1} of ${Math.min(PIECES, pieces.length) || PIECES}`) : "Run a round"}
           </button>
+          {agent === "writer" && <span className="text-xs text-tertiary">{pieces.length < PIECES ? `Only ${pieces.length} approved brief${pieces.length === 1 ? "" : "s"} on this tenant. ` : ""}{piece > 0 && `Cost so far ${usd(costSoFar)}.`}</span>}
           <span className="text-xs text-quaternary">Capped per round on the worker. Every call is in the cost log as arena:{agent}.</span>
         </div>
         {error && <p className="text-error-primary">{error}</p>}
@@ -209,7 +229,7 @@ export function ArenaPage() {
             <h3 className="type-heading text-primary">{round.task}</h3>
             {revealed && <span className="text-tertiary">Round cost {usd(round.costUsd)}</span>}
           </div>
-          <div className={`grid gap-3 ${round.entries.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+          <div className={`grid gap-3 ${round.entries.length === 4 ? "lg:grid-cols-2 xl:grid-cols-4" : round.entries.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
             {round.entries.map((e, i) => (
               <article key={i} className={`flex min-w-0 flex-col rounded-xl border ${revealed && voted === e.model ? "border-brand" : "border-secondary"}`}>
                 <header className="flex items-center justify-between gap-2 border-b border-secondary px-4 py-2.5">
@@ -299,6 +319,16 @@ function Answer({ agent, entry, ideas }: { agent: ArenaAgent; entry: ArenaEntry;
       <>
         {problem}
         <pre className="whitespace-pre-wrap break-words font-mono text-xs text-secondary">{entry.raw}</pre>
+      </>
+    );
+  }
+  if (agent === "writer") {
+    return (
+      <>
+        {problem}
+        <h4 className="text-base font-semibold text-primary">{text(a.title)}</h4>
+        {text(a.subtitle) && <p className="mb-2 text-tertiary">{text(a.subtitle)}</p>}
+        <pre className="whitespace-pre-wrap break-words font-sans text-sm text-secondary">{text(a.markdown)}</pre>
       </>
     );
   }
