@@ -48,7 +48,8 @@ const MODEL_RE = /^[a-z0-9-]+\/[a-z0-9.:-]+$/;
 /**
  * The tenants a round may read: Ayadi's own. Named by site slug, so a tenant
  * that signs up again (PPGD, 2026-10-14) is still his; ARENA_TENANTS adds ids.
- * A customer's ideas and calls never go to models it didn't agree to.
+ * A customer's ideas and calls never go to models it didn't agree to, so a slug
+ * counts only while a superadmin is a member of that site.
  */
 const ARENA_TENANT_IDS = (process.env.ARENA_TENANTS ?? "verbatimsite000")
   .split(",")
@@ -62,7 +63,10 @@ const ARENA_TENANT_SLUGS = (process.env.ARENA_TENANT_SLUGS ?? "verbatim,ppgd")
 /** The ids a round may read now. Without a database (the in-process test) only the ids. */
 export async function arenaTenantIds(db: Pool | null): Promise<string[]> {
   if (!db || !ARENA_TENANT_SLUGS.length) return ARENA_TENANT_IDS;
-  const { rows } = await db.query<{ id: string }>("select id from public.sites where slug = any($1)", [ARENA_TENANT_SLUGS]);
+  const { rows } = await db.query<{ id: string }>(`select s.id from public.sites s
+      where s.slug = any($1)
+        and exists (select 1 from public.site_members m join private.superadmins a on a.user_id = m.user_id where m.site = s.id)`,
+    [ARENA_TENANT_SLUGS]);
   return [...new Set([...ARENA_TENANT_IDS, ...rows.map((r) => r.id)])];
 }
 

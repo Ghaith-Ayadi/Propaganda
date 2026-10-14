@@ -34,4 +34,4 @@ A writing round (Ayadi, 2026-10-14) is five pieces. Each piece is one of the ten
 
 ## Which tenants
 
-A round reads only Ayadi's own tenants, found by site slug (`ARENA_TENANT_SLUGS`, default `verbatim,ppgd`), so a tenant that signs up again keeps working. `ARENA_TENANTS` adds ids.
+A round reads only Ayadi's own tenants, found by site slug (`ARENA_TENANT_SLUGS`, default `verbatim,ppgd`) when a superadmin is a member of the site, so a tenant that signs up again keeps working. `ARENA_TENANTS` adds ids.
