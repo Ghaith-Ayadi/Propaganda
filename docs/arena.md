@@ -21,7 +21,7 @@ Nothing else is shared. The Arena has no product code in it and the product Admi
 
 1. Create a Vercel project for `arena/` with Root Directory left empty and Git integration off, and add the `VERCEL_ARENA_PROJECT_ID` repo secret (the token and org id are the product's).
 2. Point `arena.propaganda.pub` at it.
-3. Add `https://arena.propaganda.pub/**` to the auth server's redirect allow list (`ADDITIONAL_REDIRECT_URLS` in Bedrock's propaganda-supabase), or Google sign-in lands on the product instead.
+3. Add `https://arena.propaganda.pub/**` to the auth server's redirect allow list (`GOTRUE_URI_ALLOW_LIST` in Bedrock's `compose/propaganda-supabase/docker-compose.yml`), or Google sign-in lands on the product instead.
 4. Build env on that project: `VITE_SUPABASE_URL=https://arena.propaganda.pub` (same origin, so no CORS) and `VITE_SUPABASE_ANON_KEY` (the product's public key). `vercel.json` rewrites `/auth/v1`, `/rest/v1` and `/worker/v1` to `app.propaganda.pub`.
 
 ## Local

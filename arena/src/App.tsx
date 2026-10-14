@@ -5,7 +5,7 @@ import { ArenaError, client, emailCodesEnabled, signInWithGoogle, userMessage } 
 
 // Sign-in is Google (the product's accounts), plus an emailed one-time code when the server can
 // send one. Google comes back to this page, so the auth server must allow this origin as a
-// redirect URL (ADDITIONAL_REDIRECT_URLS in Bedrock).
+// redirect URL (GOTRUE_URI_ALLOW_LIST in Bedrock).
 // Only superadmins can run a round or read the votes; anyone else sees empty
 // pages and refusals.
 
