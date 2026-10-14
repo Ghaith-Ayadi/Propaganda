@@ -51,7 +51,7 @@ export function FirstPitches({ day, progress, continuing }: { day: FirstDay; pro
             ? "Review the drafts that are ready and decide on the pitches left. Everything you skip waits in the Pipeline."
             : pitches.length === 0 && pitchingEnded
               ? "Your plan is approved."
-              : "The Strategist pitched these with your plan. Approve the ones you'd publish; a reason on a rejection shapes its replacement. The strongest are already being written."
+              : "We pitched these with your plan. Approve the ones you'd publish; a reason on a rejection shapes its replacement. The strongest are already being written."
         }
       />
       <div className="flex flex-wrap gap-2 text-sm">
@@ -75,11 +75,11 @@ export function FirstPitches({ day, progress, continuing }: { day: FirstDay; pro
 
       {pitches.length === 0 && pitchingEnded ? (
         <p className="rounded-lg bg-secondary px-3.5 py-2.5 text-sm text-primary">
-          No first pitches came through this time. The Pitcher writes your first batch on its next morning run, and it lands here and in the Pipeline.
+          No first pitches came through this time. We write your first batch on the next morning run, and it lands here and in the Pipeline.
         </p>
       ) : pitches.length === 0 ? (
         <p className="flex items-center gap-2 text-sm text-tertiary">
-          <Spinner /> The Strategist is writing your first pitches. They show up here one topic at a time.
+          <Spinner /> We are writing your first pitches. They show up here one topic at a time.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
@@ -154,10 +154,10 @@ function PitchCard({ p, draft, open, onToggle }: { p: PipelineItem; draft: Retur
               <CheckCircle className="size-4 text-fg-success-primary" /> Draft ready: open it <ArrowRight className="size-4 text-quaternary" />
             </button>
           ) : draft === "failed" ? (
-            <p className="text-xs text-tertiary">The Writer couldn't finish this draft. Approve the pitch and it tries again.</p>
+            <p className="text-xs text-tertiary">We couldn't finish this draft. Approve the pitch and we'll try again.</p>
           ) : (
             <p className="flex items-center gap-2 text-xs text-tertiary">
-              <Spinner /> The Writer is drafting it
+              <Spinner /> We are drafting it
             </p>
           )}
         </div>
@@ -243,7 +243,7 @@ function PitchCard({ p, draft, open, onToggle }: { p: PipelineItem; draft: Retur
           )}
           {p.stage === "rejected" && p.rejectReason && (
             <p className="border-t border-secondary px-5 py-3 text-sm text-tertiary">
-              “{p.rejectReason}”. {p.learned ? "" : "The Strategist writes one replacement after your note."}
+              “{p.rejectReason}”. {p.learned ? "" : "We write one replacement after your note."}
             </p>
           )}
         </>

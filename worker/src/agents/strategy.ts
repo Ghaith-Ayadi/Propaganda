@@ -403,6 +403,14 @@ export function emptyBrief(o: { website: string; answers: Record<string, string>
   return ["offer", "searches", "watch", "upcoming"].every((key) => !String(o.answers[key] ?? "").trim());
 }
 
+/**
+ * Revisions a quarter's plan can take. The tenant never sees a number; this is
+ * the server-side limit behind the UI's (app gettingStarted/state.ts MAX_ROUNDS,
+ * keep them equal), so a direct call can't run the Strategist without end.
+ */
+export const MAX_PLAN_ROUNDS = 12;
+export const ROUND_LIMIT_ERROR = "This plan has been revised as many times as it can be here. Approve it as it is; you can change it any time on Goals.";
+
 export const EMPTY_BRIEF_ERROR =
   "Nothing to plan from yet: no website, no onboarding answers, no plan and no posts. Answer the onboarding questions (your website, what you sell, the searches you want to be found by) and run the Strategist again.";
 

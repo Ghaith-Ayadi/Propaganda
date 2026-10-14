@@ -932,7 +932,7 @@ function PlanStep({
               <Button color="tertiary" size="sm" onClick={() => setAsking(false)}>
                 Cancel
               </Button>
-              <Button size="sm" isDisabled={!ask.trim() || round >= 5} onClick={() => onRevise(ask.trim())}>
+              <Button size="sm" isDisabled={!ask.trim() || round >= 12} onClick={() => onRevise(ask.trim())}>
                 Send to the Strategist
               </Button>
             </>
@@ -943,7 +943,7 @@ function PlanStep({
                 {!answered && " · Answer its 3 questions to approve"}
               </span>
               <div className="ml-auto flex gap-2">
-                <Button color="secondary" size="sm" isDisabled={round >= 5} onClick={() => setAsking(true)}>
+                <Button color="secondary" size="sm" isDisabled={round >= 12} onClick={() => setAsking(true)}>
                   Ask for changes
                 </Button>
                 <Button size="sm" iconTrailing={ArrowRight} isDisabled={!answered} onClick={onApprove}>

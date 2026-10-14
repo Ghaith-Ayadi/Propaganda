@@ -19,9 +19,9 @@ import { useVoiceGuide } from "@/lib/tenantConfig";
 import { reportError } from "@/lib/telemetry";
 import { userMessage } from "@/lib/errors";
 import { cx } from "@/utils/cx";
-import { Choice, Shimmer, Spinner, StepTitle } from "./bits";
+import { Choice, clock, Shimmer, Spinner, StepTitle } from "./bits";
 import { PLAN_STEPS, type StrategistProgress } from "./progress";
-import { MAX_ROUNDS, type FirstDay } from "./state";
+import { type FirstDay } from "./state";
 import { useNow } from "./TodayPanel";
 
 /** About how long the Strategist takes, for the bar when the worker hasn't answered. */
@@ -43,9 +43,14 @@ export function PlanningStep({ day, progress }: { day: FirstDay; progress: Strat
     <div className="flex flex-col gap-10">
       <section>
         <StepTitle
-          title={day.failed ? "The Strategist stopped" : revising ? `Revising your plan, round ${round} of ${MAX_ROUNDS}` : "The Strategist is writing your plan"}
+          title={day.failed ? "We stopped" : revising ? "Revising your plan" : "We're writing your plan"}
           lede={day.failed ?? "About 3 minutes. Your plan opens here as soon as it's ready."}
         />
+        {!day.failed && (
+          <p className="-mt-2 mb-5 flex items-center gap-2 text-sm text-tertiary tabular-nums" role="status">
+            <Spinner /> Working for {clock(now - started)}
+          </p>
+        )}
         {day.failed ? (
           <Retry />
         ) : (
@@ -89,13 +94,13 @@ function Retry() {
           await goalsActions.askStrategist("onboarding");
         } catch (err) {
           reportError("Strategist not asked again", err);
-          toast.add({ type: "error", title: "Couldn't reach the Strategist", description: userMessage(err) });
+          toast.add({ type: "error", title: "Couldn't start your plan", description: userMessage(err) });
         } finally {
           setBusy(false);
         }
       }}
     >
-      Ask the Strategist again
+      Try again
     </Button>
   );
 }
@@ -145,7 +150,7 @@ function WhileYouWait() {
 
   return (
     <section className="border-t border-secondary pt-8">
-      <StepTitle title="While you wait" lede="Four things the Strategist doesn't need. Save each one, or skip it: they all live in Settings later." />
+      <StepTitle title="While you wait" lede="Four things we don't need to plan. Save each one, or skip it: they all live in Settings later." />
       <div className="flex flex-col gap-4">
         <SaveCard id="blog" title="Your blog" summary={hosting === "elsewhere" ? "Lives on another site" : `Hosted on Propaganda at ${host}`}>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -184,7 +189,7 @@ function WhileYouWait() {
         <SaveCard
           id="voice"
           title="Your voice"
-          description="A few plain sentences on how you sound: who is speaking, how formal, what to avoid. The Writer reads it before every draft."
+          description="We pick up your style from all your published content and every piece of feedback you give. To start us off, add a few plain sentences: who is speaking, how formal, what to avoid."
           summary="Voice guide saved"
           onSave={async () => {
             if (voice != null) setGuide(voice.trim());

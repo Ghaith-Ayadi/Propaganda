@@ -5,7 +5,7 @@
 //   1. Your business     website, name, posts a month        (onboarding/SetupStep)
 //   2. Your strategy     the Strategist's four questions     (goals/StrategistOnboarding)
 //   3. Planning          the Strategist writes; the rest of the setup meanwhile
-//   4. The plan          read it, answer its questions, approve or ask again (5 rounds)
+//   4. The plan          read it, answer its questions, approve or ask again
 //   5-6. First pitches   the Strategist's first pitches; the Writer drafts the strongest 3
 //   7. Publish           the first draft opens in the editor; "Approve and publish now"
 //
@@ -52,6 +52,28 @@ export function GettingStartedPage() {
       void setSetting("onboarding.started", new Date().toISOString());
     }
   }, [day.ready, started, day.completed, day.proposal?.status]);
+
+  // Right after "Start": the drawer, header and page arrive one after another (index.css, data-intro).
+  const playIntro = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (playIntro.current === null) {
+      playIntro.current = false;
+      try {
+        playIntro.current = sessionStorage.getItem("propaganda:intro") === "1";
+        if (playIntro.current) sessionStorage.removeItem("propaganda:intro");
+      } catch {
+        /* no storage: no reveal */
+      }
+    }
+    if (!playIntro.current) return;
+    const root = document.documentElement;
+    root.setAttribute("data-intro-play", "");
+    const timer = window.setTimeout(() => root.removeAttribute("data-intro-play"), 2_500);
+    return () => {
+      window.clearTimeout(timer);
+      root.removeAttribute("data-intro-play");
+    };
+  }, []);
 
   const toTop = () => rootRef.current?.closest("main")?.scrollTo({ top: 0, behavior: "smooth" });
 
@@ -116,7 +138,7 @@ export function GettingStartedPage() {
         {!day.ready ? null : (
           <>
             <PhoneProgress step={day.step} done={day.done} active={day.active} />
-            <div className="flex flex-col gap-10 lg:flex-row lg:items-start">
+            <div data-intro="right" className="flex flex-col gap-10 lg:flex-row lg:items-start">
               <div className="min-w-0 flex-1">
                 {day.step === "business" && <BusinessStep />}
                 {day.step === "strategy" && <StrategyStep emptyBrief={day.emptyBrief} />}
@@ -174,11 +196,11 @@ function StrategyStep({ emptyBrief }: { emptyBrief: boolean }) {
     <section className="max-w-2xl">
       <StepTitle
         title="Your strategy"
-        lede="Four questions, then any plan you already have. The Strategist turns it into a plan and your first pitches, in about 3 minutes. You'll set up the rest meanwhile."
+        lede="Four questions, then any plan you already have. We turn it into a plan and your first pitches, in about 3 minutes. You'll set up the rest meanwhile."
       />
       {emptyBrief && (
         <p className="mb-5 rounded-lg bg-secondary px-3.5 py-2.5 text-sm text-primary">
-          The Strategist had nothing to plan from. Answer at least what you sell and the searches you want to be found by, then write the plan again.
+          We had nothing to plan from. Answer at least what you sell and the searches you want to be found by, then write the plan again.
         </p>
       )}
       <StrategistOnboarding submitLabel="Write my plan" submitIcon={Stars01} onDone={() => void refreshGoals()} />

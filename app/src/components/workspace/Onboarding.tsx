@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash01 } from "@untitledui/icons";
+import { Avatar } from "@/components/base/avatar/avatar";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { clientFor, createSite, isSlugAvailable, type Account, type SiteRef } from "@/lib/accounts";
@@ -30,6 +31,13 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
+}
+
+/** "acme.com" is enough: the scheme is ours to add. Anything already starting with http(s):// stays as typed. */
+export function normaliseWebsite(raw: string): string {
+  const v = raw.trim().replace(/\s+/g, "");
+  if (!v) return "";
+  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
 }
 
 const SLUG_RE = /^[a-z0-9-]{2,40}$/;
@@ -138,7 +146,7 @@ export function Onboarding({
       if (plan === "full") {
         // Getting started's "Your business" was this screen: it opens on the strategy.
         settings.push(
-          ["tenant.website", website.trim()],
+          ["tenant.website", normaliseWebsite(website)],
           ["strategist.reviewPerMonth", review],
           ["onboarding.business", new Date().toISOString()],
         );
@@ -178,11 +186,11 @@ export function Onboarding({
     screen === "plan" ? plan !== null : screen === "business" || screen === "site" ? canContinueName : screen === "collections" ? canContinueCollections : true;
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-primary">
-      <div className="w-[480px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary">
+    <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 overflow-y-auto bg-primary py-6">
+      <div className={cx("max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary", screen === "plan" ? "w-[760px]" : "w-[480px]")}>
         <div className="flex items-center justify-between">
           <h1 className="type-title text-primary">
-            {screen === "plan" && "Which Propaganda?"}
+            {screen === "plan" && "Welcome to Propaganda"}
             {screen === "business" && "Your business"}
             {screen === "site" && "Name your site"}
             {screen === "about" && "About you"}
@@ -195,20 +203,27 @@ export function Onboarding({
 
         <div className="mt-5">
           {screen === "plan" && (
-            <div className="space-y-3">
-              <PlanChoice
-                picked={plan === "full"}
-                onPick={() => setPlan("full")}
-                title="Propaganda"
-                body="The agents plan your blog, pitch posts and draft them. You review and publish. Your first article goes out today."
-              />
-              <PlanChoice
-                picked={plan === "lite"}
-                onPick={() => setPlan("lite")}
-                title="Propaganda Lite"
-                body="The editor and your blog, free. You write every word yourself. No AI."
-              />
-            </div>
+            <>
+              <p className="-mt-2 mb-5 text-sm text-tertiary">Propaganda comes in two versions. You can always switch later.</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <PlanCard
+                  kind="full"
+                  picked={plan === "full"}
+                  onPick={() => setPlan("full")}
+                  title="Propaganda"
+                  features={["A plan for your blog, built from your site and your market", "Post pitches every week, drafted in your voice", "You review and publish; your first article goes out today"]}
+                  price="Starts from $599"
+                />
+                <PlanCard
+                  kind="lite"
+                  picked={plan === "lite"}
+                  onPick={() => setPlan("lite")}
+                  title="Propaganda Lite"
+                  features={["The editor and your blog", "Collections, images and your own domain", "You write every word; no AI"]}
+                  price="Free till thy kingdom come"
+                />
+              </div>
+            </>
           )}
 
           {screen === "business" && (
@@ -228,9 +243,9 @@ export function Onboarding({
               </Field>
               <p className="-mt-2 truncate text-xs text-tertiary">Your blog: {url}</p>
               <Field label="Your business's website" hint="The site your customers know you by.">
-                <Input size="sm" type="url" placeholder="https://example.com" value={website} onChange={setWebsite} />
+                <Input size="sm" placeholder="example.com" value={website} onChange={setWebsite} />
               </Field>
-              <Field label="Posts a month your team can review" hint="We do the writing. The Strategist plans to this number; change it any time.">
+              <Field label="Posts a month your team can review" hint="We do the writing and plan to this number; change it any time.">
                 <NativeSelect size="sm" value={review} onChange={(e) => setReview(e.target.value)} options={REVIEW_OPTIONS} />
               </Field>
             </div>
@@ -315,13 +330,7 @@ export function Onboarding({
           )}
         </div>
 
-        <div className="mt-6 flex items-center justify-between border-t border-secondary pt-4">
-          <div className="text-xs text-tertiary">
-            Signed in as {account.email} ·{" "}
-            <button onClick={onSignOut} className="text-tertiary underline hover:text-primary">
-              Sign out
-            </button>
-          </div>
+        <div className="mt-6 flex items-center justify-end border-t border-secondary pt-4">
           <div className="flex items-center gap-2">
             {step === 0 && onCancel && (
               <Button size="sm" color="tertiary" onClick={onCancel}>
@@ -346,24 +355,76 @@ export function Onboarding({
           </div>
         </div>
       </div>
+      <div className="flex items-center gap-2 text-xs text-tertiary">
+        <Avatar size="xs" src={account.avatar || undefined} initials={(account.name || account.email).slice(0, 1).toUpperCase()} alt={account.email} />
+        <span>Signed in as {account.email}</span>
+        <span aria-hidden>·</span>
+        <button onClick={onSignOut} className="underline hover:text-primary">
+          Sign out
+        </button>
+      </div>
     </div>
   );
 }
 
-function PlanChoice({ picked, onPick, title, body }: { picked: boolean; onPick: () => void; title: string; body: string }) {
+function PlanCard({ kind, picked, onPick, title, features, price }: { kind: Plan; picked: boolean; onPick: () => void; title: string; features: string[]; price: string }) {
   return (
     <button
       type="button"
       aria-pressed={picked}
       onClick={onPick}
       className={cx(
-        "block w-full rounded-lg bg-primary px-4 py-3 text-left shadow-xs ring-1 ring-inset transition",
+        "flex w-full flex-col gap-4 rounded-xl bg-primary p-4 text-left shadow-xs ring-1 ring-inset transition",
         picked ? "ring-2 ring-brand" : "ring-primary hover:bg-primary_hover",
       )}
     >
-      <div className="text-sm font-semibold text-primary">{title}</div>
-      <p className="mt-1 text-sm text-tertiary">{body}</p>
+      <PlanPicture kind={kind} />
+      <div className="text-md font-semibold text-primary">{title}</div>
+      <ul className="flex flex-1 flex-col gap-2 text-sm text-tertiary">
+        {features.map((f) => (
+          <li key={f} className="flex gap-2">
+            <span aria-hidden className="mt-2 size-1 shrink-0 rounded-full bg-quaternary" />
+            {f}
+          </li>
+        ))}
+      </ul>
+      <div className="rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-primary ring-1 ring-inset ring-secondary">{price}</div>
     </button>
+  );
+}
+
+/** A small, wordless picture of each version: a plan with three numbers, or a page being written. Shapes only, no sample data. */
+function PlanPicture({ kind }: { kind: Plan }) {
+  return (
+    <div aria-hidden className="aspect-square w-full overflow-hidden rounded-lg bg-secondary p-4 ring-1 ring-inset ring-secondary">
+      {kind === "full" ? (
+        <div className="flex h-full flex-col gap-3">
+          <div className="h-3 w-3/4 rounded bg-tertiary" />
+          <div className="h-2 w-1/2 rounded bg-tertiary opacity-60" />
+          <div className="grid grid-cols-3 gap-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex flex-col gap-2 rounded-md bg-primary p-2 ring-1 ring-inset ring-secondary">
+                <div className="h-4 w-2/3 rounded bg-tertiary" />
+                <div className="h-1.5 w-full rounded bg-tertiary opacity-60" />
+              </div>
+            ))}
+          </div>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-2 rounded-md bg-primary px-2 py-1.5 ring-1 ring-inset ring-secondary">
+              <div className="h-1.5 flex-1 rounded bg-tertiary" />
+              <div className="h-1.5 w-8 rounded bg-tertiary opacity-60" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex h-full flex-col gap-2.5 rounded-md bg-primary p-3 ring-1 ring-inset ring-secondary">
+          <div className="h-3.5 w-2/3 rounded bg-tertiary" />
+          {[100, 92, 96, 70, 100, 84].map((w, i) => (
+            <div key={i} className="h-1.5 rounded bg-tertiary opacity-60" style={{ width: `${w}%` }} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

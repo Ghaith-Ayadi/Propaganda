@@ -39,7 +39,7 @@ export function Spinner({ light }: { light?: boolean }) {
 }
 
 export function Shimmer({ className }: { className?: string }) {
-  return <div className={cx("animate-pulse rounded bg-secondary", className)} />;
+  return <div className={cx("skeleton rounded bg-secondary", className)} />;
 }
 
 export function Choice({ selected, onSelect, title, hint }: { selected: boolean; onSelect: () => void; title: string; hint: string }) {

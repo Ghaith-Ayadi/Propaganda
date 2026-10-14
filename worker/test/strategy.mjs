@@ -461,6 +461,19 @@ try {
   check(row4.proposal.topics.map((x) => x.name).join("|") === "Reliability|Scraping at scale", `the sent proposal keeps the previous topic names (${row4.proposal.topics.map((x) => x.name).join("|")})`);
   check(row4.proposal.ranking.searches.every((s) => ["Reliability", "Scraping at scale"].includes(s.topic)) && row4.proposal.watchedSites.every((w) => ["Reliability", "Scraping at scale"].includes(w.topic)), "with its searches and watched sites on those names");
   check(row4.proposal.questions.length === 0 && db.strategy_proposals[0].status === "superseded", "no question left, and the earlier proposal is superseded");
+
+  console.log("the revision limit");
+  const LIMITED = "limitedsite0000";
+  for (let i = 0; i < t.MAX_PLAN_ROUNDS; i++) {
+    db.strategy_proposals.push({ id: `limited${String(i).padStart(8, "0")}`, site: LIMITED, quarter: "2026-Q4", kind: i ? "revision" : "onboarding", status: "superseded", request: "", requested_by: "u1", proposal: null, edits: null, created: new Date(Date.now() - 1000 * (20 - i)).toISOString(), approved_at: null });
+  }
+  db.strategy_proposals.push({ id: "limitedlast0000", site: LIMITED, quarter: "2026-Q4", kind: "revision", status: "requested", request: "once more", requested_by: "u1", proposal: null, edits: null, created: new Date().toISOString(), approved_at: null });
+  const beforeLimit = prompts.length;
+  const [idLimit] = await t.dispatchStrategist();
+  const resLimit = await t.DBOS.retrieveWorkflow(idLimit).getResult();
+  const rowLimit = db.strategy_proposals.find((x) => x.id === "limitedlast0000");
+  check(resLimit.status === "failed" && rowLimit.status === "failed" && rowLimit.error === t.ROUND_LIMIT_ERROR, `a revision past the limit stops with the limit's own message (${JSON.stringify(resLimit)})`);
+  check(prompts.length === beforeLimit, "before any model call");
 } finally {
   await t.DBOS.shutdown();
   rest.close();

@@ -717,6 +717,10 @@ export const placeholderAdapter: GoalsAdapter = {
     };
   },
 
+  previousProposal() {
+    return null;
+  },
+
   proposal(quarter) {
     const ps = state.proposals.filter((p) => p.quarter === quarter && p.status !== "superseded");
     return ps.length ? ps[ps.length - 1] : null;

@@ -465,6 +465,15 @@ export const liveAdapter: GoalsAdapter & {
     return proposalOf(sent, sent.status === "approved" ? "approved" : "sent");
   },
 
+  previousProposal(quarter) {
+    const rows = s().proposals.filter((p) => (p.quarter === quarter || p.proposal?.quarter === quarter) && p.proposal);
+    const latest = [...rows].reverse().findIndex((p) => p.status === "sent" || p.status === "approved");
+    if (latest < 0) return null;
+    const before = rows.slice(0, rows.length - 1 - latest);
+    const prev = before[before.length - 1];
+    return prev ? proposalOf(prev, "superseded") : null;
+  },
+
   launch() {
     return null;
   },

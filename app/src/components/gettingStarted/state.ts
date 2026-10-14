@@ -25,10 +25,10 @@ import type { StrategistState } from "@/lib/goals/live";
  */
 export function stopReason(error: string | null | undefined): string {
   const e = error ?? "";
-  if (e.includes("Model call refused: tenant-budget")) return "This month's AI budget is spent, so the Strategist couldn't start. Your answers are saved; ask again once the budget is raised.";
-  if (e.includes("Model call refused: suspended")) return "AI is switched off for this workspace, so the Strategist couldn't start. Your answers are saved; ask again once it's back on.";
-  if (e.includes("Model call refused:") || e.includes("budget exceeded")) return "AI is paused on our side right now, so the Strategist couldn't start. Your answers are saved; ask again a little later.";
-  if (e.startsWith("Nothing to plan from") || e.startsWith("The Strategist stopped")) return e;
+  if (e.includes("Model call refused: tenant-budget")) return "This month's AI budget is spent, so we couldn't start. Your answers are saved; ask again once the budget is raised.";
+  if (e.includes("Model call refused: suspended")) return "AI is switched off for this workspace, so we couldn't start. Your answers are saved; ask again once it's back on.";
+  if (e.includes("Model call refused:") || e.includes("budget exceeded")) return "AI is paused on our side right now, so we couldn't start. Your answers are saved; ask again a little later.";
+  if (e.startsWith("Nothing to plan from") || e.startsWith("The Strategist stopped") || e.startsWith("This plan has been revised")) return e;
   return "Nothing was lost. Ask it again; your answers are saved.";
 }
 
@@ -46,14 +46,15 @@ export interface TimelineStep {
 export const TIMELINE: TimelineStep[] = [
   { id: "business", label: "Your business", minutes: 2 },
   { id: "strategy", label: "Your strategy", minutes: 5 },
-  { id: "planning", label: "The Strategist writes your plan", minutes: 3, agent: true },
+  { id: "planning", label: "We write your plan", minutes: 3, agent: true },
   { id: "plan", label: "Review and approve the plan", minutes: 5 },
   { id: "pitches", label: "Your first pitches", minutes: 10 },
-  { id: "drafts", label: "The Writer drafts the strongest 3", minutes: 5, agent: true },
+  { id: "drafts", label: "We draft the strongest 3", minutes: 5, agent: true },
   { id: "publish", label: "Publish your first article", minutes: 5 },
 ];
 
-export const MAX_ROUNDS = 5;
+/** A safety limit on revisions, never shown: the plan has no preset number of rounds. The worker holds the same number (agents/strategy.ts MAX_PLAN_ROUNDS): keep them equal. */
+export const MAX_ROUNDS = 12;
 export const STRATEGIST = "agent:strategist";
 
 export interface FirstDay {
