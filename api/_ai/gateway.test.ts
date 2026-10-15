@@ -79,6 +79,19 @@ test("a call is logged with tokens, priced cost, and workflow context", async ()
   assert.equal(calls[0].cost_usd, 0.002); // 1000*$1/M + 500*$2/M
 });
 
+test("cache puts a cache breakpoint on the prompt of an Anthropic call, and only there", async () => {
+  const seen: { prompt: any[] }[] = [];
+  setModelResolver(() => new MockLanguageModelV3({
+    doGenerate: async (o: any) => { seen.push(o); return await (ok as any).doGenerate(o); },
+  }));
+  await callModel({ site: "sitecache0000001", job: "t", model: "anthropic/claude-opus-5.5", background: true, system: "S", prompt: "P", cache: true });
+  await callModel({ site: "sitecache0000001", job: "t", model: "deepseek/deepseek-v4-pro", background: true, system: "S", prompt: "P", cache: true });
+  await callModel({ site: "sitecache0000001", job: "t", model: "anthropic/claude-opus-5.5", background: true, system: "S", prompt: "P" });
+  const marked = (o: { prompt: any[] }) => JSON.stringify(o.prompt).includes("cacheControl");
+  assert.deepEqual(seen.map(marked), [true, false, false]);
+  setModelResolver(() => ok);
+});
+
 test("tenant at 100%: background refused and nothing logged; editor still runs", async () => {
   gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 }; calls.length = 0;
   await assert.rejects(callModel(opts), (e: Error) => e instanceof BudgetError && e.reason === "tenant-budget");

@@ -332,7 +332,7 @@ try {
   const batch1 = db.content_batches.find((b) => b.site === SITE && b.number === 1);
   check(batch1?.state === "in_review" && batch1.quota === 5 && batch1.released_at, "batch 1 released now, quota 5");
   const calls1 = db.model_calls.filter((c) => c.job === "strategist:pitch" && !String(c.model).startsWith("dataforseo"));
-  check(calls1.length === 2 && calls1.every((c) => String(c.model).includes("fable")), `one Fable call per topic, logged (${calls1.map((c) => c.model)})`);
+  check(calls1.length === 2 && calls1.every((c) => String(c.model).includes("sonnet")), `one Sonnet call per topic, logged (${calls1.map((c) => c.model)})`);
   check(searches.length === 10, `one search per pitch (${searches.length})`);
   check(prompts.some((x) => x.includes("Write 7 different pitches") && x.includes("Kontra runs batch jobs on Temporal")), "the prompt carries the count and the knowledge base");
 
@@ -351,13 +351,13 @@ try {
   const P2 = "proposal2000002";
   db.strategy_proposals[0].status = "superseded";
   db.strategy_proposals.push(row(P2, "revision", "sent", proposal([["Reliability", 6, 9], ["Web data pipelines", 3, 5]], { kind: "revision", launch: null })));
-  const fable = () => db.model_calls.filter((c) => String(c.model).includes("fable")).length;
-  const callsBefore = fable();
+  const sonnet = () => db.model_calls.filter((c) => String(c.model).includes("sonnet")).length;
+  const callsBefore = sonnet();
   const res2 = await run(t.firstPitches, t.firstPitchesId(P2), P2);
   check(res2.kept.includes("Reliability") && JSON.stringify(res2.topics) === '["Web data pipelines"]' && res2.written === 3, `only the new topic is pitched (${JSON.stringify(res2)})`);
   check(scraping[0].status === "todo" && scraping.slice(1).every((b) => b.status === "cancelled" && b.reject_reason === "Topic left the plan"), "undecided pitches on the dropped topic are withdrawn; a decided one stays");
   check(strategistBriefs().filter((b) => b.topics[0] === "Reliability" && b.status === "pitched").length === 7, "the kept topic's pitches stay");
-  check(fable() - callsBefore === 1, "one model call, for the new topic");
+  check(sonnet() - callsBefore === 1, "one model call, for the new topic");
 
   console.log("one replacement for a rejected pitch");
   const rejected = strategistBriefs().find((b) => b.topics[0] === "Reliability");

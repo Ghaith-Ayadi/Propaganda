@@ -20,15 +20,18 @@ export function wireGateway(): void {
  * Model ids as the AI SDK / AI Gateway spells them. Both tiers are the gateway's
  * DEFAULT_MODEL (DeepSeek V4 Pro, Ayadi 2026-10-09) until a benchmark says a
  * job needs another; on a tenant's own Anthropic key it runs as BYOK_MODEL.
- * The Strategist is the exception (Ayadi, 2026-10-10, after the blind test of
- * the first PPGD proposal): Claude Fable 5.1, the one document that sets a
- * tenant's quarter, $0.30 to $0.80 a run. On a tenant's own key it is Fable
- * on that key.
+ * Two exceptions (Ayadi, 2026-10-14, after the blind benchmarks on PPGD): the
+ * Strategist, the one document that sets a tenant's quarter, is Claude Opus 5.5
+ * (about $0.21 a run at medium effort, less with prompt caching), and the first
+ * pitches are Claude Sonnet 5.5. It was Fable 5.1 for both since 2026-10-10. On a
+ * tenant's own Anthropic key they run on that key, like every `anthropic/` call.
  */
 export const MODELS = {
   base: process.env.AGENT_MODEL_BASE || DEFAULT_MODEL,
   advanced: process.env.AGENT_MODEL_ADVANCED || DEFAULT_MODEL,
-  strategist: process.env.AGENT_MODEL_STRATEGIST || "anthropic/claude-fable-5.1",
+  strategist: process.env.AGENT_MODEL_STRATEGIST || "anthropic/claude-opus-5.5",
+  /** The first pitches of a plan (workflows/first-day.ts). */
+  pitcher: process.env.AGENT_MODEL_PITCHER || "anthropic/claude-sonnet-5.5",
 };
 
 export interface Ask {
@@ -41,6 +44,8 @@ export interface Ask {
   maxOutputTokens?: number;
   /** How hard the model thinks first; unset is the provider's default. */
   reasoning?: Reasoning;
+  /** Cache the prompt on an Anthropic model (gateway.ts CallOptions.cache). */
+  cache?: boolean;
 }
 
 /** One model call as one step. Background work: it stops at the tenant's budget. */
