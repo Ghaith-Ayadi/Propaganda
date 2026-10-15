@@ -13,14 +13,15 @@ interface Layout {
   attributes: boolean;
   /** The left drawer shrinks to an icon rail instead of hiding. */
   sidebarCollapsed: boolean;
-  attributesWidth: number;
+  /** null until the writer drags the edge: each panel then uses its own default. */
+  attributesWidth: number | null;
 }
 
 const DEFAULTS: Layout = {
   sidebar: true,
   attributes: true,
   sidebarCollapsed: false,
-  attributesWidth: ATTRIBUTES_WIDTH.default,
+  attributesWidth: null,
 };
 
 export function clampWidth(w: number): number {

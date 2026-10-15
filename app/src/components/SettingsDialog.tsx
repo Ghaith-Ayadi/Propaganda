@@ -670,7 +670,7 @@ function BlockTypeSettings({ block }: { block: BlockKey }) {
         label="Font weight"
         value={getBlockProp(block, "fontWeight")}
         onChange={(v) => void setBlockProp(block, "fontWeight", v)}
-        min={100} max={900} step={100}
+        min={100} max={600} step={100}
       />
       <NumberField
         label="Line height"

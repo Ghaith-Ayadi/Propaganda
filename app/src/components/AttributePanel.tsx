@@ -31,6 +31,8 @@ import { Tabs } from "@/components/application/tabs/tabs";
 import { ResizeHandle } from "@/components/shell/ResizeHandle";
 import { ATTRIBUTES_WIDTH, clampWidth, useLayout } from "@/lib/layout";
 import { ReviewPanel } from "@/components/pipeline/ReviewPanel";
+import { CommentsPanel, useOpenCommentCount } from "@/components/CommentsPanel";
+import { useCommentFocus } from "@/lib/comments/focus";
 import { usePipelineItemForPost } from "@/lib/pipeline/store";
 import { useReviewState } from "@/lib/review/store";
 
@@ -70,6 +72,12 @@ export function AttributePanel({ post }: Props) {
   useEffect(() => {
     if (activeFrom === "editor") setTab("review");
   }, [seq, activeFrom]);
+  // A passage chosen to comment on, or a comment's highlight clicked in the text, opens Comments.
+  const comments = useCommentFocus();
+  const openComments = useOpenCommentCount(post.id);
+  useEffect(() => {
+    if (comments.draft || comments.from === "editor") setTab("comments");
+  }, [comments.draft, comments.seq, comments.from]);
 
   const { site } = useWorkspace();
   const publicUrl = postPublicUrl(site, collectionSlugOf(post.type, collectionRows), post.slug);
@@ -96,18 +104,20 @@ export function AttributePanel({ post }: Props) {
     [collectionRows],
   );
   const status: PostStatus = post.status ?? "draft";
+  // Until the writer drags the edge, the review and comments tabs open wider.
+  const width = layout.attributesWidth ?? (tab === "review" || tab === "comments" ? 360 : ATTRIBUTES_WIDTH.default);
 
   return (
     <aside
-      style={{ "--panel-w": `${layout.attributesWidth}px` } as CSSProperties}
+      style={{ "--panel-w": `${width}px` } as CSSProperties}
       className="relative flex h-full w-[300px] max-w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm [scrollbar-gutter:stable] md:w-[var(--panel-w)]"
     >
       <ResizeHandle
-        width={layout.attributesWidth}
+        width={width}
         min={ATTRIBUTES_WIDTH.min}
         max={ATTRIBUTES_WIDTH.max}
         onChange={(w) => setLayout({ attributesWidth: clampWidth(w) })}
-        onReset={() => setLayout({ attributesWidth: ATTRIBUTES_WIDTH.default })}
+        onReset={() => setLayout({ attributesWidth: null })}
         label="Resize details panel"
       />
       <div className="flex items-center gap-1">
@@ -155,6 +165,7 @@ export function AttributePanel({ post }: Props) {
           <Tabs.Item id="brief">Brief</Tabs.Item>
           <Tabs.Item id="analytics">Analytics</Tabs.Item>
           <Tabs.Item id="review">Review</Tabs.Item>
+          <Tabs.Item id="comments">{openComments ? `Comments (${openComments})` : "Comments"}</Tabs.Item>
         </Tabs.List>
 
         <Tabs.Panel id="brief">
@@ -165,6 +176,9 @@ export function AttributePanel({ post }: Props) {
         </Tabs.Panel>
         <Tabs.Panel id="review">
           <ReviewPanel postId={post.id} />
+        </Tabs.Panel>
+        <Tabs.Panel id="comments">
+          <CommentsPanel postId={post.id} />
         </Tabs.Panel>
 
         <Tabs.Panel id="details" className="flex flex-col gap-5">
@@ -329,7 +343,7 @@ function FieldStack({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-type TabKey = "details" | "brief" | "analytics" | "review";
+type TabKey = "details" | "brief" | "analytics" | "review" | "comments";
 
 function BriefTab({ post }: { post: Post }) {
   const [picking, setPicking] = useState(false);

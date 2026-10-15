@@ -21,11 +21,12 @@ import { dateToMs, must } from "@/lib/supabase";
 import { fromRecord, type PostRecord } from "@/lib/posts";
 import { fromVersionRecord, type VersionRecord } from "@/lib/versions";
 import { fromBriefRecord, type BriefRecord } from "@/lib/plan/briefs";
+import { fromCommentRecord, type CommentRecord } from "@/lib/comments/store";
 import { captureCtx, keepsLocal, pullCollections, runSync, type Ctx } from "@/lib/sync";
 import { serverChanged } from "@/lib/serverChanges";
 import { reportError } from "@/lib/telemetry";
 
-let current: { ctx: Ctx; channel: RealtimeChannel; agents: RealtimeChannel } | null = null;
+let current: { ctx: Ctx; channel: RealtimeChannel; agents: RealtimeChannel; comments: RealtimeChannel } | null = null;
 
 async function readRow<R>(ctx: Ctx, table: string, id: string): Promise<R | null> {
   try {
@@ -52,6 +53,14 @@ async function briefChanged(ctx: Ctx, id: string) {
   const local = await ctx.db.briefs.get(id);
   if (keepsLocal(local, dateToMs(r.updated) ?? 0)) return;
   await ctx.db.briefs.put({ ...fromBriefRecord(r), syncedAt: Date.now(), dirty: false });
+}
+
+async function commentChanged(ctx: Ctx, id: string) {
+  const r = await readRow<CommentRecord>(ctx, "comments", id);
+  if (!r) return;
+  const local = await ctx.db.comments.get(id);
+  if (keepsLocal(local, dateToMs(r.updated) ?? 0)) return;
+  await ctx.db.comments.put({ ...fromCommentRecord(r), syncedAt: Date.now(), dirty: false });
 }
 
 async function versionChanged(ctx: Ctx, id: string) {
@@ -135,7 +144,21 @@ export async function startRealtime() {
       if (status === "CHANNEL_ERROR") reportError("Realtime agents channel error", err ?? new Error("channel error"));
     });
 
-  current = { ctx, channel, agents };
+  // Comments, on a channel of their own: a server whose publication doesn't
+  // carry the table yet refuses only this one.
+  const comments = sb
+    .channel(`comments:${site}:${Math.random().toString(36).slice(2)}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "comments", filter }, (e) => {
+      const id = changed(e);
+      if (id) void commentChanged(ctx, id);
+    })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "comments" }, (e) => {
+      const id = (e.old as { id?: string }).id;
+      if (id) void db.comments.delete(id);
+    })
+    .subscribe();
+
+  current = { ctx, channel, agents, comments };
 }
 
 export async function stopRealtime() {
@@ -145,6 +168,7 @@ export async function stopRealtime() {
   try {
     await was.ctx.sb.removeChannel(was.channel);
     await was.ctx.sb.removeChannel(was.agents);
+    await was.ctx.sb.removeChannel(was.comments);
   } catch (err) {
     console.warn("realtime unsubscribe failed:", err);
   }
