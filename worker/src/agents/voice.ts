@@ -22,6 +22,8 @@ export const DEFAULT_VOICE = `# Default voice
 2. Be concrete: a real example, a named tool, a before and after, a number when the argument turns on it. One good example beats three adjectives. Spread sources through the post, one where each claim stands; never stack several in the opening paragraphs.
 3. Have an opinion and say why. Admit the trade-off out loud.
 4. Vary the paragraphs. Some are one or two sentences; most develop an idea over four to six, and now and then one runs longer, with a long sentence that holds a thought together. A post whose paragraphs are all the same size reads as mechanical.
+   Vary how paragraphs open too. Don't start most of them with an action or an imperative ("Pull...", "Read...", "Cut..."): open some on a claim, a concrete detail, a short scene, a number, a concession or a question the reader would ask, and let the verb come later.
+   Give sentences substance. Prefer a sentence that carries a reason, a condition or a consequence over a run of short declaratives; keep it clear, then let a short one land now and then.
 5. Write for an educated adult reader, a notch above conversational: precise, varied vocabulary and syntax, an occasional uncommon word where it is exactly right. Never academic, never jargon for its own sake, never explained to the reader as if they were five.
 6. Humour is welcome when it's earned: a jab at the industry's habits, never at the reader.
 7. Talk to the reader as "you". The tenant is "we" only when it speaks about its own work.

@@ -247,9 +247,9 @@ ${briefBlock(brief)}
 What the tenant knows (knowledge base; the only source for facts about the tenant):
 ${renderClaims(claims)}
 
-Write the whole post in Markdown: no H1 (the title is separate), H2 subheads. Use no outside sources or links. Then list the facts about the tenant you needed and didn't have.
+Write the whole post in Markdown: no H1 (the title is separate), H2 subheads. Use no outside sources or links. The subtitle is the post's one short description (one or two sentences): it is shown under the title, on listings and in the page meta, so the body never repeats it, and no standfirst or italic summary line goes at the top of the body. The body opens with the argument itself. Then list the facts about the tenant you needed and didn't have.
 
-Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or two sentences for listings", "markdown": "...", "missingFacts": ["..."]}`,
+Answer with JSON only: {"title": "...", "subtitle": "the short description", "markdown": "...", "missingFacts": ["..."]}`,
     maxOutputTokens: WRITER_OUTPUT_TOKENS,
     capUsd: WRITER_ROUND_CAP_USD,
     check: (a) => void parseDraft(a),
