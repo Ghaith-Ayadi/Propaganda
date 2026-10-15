@@ -64,7 +64,7 @@ export function PitchDrawer({ id }: { id: string }) {
       className="fixed inset-0 z-50 bg-overlay/40 duration-150 entering:animate-in entering:fade-in exiting:animate-out exiting:fade-out"
     >
       <Modal className="fixed inset-0 flex items-center justify-center p-0 duration-200 entering:animate-in entering:fade-in entering:zoom-in-95 exiting:animate-out exiting:fade-out exiting:zoom-out-95 md:p-6">
-        <Dialog aria-label={item.title} className="flex h-full w-full max-w-[1200px] bg-primary shadow-xl outline-hidden md:rounded-2xl md:max-h-[920px]">
+        <Dialog aria-label={item.title} className="flex h-full w-full max-w-[1200px] flex-col bg-primary shadow-xl outline-hidden md:max-h-[920px] md:rounded-2xl lg:flex-row">
           <PitchBody key={item.id} item={item} people={people} meId={settings.meId} onClose={close} />
         </Dialog>
       </Modal>
@@ -152,7 +152,7 @@ function PitchBody({
     <HighlightProvider
       value={{ threads: decidable ? threads : [], activeId, hoverId, onActivate: setActiveId, onHover: setHoverId }}
     >
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* header: what it is, in one look */}
       <header className="border-b border-secondary px-6 pt-5 pb-6 md:px-8">
         <div className="flex items-center justify-between gap-3">
@@ -330,7 +330,7 @@ function PitchBody({
       </div>
 
       {/* comments: highlights and general, sent together on approve */}
-      <aside className="hidden w-[360px] shrink-0 flex-col border-l border-secondary bg-secondary_subtle lg:flex">
+      <aside className="flex max-h-[45%] w-full shrink-0 flex-col border-t border-secondary bg-secondary_subtle lg:max-h-none lg:w-[360px] lg:border-t-0 lg:border-l">
         <div className="border-b border-secondary px-5 py-4">
           <h3 className="type-heading text-primary">Comments</h3>
           <p className="mt-1 text-xs text-tertiary">
