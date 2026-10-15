@@ -197,6 +197,10 @@ const DRAFT_BODY =
   "Kontra runs batch jobs on Temporal, so a failed step resumes where it stopped. ".repeat(40) +
   "\n\n## What to do about it\n\nAbout 12% of teams retry by hand.\n";
 function answer(prompt) {
+  if (prompt.includes("You decide which web pages a business blog may cite")) {
+    const pages = [...prompt.matchAll(/^(\d+)\. .*<([^>]+)>:/gm)].map((m) => ({ n: Number(m[1]), citable: /ranking\.example|93\.184/.test(m[2]), why: "stand-in" }));
+    return JSON.stringify({ pages });
+  }
   if (prompt.includes("Write the voice guide")) {
     return JSON.stringify({
       guide: "# Voice\n\n**In one line:** a tired engineer telling the truth.",

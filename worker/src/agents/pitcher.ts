@@ -42,6 +42,7 @@ import { HOUSE_STYLE, RULE_NAMES, TITLE_RULES, houseTitleHits, noDashes, titleHi
 import { polishTexts } from "./polish.js";
 import { type SearchHit } from "./web.js";
 import { AUTHORITY_RULE, quotable } from "./authority.js";
+import { vetSources } from "./sources.js";
 import { SearchSession, searchDurably } from "./search.js";
 import { AGENT_QUEUE, registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
 import { writer } from "./writer.js";
@@ -480,7 +481,14 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     const evidenceUrls = (idea.evidence ?? []).filter((e) => e.url).map((e) => ({ url: e.url!, label: e.label }));
     // Only sources with authority can be cited. What ranks stays visible, marked, so the
     // angle can still differ from it (authority.ts).
-    const allowed = new Set([...evidenceUrls.map((e) => e.url), ...hits.map((h) => h.url)].filter((u) => quotable(u)));
+    // Search results are vetted first (sources.ts); a run recorded before that is gated by list alone.
+    let citable = new Set(hits.map((h) => h.url).filter((u) => quotable(u)));
+    if (await DBOS.patch("authority-vet")) {
+      const v = await vetSources({ site, job: "pitcher:research", topic: idea.title, label: idea.id, hits, searches });
+      hits.splice(0, hits.length, ...v.hits);
+      citable = v.citable;
+    }
+    const allowed = new Set([...evidenceUrls.map((e) => e.url).filter((u) => quotable(u)), ...citable]);
 
     // 5. The brief.
     let written = await askJson(
@@ -503,7 +511,7 @@ What the tenant knows (knowledge base):
 ${renderClaims(claims)}
 
 What's already ranking for it:
-${hits.map((h) => `- ${h.title} <${h.url}>${quotable(h.url) ? "" : " (not citable)"}: ${h.snippet}`).join("\n") || "(no search results)"}
+${hits.map((h) => `- ${h.title} <${h.url}>${citable.has(h.url) ? "" : " (not citable)"}: ${h.snippet}`).join("\n") || "(no search results)"}
 
 ${AUTHORITY_RULE}
 

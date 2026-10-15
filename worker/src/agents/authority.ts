@@ -31,7 +31,7 @@ const B = [
   "bbc.co.uk", "theguardian.com", "wired.com", "technologyreview.com", "fortune.com", "scientificamerican.com",
 ];
 const C = [
-  "stripe.com", "a16z.com", "ahrefs.com", "sequoiacap.com", "firstround.com", "paulgraham.com", "lennysnewsletter.com",
+  "contentmarketinginstitute.com", "searchengineland.com", "deloittedigital.com", "stripe.com", "a16z.com", "ahrefs.com", "sequoiacap.com", "firstround.com", "paulgraham.com", "lennysnewsletter.com",
   "openai.com", "anthropic.com", "research.google", "github.blog", "netflixtechblog.com", "blog.cloudflare.com",
 ];
 // Never quoted, whatever the page says: competitors of Propaganda (meeting and call tools, AI
@@ -79,6 +79,23 @@ export function quotable(url: string, ownHosts: string[] = []): boolean {
   if (h && ownHosts.some((o) => on(h, o.toLowerCase()))) return true;
   const t = authority(url).tier;
   return t === "A" || t === "B" || t === "C";
+}
+
+/**
+ * Does this URL need a look before it is cited? Unknown domains do, and so does a
+ * government or university address that matched only on its suffix: ai.cms.gov is
+ * authoritative, but not about content marketing.
+ */
+export function needsVetting(url: string, ownHosts: string[] = []): boolean {
+  const h = host(url);
+  if (h && ownHosts.some((o) => on(h, o.toLowerCase()))) return false;
+  const v = authority(url);
+  return v.tier === "U" || (v.tier === "A" && A_SUFFIX.includes(v.why));
+}
+
+/** A search aimed at the sources that count: studies, analyst reports, major press. */
+export function authorityQuery(topic: string): string {
+  return `${topic.slice(0, 200)} (study OR research OR survey OR report) (site:edu OR site:gov OR gartner.com OR forrester.com OR mckinsey.com OR bain.com OR nytimes.com OR hbr.org OR newyorker.com)`;
 }
 
 /** The sentence the agents get about the rule, so the model knows why a source is missing. */

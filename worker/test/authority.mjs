@@ -1,6 +1,6 @@
 // Which web sources may be cited (src/agents/authority.ts). No database.
 import assert from "node:assert/strict";
-import { authority, quotable } from "../dist/agents/testing.js";
+import { authority, quotable, needsVetting, authorityQuery } from "../dist/agents/testing.js";
 
 const tier = (u) => authority(u).tier;
 const cases = [
@@ -44,5 +44,27 @@ for (const [url, want, own] of [
     failures++;
     console.log(`  FAIL quotable ${url}: ${e.message}`);
   }
+}
+for (const [url, want] of [
+  ["https://ai.cms.gov/x", true],
+  ["https://news.stanford.edu/x", true],
+  ["https://www.gartner.com/x", false],
+  ["https://unknown.example/x", true],
+  ["https://fireflies.ai/x", false],
+]) {
+  try {
+    assert.equal(needsVetting(url), want);
+    console.log(`  ok   needsVetting ${url} = ${want}`);
+  } catch (e) {
+    failures++;
+    console.log(`  FAIL needsVetting ${url}: ${e.message}`);
+  }
+}
+try {
+  assert.ok(authorityQuery("sales call follow ups").includes("site:edu"));
+  console.log("  ok   the authority search names the sources that count");
+} catch (e) {
+  failures++;
+  console.log(`  FAIL authorityQuery: ${e.message}`);
 }
 if (failures) process.exit(1);

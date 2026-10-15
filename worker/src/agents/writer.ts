@@ -37,6 +37,7 @@ import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
 import { readPage, type Page } from "./web.js";
 import { AUTHORITY_RULE, quotable } from "./authority.js";
+import { vetSources } from "./sources.js";
 import { SearchSession, searchDurably } from "./search.js";
 import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, hardHits, houseTitleHits, noDashes, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit, type PolishStats } from "./writing.js";
 import { polishTexts } from "./polish.js";
@@ -174,17 +175,25 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
   const ownHosts = gated ? await DBOS.runStep(() => ownHostsOf(site), { name: "read the site's hosts" }) : [];
   const urls: string[] = (brief.sources ?? []).map((s) => s.url);
   const searches = new SearchSession();
+  const found: Awaited<ReturnType<typeof searchDurably>> = [];
   for (const [n, q] of queries.entries()) {
     // A search the service refused (not an outage: those wait in searchDurably)
     // costs this post a few sources, not the draft.
-    let hits: Awaited<ReturnType<typeof searchDurably>> = [];
     try {
-      hits = await searchDurably(searches, q, 5, { site, job: "writer:research" }, `search ${n + 1}`);
+      found.push(...(await searchDurably(searches, q, 5, { site, job: "writer:research" }, `search ${n + 1}`)));
     } catch (err) {
       DBOS.logger.warn(`writer research: search "${q}" refused: ${(err as Error).message}`);
     }
-    for (const h of hits) if (!urls.includes(h.url) && (!gated || quotable(h.url, ownHosts))) urls.push(h.url);
   }
+  // Vetted once for the whole post (sources.ts); a run recorded before the vetting reads the list's verdict.
+  let citable = new Set(found.map((h) => h.url).filter((u) => quotable(u, ownHosts)));
+  let hits = found;
+  if (gated && (await DBOS.patch("writer-authority-vet"))) {
+    const v = await vetSources({ site, job: "writer:research", topic: brief.title, label: "post", hits: found, ownHosts, searches });
+    hits = v.hits;
+    citable = v.citable;
+  }
+  for (const h of hits) if (!urls.includes(h.url) && (!gated || citable.has(h.url))) urls.push(h.url);
 
   const pages: Page[] = [];
   for (const [n, url] of urls.slice(0, MAX_PAGES + 4).entries()) {
