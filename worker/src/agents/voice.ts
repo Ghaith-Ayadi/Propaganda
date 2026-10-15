@@ -18,12 +18,13 @@ export const DEFAULT_VOICE = `# Default voice
 **In one line:** a sharp practitioner explaining something to a smart friend over a drink. Alive, specific, a bit cheeky; never a brochure.
 
 **Do**
-1. Lead with the point. The first paragraph says what the reader will get and why it matters to them.
-2. Be concrete: a real example, a number with its source, a named tool, a before and after. One good example beats three adjectives.
+1. Open on the point, in the first paragraph: what the reader gets and why it matters. Evidence comes later, where the argument needs it.
+2. Be concrete: a real example, a named tool, a before and after, a number when the argument turns on it. One good example beats three adjectives. Spread sources through the post, one where each claim stands; never stack several in the opening paragraphs.
 3. Have an opinion and say why. Admit the trade-off out loud.
-4. Short paragraphs, plain words, active verbs. Vary sentence length; let a short one land.
-5. Humour is welcome when it's earned: a jab at the industry's habits, never at the reader.
-6. Talk to the reader as "you". The tenant is "we" only when it speaks about its own work.
+4. Vary the paragraphs. Some are one or two sentences; most develop an idea over four to six, and now and then one runs longer, with a long sentence that holds a thought together. A post whose paragraphs are all the same size reads as mechanical.
+5. Write for an educated adult reader, a notch above conversational: precise, varied vocabulary and syntax, an occasional uncommon word where it is exactly right. Never academic, never jargon for its own sake, never explained to the reader as if they were five.
+6. Humour is welcome when it's earned: a jab at the industry's habits, never at the reader.
+7. Talk to the reader as "you". The tenant is "we" only when it speaks about its own work.
 
 **Don't**
 1. Corporate filler: "leverage", "unlock", "in today's fast-paced world", "seamless", "robust", "game-changer".
@@ -31,6 +32,8 @@ export const DEFAULT_VOICE = `# Default voice
 3. Listicles of thin points. Fewer points, each one earned.
 4. The "That's not X. It's Y." move. Use a comparison: "This is much more X than it is Y."
 5. Ending on a summary of what was just said. End on the next step or the sharpest line.
+6. Let one page carry the post. No single source, and above all no single vendor's page, supplies more than a passing mention or two. Don't cite competitors' own marketing pages; prefer independent research, press, universities and recognised experts.
+7. Open a paragraph by announcing a source ("A guide from X offers a prompt that begins"). Say the point; link the source on the words it backs.
 
 **Shape of a post**
 - Title: specific and a little provocative; a promise the post keeps.
@@ -163,7 +166,8 @@ export const voiceGuideWorkflow = DBOS.registerWorkflow(voiceGuideRun, { name: "
 
 /** The guide the Writer follows: the tenant's, else the default. */
 export function voiceFor(row: VoiceGuideRow | null): string {
-  if (!row?.body.trim()) return DEFAULT_VOICE;
+  // A default saved earlier is the default of its day: always read today's, until a person or the content writes the guide.
+  if (!row?.body.trim() || row.source === "default") return DEFAULT_VOICE;
   const samples = (row.samples ?? []).map((s) => `> ${s.passage.replace(/\n/g, "\n> ")}\n> (from "${s.title}")`).join("\n\n");
   return samples ? `${row.body}\n\n## Sample passages\n\n${samples}` : row.body;
 }
