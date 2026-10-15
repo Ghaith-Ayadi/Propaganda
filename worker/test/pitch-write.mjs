@@ -152,6 +152,7 @@ process.env.DATAFORSEO_PASSWORD = "password";
 
 // ---- a stand-in web ----
 
+process.env.AUTHORITY_ALLOW = "93.184.216.34";
 const PAGE = "http://93.184.216.34/temporal-study";
 const fetched = [];
 // How many searches in a row DataForSEO fails on its side, as it did on 2026-10-10.

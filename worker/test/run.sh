@@ -9,6 +9,7 @@ node test/failures.mjs
 node test/flows.mjs
 node test/shared.mjs
 node test/web.mjs
+node test/authority.mjs
 node test/agents.mjs
 node test/lite.mjs
 node test/pitch-write.mjs

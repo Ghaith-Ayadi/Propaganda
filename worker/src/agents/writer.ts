@@ -36,6 +36,7 @@ import { voiceFor, voiceGuideWorkflow, voiceSourceFor } from "./voice.js";
 import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
 import { readPage, type Page } from "./web.js";
+import { AUTHORITY_RULE, quotable } from "./authority.js";
 import { SearchSession, searchDurably } from "./search.js";
 import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, hardHits, houseTitleHits, noDashes, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit, type PolishStats } from "./writing.js";
 import { polishTexts } from "./polish.js";
@@ -173,6 +174,8 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
     }
     for (const h of hits) if (!urls.includes(h.url)) urls.push(h.url);
   }
+  // Only sources with authority are read for citing (authority.ts); the rest never reach the draft.
+  urls.splice(0, urls.length, ...urls.filter((u) => quotable(u)));
 
   const pages: Page[] = [];
   for (const [n, url] of urls.slice(0, MAX_PAGES + 4).entries()) {
@@ -241,7 +244,7 @@ ${renderClaims(claims)}
 Sources you read (cite them as Markdown links on the words they support; use no other URLs):
 ${pagesBlock(pages)}
 ${edits.length ? `\nHow reviewers edited your recent drafts for this tenant (do what they did without being asked):\n${renderEdits(edits)}\n` : ""}
-Write the whole post in Markdown: no H1 (the title is separate), H2 subheads, links inline. Place evidence where the argument needs it, through the whole post, not in the first paragraphs; the outline's order is the argument's order, not a queue of sources to spend early. No single page or vendor carries the post: use a source once or twice at most, and do not cite a competitor's own marketing page. Vary paragraph length and let some ideas run long. Then list the facts about the tenant you needed and didn't have.
+Write the whole post in Markdown: no H1 (the title is separate), H2 subheads, links inline. Place evidence where the argument needs it, through the whole post, not in the first paragraphs; the outline's order is the argument's order, not a queue of sources to spend early. No single page or vendor carries the post: use a source once or twice at most, and do not cite a competitor's own marketing page. ${AUTHORITY_RULE} Vary paragraph length and let some ideas run long. Then list the facts about the tenant you needed and didn't have.
 
 Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or two sentences for listings", "markdown": "...", "missingFacts": ["..."]}`,
     },
