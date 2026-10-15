@@ -169,7 +169,7 @@ const web = async (input, init) => {
   }
   if (url.startsWith("https://api.dataforseo.com/") && searchRefused > 0) {
     searchRefused--;
-    return Response.json({ cost: 0.002, tasks: [{ status_code: 40000, status_message: "Internal SE Server Error." }] });
+    return Response.json({ cost: 0.002, tasks: [{ status_code: 40000, status_message: "Invalid field." }] });
   }
   if (url.startsWith("https://api.dataforseo.com/")) {
     const [{ keyword }] = JSON.parse(init.body);

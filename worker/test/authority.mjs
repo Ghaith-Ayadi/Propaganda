@@ -61,7 +61,8 @@ for (const [url, want] of [
   }
 }
 try {
-  assert.ok(authorityQuery("sales call follow ups").includes("site:edu"));
+  const q = authorityQuery("Why small companies that let ChatGPT answer for them lose the buyers who ask it what the product costs and who else sells it");
+  assert.ok(q.includes("site:edu") && q.split(" (study")[0].split(" ").length === 8, q);
   console.log("  ok   the authority search names the sources that count");
 } catch (e) {
   failures++;
