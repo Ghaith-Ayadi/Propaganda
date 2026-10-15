@@ -31,6 +31,8 @@ import { AGENT_QUEUE, startForTenant, startOnceForTenant } from "./agents.js";
 import { MODELS, askJson } from "../agents/model.js";
 import { SearchSession, searchDurably } from "../agents/search.js";
 import type { SearchHit } from "../agents/web.js";
+import { quotable } from "../agents/authority.js";
+import { vetSources } from "../agents/sources.js";
 import { claimsFor, renderClaims } from "../agents/kb.js";
 import { readTaste, renderTaste } from "../agents/taste.js";
 import { rate } from "../agents/fit.js";
@@ -222,6 +224,13 @@ async function topicPitchesRun(input: TopicInput): Promise<TopicResult> {
       if (!hits.some((x) => x.url === h.url)) hits.push(h);
     }
   }
+  // Only sources with authority can be cited (sources.ts); a run recorded before that is gated by list alone.
+  let citable = new Set(hits.map((h) => h.url).filter((u) => quotable(u)));
+  if (await DBOS.patch("authority-vet")) {
+    const v = await vetSources({ site, job: JOB, topic: topic.thesis || topic.name, label: topic.name.slice(0, 40), hits, searches: session });
+    hits.splice(0, hits.length, ...v.hits);
+    citable = v.citable;
+  }
   const claims = await DBOS.runStep(() => claimsFor(site, [topic.name], 8), { name: "knowledge" });
 
   const pitches = await askJson(
@@ -242,6 +251,7 @@ async function topicPitchesRun(input: TopicInput): Promise<TopicResult> {
         targets,
         n,
         hits,
+        citable,
         claims: renderClaims(claims),
         collections: c.collections,
         taste: c.taste,
@@ -249,7 +259,7 @@ async function topicPitchesRun(input: TopicInput): Promise<TopicResult> {
         replacing: replacing ?? null,
       }),
     },
-    parseTopicPitches(new Set(hits.map((h) => h.url)), c.collections, n, targets.map((t) => t.query)),
+    parseTopicPitches(citable, c.collections, n, targets.map((t) => t.query)),
   );
 
   const now = new Date(await DBOS.now());

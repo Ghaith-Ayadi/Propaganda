@@ -177,6 +177,10 @@ function pitch(topic, url, i) {
   };
 }
 function answer(prompt) {
+  if (prompt.includes("You decide which web pages a business blog may cite")) {
+    const pages = [...prompt.matchAll(/^(\d+)\. .*<([^>]+)>:/gm)].map((m) => ({ n: Number(m[1]), citable: /ranking\.example|93\.184/.test(m[2]), why: "stand-in" }));
+    return JSON.stringify({ pages });
+  }
   if (prompt.includes("Write the new summary.")) return "Rejects listicles.";
   const topic = /The topic: (.*) \(\d+ to \d+ posts/.exec(prompt)?.[1];
   const url = /<(https:\/\/ranking\.example\/[^>]+)>/.exec(prompt)?.[1];

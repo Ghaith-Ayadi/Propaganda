@@ -36,6 +36,8 @@ import { voiceFor, voiceGuideWorkflow, voiceSourceFor } from "./voice.js";
 import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
 import { readPage, type Page } from "./web.js";
+import { AUTHORITY_RULE, quotable } from "./authority.js";
+import { vetSources } from "./sources.js";
 import { SearchSession, searchDurably } from "./search.js";
 import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, hardHits, houseTitleHits, noDashes, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit, type PolishStats } from "./writing.js";
 import { polishTexts } from "./polish.js";
@@ -146,6 +148,12 @@ async function polishDraft(site: string, step: string, voice: string, d: { markd
 /** Every house-rule problem left in a draft, for the reviewer. */
 const leftHits = (markdown: string, styled: boolean) => (styled ? [...styleHits(markdown), ...hardHits(markdown)] : styleHits(markdown));
 
+/** The tenant's own hosts: its blog's domain and its propaganda.pub address. */
+async function ownHostsOf(site: string): Promise<string[]> {
+  const row = await getSite(site);
+  return [row?.domain, row?.slug ? `${row.slug}.propaganda.pub` : ""].filter((h): h is string => Boolean(h)).map((h) => h.replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
+}
+
 async function research(site: string, brief: BriefRow): Promise<{ pages: Page[]; claims: Claim[]; searches: SearchSession }> {
   const queries = await askJson(
     "plan research",
@@ -160,19 +168,32 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
     (v) => strs(obj(v, "The answer").searches, "searches").slice(0, 3),
   );
 
+  // Search hits are read for citing only if their domain has authority (authority.ts). The brief's
+  // own sources were chosen by the Pitcher and a person, and the tenant's own pages stay citable.
+  // Guarded: a run recorded before this reads its sources unfiltered.
+  const gated = await DBOS.patch("writer-authority");
+  const ownHosts = gated ? await DBOS.runStep(() => ownHostsOf(site), { name: "read the site's hosts" }) : [];
   const urls: string[] = (brief.sources ?? []).map((s) => s.url);
   const searches = new SearchSession();
+  const found: Awaited<ReturnType<typeof searchDurably>> = [];
   for (const [n, q] of queries.entries()) {
     // A search the service refused (not an outage: those wait in searchDurably)
     // costs this post a few sources, not the draft.
-    let hits: Awaited<ReturnType<typeof searchDurably>> = [];
     try {
-      hits = await searchDurably(searches, q, 5, { site, job: "writer:research" }, `search ${n + 1}`);
+      found.push(...(await searchDurably(searches, q, 5, { site, job: "writer:research" }, `search ${n + 1}`)));
     } catch (err) {
       DBOS.logger.warn(`writer research: search "${q}" refused: ${(err as Error).message}`);
     }
-    for (const h of hits) if (!urls.includes(h.url)) urls.push(h.url);
   }
+  // Vetted once for the whole post (sources.ts); a run recorded before the vetting reads the list's verdict.
+  let citable = new Set(found.map((h) => h.url).filter((u) => quotable(u, ownHosts)));
+  let hits = found;
+  if (gated && (await DBOS.patch("writer-authority-vet"))) {
+    const v = await vetSources({ site, job: "writer:research", topic: brief.title, label: "post", hits: found, ownHosts, searches });
+    hits = v.hits;
+    citable = v.citable;
+  }
+  for (const h of hits) if (!urls.includes(h.url) && (!gated || citable.has(h.url))) urls.push(h.url);
 
   const pages: Page[] = [];
   for (const [n, url] of urls.slice(0, MAX_PAGES + 4).entries()) {
@@ -241,7 +262,7 @@ ${renderClaims(claims)}
 Sources you read (cite them as Markdown links on the words they support; use no other URLs):
 ${pagesBlock(pages)}
 ${edits.length ? `\nHow reviewers edited your recent drafts for this tenant (do what they did without being asked):\n${renderEdits(edits)}\n` : ""}
-Write the whole post in Markdown: no H1 (the title is separate), H2 subheads, links inline. Place evidence where the argument needs it, through the whole post, not in the first paragraphs; the outline's order is the argument's order, not a queue of sources to spend early. No single page or vendor carries the post: use a source once or twice at most, and do not cite a competitor's own marketing page. Vary paragraph length and let some ideas run long. Then list the facts about the tenant you needed and didn't have.
+Write the whole post in Markdown: no H1 (the title is separate), H2 subheads, links inline. Place evidence where the argument needs it, through the whole post, not in the first paragraphs; the outline's order is the argument's order, not a queue of sources to spend early. No single page or vendor carries the post: use a source once or twice at most, and do not cite a competitor's own marketing page. ${AUTHORITY_RULE} Vary paragraph length and let some ideas run long. Then list the facts about the tenant you needed and didn't have.
 
 Answer with JSON only: {"title": "...", "subtitle": "...", "excerpt": "one or two sentences for listings", "markdown": "...", "missingFacts": ["..."]}`,
     },

@@ -152,6 +152,7 @@ process.env.DATAFORSEO_PASSWORD = "password";
 
 // ---- a stand-in web ----
 
+process.env.AUTHORITY_ALLOW = "93.184.216.34";
 const PAGE = "http://93.184.216.34/temporal-study";
 const fetched = [];
 // How many searches in a row DataForSEO fails on its side, as it did on 2026-10-10.
@@ -196,6 +197,10 @@ const DRAFT_BODY =
   "Kontra runs batch jobs on Temporal, so a failed step resumes where it stopped. ".repeat(40) +
   "\n\n## What to do about it\n\nAbout 12% of teams retry by hand.\n";
 function answer(prompt) {
+  if (prompt.includes("You decide which web pages a business blog may cite")) {
+    const pages = [...prompt.matchAll(/^(\d+)\. .*<([^>]+)>:/gm)].map((m) => ({ n: Number(m[1]), citable: /ranking\.example|93\.184/.test(m[2]), why: "stand-in" }));
+    return JSON.stringify({ pages });
+  }
   if (prompt.includes("Write the voice guide")) {
     return JSON.stringify({
       guide: "# Voice\n\n**In one line:** a tired engineer telling the truth.",

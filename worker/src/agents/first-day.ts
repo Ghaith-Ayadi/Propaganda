@@ -5,6 +5,7 @@
 // The pure parts are here (tested in test/first-day.mjs); the workflows are
 // in workflows/first-day.ts.
 
+import { AUTHORITY_RULE } from "./authority.js";
 import { fitScore, type FitGrade, type FitReason, type Judgement } from "./fit.js";
 import type { Goals } from "./goals.js";
 import { arr, obj, str } from "./model.js";
@@ -194,6 +195,8 @@ export interface TopicPitchPrompt {
   targets: { query: string; volume?: number; difficulty?: number | null; position?: number | null }[];
   n: number;
   hits: { title: string; url: string; snippet: string }[];
+  /** The hit URLs that may be cited; unset marks none. */
+  citable?: Set<string>;
   claims: string;
   collections: string[];
   taste: string;
@@ -211,7 +214,7 @@ export function topicPitchPrompt(p: TopicPitchPrompt): string {
     p.otherTopics.length ? `The plan's other topics (someone else pitches those; don't stray into them): ${p.otherTopics.join("; ")}.` : "",
     p.targets.length ? `\nThe plan's target searches for this topic:\n${p.targets.map(target).join("\n")}` : "\nThis topic has no target search in the plan.",
     `\nWhat the tenant knows (knowledge base):\n${p.claims}`,
-    `\nWhat's already ranking:\n${p.hits.map((h) => `- ${h.title} <${h.url}>: ${h.snippet}`).join("\n") || "(no search results)"}`,
+    `\nWhat's already ranking:\n${p.hits.map((h) => `- ${h.title} <${h.url}>${p.citable && !p.citable.has(h.url) ? " (not citable)" : ""}: ${h.snippet}`).join("\n") || "(no search results)"}${p.citable ? `\n${AUTHORITY_RULE}` : ""}`,
     `\nAlready published or pitched (don't repeat any):\n${p.existing.slice(0, 60).map((t) => `- ${t}`).join("\n") || "(nothing yet)"}`,
     `\nCollections on this blog: ${p.collections.join(", ") || "(none)"}.`,
     `\nWhat this tenant has decided before (learn from it; their own words win):\n${p.taste}`,
