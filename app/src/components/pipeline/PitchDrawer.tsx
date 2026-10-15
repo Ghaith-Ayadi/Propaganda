@@ -1,10 +1,12 @@
-// The pitch brief, over the board (#/pipeline/pitch/<id>). Approve as is,
-// approve with notes (general, or on an outline line), or reject with a reason.
+// The pitch brief, over the board (#/pipeline/pitch/<id>), in a large dialog
+// with the comments beside it. Highlight a passage and choose Comment for a
+// contextual comment, or write a general one; the comments stay here and go
+// together, as the pitch's notes, when it is approved. Or reject with a reason.
 // Approving hands off to the editor: a draft post and its brief are created.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { Check, LinkExternal01, MessagePlusSquare, Minus } from "@untitledui/icons";
+import { Check, LinkExternal01, Minus } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { NativeSelect } from "@/components/base/select/select-native";
@@ -16,7 +18,18 @@ import { GOAL_LABEL, ORIGIN_LABEL, STAGE_LABEL, type GoalKey, type PipelineItem,
 import { reportError, track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
 import { Card, CardBody, CardHeader } from "@/components/shell/Card";
+import { CommentThreads } from "@/components/shared/CommentThreads";
+import { newId } from "@/lib/supabase";
 import { FitBadge, TextArea } from "./bits";
+import {
+  HighlightProvider,
+  Passage,
+  SelectionComment,
+  notesFromThreads,
+  threadsFromNotes,
+  toThreadItems,
+  type PitchThread,
+} from "./pitchComments";
 
 const REASON_LABEL: Record<ReasonKind, string> = {
   demand: "Demand",
@@ -50,8 +63,8 @@ export function PitchDrawer({ id }: { id: string }) {
       onOpenChange={(open) => !open && close()}
       className="fixed inset-0 z-50 bg-overlay/40 duration-150 entering:animate-in entering:fade-in exiting:animate-out exiting:fade-out"
     >
-      <Modal className="fixed inset-y-0 right-0 flex w-full max-w-[640px] duration-200 entering:animate-in entering:slide-in-from-right exiting:animate-out exiting:slide-out-to-right">
-        <Dialog aria-label={item.title} className="flex h-full w-full flex-col bg-primary shadow-xl outline-hidden">
+      <Modal className="fixed inset-0 flex items-center justify-center p-0 duration-200 entering:animate-in entering:fade-in entering:zoom-in-95 exiting:animate-out exiting:fade-out exiting:zoom-out-95 md:p-6">
+        <Dialog aria-label={item.title} className="flex h-full w-full max-w-[1200px] bg-primary shadow-xl outline-hidden md:rounded-2xl md:max-h-[920px]">
           <PitchBody key={item.id} item={item} people={people} meId={settings.meId} onClose={close} />
         </Dialog>
       </Modal>
@@ -74,21 +87,24 @@ function PitchBody({
   const [writerId, setWriterId] = useState(item.writerId);
   const [reviewerId, setReviewerId] = useState(item.reviewerId);
   const [publishBy, setPublishBy] = useState(item.publishBy);
-  const [lineNotes, setLineNotes] = useState<Record<string, string>>(() =>
-    Object.fromEntries(item.notes.filter((n) => n.lineId).map((n) => [n.lineId!, n.text])),
-  );
-  const [openNote, setOpenNote] = useState<string | null>(null);
-  const [generalNote, setGeneralNote] = useState(item.notes.find((n) => n.lineId === null)?.text ?? "");
+  const [threads, setThreads] = useState<PitchThread[]>(() => threadsFromNotes(item.notes, item));
+  const [draft, setDraft] = useState<{ field: string; quote: string } | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const notes: PitchNote[] = [
-    ...(generalNote.trim() ? [{ lineId: null, text: generalNote.trim() }] : []),
-    ...Object.entries(lineNotes)
-      .filter(([, t]) => t.trim())
-      .map(([lineId, t]) => ({ lineId, text: t.trim() })),
-  ];
+  const notes: PitchNote[] = notesFromThreads(threads, item);
+
+  const mine = (body: string) => ({ id: newId(), author: "You", at: Date.now(), body: body.trim(), mine: true });
+  const addThread = (field: string | null, quote: string | null, body: string) => {
+    const t: PitchThread = { id: newId(), field, quote, resolved: false, comments: [mine(body)] };
+    setThreads((all) => [...all, t]);
+    setActiveId(t.id);
+  };
+  const mapThread = (id: string, f: (t: PitchThread) => PitchThread) => setThreads((all) => all.map((t) => (t.id === id ? f(t) : t)));
 
   const writerName = personById(people, writerId)?.name ?? "Unassigned";
   const options = people.map((p) => ({ label: p.id === meId ? "You" : p.agent ? "Writer agent" : p.name, value: p.id }));
@@ -130,8 +146,13 @@ function PitchBody({
 
   const nameOf = (id: string) => options.find((o) => o.value === id)?.label ?? "Unassigned";
 
+  const items = toThreadItems(threads, item);
+
   return (
-    <>
+    <HighlightProvider
+      value={{ threads: decidable ? threads : [], activeId, hoverId, onActivate: setActiveId, onHover: setHoverId }}
+    >
+      <div className="flex min-w-0 flex-1 flex-col">
       {/* header: what it is, in one look */}
       <header className="border-b border-secondary px-6 pt-5 pb-6 md:px-8">
         <div className="flex items-center justify-between gap-3">
@@ -144,7 +165,11 @@ function PitchBody({
           <CloseButton size="md" onPress={onClose} label="Close" className="-mr-2 shrink-0" />
         </div>
         <h2 className="mt-4 type-title text-primary">{item.title}</h2>
-        {item.why && <p className="mt-2 text-sm text-secondary">{item.why}</p>}
+        {item.why && (
+          <p className="mt-2 text-sm text-secondary">
+            <Passage field="why" text={item.why} />
+          </p>
+        )}
         {item.learned && <p className="mt-2 text-sm text-tertiary italic">{item.learned}</p>}
         {!decidable && (
           <p className="mt-4 text-sm font-medium text-primary">
@@ -155,7 +180,7 @@ function PitchBody({
       </header>
 
       {/* body: one column, one rhythm */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={setBodyEl} className="flex-1 overflow-y-auto">
         <div className="flex flex-col gap-8 px-6 py-6 md:px-8">
           {item.research && (
             <p className="border-l-2 border-secondary pl-3 text-sm text-secondary">
@@ -173,8 +198,8 @@ function PitchBody({
           <Block title="The post">
             <Fields
               rows={[
-                ["Angle", item.angle],
-                ["Who it's for", item.audience],
+                ["Angle", item.angle && <Passage key="angle" field="angle" text={item.angle} />],
+                ["Who it's for", item.audience && <Passage key="audience" field="audience" text={item.audience} />],
                 [item.topics.length > 1 ? "Topics" : "Topic", [item.topics.join(", "), item.topicProgress].filter(Boolean).join(" · ")],
                 ["Format", [`Blog post in ${item.collection}`, item.length].filter(Boolean).join(", ")],
               ]}
@@ -183,7 +208,7 @@ function PitchBody({
 
           <Block title="Why now">
             {item.reasons.length ? (
-              <Fields rows={item.reasons.map((r) => [REASON_LABEL[r.kind], r.text, !r.counts] as const)} />
+              <Fields rows={item.reasons.map((r, n) => [REASON_LABEL[r.kind], <Passage key={n} field={`reason:${n}`} text={r.text} />, !r.counts] as const)} />
             ) : (
               <p className="text-sm text-tertiary">Your idea: no reasons from the Pitcher.</p>
             )}
@@ -209,47 +234,16 @@ function PitchBody({
           </Block>
 
           {item.outline.length > 0 && (
-            <Block title="Outline" hint={decidable ? "Hover a line to leave a note on it." : undefined}>
-              <ol className="flex flex-col">
-                {item.outline.map((l, n) => {
-                  const note = lineNotes[l.id];
-                  const showNote = note !== undefined || openNote === l.id;
-                  return (
-                    <li key={l.id} className="group -mx-2 rounded-lg px-2 py-1.5 hover:bg-primary_hover">
-                      <div className="flex items-start gap-3">
-                        <span className="w-4 shrink-0 text-right text-sm text-quaternary tabular-nums">{n + 1}</span>
-                        <span className="flex-1 text-sm text-primary">{l.text}</span>
-                        {decidable && !showNote && (
-                          <button
-                            type="button"
-                            onClick={() => setOpenNote(l.id)}
-                            aria-label={`Add a note on line ${n + 1}`}
-                            className="rounded-md p-0.5 text-fg-quaternary transition hover:text-fg-secondary md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-                          >
-                            <MessagePlusSquare className="size-4" />
-                          </button>
-                        )}
-                      </div>
-                      {showNote && (
-                        <TextArea
-                          autoFocus={openNote === l.id && note === undefined}
-                          rows={2}
-                          disabled={!decidable}
-                          className="mt-2 ml-7 w-[calc(100%-1.75rem)]"
-                          placeholder="Your note on this line"
-                          value={note ?? ""}
-                          onChange={(e) => setLineNotes((m) => ({ ...m, [l.id]: e.target.value }))}
-                          onBlur={() => {
-                            if (!lineNotes[l.id]?.trim()) {
-                              setLineNotes(({ [l.id]: _, ...rest }) => rest);
-                              setOpenNote(null);
-                            }
-                          }}
-                        />
-                      )}
-                    </li>
-                  );
-                })}
+            <Block title="Outline" hint={decidable ? "Highlight any words to comment on them." : undefined}>
+              <ol className="flex flex-col gap-2">
+                {item.outline.map((l, n) => (
+                  <li key={l.id} className="flex items-start gap-3">
+                    <span className="w-4 shrink-0 text-right text-sm text-quaternary tabular-nums">{n + 1}</span>
+                    <span className="flex-1 text-sm text-primary">
+                      <Passage field={l.id} text={l.text} />
+                    </span>
+                  </li>
+                ))}
               </ol>
             </Block>
           )}
@@ -289,14 +283,6 @@ function PitchBody({
                   />
                 </label>
               </div>
-              {decidable && (
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-secondary">
-                    Note for the writer <span className="font-normal text-tertiary">(optional)</span>
-                  </span>
-                  <TextArea rows={2} placeholder="Anything to keep in mind while writing it" value={generalNote} onChange={(e) => setGeneralNote(e.target.value)} />
-                </label>
-              )}
             </CardBody>
           </Card>
         </div>
@@ -341,7 +327,52 @@ function PitchBody({
             </Button>
           </footer>
         ))}
-    </>
+      </div>
+
+      {/* comments: highlights and general, sent together on approve */}
+      <aside className="hidden w-[360px] shrink-0 flex-col border-l border-secondary bg-secondary_subtle lg:flex">
+        <div className="border-b border-secondary px-5 py-4">
+          <h3 className="type-heading text-primary">Comments</h3>
+          <p className="mt-1 text-xs text-tertiary">
+            {decidable ? "They go to the writer together when you approve." : "What was said when this pitch was decided."}
+          </p>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {decidable ? (
+            <CommentThreads
+              threads={items}
+              draftQuote={draft?.quote ?? null}
+              activeId={activeId}
+              hoverId={hoverId}
+              onActivate={setActiveId}
+              onHover={setHoverId}
+              onComment={(body) => {
+                if (draft) addThread(draft.field, draft.quote, body);
+                setDraft(null);
+              }}
+              onCancelDraft={() => setDraft(null)}
+              onGeneral={(body) => addThread(null, null, body)}
+              onReply={(id, body) => mapThread(id, (t) => ({ ...t, comments: [...t.comments, mine(body)] }))}
+              onResolve={(id, resolved) => mapThread(id, (t) => ({ ...t, resolved }))}
+              onDelete={(cid) => setThreads((all) => all.map((t) => ({ ...t, comments: t.comments.filter((c) => c.id !== cid) })).filter((t) => t.comments.length))}
+              generalPlaceholder="Anything to keep in mind while writing it"
+            />
+          ) : item.notes.length ? (
+            <ul className="flex flex-col gap-3">
+              {item.notes.map((n, i) => (
+                <li key={i} className="flex flex-col gap-2 rounded-xl bg-primary p-3 text-sm ring-1 ring-secondary ring-inset">
+                  {n.quote && <blockquote className="border-l-2 border-brand pl-3 text-tertiary">{n.quote}</blockquote>}
+                  <p className="whitespace-pre-wrap text-primary">{n.text}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-tertiary">No comments.</p>
+          )}
+        </div>
+      </aside>
+      {decidable && <SelectionComment root={bodyEl} onPick={(field, quote) => setDraft({ field, quote })} />}
+    </HighlightProvider>
   );
 }
 
@@ -359,7 +390,7 @@ function Block({ title, hint, children }: { title: string; hint?: string; childr
 }
 
 /** Label and value rows, the label in a fixed column; empty values are left out. */
-function Fields({ rows }: { rows: ReadonlyArray<readonly [string, string | undefined, boolean?]> }) {
+function Fields({ rows }: { rows: ReadonlyArray<readonly [string, ReactNode, boolean?]> }) {
   return (
     <dl className="flex flex-col divide-y divide-secondary">
       {rows

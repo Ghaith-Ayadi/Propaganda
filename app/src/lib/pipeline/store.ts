@@ -280,13 +280,13 @@ export function briefBody(item: PipelineItem, people: Person[]): string {
   if (item.audience) parts.push(`## Who it's for\n${item.audience}`);
   if (item.outline.length) {
     const outline = item.outline.map((l, n) => {
-      const notes = item.notes.filter((x) => x.lineId === l.id).map((x) => `\n   - Note: ${x.text}`);
+      const notes = item.notes.filter((x) => x.lineId === l.id).map((x) => `\n   - Note${x.quote ? ` on "${x.quote}"` : ""}: ${x.text}`);
       return `${n + 1}. ${l.text}${notes.join("")}`;
     });
     parts.push(`## Outline\n${outline.join("\n")}`);
   }
   const general = item.notes.filter((x) => x.lineId === null);
-  if (general.length) parts.push(`## Reviewer notes\n${general.map((x) => `- ${x.text}`).join("\n")}`);
+  if (general.length) parts.push(`## Reviewer notes\n${general.map((x) => `- ${x.quote ? `On "${x.quote}": ` : ""}${x.text}`).join("\n")}`);
   if (item.sources.length) parts.push(`## Sources\n${item.sources.map((s) => `- [${s.label}](${s.url})`).join("\n")}`);
   const reviewer = personById(people, item.reviewerId)?.name ?? "";
   parts.push(`${item.length} · ${item.topics.join(", ")}${reviewer ? ` · reviewer: ${reviewer}` : ""}`);
@@ -307,7 +307,7 @@ export async function approvePitch(
 
   if (LIVE) {
     const { postId, agentNote, drafted } = await live.approve(item, decision);
-    updateItem(id, { ...decision, stage: drafted ? "in_review" : "writing", postId, notes: item.notes });
+    updateItem(id, { ...decision, stage: drafted ? "in_review" : "writing", postId });
     void refresh();
     if (agentNote) {
       toast.add({ title: "The Writer didn't start", description: `The worker says ${agentNote}. Write it yourself, or ask Chat to write it later.` });
