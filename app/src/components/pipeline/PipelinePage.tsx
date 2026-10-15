@@ -95,7 +95,7 @@ export function PipelinePage() {
               </p>
             </div>
           )}
-          <div className="overflow-x-auto px-4 pt-6 pb-10 md:px-8">
+          <div className="overflow-x-auto px-4 pt-6 pb-10 md:px-5 2xl:px-8">
             <div className="grid min-w-[1040px] grid-cols-4 gap-4 xl:min-w-[880px]">
               {BOARD_STAGES.map((stage) => (
                 <Column key={stage} stage={stage} items={columns[stage]}>

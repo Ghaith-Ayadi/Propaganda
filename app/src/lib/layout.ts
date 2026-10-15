@@ -1,25 +1,46 @@
-// Sidebar / attribute panel visibility — persisted in localStorage.
-// Author mode = both panels hidden.
+// Sidebar / attribute panel visibility and the details panel's width, persisted
+// in localStorage. Author mode = both panels hidden.
 
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "verbatim:layout";
 
+/** The details panel (right): default, and the range a drag can reach. */
+export const ATTRIBUTES_WIDTH = { default: 320, min: 260, max: 640 } as const;
+
 interface Layout {
   sidebar: boolean;
   attributes: boolean;
+  /** The left drawer shrinks to an icon rail instead of hiding. */
+  sidebarCollapsed: boolean;
+  /** null until the writer drags the edge: each panel then uses its own default. */
+  attributesWidth: number | null;
+}
+
+const DEFAULTS: Layout = {
+  sidebar: true,
+  attributes: true,
+  sidebarCollapsed: false,
+  attributesWidth: null,
+};
+
+export function clampWidth(w: number): number {
+  const max = Math.min(ATTRIBUTES_WIDTH.max, Math.round(window.innerWidth * 0.6));
+  return Math.max(ATTRIBUTES_WIDTH.min, Math.min(max, Math.round(w)));
 }
 
 function read(): Layout {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
   } catch {}
-  return { sidebar: true, attributes: true };
+  return DEFAULTS;
 }
 
 function write(l: Layout) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(l));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(l));
+  } catch {}
 }
 
 const listeners = new Set<(l: Layout) => void>();

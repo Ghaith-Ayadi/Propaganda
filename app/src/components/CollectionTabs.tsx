@@ -71,7 +71,7 @@ export function CollectionTabs() {
   const collectionPosts = posts.filter((p) => p.type === activeName);
 
   return (
-    <div className="mx-auto h-full w-full max-w-[900px] px-4 pt-6 pb-16 md:px-10 md:pt-10">
+    <div className="mx-auto h-full w-full max-w-[900px] px-4 pt-6 pb-16 md:px-5 md:pt-5 2xl:px-10 2xl:pt-10">
       <CollectionView collection={activeCollection} posts={collectionPosts} />
     </div>
   );

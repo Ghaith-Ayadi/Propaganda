@@ -405,7 +405,7 @@
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* 8. BROADSIDE                                                               */
-/* Black · oversized Roslindale Display bold · poster impact                 */
+/* Black · oversized Roslindale Display semibold · poster impact                 */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
 .sc-t8 {
@@ -417,7 +417,7 @@
 
 .sc-t8 .sc-quote {
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 600;
   color: #ffffff;
   line-height: 1.22;
   flex: 1;

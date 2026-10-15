@@ -259,14 +259,14 @@ export default defineConfig(({ mode }) => {
         registerType: "autoUpdate",
         // EditorApp registers the worker itself: blogs never load it.
         injectRegister: false,
-        includeAssets: ["favicon.svg"],
+        includeAssets: ["favicon.svg", "favicon.ico", "apple-touch-icon.png"],
         manifest: {
           // Stable identity pinned to the admin app so the installed PWA is the
           // writing tool, not the public reader.
           id: "/admin",
-          name: "Verbatim",
-          short_name: "Verbatim",
-          description: "Local-first writing.",
+          name: "Propaganda",
+          short_name: "Propaganda",
+          description: "Write and publish in your own voice.",
           theme_color: "#0a0a0a",
           background_color: "#0a0a0a",
           display: "standalone",
@@ -275,6 +275,9 @@ export default defineConfig(({ mode }) => {
           scope: "/",
           icons: [
             { src: "/favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
+            { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+            { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+            { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
           ],
         },
         workbox: {

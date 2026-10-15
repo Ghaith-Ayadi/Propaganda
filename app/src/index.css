@@ -1,5 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
-@import url("https://api.fontshare.com/v2/css?f[]=zodiak@400,500,600,700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500;600&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=zodiak@400,500,600&display=swap");
 @import "./styles/globals.css";
 
 /* Roslindale Variable Display — used for editorial headings (post titles,
@@ -7,7 +7,7 @@
 @font-face {
   font-family: "Roslindale Display";
   src: url("/fonts/RoslindaleVariableDisplay-VF.ttf") format("truetype-variations");
-  font-weight: 100 1000;
+  font-weight: 100 600;
   font-style: normal;
   font-display: swap;
 }
@@ -15,6 +15,13 @@
 /* App-specific tweaks layered on top of Untitled UI. */
 
 @theme {
+  /* Nothing in Propaganda is heavier than 600 (Ayadi, 2026-10-15), so the
+     heavy Tailwind utilities resolve to it. `npm run check:weights`
+     keeps literal 700s out of the source. */
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
+
   /* Geist for body / UI, Zodiak for the logo + editorial titles. */
   --font-inter: "Geist";
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Monaco, monospace;
@@ -40,6 +47,11 @@
 
 html, body, #root {
   height: 100%;
+}
+
+/* The browser's own bold is 700: cap it for the elements that default to it. */
+b, strong, th, dt, h1, h2, h3, h4, h5, h6, optgroup {
+  font-weight: 600;
 }
 
 /* The app (/admin), not the public blogs (EditorApp sets the class), which

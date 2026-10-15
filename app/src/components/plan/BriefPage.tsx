@@ -3,6 +3,8 @@
 // (lib/plan/briefs); edits persist and sync.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ResizeHandle } from "@/components/shell/ResizeHandle";
+import { ATTRIBUTES_WIDTH, clampWidth, useLayout } from "@/lib/layout";
 import { useLiveQuery } from "dexie-react-hooks";
 import { BlockNoteView } from "@blocknote/mantine";
 import { useCreateBlockNote } from "@blocknote/react";
@@ -67,6 +69,7 @@ export function BriefPage({ id }: { id: string }) {
 }
 
 function BriefView({ brief }: { brief: Brief }) {
+  const [layout, setLayout] = useLayout();
   const editor = useCreateBlockNote();
   const [theme] = useTheme();
   const [tagDraft, setTagDraft] = useState("");
@@ -193,7 +196,18 @@ function BriefView({ brief }: { brief: Brief }) {
         </div>
       </main>
 
-      <aside className="flex h-full w-[320px] shrink-0 max-md:hidden flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm">
+      <aside
+        style={{ width: layout.attributesWidth ?? ATTRIBUTES_WIDTH.default }}
+        className="relative flex h-full shrink-0 max-md:hidden flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm [scrollbar-gutter:stable]"
+      >
+        <ResizeHandle
+          width={layout.attributesWidth ?? ATTRIBUTES_WIDTH.default}
+          min={ATTRIBUTES_WIDTH.min}
+          max={ATTRIBUTES_WIDTH.max}
+          onChange={(w) => setLayout({ attributesWidth: clampWidth(w) })}
+          onReset={() => setLayout({ attributesWidth: null })}
+          label="Resize details panel"
+        />
         <FieldStack label="Status">
           <Select
             size="sm"

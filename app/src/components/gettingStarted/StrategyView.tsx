@@ -332,7 +332,7 @@ export function StrategyView({
       )}
 
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-secondary bg-primary/95 backdrop-blur md:-mx-8 lg:mr-0">
-        <div className="flex flex-col gap-2 px-4 py-3 md:px-8 lg:pr-0">
+        <div className="flex flex-col gap-2 px-4 py-3 md:px-5 2xl:px-8 lg:pr-0">
           <span className="text-sm text-tertiary">
             {pitches.length > 0
               ? `${pitches.length} pitches ready`

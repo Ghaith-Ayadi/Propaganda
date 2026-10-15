@@ -13,9 +13,10 @@ import type { Key, ReactNode } from "react";
 import { Tabs } from "@/components/application/tabs/tabs";
 import { cx } from "@/utils/cx";
 
-/** The shared content container: width and side gutters. */
-export const CONTAINER = "mx-auto w-full max-w-[1120px] px-4 md:px-8";
-const FULL = "w-full px-4 md:px-8";
+/** The shared content container: width and side gutters. Laptops (md up to
+ * the 2xl breakpoint, 1536px) use 20px; big screens keep 32px. */
+export const CONTAINER = "mx-auto w-full max-w-[1120px] px-4 md:px-5 2xl:px-8";
+const FULL = "w-full px-4 md:px-5 2xl:px-8";
 
 export function PageHeader({
   title,
@@ -39,7 +40,7 @@ export function PageHeader({
 }) {
   return (
     <header data-intro="top" className="border-b border-secondary">
-      <div className={cx(contained ? CONTAINER : FULL, "pt-6 md:pt-8", tabs ? "pb-0" : "pb-5 md:pb-6")}>
+      <div className={cx(contained ? CONTAINER : FULL, "pt-6 md:pt-5 2xl:pt-8", tabs ? "pb-0" : "pb-5 md:pb-6")}>
         {breadcrumbs && <div className="mb-3 text-sm text-tertiary">{breadcrumbs}</div>}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -57,7 +58,7 @@ export function PageHeader({
 
 /** The page's content, in the shared container (or full width). */
 export function PageBody({ children, contained = true, className }: { children: ReactNode; contained?: boolean; className?: string }) {
-  return <div className={cx(contained ? CONTAINER : FULL, "pt-6 pb-16 md:pt-8", className)}>{children}</div>;
+  return <div className={cx(contained ? CONTAINER : FULL, "pt-6 pb-16 md:py-5 2xl:pt-8 2xl:pb-16", className)}>{children}</div>;
 }
 
 /** Header + body in one. */
