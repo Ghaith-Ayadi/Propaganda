@@ -198,7 +198,7 @@ function BriefView({ brief }: { brief: Brief }) {
 
       <aside
         style={{ width: layout.attributesWidth ?? ATTRIBUTES_WIDTH.default }}
-        className="relative flex h-full shrink-0 max-md:hidden flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm [scrollbar-gutter:stable]"
+        className="ppg-panel relative flex h-full shrink-0 max-md:hidden flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm [scrollbar-gutter:stable]"
       >
         <ResizeHandle
           width={layout.attributesWidth ?? ATTRIBUTES_WIDTH.default}

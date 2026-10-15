@@ -233,6 +233,9 @@ function Thread({
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [messages, status]);
 
+  // Only replies that arrive after the conversation opened rise in.
+  const seen = useRef<Set<string> | null>(null);
+  if (seen.current === null) seen.current = new Set(messages.map((m) => m.id));
   const last = messages[messages.length - 1];
   return (
     <div
@@ -245,12 +248,13 @@ function Thread({
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-5 md:py-5 2xl:px-8 2xl:py-8">
         {messages.map((m) => (
+          <div key={m.id} className={seen.current?.has(m.id) ? undefined : "ppg-pop"}>
           <Message
-            key={m.id}
             message={m}
             streaming={status === "streaming" && m === last && m.role === "assistant"}
             onRemember={onRemember}
           />
+          </div>
         ))}
         {/* Sent, nothing back yet: useChat adds the reply on its first chunk. */}
         {status === "submitted" && (

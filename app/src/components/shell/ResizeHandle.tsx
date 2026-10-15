@@ -24,6 +24,7 @@ export function ResizeHandle({
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     start.current = { x: e.clientX, w: width };
+    document.documentElement.dataset.resizing = "1";
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }
@@ -36,6 +37,7 @@ export function ResizeHandle({
     if (!start.current) return;
     start.current = null;
     e.currentTarget.releasePointerCapture(e.pointerId);
+    delete document.documentElement.dataset.resizing;
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
   }

@@ -262,3 +262,28 @@ html[data-intro-play] [data-intro="right"] { animation: intro-from-right 700ms c
   html[data-intro-play] [data-intro], [data-reveal] { animation: none; }
   .skeleton::after { animation: none; }
 }
+
+/* ── Motion ─────────────────────────────────────────────────────────────
+   Small shared transitions (components/motion). All are off under
+   prefers-reduced-motion. */
+@keyframes ppg-pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ppg-shake {
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(3px); }
+}
+@keyframes ppg-check-in { from { transform: scale(0.4); opacity: 0; } to { transform: none; opacity: 1; } }
+.ppg-pop { animation: ppg-pop 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.ppg-shake { animation: ppg-shake 0.35s ease-in-out; }
+.ppg-check { animation: ppg-check-in 0.3s cubic-bezier(0.3, 1.5, 0.5, 1) both; }
+/* A side panel's width eases when its default changes; not while it is being dragged. */
+.ppg-panel { transition: width 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }
+html[data-resizing] .ppg-panel { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ppg-pop, .ppg-shake, .ppg-check { animation: none; }
+  .ppg-panel { transition: none; }
+}

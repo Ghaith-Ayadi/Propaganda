@@ -110,7 +110,7 @@ export function AttributePanel({ post }: Props) {
   return (
     <aside
       style={{ "--panel-w": `${width}px` } as CSSProperties}
-      className="relative flex h-full w-[300px] max-w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm [scrollbar-gutter:stable] md:w-[var(--panel-w)]"
+      className="ppg-panel relative flex h-full w-[300px] max-w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm [scrollbar-gutter:stable] md:w-[var(--panel-w)]"
     >
       <ResizeHandle
         width={width}

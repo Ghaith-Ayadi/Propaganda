@@ -3,6 +3,8 @@
 // background work has stopped.
 
 import { useEffect, useState } from "react";
+import { cx } from "@/utils/cx";
+import { NumberPop } from "@/components/motion/NumberPop";
 import { budgetState, loadMonthUsage, usd, type MonthUsage } from "@/lib/cost";
 import { reportError } from "@/lib/telemetry";
 
@@ -30,14 +32,14 @@ export function CostMeter() {
       <div className="flex items-baseline justify-between gap-4">
         <span className="text-sm font-medium text-secondary">Model usage this month</span>
         <span className="text-sm text-primary">
-          {usd(usage.spentUsd)}
+          <NumberPop value={usd(usage.spentUsd)} />
           {usage.monthlyLimit !== null && <span className="text-tertiary"> of {usd(usage.monthlyLimit)}</span>}
         </span>
       </div>
       {usage.monthlyLimit !== null && (
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-tertiary" role="img" aria-label={`${Math.round(pct)}% of the monthly budget used`}>
           <div
-            className={state === "over" ? "h-full bg-error-solid" : state === "warn" ? "h-full bg-warning-solid" : "h-full bg-brand-solid"}
+            className={cx("h-full transition-[width] duration-500 ease-out motion-reduce:transition-none", state === "over" ? "bg-error-solid" : state === "warn" ? "bg-warning-solid" : "bg-brand-solid")}
             style={{ width: `${pct}%` }}
           />
         </div>

@@ -128,7 +128,7 @@ function Thread({ t, active, hover, p }: { t: ThreadItem; active: boolean; hover
       onMouseLeave={() => p.onHover(null)}
       onClick={() => p.onActivate(t.id)}
       className={cx(
-        "flex flex-col gap-3 rounded-xl bg-primary p-3 ring-1 ring-secondary ring-inset",
+        "flex flex-col gap-3 rounded-xl bg-primary p-3 ring-1 ring-secondary ring-inset animate-in fade-in slide-in-from-right-2 duration-200 motion-reduce:animate-none",
         (active || hover) && "ring-2 ring-brand",
         t.resolved && "opacity-60",
       )}

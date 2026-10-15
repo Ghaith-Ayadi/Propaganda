@@ -1,5 +1,5 @@
-import type { ComponentPropsWithRef, FC, ReactNode } from "react";
-import { createContext, isValidElement, useContext } from "react";
+import type { ComponentPropsWithRef, FC, ReactNode, RefObject } from "react";
+import { createContext, isValidElement, useContext, useLayoutEffect, useRef } from "react";
 import type { TabListProps as AriaTabListProps, TabProps as AriaTabProps, TabRenderProps as AriaTabRenderProps } from "react-aria-components";
 import { Tab as AriaTab, TabList as AriaTabList, TabPanel as AriaTabPanel, Tabs as AriaTabs, TabsContext, useSlottedContext } from "react-aria-components";
 import { Badge } from "@/components/base/badges/badges";
@@ -39,7 +39,9 @@ const getTabStyles = ({ isFocusVisible, isSelected, isHovered }: AriaTabRenderPr
     underline: cx(
         "rounded-none border-b-2 border-transparent outline-focus-ring *:data-icon:text-fg-quaternary",
         isFocusVisible && "outline-2 -outline-offset-2",
-        (isSelected || isHovered) && "border-fg-brand-primary_alt text-brand-secondary *:data-icon:text-fg-brand-secondary_hover",
+        // The selected tab's bar is the list's sliding indicator (useSlidingIndicator), so it eases between tabs.
+        isHovered && !isSelected && "border-fg-brand-primary_alt",
+        (isSelected || isHovered) && "text-brand-secondary *:data-icon:text-fg-brand-secondary_hover",
     ),
     line: cx(
         "rounded-none border-l-2 border-transparent outline-focus-ring *:data-icon:text-fg-quaternary",
@@ -97,6 +99,29 @@ const TabListContext = createContext<Omit<TabListComponentProps<TabComponentProp
     type: "button-brand",
 });
 
+/** Keeps --ind-x / --ind-w on the list at the selected tab, for the sliding underline. */
+function useSlidingIndicator(ref: RefObject<HTMLDivElement | null>, on: boolean) {
+    useLayoutEffect(() => {
+        const list = ref.current;
+        if (!list || !on) return;
+        const place = () => {
+            const tab = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+            if (!tab) return;
+            list.style.setProperty("--ind-x", `${tab.offsetLeft}px`);
+            list.style.setProperty("--ind-w", `${tab.offsetWidth}px`);
+        };
+        place();
+        const mo = new MutationObserver(place);
+        mo.observe(list, { attributes: true, subtree: true, attributeFilter: ["aria-selected"] });
+        const ro = new ResizeObserver(place);
+        ro.observe(list);
+        return () => {
+            mo.disconnect();
+            ro.disconnect();
+        };
+    }, [ref, on]);
+}
+
 export const TabList = <T extends Orientation>({
     size = "sm",
     type = "button-brand",
@@ -109,11 +134,14 @@ export const TabList = <T extends Orientation>({
     const context = useSlottedContext(TabsContext);
 
     const orientation = orientationProp ?? context?.orientation ?? "horizontal";
+    const listRef = useRef<HTMLDivElement>(null);
+    useSlidingIndicator(listRef, type === "underline" && orientation === "horizontal");
 
     return (
         <TabListContext.Provider value={{ size, type, orientation, fullWidth }}>
             <AriaTabList
                 {...otherProps}
+                ref={listRef}
                 className={(state) =>
                     cx(
                         "group flex",
@@ -128,7 +156,7 @@ export const TabList = <T extends Orientation>({
                         // Only horizontal tabs with underline type have bottom border
                         orientation === "horizontal" &&
                             type === "underline" &&
-                            "relative before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border-secondary",
+                            "relative before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border-secondary after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-[var(--ind-w,0px)] after:translate-x-[var(--ind-x,0px)] after:bg-fg-brand-primary_alt after:transition-[transform,width] after:duration-250 after:ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:after:transition-none",
 
                         typeof className === "function" ? className(state) : className,
                     )

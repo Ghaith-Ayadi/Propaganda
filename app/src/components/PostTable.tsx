@@ -3,7 +3,8 @@
 // - Status filter chips (All / Drafts / Published) above the table
 // - Title filter input on the right
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useFlip } from "@/lib/motion/useFlip";
 import { ArrowDown, ArrowUp, Copy04, DotsHorizontal, Plus, SearchLg, Trash01 } from "@untitledui/icons";
 import type { Post } from "@/types";
 import { go } from "@/lib/route";
@@ -51,6 +52,8 @@ export function PostTable({ posts, onAddPost }: Props) {
     });
     return xs;
   }, [posts, filter, query, sortKey, sortDir]);
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  useFlip(bodyRef, filtered);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -110,7 +113,7 @@ export function PostTable({ posts, onAddPost }: Props) {
             <Th className="w-10" />
           </tr>
         </thead>
-        <tbody>
+        <tbody ref={bodyRef}>
           <tr
             tabIndex={0}
             onClick={onAddPost}
@@ -138,6 +141,7 @@ export function PostTable({ posts, onAddPost }: Props) {
           {filtered.map((p) => (
             <tr
               key={p.id}
+              data-flip={p.id}
               tabIndex={0}
               onClick={() => go({ view: "post", id: p.id })}
               onKeyDown={(e) => {
