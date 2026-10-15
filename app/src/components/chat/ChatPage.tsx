@@ -110,7 +110,7 @@ export function ChatPage() {
       <div className="relative flex min-h-0 flex-1">
         <section className="flex min-w-0 flex-1 flex-col">
           {messages.length > 0 || (activeId && loading) ? (
-            <Thread messages={messages} status={status} onRemember={remember} onRetry={retry} />
+            <Thread key={activeId ?? "new"} history={Boolean(activeId)} messages={messages} status={status} onRemember={remember} onRetry={retry} />
           ) : (
             <Welcome onPick={ask} />
           )}
@@ -214,11 +214,14 @@ function Welcome({ onPick }: { onPick: (s: string) => void }) {
 }
 
 function Thread({
+  history,
   messages,
   status,
   onRemember,
   onRetry,
 }: {
+  /** An existing conversation: its loaded messages do not animate in. */
+  history: boolean;
   messages: ChatUIMessage[];
   status: ChatStatus;
   onRemember: (statement: string, messageId: string) => Promise<void>;
@@ -235,7 +238,8 @@ function Thread({
 
   // Only replies that arrive after the conversation opened rise in.
   const seen = useRef<Set<string> | null>(null);
-  if (seen.current === null) seen.current = new Set(messages.map((m) => m.id));
+  // History loads in after the first render, so seed on the first non-empty list.
+  if (seen.current === null && messages.length > 0) seen.current = new Set(history ? messages.map((m) => m.id) : []);
   const last = messages[messages.length - 1];
   return (
     <div
