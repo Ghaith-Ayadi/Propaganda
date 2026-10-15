@@ -147,6 +147,12 @@ async function polishDraft(site: string, step: string, voice: string, d: { markd
 /** Every house-rule problem left in a draft, for the reviewer. */
 const leftHits = (markdown: string, styled: boolean) => (styled ? [...styleHits(markdown), ...hardHits(markdown)] : styleHits(markdown));
 
+/** The tenant's own hosts: its blog's domain and its propaganda.pub address. */
+async function ownHostsOf(site: string): Promise<string[]> {
+  const row = await getSite(site);
+  return [row?.domain, row?.slug ? `${row.slug}.propaganda.pub` : ""].filter((h): h is string => Boolean(h)).map((h) => h.replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
+}
+
 async function research(site: string, brief: BriefRow): Promise<{ pages: Page[]; claims: Claim[]; searches: SearchSession }> {
   const queries = await askJson(
     "plan research",
@@ -161,6 +167,11 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
     (v) => strs(obj(v, "The answer").searches, "searches").slice(0, 3),
   );
 
+  // Search hits are read for citing only if their domain has authority (authority.ts). The brief's
+  // own sources were chosen by the Pitcher and a person, and the tenant's own pages stay citable.
+  // Guarded: a run recorded before this reads its sources unfiltered.
+  const gated = await DBOS.patch("writer-authority");
+  const ownHosts = gated ? await DBOS.runStep(() => ownHostsOf(site), { name: "read the site's hosts" }) : [];
   const urls: string[] = (brief.sources ?? []).map((s) => s.url);
   const searches = new SearchSession();
   for (const [n, q] of queries.entries()) {
@@ -172,10 +183,8 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
     } catch (err) {
       DBOS.logger.warn(`writer research: search "${q}" refused: ${(err as Error).message}`);
     }
-    for (const h of hits) if (!urls.includes(h.url)) urls.push(h.url);
+    for (const h of hits) if (!urls.includes(h.url) && (!gated || quotable(h.url, ownHosts))) urls.push(h.url);
   }
-  // Only sources with authority are read for citing (authority.ts); the rest never reach the draft.
-  urls.splice(0, urls.length, ...urls.filter((u) => quotable(u)));
 
   const pages: Page[] = [];
   for (const [n, url] of urls.slice(0, MAX_PAGES + 4).entries()) {
