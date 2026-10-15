@@ -61,8 +61,9 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   };
 
   const answered = proposal.questions.filter((q) => answers[q]?.trim());
-  // Open questions block approval (Ayadi, 2026-10-10): every one is answered, the
-  // answers go back together, and the revision that comes back is the one to approve.
+  // Open questions no longer block approval (Ayadi, 2026-10-15): the plan is approved
+  // as shown and a skipped question keeps the plan's own default. Answers still go
+  // back together as a revision.
   const allAnswered = answered.length === proposal.questions.length;
   const blocked = proposal.questions.length > 0;
   // The answers go back as a revision request, so the next proposal is built on them.
@@ -257,8 +258,8 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
               <Button size="md" color="secondary" onClick={() => setAsking(true)}>
                 Ask for changes
               </Button>
-              {blocked && <p className="text-sm text-tertiary sm:mr-auto">Answer the Strategist's questions above to approve.</p>}
-              <Button size="md" color="primary" isDisabled={blocked || problems.length > 0 || busy} isLoading={busy} onClick={() => void approve()}>
+              {blocked && <p className="text-sm text-tertiary sm:mr-auto">Approving as it is: a question you skip keeps the plan's own default.</p>}
+              <Button size="md" color="primary" isDisabled={problems.length > 0 || busy} isLoading={busy} onClick={() => void approve()}>
                 {edits.length ? `Approve with ${edits.length} ${edits.length === 1 ? "change" : "changes"}` : "Approve"}
               </Button>
             </div>
