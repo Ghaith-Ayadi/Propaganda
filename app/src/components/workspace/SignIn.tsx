@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
+import { cx } from "@/utils/cx";
 import { PinInput } from "@/components/base/input/pin-input";
 import {
   SignInCancelled,
@@ -167,7 +168,7 @@ export function SignIn({
           </div>
         ) : (
           <div className="mt-8 space-y-6">
-            <PinInput size="xxs" disabled={verifyBusy} invalid={Boolean(error)} className="items-center">
+            <PinInput size="xxs" disabled={verifyBusy} invalid={Boolean(error)} className={cx("items-center", error && "ppg-shake")} key={error ?? "ok"}>
               <PinInput.Group
                 autoFocus
                 maxLength={6}

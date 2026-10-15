@@ -14,6 +14,8 @@ import { SiteSwitcher } from "@/components/workspace/SiteSwitcher";
 import { LiteCollections } from "@/components/lite/LiteCollections";
 import { hookKey, usePages } from "@/components/lite/pages";
 import { useActiveCollection } from "@/lib/activeCollection";
+import { Collapse } from "@/components/motion/Collapse";
+import { NumberPop } from "@/components/motion/NumberPop";
 import { useLayout } from "@/lib/layout";
 import { useIsMobile } from "@/lib/mobile";
 import { analyticsHref, pageHref, useRoute, type Route } from "@/lib/route";
@@ -37,36 +39,43 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
   const isMobile = useIsMobile();
 
   // Collapsed on a laptop: an icon rail, so the details panel gets the room.
-  if (layout.sidebarCollapsed && !isMobile) {
-    return (
-      <aside data-intro="left" className="flex h-full w-[52px] shrink-0 flex-col items-center border-r border-secondary bg-secondary py-3">
-        <button
-          type="button"
-          aria-label="Expand sidebar"
-          title="Expand sidebar (⌘.)"
-          onClick={() => setLayout({ sidebarCollapsed: false })}
-          className="rounded-lg p-2 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
-        >
-          <LayoutLeft className="size-4" />
-        </button>
-        <nav aria-label="Main" className="mt-2 flex flex-1 flex-col items-center gap-0.5 overflow-y-auto [scrollbar-width:none]">
-          {pages
-            .filter((p) => p.section === "main" && !(lite && p.id === "content"))
-            .map((p) => (
-              <RailLink key={hookKey(p)} page={p} active={active === p.id} />
-            ))}
-        </nav>
-        <div className="flex flex-col items-center gap-0.5 border-t border-secondary pt-2">
-          {pages.filter((p) => p.section === "footer").map((p) => (
+  const collapsed = layout.sidebarCollapsed && !isMobile;
+  const rail = (
+    <div className="flex h-full w-[52px] flex-col items-center py-3">
+      <button
+        type="button"
+        aria-label="Expand sidebar"
+        title="Expand sidebar (⌘.)"
+        onClick={() => setLayout({ sidebarCollapsed: false })}
+        className="rounded-lg p-2 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+      >
+        <LayoutLeft className="size-4" />
+      </button>
+      <nav aria-label="Main" className="mt-2 flex flex-1 flex-col items-center gap-0.5 overflow-y-auto [scrollbar-width:none]">
+        {pages
+          .filter((p) => p.section === "main" && !(lite && p.id === "content"))
+          .map((p) => (
             <RailLink key={hookKey(p)} page={p} active={active === p.id} />
           ))}
-        </div>
-      </aside>
-    );
-  }
+      </nav>
+      <div className="flex flex-col items-center gap-0.5 border-t border-secondary pt-2">
+        {pages.filter((p) => p.section === "footer").map((p) => (
+          <RailLink key={hookKey(p)} page={p} active={active === p.id} />
+        ))}
+      </div>
+    </div>
+  );
 
   return (
-    <aside data-intro="left" className="flex h-full w-[260px] max-w-full shrink-0 flex-col border-r border-secondary bg-secondary max-md:w-[300px]">
+    <aside
+      data-intro="left"
+      className={cx(
+        "h-full max-w-full shrink-0 overflow-hidden border-r border-secondary bg-secondary transition-[width] duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none",
+        collapsed ? "w-[52px]" : "w-[260px] max-md:w-[300px]",
+      )}
+    >
+      {collapsed ? rail : (
+    <div className="flex h-full w-[260px] max-w-full flex-col max-md:w-[300px]">
       <div className="flex items-center gap-1 px-3 pt-3 pb-2">
         <div className="min-w-0 flex-1">
           <SiteSwitcher />
@@ -153,6 +162,8 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
           )}
         </ul>
       </div>
+    </div>
+      )}
     </aside>
   );
 }
@@ -212,7 +223,7 @@ function PageItem({
           <span className="truncate">{page.label}</span>
           {badge && (
             <Badge size="sm" color={badge.urgent ? "error" : "gray"} className={cx("ml-auto tabular-nums", children && "mr-6")}>
-              {badge.count}
+              <NumberPop value={badge.count} />
             </Badge>
           )}
         </a>
@@ -220,8 +231,10 @@ function PageItem({
           <FoldButton id={page.id} open={open} className="absolute right-1" />
         )}
       </div>
-      {children && open && (
-        <NavTree page={page} nodes={children} route={route} currentCollection={currentCollection} depth={0} />
+      {children && (
+        <Collapse open={open}>
+          <NavTree page={page} nodes={children} route={route} currentCollection={currentCollection} depth={0} />
+        </Collapse>
       )}
     </li>
   );
@@ -236,7 +249,7 @@ function FoldButton({ id, open, className }: { id: string; open: boolean; classN
       onClick={() => toggleFolded(id)}
       className={cx("rounded p-1 text-quaternary transition hover:bg-primary_hover hover:text-secondary", className)}
     >
-      <ChevronDown className={cx("size-3.5 transition", !open && "-rotate-90")} />
+      <ChevronDown className={cx("size-3.5 transition-transform duration-200", !open && "-rotate-90")} />
     </button>
   );
 }
@@ -300,8 +313,10 @@ function NavTree({
                 <FoldButton id={key} open={open} className="absolute right-1" />
               )}
             </div>
-            {n.children && n.children.length > 0 && open && (
-              <NavTree page={page} nodes={n.children} route={route} currentCollection={currentCollection} depth={depth + 1} />
+            {n.children && n.children.length > 0 && (
+              <Collapse open={open}>
+                <NavTree page={page} nodes={n.children} route={route} currentCollection={currentCollection} depth={depth + 1} />
+              </Collapse>
             )}
           </li>
         );

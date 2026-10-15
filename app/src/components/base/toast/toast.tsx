@@ -125,7 +125,7 @@ function ToastClose({
 function ToastIcon({ type }: { type: string | undefined }) {
   let icon: ReactNode = null;
 
-  if (type === "success") icon = <CheckCircle aria-hidden="true" />;
+  if (type === "success") icon = <CheckCircle aria-hidden="true" className="ppg-check" />;
   if (type === "info") icon = <InfoCircle aria-hidden="true" />;
   if (type === "warning") icon = <AlertTriangle aria-hidden="true" />;
   if (type === "error") icon = <XCircle className="text-fg-error-primary" aria-hidden="true" />;

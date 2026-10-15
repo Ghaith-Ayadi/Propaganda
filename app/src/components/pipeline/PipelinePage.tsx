@@ -8,7 +8,8 @@
 // The header sits in the shared container; the board and the calendar run
 // edge to edge below it.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useFlip } from "@/lib/motion/useFlip";
 import { Plus } from "@untitledui/icons";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { toast } from "@/components/base/toast/toast";
@@ -52,6 +53,7 @@ export function PipelinePage() {
   const titles = usePostTitles(items);
   const pitchId = rest?.match(/^pitch\/(.+)$/)?.[1];
 
+  const boardRef = useRef<HTMLDivElement>(null);
   const columns = useMemo(() => {
     const by: Record<Stage, PipelineItem[]> = {
       pitched: [],
@@ -73,6 +75,7 @@ export function PipelinePage() {
     );
     return by;
   }, [items, batches]);
+  useFlip(boardRef, columns);
 
   return (
     <div className="flex min-h-full flex-col xl:h-full">
@@ -96,7 +99,7 @@ export function PipelinePage() {
             </div>
           )}
           <div className="overflow-x-auto px-4 pt-6 pb-10 md:px-5 2xl:px-8">
-            <div className="grid min-w-[1040px] grid-cols-4 gap-4 xl:min-w-[880px]">
+            <div ref={boardRef} className="grid min-w-[1040px] grid-cols-4 gap-4 xl:min-w-[880px]">
               {BOARD_STAGES.map((stage) => (
                 <Column key={stage} stage={stage} items={columns[stage]}>
                   {columns[stage].map((item) => (
@@ -287,6 +290,7 @@ function Card({
   return (
     <button
       type="button"
+      data-flip={item.id}
       onClick={() => void openItem(item)}
       className={cx(
         "flex flex-col gap-2 rounded-lg bg-primary p-3 text-left shadow-xs ring-1 ring-secondary transition ring-inset",
