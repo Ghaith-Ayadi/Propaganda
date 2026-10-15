@@ -90,6 +90,11 @@ export interface CallOptions {
   maxOutputTokens?: number;
   /** How hard the model thinks first; "none" turns it off. Unset: the provider's default. */
   reasoning?: Reasoning;
+  /**
+   * Cache the system prompt and prompt on an Anthropic model (a breakpoint after the prompt),
+   * so a repeat or a fix call reads them at the cache price. Ignored for any other provider.
+   */
+  cache?: boolean;
   abortSignal?: AbortSignal;
 }
 
@@ -208,7 +213,8 @@ let resolveModel: (id: string) => LanguageModel = defaultResolve;
 /**
  * The model every agent and Chat asks for unless told otherwise (Ayadi,
  * 2026-10-09). DEFAULT_MODEL overrides it. The Strategist asks for Claude
- * Fable 5.1 by name (worker MODELS.strategist, Ayadi 2026-10-10).
+ * Opus 5.5 and the first pitches for Sonnet 5.5, by name (worker MODELS,
+ * Ayadi 2026-10-14).
  */
 export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "deepseek/deepseek-v4-pro";
 
@@ -392,10 +398,13 @@ function requestOf(model: string, opts: CallOptions) {
 async function run(base: Logged, route: Route, opts: CallOptions) {
   const { tenant } = route;
   try {
+    const cached = opts.cache && route.id.startsWith("anthropic/");
     const result = await generateText({
       model: route.model,
       system: opts.system,
-      prompt: opts.prompt,
+      ...(cached
+        ? { messages: [{ role: "user" as const, content: [{ type: "text" as const, text: opts.prompt, providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } }] }] }
+        : { prompt: opts.prompt }),
       maxOutputTokens: thinkingBudget(opts.maxOutputTokens, opts.reasoning),
       ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
       abortSignal: opts.abortSignal,

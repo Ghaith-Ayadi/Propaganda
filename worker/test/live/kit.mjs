@@ -19,7 +19,7 @@ export const PGURL = process.env.PGURL ?? "postgres://postgres:postgres@localhos
 const SPEND_CAP_USD = Number(process.env.LIVE_SPEND_CAP_USD || 5);
 
 /** The models a release test runs on, where they differ from prod. Read before the agents' code loads. */
-export const TEST_MODELS = { AGENT_MODEL_STRATEGIST: "deepseek/deepseek-v4-pro" };
+export const TEST_MODELS = { AGENT_MODEL_STRATEGIST: "deepseek/deepseek-v4-pro", AGENT_MODEL_PITCHER: "deepseek/deepseek-v4-pro" };
 
 /**
  * Before anything imports the agents: the test models, and the gateway key. With no key a

@@ -8,7 +8,7 @@
 //       that changed; pitches on kept topics stay, with any decision on them,
 //       and undecided ones on topics that left the plan are withdrawn.
 //   strategist:topic-pitches  (first-pitches-<proposal>-t<i>)  one topic: one
-//       search per pitch, one Fable call (MODELS.strategist) for all of the
+//       search per pitch, one Sonnet call (MODELS.pitcher) for all of the
 //       topic's pitches in the Pitcher's brief format, rated by fit.ts.
 //   strategist:first-drafts   (first-drafts-<proposal>)  the plan approved:
 //       the Writer drafts the 3 strongest pitches before anyone approves them.
@@ -229,7 +229,7 @@ async function topicPitchesRun(input: TopicInput): Promise<TopicResult> {
     {
       site,
       job: JOB,
-      model: MODELS.strategist,
+      model: MODELS.pitcher,
       maxOutputTokens: 1_500 * n + 500,
       system: FIRST_PITCH_SYSTEM,
       prompt: topicPitchPrompt({

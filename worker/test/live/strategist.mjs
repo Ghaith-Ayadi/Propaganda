@@ -93,7 +93,7 @@ await launch(t, "strategist");
 
 try {
   console.log(`a day-one proposal on ${t.MODELS.strategist}`);
-  check(t.MODELS.strategist !== "anthropic/claude-fable-5.1", "not on Fable");
+  check(!t.MODELS.strategist.startsWith("anthropic/"), "not on a Claude model");
   db.strategy_proposals.push({ id: "liveproposal001", site: SITE, quarter: "2026-Q4", kind: "onboarding", status: "requested", request: "", requested_by: "u1", proposal: null, edits: null, created: new Date().toISOString(), approved_at: null });
   const [id] = await t.dispatchStrategist();
   const res = await t.DBOS.retrieveWorkflow(id).getResult();
