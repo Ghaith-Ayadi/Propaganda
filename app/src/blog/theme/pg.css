@@ -62,7 +62,7 @@
     --pg-size-section: var(--pg-step--1);
 
     --pg-leading-text: 1.6; --pg-leading-tight: 1.22; --pg-leading-display: 1.1;
-    --pg-weight-text: 400; --pg-weight-strong: 650; --pg-weight-title: 600;
+    --pg-weight-text: 400; --pg-weight-strong: 600; --pg-weight-title: 600;
     --pg-weight-display: 600; --pg-weight-ui: 500;
     --pg-tracking-display: -0.01em; --pg-tracking-title: -0.005em;
     --pg-figures: normal;

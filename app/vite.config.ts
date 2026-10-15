@@ -266,7 +266,7 @@ export default defineConfig(({ mode }) => {
           id: "/admin",
           name: "Propaganda",
           short_name: "Propaganda",
-          description: "Propaganda",
+          description: "Write and publish in your own voice.",
           theme_color: "#0a0a0a",
           background_color: "#0a0a0a",
           display: "standalone",

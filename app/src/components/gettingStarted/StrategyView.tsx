@@ -4,9 +4,11 @@
 // watched sites, then its questions. Approve or ask for changes from the bar
 // at the bottom, with as many rounds as it takes.
 //
-// Its questions are answered here, all together; the answers go back as a
-// revision, and Approve stays locked while any are open (Ayadi, 2026-10-10;
-// the Strategist decides with the answers instead of asking again, #103).
+// Its questions are answered here, all together, and the answers go back as a
+// revision (the Strategist decides with them instead of asking again, #103).
+// Approve is never locked by them (Ayadi, 2026-10-15): the plan is approved as
+// shown and an unanswered question keeps the plan's own default. The bottom bar
+// always holds the box for general feedback.
 
 import { useState } from "react";
 import { Label, TextArea, TextField } from "react-aria-components";
@@ -53,17 +55,13 @@ export function StrategyView({
   pitches: PipelineItem[];
   progress: StrategistProgress | null;
 }) {
-  const [asking, setAsking] = useState(false);
-  const [ask, setAsk] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [answers, setAnswers] = useState<string[]>(() => proposal.questions.map(() => ""));
-  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const previous = usePreviousProposal(proposal);
   const questions = proposal.questions;
   const lastRound = round >= MAX_ROUNDS;
-  // Open questions block approval, every round (as on Goals, #102), except the
-  // last: no answer can be sent then, so it would never unlock.
-  const mustAnswer = questions.length > 0 && !lastRound;
+  const openQuestions = questions.length > 0 && !lastRound;
   const allAnswered = answers.every((a) => a.trim());
   const pitching = progress?.proposalId === proposal.id ? progress.pitches : null;
 
@@ -81,6 +79,11 @@ export function StrategyView({
   };
 
   const approve = async () => {
+    // Feedback typed but not sent would be dropped by approving: say so first.
+    if (feedback.trim()) {
+      toast.add({ type: "warning", title: "You have feedback that isn't sent", description: "Send it, or clear the box and approve again." });
+      return;
+    }
     setBusy(true);
     try {
       await goalsActions.approveProposal(proposal.id, proposal, []);
@@ -97,7 +100,6 @@ export function StrategyView({
     [
       "Answers to your questions:",
       ...questions.map((q, i) => `${i + 1}. ${q}\n${answers[i].trim()}`),
-      ...(notes.trim() ? [`Anything else:\n${notes.trim()}`] : []),
     ].join("\n\n");
 
   const numbers = [
@@ -298,7 +300,7 @@ export function StrategyView({
             lede={
               lastRound
                 ? "That was the last round. Approve the plan as it is; you can change it any time on Goals."
-                : `Answer ${questions.length === 1 ? "it" : questions.length === 2 ? "both" : `all ${questions.length}`} and send them together. We fold your answers into the plan, and approving unlocks then.`
+                : `Answer ${questions.length === 1 ? "it" : questions.length === 2 ? "both" : `all ${questions.length}`} and send them together, and we fold your answers into the plan. Or approve it as it is: a question you skip keeps the plan\u2019s own default.`
             }
           />
           {lastRound ? (
@@ -329,67 +331,35 @@ export function StrategyView({
         </section>
       )}
 
-      <section>
-        <SectionTitle
-          title="Anything else we should know?"
-          lede={questions.length > 0 && !lastRound ? "Optional. Sent with your answers." : "Optional. Tell us what to change or keep, in your own words."}
-        />
-        <TextField value={notes} onChange={setNotes} className="flex flex-col gap-1.5">
-          <Label className="sr-only">Notes for the plan</Label>
-          <TextArea
-            rows={3}
-            placeholder="For example: keep the topics, but make the first posts shorter."
-            className="w-full resize-y rounded-lg bg-primary px-3.5 py-2.5 text-md text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
-          />
-        </TextField>
-        {!(questions.length > 0 && !lastRound) && (
-          <div className="mt-3">
-            <Button size="sm" color="secondary" isDisabled={!notes.trim() || busy || lastRound} isLoading={busy} onClick={() => void revise(notes.trim(), "notes").then(() => setNotes(""))}>
-              Send notes
-            </Button>
-          </div>
-        )}
-      </section>
-
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-secondary bg-primary/95 backdrop-blur md:-mx-8 lg:mr-0">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-5 2xl:px-8 lg:pr-0">
-          {asking ? (
-            <>
-              <input
-                autoFocus
-                value={ask}
-                onChange={(e) => setAsk(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && setAsking(false)}
-                placeholder="What should change?"
-                className="min-w-[16rem] flex-1 rounded-lg bg-primary px-3.5 py-2 text-sm text-primary shadow-xs ring-1 ring-primary outline-none ring-inset focus:ring-2 focus:ring-brand"
-              />
-              <Button color="tertiary" size="sm" onClick={() => setAsking(false)}>
-                Cancel
+        <div className="flex flex-col gap-2 px-4 py-3 md:px-5 2xl:px-8 lg:pr-0">
+          <span className="text-sm text-tertiary">
+            {pitches.length > 0
+              ? `${pitches.length} pitches ready`
+              : pitching
+                ? `Pitching topic ${Math.min(pitching.topicsDone + 1, pitching.topics)} of ${pitching.topics}`
+                : "Pitches on their way"}
+            {openQuestions && ` · Approving as it is: a question you skip keeps the plan's own default`}
+          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && feedback.trim() && !busy && !lastRound && void revise(feedback.trim(), "feedback").then(() => setFeedback(""))}
+              disabled={lastRound}
+              aria-label="Feedback on the plan"
+              placeholder={lastRound ? "That was the last round. Approve the plan as it is." : "Anything to change or keep? Tell us in your own words."}
+              className="min-w-[16rem] flex-1 rounded-lg bg-primary px-3.5 py-2 text-sm text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-placeholder focus:ring-2 focus:ring-brand"
+            />
+            <div className="ml-auto flex gap-2">
+              <Button color="secondary" size="sm" isDisabled={!feedback.trim() || lastRound || busy} isLoading={busy} onClick={() => void revise(feedback.trim(), "feedback").then(() => setFeedback(""))}>
+                Send feedback
               </Button>
-              <Button size="sm" isDisabled={!ask.trim() || busy} isLoading={busy} onClick={() => void revise(ask.trim(), "changes")}>
-                Send changes
+              <Button size="sm" iconTrailing={ArrowRight} isDisabled={busy} isLoading={busy} onClick={() => void approve()}>
+                Approve plan
               </Button>
-            </>
-          ) : (
-            <>
-              <span className="text-sm text-tertiary">
-                {pitches.length > 0
-                  ? `${pitches.length} pitches ready`
-                  : pitching
-                    ? `Pitching topic ${Math.min(pitching.topicsDone + 1, pitching.topics)} of ${pitching.topics}`
-                    : "Pitches on their way"}
-                {mustAnswer && ` · Answer our ${questions.length === 1 ? "question" : `${questions.length} questions`} to approve`}
-              </span>
-              <div className="ml-auto flex gap-2">
-                <Button color="secondary" size="sm" isDisabled={lastRound || busy} onClick={() => setAsking(true)}>
-                  Ask for changes
-                </Button>
-                <Button size="sm" iconTrailing={ArrowRight} isDisabled={mustAnswer || busy} isLoading={busy} onClick={() => void approve()}>
-                  Approve plan
-                </Button>
-              </div>
-            </>
-          )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

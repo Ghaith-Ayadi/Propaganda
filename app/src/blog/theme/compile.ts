@@ -258,7 +258,7 @@ export function compileTheme(src: ThemeSource): CompiledTheme {
   V("weight-text", num(t.text?.weight ?? 400, "weight", 400));
   V("weight-display", num(t.display?.weight ?? 600, "displayWeight", 600));
   V("weight-title", num(t.title?.weight ?? 600, "titleWeight", 600));
-  V("weight-strong", num(t.text?.strong ?? 650, "weight", 650));
+  V("weight-strong", num(t.text?.strong ?? 600, "weight", 600));
   V("tracking-display", `${num(t.display?.tracking ?? -0.01, "tracking", -0.01)}em`);
   V("tracking-title", `${num(t.title?.tracking ?? 0, "tracking", 0)}em`);
   V("figures", t.figures === "oldstyle" ? "oldstyle-nums proportional-nums" : "lining-nums");

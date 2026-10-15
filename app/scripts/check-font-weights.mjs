@@ -18,11 +18,12 @@ const skip = new Set(["node_modules", "dist", "dist-harness", "dev-dist"]);
 
 const rules = [
   [/\bfont-(bold|extrabold|black)\b/, "Tailwind heavy font weight"],
-  [/font-weight\s*:\s*(bold|bolder|[7-9]\d\d|1000)\b/i, "CSS font-weight above 600"],
+  [/font-weight\s*:\s*(bold|bolder|6[1-9]\d|[7-9]\d\d|1000)\b/i, "CSS font-weight above 600"],
   // `font-weight: 400 900` and `weight: "100 900"` ranges in @font-face / theme data.
-  [/font-weight\s*:\s*\d+\s+([7-9]\d\d|1000)\b/i, "font-face weight range above 600"],
-  [/\bfontWeight\s*[:=]\s*[{"']?\s*(bold|bolder|[7-9]\d\d|1000)\b/, "fontWeight above 600"],
-  [/\b(weight|strong)\s*:\s*([7-9]\d\d|1000)\b/, "theme weight above 600"],
+  [/font-weight\s*:\s*\d+\s+(6[1-9]\d|[7-9]\d\d|1000)\b/i, "font-face weight range above 600"],
+  [/\bfontWeight\s*[:=]\s*[{"']?\s*(bold|bolder|6[1-9]\d|[7-9]\d\d|1000)\b/, "fontWeight above 600"],
+  [/\b(weight|strong)\s*:\s*(6[1-9]\d|[7-9]\d\d|1000)\b/, "theme weight above 600"],
+  [/--[\w-]*weight[\w-]*\s*:\s*(6[1-9]\d|[7-9]\d\d|1000)\b/, "weight variable above 600"],
   [/wght@[^"'\s)]*?([7-9]00)\b/, "font load asks for 700+"],
   [/\.\.([7-9]00)\b/, "variable font load goes to 700+"],
   [/zodiak@[^"'\s&]*\b[7-9]00\b/i, "Fontshare load asks for 700+"],
