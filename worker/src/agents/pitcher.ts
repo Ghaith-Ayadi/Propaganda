@@ -42,7 +42,7 @@ import { HOUSE_STYLE, RULE_NAMES, TITLE_RULES, houseTitleHits, noDashes, titleHi
 import { polishTexts } from "./polish.js";
 import { type SearchHit } from "./web.js";
 import { AUTHORITY_RULE, quotable } from "./authority.js";
-import { vetSources } from "./sources.js";
+import { ownHostsOf, vetSources } from "./sources.js";
 import { SearchSession, searchDurably } from "./search.js";
 import { AGENT_QUEUE, registerAgent, startForDispatch, startForTenant, type DispatchInput } from "../workflows/agents.js";
 import { writer } from "./writer.js";
@@ -483,12 +483,15 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     // angle can still differ from it (authority.ts).
     // Search results are vetted first (sources.ts); a run recorded before that is gated by list alone.
     let citable = new Set(hits.map((h) => h.url).filter((u) => quotable(u)));
+    let ownHosts: string[] = [];
     if (await DBOS.patch("authority-vet")) {
-      const v = await vetSources({ site, job: "pitcher:research", topic: idea.title, label: idea.id, hits, searches });
+      // Its own patch: runs recorded after the vet but before the hosts replay without the step.
+      if (await DBOS.patch("authority-own-hosts")) ownHosts = await DBOS.runStep(() => ownHostsOf(site), { name: `site hosts ${idea.id}` });
+      const v = await vetSources({ site, job: "pitcher:research", topic: idea.title, label: idea.id, hits, ownHosts, searches });
       hits.splice(0, hits.length, ...v.hits);
       citable = v.citable;
     }
-    const allowed = new Set([...evidenceUrls.map((e) => e.url).filter((u) => quotable(u)), ...citable]);
+    const allowed = new Set([...evidenceUrls.map((e) => e.url).filter((u) => quotable(u, ownHosts)), ...citable]);
 
     // 5. The brief.
     let written = await askJson(

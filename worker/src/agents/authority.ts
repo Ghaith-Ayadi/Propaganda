@@ -31,7 +31,7 @@ const B = [
   "bbc.co.uk", "theguardian.com", "wired.com", "technologyreview.com", "fortune.com", "scientificamerican.com",
 ];
 const C = [
-  "contentmarketinginstitute.com", "searchengineland.com", "deloittedigital.com", "stripe.com", "a16z.com", "ahrefs.com", "sequoiacap.com", "firstround.com", "paulgraham.com", "lennysnewsletter.com",
+  "contentmarketinginstitute.com", "searchengineland.com", "stripe.com", "a16z.com", "ahrefs.com", "sequoiacap.com", "firstround.com", "paulgraham.com", "lennysnewsletter.com",
   "openai.com", "anthropic.com", "research.google", "github.blog", "netflixtechblog.com", "blog.cloudflare.com",
 ];
 // Never quoted, whatever the page says: competitors of Propaganda (meeting and call tools, AI

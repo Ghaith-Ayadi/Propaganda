@@ -8,6 +8,7 @@
 import { MODELS, askJson, arr, obj, str } from "./model.js";
 import { authority, authorityQuery } from "./authority.js";
 import { searchDurably, type SearchSession } from "./search.js";
+import { getSite } from "./store.js";
 import type { SearchHit } from "./web.js";
 
 const VET_SYSTEM = `You decide which web pages a business blog may cite as a source. Be strict: a reader should nod at the name of the source.
@@ -107,4 +108,10 @@ export async function vetSources(input: {
     hits.push(...more);
   }
   return { hits, citable };
+}
+
+/** The tenant's own hosts: its blog's domain and its propaganda.pub address. */
+export async function ownHostsOf(site: string): Promise<string[]> {
+  const row = await getSite(site);
+  return [row?.domain, row?.slug ? `${row.slug}.propaganda.pub` : ""].filter((h): h is string => Boolean(h)).map((h) => h.replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
 }

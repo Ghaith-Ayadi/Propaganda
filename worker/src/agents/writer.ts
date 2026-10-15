@@ -37,7 +37,7 @@ import { renderEdits, reviewerEdits } from "./edits.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
 import { readPage, type Page } from "./web.js";
 import { AUTHORITY_RULE, quotable } from "./authority.js";
-import { vetSources } from "./sources.js";
+import { ownHostsOf, vetSources } from "./sources.js";
 import { SearchSession, searchDurably } from "./search.js";
 import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, hardHits, houseTitleHits, noDashes, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit, type PolishStats } from "./writing.js";
 import { polishTexts } from "./polish.js";
@@ -147,12 +147,6 @@ async function polishDraft(site: string, step: string, voice: string, d: { markd
 
 /** Every house-rule problem left in a draft, for the reviewer. */
 const leftHits = (markdown: string, styled: boolean) => (styled ? [...styleHits(markdown), ...hardHits(markdown)] : styleHits(markdown));
-
-/** The tenant's own hosts: its blog's domain and its propaganda.pub address. */
-async function ownHostsOf(site: string): Promise<string[]> {
-  const row = await getSite(site);
-  return [row?.domain, row?.slug ? `${row.slug}.propaganda.pub` : ""].filter((h): h is string => Boolean(h)).map((h) => h.replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
-}
 
 async function research(site: string, brief: BriefRow): Promise<{ pages: Page[]; claims: Claim[]; searches: SearchSession }> {
   const queries = await askJson(
