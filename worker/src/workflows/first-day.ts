@@ -227,7 +227,7 @@ async function topicPitchesRun(input: TopicInput): Promise<TopicResult> {
   // Only sources with authority can be cited (sources.ts); a run recorded before that is gated by list alone.
   let citable = new Set(hits.map((h) => h.url).filter((u) => quotable(u)));
   if (await DBOS.patch("authority-vet")) {
-    const v = await vetSources({ site, job: JOB, topic: topic.thesis || topic.name, label: topic.name.slice(0, 40), hits, searches: session });
+    const v = await vetSources({ site, job: JOB, topic: topic.name, label: topic.name.slice(0, 40), hits, searches: session });
     hits.splice(0, hits.length, ...v.hits);
     citable = v.citable;
   }

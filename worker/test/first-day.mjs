@@ -142,7 +142,7 @@ const web = async (input, init) => {
   if (url.startsWith("https://api.dataforseo.com/")) {
     const [{ keyword }] = JSON.parse(init.body);
     searches.push(keyword);
-    if (refused.has(keyword)) return Response.json({ cost: 0.002, tasks: [{ status_code: 40000, status_message: "Internal SE Server Error." }] });
+    if (refused.has(keyword)) return Response.json({ cost: 0.002, tasks: [{ status_code: 40000, status_message: "Invalid field." }] });
     const slug = keyword.replace(/\W+/g, "-");
     return Response.json({
       cost: 0.002,

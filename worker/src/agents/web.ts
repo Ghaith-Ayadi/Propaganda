@@ -139,7 +139,8 @@ export async function searchOnce(query: string, limit: number, opts: SearchOptio
       const task = body.tasks?.[0];
       if (!task || (task.status_code && task.status_code >= 40000)) {
         const msg = `web search failed: ${task?.status_message ?? "no task"}`;
-        const err = !task || (task.status_code ?? 0) >= 50000 ? new SearchUnavailableError(msg) : new Error(msg);
+        // DataForSEO reports "Internal SE Server Error." under more than one code: that is its side, so ask again.
+        const err = !task || (task.status_code ?? 0) >= 50000 || /internal.*error/i.test(task.status_message ?? "") ? new SearchUnavailableError(msg) : new Error(msg);
         throw withCost(err, body.cost ?? task?.cost);
       }
       const items = task.result?.[0]?.items ?? [];

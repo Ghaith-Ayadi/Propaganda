@@ -93,9 +93,20 @@ export function needsVetting(url: string, ownHosts: string[] = []): boolean {
   return v.tier === "U" || (v.tier === "A" && A_SUFFIX.includes(v.why));
 }
 
-/** A search aimed at the sources that count: studies, analyst reports, major press. */
+/** The words that carry a topic, in order, for a search query. */
+function keyWords(text: string, max: number): string {
+  const stop = new Set("a an and are as at be but by can do does for from how i if in into is it its of on or our so than that the their them then there these they this to too vs was we what when where which who why will with without you your".split(" "));
+  const out: string[] = [];
+  for (const w of text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)) {
+    if (w.length > 2 && !stop.has(w) && !out.includes(w)) out.push(w);
+    if (out.length >= max) break;
+  }
+  return out.join(" ");
+}
+
+/** A search aimed at the sources that count: studies, analyst firms, major press. The topic is cut to its first eight keywords, so a long thesis can't pull the results away from it. */
 export function authorityQuery(topic: string): string {
-  return `${topic.slice(0, 200)} (study OR research OR survey OR report) (site:edu OR site:gov OR gartner.com OR forrester.com OR mckinsey.com OR bain.com OR nytimes.com OR hbr.org OR newyorker.com)`;
+  return `${keyWords(topic, 8)} (study OR research OR survey OR report) (site:edu OR site:gov OR gartner.com OR forrester.com OR mckinsey.com OR bain.com OR nytimes.com OR hbr.org OR newyorker.com)`;
 }
 
 /** The sentence the agents get about the rule, so the model knows why a source is missing. */
