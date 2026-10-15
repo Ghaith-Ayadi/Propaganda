@@ -19,6 +19,9 @@ export interface PitchThread {
   comments: CommentItem[];
 }
 
+/** The longest passage a comment can be pinned to. */
+const MAX_QUOTE = 300;
+
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
 /** The text of every field a passage can be picked from. */
@@ -156,7 +159,8 @@ export function SelectionComment({ root, onPick }: { root: HTMLElement | null; o
       const b = fieldOf(range.endContainer);
       if (!a || a !== b || !root.contains(a)) return setPick(null);
       const quote = squash(sel.toString());
-      if (!quote) return setPick(null);
+      // a very long highlight would swell the pitch notes past their column limit
+      if (!quote || quote.length > MAX_QUOTE) return setPick(null);
       const r = range.getBoundingClientRect();
       setPick({ field: a.dataset.pitchFieldRoot!, quote, x: r.left + r.width / 2, y: r.top });
     };
