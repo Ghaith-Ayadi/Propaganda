@@ -17,9 +17,9 @@ export interface BlockConfig {
 
 export const BLOCK_DEFAULTS: Record<BlockKey, BlockConfig> = {
   paragraph: { fontSize: 16, fontWeight: 400, lineHeight: 1.7,  letterSpacing:  0,     spacing: 4 },
-  h1:        { fontSize: 36, fontWeight: 700, lineHeight: 1.15, letterSpacing: -0.02,  spacing: 8 },
-  h2:        { fontSize: 28, fontWeight: 600, lineHeight: 1.25, letterSpacing: -0.01,  spacing: 6 },
-  h3:        { fontSize: 22, fontWeight: 600, lineHeight: 1.35, letterSpacing:  0,     spacing: 4 },
+  h1:        { fontSize: 40, fontWeight: 600, lineHeight: 1.12, letterSpacing: -0.025, spacing: 12 },
+  h2:        { fontSize: 30, fontWeight: 600, lineHeight: 1.2,  letterSpacing: -0.018, spacing: 10 },
+  h3:        { fontSize: 22, fontWeight: 600, lineHeight: 1.3,  letterSpacing: -0.008, spacing: 6 },
   quote:     { fontSize: 16, fontWeight: 400, lineHeight: 1.8,  letterSpacing:  0,     spacing: 4 },
 };
 
@@ -34,11 +34,14 @@ export function settingKey(block: BlockKey, prop: BlockProp): string {
 
 // ─── Getters / setters ────────────────────────────────────────────────────────
 
+/** Nothing in Propaganda is heavier than 600, including a weight saved before the cap. */
+export const MAX_FONT_WEIGHT = 600;
+
 export function getBlockProp(block: BlockKey, prop: BlockProp): number {
-  return (
+  const v =
     getSetting<number>(settingKey(block, prop), BLOCK_DEFAULTS[block][prop]) ??
-    BLOCK_DEFAULTS[block][prop]
-  );
+    BLOCK_DEFAULTS[block][prop];
+  return prop === "fontWeight" ? Math.min(v, MAX_FONT_WEIGHT) : v;
 }
 
 export function setBlockProp(block: BlockKey, prop: BlockProp, value: number): Promise<void> {
@@ -59,19 +62,22 @@ export const setCaptionSize  = (v: string) => setSetting(CAPTION_SIZE_KEY, v);
 
 // ─── CSS selectors ────────────────────────────────────────────────────────────
 
+// The prefix makes these win over BlockNote's own heading rules (size from its
+// --level, weight 700), which are more specific than the bare selector.
+const P = ".bn-editor .bn-block-outer .bn-block";
 const BLOCK_SELECTOR: Record<BlockKey, string> = {
-  paragraph: '.bn-block-content[data-content-type="paragraph"]',
-  h1:        '.bn-block-content[data-content-type="heading"][data-level="1"]',
-  h2:        '.bn-block-content[data-content-type="heading"][data-level="2"]',
-  h3:        '.bn-block-content[data-content-type="heading"][data-level="3"]',
-  quote:     '.bn-block-content[data-content-type="quote"]',
+  paragraph: `${P} .bn-block-content[data-content-type="paragraph"]`,
+  h1:        `${P} .bn-block-content[data-content-type="heading"]:is([data-level="1"], :not([data-level]))`,
+  h2:        `${P} .bn-block-content[data-content-type="heading"][data-level="2"]`,
+  h3:        `${P} .bn-block-content[data-content-type="heading"][data-level="3"]`,
+  quote:     `${P} .bn-block-content[data-content-type="quote"]`,
 };
 
 // ─── CSS generation ──────────────────────────────────────────────────────────
 
 function blockCss(block: BlockKey, cfg: BlockConfig): string {
   const sel = BLOCK_SELECTOR[block];
-  return `${sel} { font-size: ${cfg.fontSize}px; font-weight: ${cfg.fontWeight}; line-height: ${cfg.lineHeight}; letter-spacing: ${cfg.letterSpacing}em; padding: ${cfg.spacing}px 0; }`;
+  return `${sel} { font-size: ${cfg.fontSize}px !important; font-weight: ${cfg.fontWeight} !important; line-height: ${cfg.lineHeight}; letter-spacing: ${cfg.letterSpacing}em; padding: ${cfg.spacing}px 0; }`;
 }
 
 export function buildEditorCss(
@@ -81,6 +87,8 @@ export function buildEditorCss(
 ): string {
   const lines = (Object.keys(configs) as BlockKey[]).map((b) => blockCss(b, configs[b]));
   lines.push(`.bn-file-caption { text-align: ${captionAlign}; font-size: ${captionSize}; }`);
+  // Bold text is the heaviest the editor gets: 600, never 700.
+  lines.push(`.bn-editor strong, .bn-editor b, .bn-editor [data-style-type="bold"], .bn-editor th { font-weight: ${MAX_FONT_WEIGHT}; }`);
   // Links render blue + underlined in the editor, matching the public reader.
   lines.push(
     `.bn-editor a, .bn-editor a:visited { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }`,

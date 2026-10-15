@@ -23,9 +23,10 @@
 // must never land in this site's cache.
 
 import { db, type VerbatimDB } from "@/lib/db";
-import { dateToMs, fetchAll, fetchSince, isUniqueViolation, must, sb, type Client } from "@/lib/supabase";
+import { BackendError, dateToMs, fetchAll, fetchSince, isUniqueViolation, must, sb, type Client } from "@/lib/supabase";
 import { fromRecord, toRecord, type PostRecord } from "@/lib/posts";
 import { fromBriefRecord, toBriefRecord, type BriefRecord } from "@/lib/plan/briefs";
+import { fromCommentRecord, toCommentRecord, type Comment } from "@/lib/comments/store";
 import { fromTemplateRecord, toTemplateRecord, type BriefTemplateRecord } from "@/lib/plan/templates";
 import { pullAllVersions, pushPendingVersions } from "@/lib/versions";
 import { fromCollectionRecord, type CollectionRecord } from "@/lib/collections";
@@ -134,6 +135,7 @@ function start(ctx: Ctx, mode: "full" | "push"): Promise<void> {
       await pushPendingVersions(ctx);
       await pushTable(ctx, ctx.db.briefs, "briefs", toBriefRecord, fromBriefRecord);
       await pushTable(ctx, ctx.db.briefTemplates, "brief_templates", toTemplateRecord, fromTemplateRecord);
+      await pushTable(ctx, ctx.db.comments, "comments", toCommentRecord, fromCommentRecord, COMMENTS_OPTS);
       if (mode === "push") return;
       await reconcileEpoch(ctx);
       await pullTable(ctx, ctx.db.posts, "posts", CURSOR_KEYS[0], fromRecord);
@@ -142,6 +144,7 @@ function start(ctx: Ctx, mode: "full" | "push"): Promise<void> {
       await pullCollections(ctx);
       await pullTable(ctx, ctx.db.briefs, "briefs", CURSOR_KEYS[1], fromBriefRecord);
       await pullTable(ctx, ctx.db.briefTemplates, "brief_templates", CURSOR_KEYS[2], fromTemplateRecord);
+      await pullTable(ctx, ctx.db.comments, "comments", CURSOR_KEYS[4], fromCommentRecord, COMMENTS_OPTS);
       if (ctx.db === db) onSyncComplete?.();
     } catch (err) {
       reportError("Sync failed", err);
@@ -177,6 +180,19 @@ interface Stamped {
   updated: string;
 }
 
+interface TableOpts<L> {
+  /** Rows that may be pushed (a draft comment waits to be sent). */
+  eligible?: (local: L) => boolean;
+  /** Errors to skip without a report: a server that has no such table yet. */
+  ignore?: (err: unknown) => boolean;
+}
+
+/** A server without the comments table (a deploy that predates it) is not an error. */
+const COMMENTS_OPTS: TableOpts<Comment> = {
+  eligible: (c) => c.submittedAt !== null,
+  ignore: (err) => err instanceof BackendError && (err.code === "PGRST205" || err.code === "42P01" || err.status === 404),
+};
+
 /**
  * Push every dirty row of a table. Failures are isolated per row: one rejected
  * record (validation, network) stays dirty and retries next sync without
@@ -188,9 +204,10 @@ async function pushTable<L extends Synced, R extends Stamped>(
   collection: string,
   toBody: (local: L) => Record<string, unknown>,
   fromRec: (r: R) => Omit<L, "syncedAt" | "dirty">,
+  opts: TableOpts<L> = {},
 ): Promise<void> {
   const all = await table.toArray();
-  const pending = all.filter((p) => p.dirty || !p.syncedAt || p.updatedAt > (p.syncedAt ?? 0));
+  const pending = all.filter((p) => (opts.eligible?.(p) ?? true) && (p.dirty || !p.syncedAt || p.updatedAt > (p.syncedAt ?? 0)));
   if (!pending.length) return;
 
   for (const local of pending) {
@@ -200,6 +217,7 @@ async function pushTable<L extends Synced, R extends Stamped>(
     try {
       saved = await saveRow<R>(ctx.sb, collection, local.id, body, !!local.syncedAt);
     } catch (err) {
+      if (opts.ignore?.(err)) return;
       reportError("Push failed", err, { collection, record_id: local.id });
       continue;
     }
@@ -221,7 +239,7 @@ async function pushTable<L extends Synced, R extends Stamped>(
 }
 
 const EPOCH_KEY = "dataEpoch";
-const CURSOR_KEYS = ["lastPullSb.posts", "lastPullSb.briefs", "lastPullSb.brief_templates", "lastVersionPullSb"];
+const CURSOR_KEYS = ["lastPullSb.posts", "lastPullSb.briefs", "lastPullSb.brief_templates", "lastVersionPullSb", "lastPullSb.comments"];
 // Checked once per database per page load: a load of the content (the
 // PocketBase import, a re-import after a rollback) happens with the app closed.
 const epochChecked = new WeakSet<VerbatimDB>();
@@ -297,6 +315,7 @@ async function pullTable<L extends Synced, R extends Stamped>(
   collection: string,
   cursorKey: string,
   fromRec: (r: R) => Omit<L, "syncedAt" | "dirty">,
+  opts: TableOpts<L> = {},
 ): Promise<void> {
   const { db, sb } = ctx;
   const meta = await db.syncMeta.get(cursorKey);
@@ -307,7 +326,7 @@ async function pullTable<L extends Synced, R extends Stamped>(
   try {
     records = await fetchSince<R>(() => sb.from(collection).select("*").eq("site", ctx.site), "updated", from);
   } catch (err) {
-    reportError("Pull failed", err, { collection });
+    if (!opts.ignore?.(err)) reportError("Pull failed", err, { collection });
     return;
   }
   if (!records.length) return;

@@ -26,6 +26,10 @@ import { setDrawer, toggleDrawer, useIsMobile } from "@/lib/mobile";
 import { useLayout } from "@/lib/layout";
 import { TextSelection } from "prosemirror-state";
 import { reviewMarksKey, reviewMarksPlugin } from "@/lib/review/marks";
+import { commentMarksKey, commentMarksPlugin } from "@/lib/comments/marks";
+import { activateComment, clearCommentFocus, commentFocus, hoverComment, setFoundComments, subscribeCommentFocus } from "@/lib/comments/focus";
+import { useComments } from "@/lib/comments/store";
+import { CommentToolbarButton } from "@/components/CommentToolbarButton";
 import { useReviewPublisher } from "@/lib/review/notes";
 import { activate, registerEditor, reviewState, setFound, setHover, subscribeReview } from "@/lib/review/store";
 import type { Collection } from "@/types";
@@ -47,7 +51,11 @@ export function Editor({ post }: Props) {
   const editor = useCreateBlockNote({
     uploadFile,
     // The Review tab's highlights (lib/review): decorations only, never saved.
-    _extensions: { reviewMarks: { plugin: reviewMarksPlugin(setFound) } },
+    _extensions: {
+      reviewMarks: { plugin: reviewMarksPlugin(setFound) },
+      // Comments' highlights (lib/comments): decorations only, never saved.
+      commentMarks: { plugin: commentMarksPlugin(setFoundComments) },
+    },
   });
   const [theme] = useTheme();
   const lastLoadedId = useRef<string | null>(null);
@@ -235,11 +243,13 @@ export function Editor({ post }: Props) {
   }, [editor, post.id]);
 
   useReviewMarks(editor, post.id, editorRootRef);
+  useCommentMarks(editor, post.id, editorRootRef);
 
   return (
     <div className="mx-auto w-full max-w-[760px] px-5 md:px-10">
       <style>{editorCss}</style>
       <style>{REVIEW_MARK_CSS}</style>
+      <style>{COMMENT_MARK_CSS}</style>
       <PostNav post={post} showTitle={!titleVisible} />
       <div className="pt-8 md:pt-12">
         <textarea
@@ -295,6 +305,7 @@ export function Editor({ post }: Props) {
                 <FormattingToolbar>
                   {...getFormattingToolbarItems()}
                   <MentionToolbarButton key="mention" excludeId={post.id} />
+                  <CommentToolbarButton key="comment" />
                 </FormattingToolbar>
               )}
             />
@@ -402,6 +413,12 @@ function useReviewMarks(editor: AnyEditor, postId: string, rootRef: React.RefObj
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootRef, isMobile]);
 }
+
+/** A comment's passage: a soft blue wash, stronger when hovered or open. Review marks underline instead. */
+const COMMENT_MARK_CSS = `
+.comment-mark { cursor: pointer; border-radius: 2px; background: var(--color-utility-blue-100); transition: background-color 120ms; }
+.comment-mark.is-hover, .comment-mark.is-active { background: var(--color-utility-blue-300); }
+`;
 
 /** One colour per Review section: pitch notes neutral, source checks red, knowledge base orange. */
 const REVIEW_MARK_CSS = `
@@ -542,4 +559,75 @@ function PostNav({ post, showTitle }: { post: Post; showTitle: boolean }) {
       </div>
     </>
   );
+}
+
+/**
+ * Keeps the comments' highlights in step with the Comments tab: feeds the open
+ * contextual comments to the marks plugin, lights up the hovered and active
+ * one, scrolls to a passage when its thread is clicked, and opens the
+ * Comments tab when a highlight is clicked.
+ */
+function useCommentMarks(editor: AnyEditor, postId: string, rootRef: React.RefObject<HTMLDivElement | null>) {
+  const isMobile = useIsMobile();
+  const [, setLayout] = useLayout();
+  const comments = useComments("post", postId);
+
+  const anchors = useMemo(
+    () =>
+      comments
+        .filter((c) => !c.parent && c.quote && !c.resolved)
+        .map((c) => ({ id: c.id, quote: c.quote!, before: c.contextBefore, after: c.contextAfter })),
+    [comments],
+  );
+
+  useEffect(() => {
+    let seen = -1;
+    const push = () => {
+      const view = editor.prosemirrorView;
+      if (!view) return;
+      const f = commentFocus();
+      const cur = commentMarksKey.getState(view.state);
+      if (cur && (cur.anchors !== anchors || cur.hover !== f.hover || cur.active !== f.active)) {
+        view.dispatch(view.state.tr.setMeta(commentMarksKey, { anchors, hover: f.hover, active: f.active }).setMeta("addToHistory", false));
+      }
+      if (f.from === "panel" && f.active && f.seq !== seen) {
+        seen = f.seq;
+        rootRef.current?.querySelector(`[data-comment-id="${CSS.escape(f.active)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    };
+    push();
+    const t = setTimeout(push, 0);
+    const unsub = subscribeCommentFocus(push);
+    return () => {
+      clearTimeout(t);
+      unsub();
+    };
+  }, [editor, anchors, rootRef]);
+
+  // Another post's focus and passages must not carry over.
+  useEffect(() => () => clearCommentFocus(), [postId]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const idOf = (e: Event) => (e.target as HTMLElement | null)?.closest?.("[data-comment-id]")?.getAttribute("data-comment-id") ?? null;
+    const onOver = (e: MouseEvent) => hoverComment(idOf(e));
+    const onLeave = () => hoverComment(null);
+    const onClick = (e: MouseEvent) => {
+      const id = idOf(e);
+      if (!id) return;
+      activateComment(id, "editor");
+      if (isMobile) setDrawer("attributes");
+      else setLayout({ attributes: true });
+    };
+    root.addEventListener("mouseover", onOver);
+    root.addEventListener("mouseleave", onLeave);
+    root.addEventListener("click", onClick);
+    return () => {
+      root.removeEventListener("mouseover", onOver);
+      root.removeEventListener("mouseleave", onLeave);
+      root.removeEventListener("click", onClick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootRef, isMobile]);
 }

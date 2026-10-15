@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import type { Collection, Post, PostVersion } from "@/types";
 import type { Brief, BriefTemplate } from "@/lib/plan/types";
+import type { Comment } from "@/lib/comments/store";
 
 interface SyncMetaRow {
   key: string;
@@ -22,6 +23,7 @@ export class VerbatimDB extends Dexie {
   collections!: Table<Collection, string>;
   briefs!: Table<Brief, string>;
   briefTemplates!: Table<BriefTemplate, string>;
+  comments!: Table<Comment, string>;
   syncMeta!: Table<SyncMetaRow, string>;
 
   /** The site every row in this database belongs to. */
@@ -38,6 +40,10 @@ export class VerbatimDB extends Dexie {
       briefs: "id, status, plannedDate, collectionName, postId, updatedAt",
       briefTemplates: "id, updatedAt",
       syncMeta: "key",
+    });
+    // Comments (lib/comments): adds a table, keeps every other row.
+    this.version(2).stores({
+      comments: "id, parent, [targetKind+targetId], updatedAt",
     });
   }
 }
