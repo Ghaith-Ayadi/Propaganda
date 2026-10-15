@@ -418,6 +418,7 @@ function useReviewMarks(editor: AnyEditor, postId: string, rootRef: React.RefObj
 const COMMENT_MARK_CSS = `
 .comment-mark { cursor: pointer; border-radius: 2px; background: var(--color-utility-blue-100); transition: background-color 120ms; animation: ppg-mark-in 250ms ease-out; }
 @keyframes ppg-mark-in { from { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .comment-mark { animation: none; } }
 .comment-mark.is-hover, .comment-mark.is-active { background: var(--color-utility-blue-300); }
 `;
 

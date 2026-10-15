@@ -249,7 +249,7 @@ function FoldButton({ id, open, className }: { id: string; open: boolean; classN
       onClick={() => toggleFolded(id)}
       className={cx("rounded p-1 text-quaternary transition hover:bg-primary_hover hover:text-secondary", className)}
     >
-      <ChevronDown className={cx("size-3.5 transition-transform duration-200", !open && "-rotate-90")} />
+      <ChevronDown className={cx("size-3.5 transition-transform duration-200 motion-reduce:transition-none", !open && "-rotate-90")} />
     </button>
   );
 }
