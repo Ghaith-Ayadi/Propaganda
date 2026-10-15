@@ -92,7 +92,7 @@ export function EditorApp() {
 
 function Shell() {
   const [route] = useRoute();
-  const [layout, , toggleAuthorMode] = useLayout();
+  const [layout, setLayout, toggleAuthorMode] = useLayout();
   const isMobile = useIsMobile();
   const drawer = useDrawer();
   useMobileShell();
@@ -132,6 +132,15 @@ function Shell() {
       toggleAuthorMode();
     },
     { enableOnFormTags: true, enableOnContentEditable: true },
+  );
+  useHotkeys(
+    "mod+.",
+    (e) => {
+      e.preventDefault();
+      setLayout({ sidebarCollapsed: !layout.sidebarCollapsed });
+    },
+    { enableOnFormTags: true, enableOnContentEditable: true },
+    [layout.sidebarCollapsed],
   );
   useHotkeys(
     "mod+shift+l",

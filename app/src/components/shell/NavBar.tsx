@@ -6,7 +6,7 @@
 // 0.1 sidebar: the plan's few pages and Analytics on top, then every
 // collection with its posts filling the bar (components/lite).
 
-import { BarChart01, ChevronDown, Eye, SearchLg, Shield01, SwitchHorizontal01 } from "@untitledui/icons";
+import { BarChart01, ChevronDown, Eye, LayoutLeft, SearchLg, Shield01, SwitchHorizontal01 } from "@untitledui/icons";
 import { Badge } from "@/components/base/badges/badges";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { useWorkspace } from "@/components/Workspace";
@@ -14,6 +14,8 @@ import { SiteSwitcher } from "@/components/workspace/SiteSwitcher";
 import { LiteCollections } from "@/components/lite/LiteCollections";
 import { hookKey, usePages } from "@/components/lite/pages";
 import { useActiveCollection } from "@/lib/activeCollection";
+import { useLayout } from "@/lib/layout";
+import { useIsMobile } from "@/lib/mobile";
 import { analyticsHref, pageHref, useRoute, type Route } from "@/lib/route";
 import { badgeOf, type NavNode, type PageRoute } from "@/lib/routes";
 import { sitePublicUrl } from "@/lib/siteUrl";
@@ -31,11 +33,55 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
   const canSwitch = useCanSwitchPlan();
   // The server's is_superadmin() answer (lib/superadmin.ts), as in the command menu.
   const superadmin = useSuperadminAccount();
+  const [layout, setLayout] = useLayout();
+  const isMobile = useIsMobile();
+
+  // Collapsed on a laptop: an icon rail, so the details panel gets the room.
+  if (layout.sidebarCollapsed && !isMobile) {
+    return (
+      <aside data-intro="left" className="flex h-full w-[52px] shrink-0 flex-col items-center border-r border-secondary bg-secondary py-3">
+        <button
+          type="button"
+          aria-label="Expand sidebar"
+          title="Expand sidebar (⌘.)"
+          onClick={() => setLayout({ sidebarCollapsed: false })}
+          className="rounded-lg p-2 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+        >
+          <LayoutLeft className="size-4" />
+        </button>
+        <nav aria-label="Main" className="mt-2 flex flex-1 flex-col items-center gap-0.5 overflow-y-auto [scrollbar-width:none]">
+          {pages
+            .filter((p) => p.section === "main" && !(lite && p.id === "content"))
+            .map((p) => (
+              <RailLink key={hookKey(p)} page={p} active={active === p.id} />
+            ))}
+        </nav>
+        <div className="flex flex-col items-center gap-0.5 border-t border-secondary pt-2">
+          {pages.filter((p) => p.section === "footer").map((p) => (
+            <RailLink key={hookKey(p)} page={p} active={active === p.id} />
+          ))}
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside data-intro="left" className="flex h-full w-[260px] max-w-full shrink-0 flex-col border-r border-secondary bg-secondary max-md:w-[300px]">
-      <div className="px-3 pt-3 pb-2">
-        <SiteSwitcher />
+      <div className="flex items-center gap-1 px-3 pt-3 pb-2">
+        <div className="min-w-0 flex-1">
+          <SiteSwitcher />
+        </div>
+        {!isMobile && (
+          <button
+            type="button"
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar (⌘.)"
+            onClick={() => setLayout({ sidebarCollapsed: true })}
+            className="shrink-0 rounded-lg p-2 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+          >
+            <LayoutLeft className="size-4" />
+          </button>
+        )}
       </div>
 
       <div className="px-3 pb-2">
@@ -108,6 +154,27 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
         </ul>
       </div>
     </aside>
+  );
+}
+
+/** A page as an icon in the collapsed rail. */
+function RailLink({ page, active }: { page: PageRoute; active: boolean }) {
+  const Icon = page.icon;
+  const badge = badgeOf(page.useBadge?.());
+  return (
+    <a
+      href={pageHref(page.path)}
+      aria-label={page.label}
+      title={page.label}
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "relative rounded-lg p-2 outline-none transition focus-visible:ring-2 focus-visible:ring-brand",
+        active ? "bg-primary text-primary shadow-xs ring-1 ring-inset ring-secondary" : "text-quaternary hover:bg-primary_hover hover:text-secondary",
+      )}
+    >
+      <Icon className="size-4" />
+      {badge?.urgent && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-fg-error-primary" />}
+    </a>
   );
 }
 

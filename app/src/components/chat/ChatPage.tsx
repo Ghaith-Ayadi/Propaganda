@@ -243,7 +243,7 @@ function Thread({
       }}
       className="min-h-0 flex-1 overflow-y-auto"
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-5 md:py-5 2xl:px-8 2xl:py-8">
         {messages.map((m) => (
           <Message
             key={m.id}
@@ -290,7 +290,7 @@ function Composer({ streaming, onSend, onStop }: { streaming: boolean; onSend: (
   };
 
   return (
-    <div className="px-4 pt-2 pb-4 md:px-8 md:pb-6">
+    <div className="px-4 pt-2 pb-4 md:px-5 md:pb-5 2xl:px-8 2xl:pb-6">
       <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl bg-primary p-1.5 pl-3.5 shadow-xs ring-1 ring-primary ring-inset transition focus-within:ring-brand">
         <textarea
           ref={ref}

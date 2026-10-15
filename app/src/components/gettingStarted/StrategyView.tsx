@@ -352,7 +352,7 @@ export function StrategyView({
       </section>
 
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-secondary bg-primary/95 backdrop-blur md:-mx-8 lg:mr-0">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-8 lg:pr-0">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-5 2xl:px-8 lg:pr-0">
           {asking ? (
             <>
               <input

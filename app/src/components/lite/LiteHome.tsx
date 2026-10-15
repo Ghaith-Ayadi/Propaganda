@@ -36,7 +36,7 @@ export function LiteHome() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] px-4 pt-6 pb-16 md:px-10 md:pt-10">
+    <div className="mx-auto w-full max-w-[1100px] px-4 pt-6 pb-16 md:px-5 md:pt-5 2xl:px-10 2xl:pt-10">
       {/* VERBOSE MODULE (optional, personal) */}
       <Suspense fallback={null}>
         <VerboseActivity />

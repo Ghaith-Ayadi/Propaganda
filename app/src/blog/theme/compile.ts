@@ -140,8 +140,8 @@ const ORNAMENTS: Record<string, string> = { "¶": "¶", "§": "§", "* * *": "* 
 
 const RANGES = {
   textMin: [15, 19], textMax: [16, 22], ratioMin: [1.1, 1.25], ratioMax: [1.125, 1.414], leading: [1.4, 1.8],
-  displayLeading: [0.95, 1.3], displayWeight: [200, 900], titleWeight: [300, 900], tracking: [-0.05, 0.02],
-  labelTracking: [0, 0.2], capsTracking: [0, 0.25], weight: [100, 900], unit: [3, 8], container: [880, 1400],
+  displayLeading: [0.95, 1.3], displayWeight: [200, 600], titleWeight: [300, 600], tracking: [-0.05, 0.02],
+  labelTracking: [0, 0.2], capsTracking: [0, 0.25], weight: [100, 600], unit: [3, 8], container: [880, 1400],
   measure: [52, 78], margin: [0, 220], rail: [180, 300], gridMin: [200, 360], radius: [0, 16], ruleWidth: [1, 3],
   density: [0.8, 1.3], avgChar: [0.3, 0.8],
 } as const;
@@ -219,7 +219,7 @@ export function compileTheme(src: ThemeSource): CompiledTheme {
   for (const [family, f] of Object.entries(custom)) {
     if (!f?.src) continue;
     const fmt = f.format ? ` format("${quoteless(f.format)}")` : "";
-    faces.push(`@font-face{font-family:"${quoteless(family)}";src:url("${quoteless(f.src).replace(/\s/g, "%20")}")${fmt};font-weight:${cssSafe(f.weight || "100 900")};font-style:${f.style === "italic" ? "italic" : "normal"};font-display:swap}`);
+    faces.push(`@font-face{font-family:"${quoteless(family)}";src:url("${quoteless(f.src).replace(/\s/g, "%20")}")${fmt};font-weight:${cssSafe(f.weight || "100 600")};font-style:${f.style === "italic" ? "italic" : "normal"};font-display:swap}`);
   }
   V("font-display", stackOf(fonts.display)); V("font-text", stackOf(fonts.text || fonts.display));
   V("font-ui", stackOf(fonts.ui || fonts.text || fonts.display)); V("font-mono", stackOf(fonts.mono || "system"));

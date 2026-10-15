@@ -9,22 +9,22 @@
    ========================================================================== */
 /* Fonts: SIL OFL, subset to Latin, self-hosted (licences next to the files).
    A browser downloads a face only when a page uses it. */
-@font-face { font-family: "Crimson Pro"; src: url("/fonts/pg/CrimsonPro-Variable.woff2") format("woff2"); font-style: normal; font-weight: 200 900; font-display: swap; }
-@font-face { font-family: "Crimson Pro"; src: url("/fonts/pg/CrimsonPro-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 200 900; font-display: swap; }
-@font-face { font-family: "Epilogue"; src: url("/fonts/pg/Epilogue-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Epilogue"; src: url("/fonts/pg/Epilogue-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Public Sans"; src: url("/fonts/pg/PublicSans-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Public Sans"; src: url("/fonts/pg/PublicSans-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "JetBrains Mono"; src: url("/fonts/pg/JetBrainsMono-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 800; font-display: swap; }
-@font-face { font-family: "Red Hat Display"; src: url("/fonts/pg/RedHatDisplay-Variable.woff2") format("woff2"); font-style: normal; font-weight: 300 900; font-display: swap; }
-@font-face { font-family: "Red Hat Display"; src: url("/fonts/pg/RedHatDisplay-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 300 900; font-display: swap; }
-@font-face { font-family: "Azeret Mono"; src: url("/fonts/pg/AzeretMono-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Sora"; src: url("/fonts/pg/Sora-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 800; font-display: swap; }
-@font-face { font-family: "Sora"; src: url("/fonts/pg/Sora-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 100 800; font-display: swap; }
-@font-face { font-family: "Lora"; src: url("/fonts/pg/Lora-Variable.woff2") format("woff2"); font-style: normal; font-weight: 400 700; font-display: swap; }
-@font-face { font-family: "Lora"; src: url("/fonts/pg/Lora-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 400 700; font-display: swap; }
-@font-face { font-family: "Plus Jakarta Sans"; src: url("/fonts/pg/PlusJakartaSans-Variable.woff2") format("woff2"); font-style: normal; font-weight: 200 800; font-display: swap; }
-@font-face { font-family: "Plus Jakarta Sans"; src: url("/fonts/pg/PlusJakartaSans-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Crimson Pro"; src: url("/fonts/pg/CrimsonPro-Variable.woff2") format("woff2"); font-style: normal; font-weight: 200 600; font-display: swap; }
+@font-face { font-family: "Crimson Pro"; src: url("/fonts/pg/CrimsonPro-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 200 600; font-display: swap; }
+@font-face { font-family: "Epilogue"; src: url("/fonts/pg/Epilogue-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "Epilogue"; src: url("/fonts/pg/Epilogue-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "Public Sans"; src: url("/fonts/pg/PublicSans-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "Public Sans"; src: url("/fonts/pg/PublicSans-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/fonts/pg/JetBrainsMono-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "Red Hat Display"; src: url("/fonts/pg/RedHatDisplay-Variable.woff2") format("woff2"); font-style: normal; font-weight: 300 600; font-display: swap; }
+@font-face { font-family: "Red Hat Display"; src: url("/fonts/pg/RedHatDisplay-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 300 600; font-display: swap; }
+@font-face { font-family: "Azeret Mono"; src: url("/fonts/pg/AzeretMono-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "Sora"; src: url("/fonts/pg/Sora-Variable.woff2") format("woff2"); font-style: normal; font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "Sora"; src: url("/fonts/pg/Sora-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "Lora"; src: url("/fonts/pg/Lora-Variable.woff2") format("woff2"); font-style: normal; font-weight: 400 600; font-display: swap; }
+@font-face { font-family: "Lora"; src: url("/fonts/pg/Lora-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 400 600; font-display: swap; }
+@font-face { font-family: "Plus Jakarta Sans"; src: url("/fonts/pg/PlusJakartaSans-Variable.woff2") format("woff2"); font-style: normal; font-weight: 200 600; font-display: swap; }
+@font-face { font-family: "Plus Jakarta Sans"; src: url("/fonts/pg/PlusJakartaSans-VariableItalic.woff2") format("woff2"); font-style: italic; font-weight: 200 600; font-display: swap; }
 
 @layer pg.base, pg.components, pg.theme, pg.custom;
 

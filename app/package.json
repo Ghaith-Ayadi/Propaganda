@@ -8,7 +8,8 @@
     "dev:ui": "VITE_UI_PREVIEW=1 vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "check:weights": "node scripts/check-font-weights.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.136",

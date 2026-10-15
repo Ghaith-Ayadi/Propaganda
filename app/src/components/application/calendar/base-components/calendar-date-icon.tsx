@@ -13,7 +13,7 @@ export const CalendarDateIcon = ({ month: label, day, className }: CalendarDateI
                 <span className="text-xs font-semibold text-quaternary">{label}</span>
             </div>
             <div className="flex w-full justify-center px-2 pt-px pb-[3px]">
-                <span className="text-lg leading-7 font-bold text-brand-secondary">{day}</span>
+                <span className="text-lg leading-7 font-semibold text-brand-secondary">{day}</span>
             </div>
         </div>
     );

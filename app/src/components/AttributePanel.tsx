@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Copy04, Link01, LinkExternal01, Plus, Star01, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
@@ -28,6 +28,8 @@ import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { Button } from "@/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
 import { Tabs } from "@/components/application/tabs/tabs";
+import { ResizeHandle } from "@/components/shell/ResizeHandle";
+import { ATTRIBUTES_WIDTH, clampWidth, useLayout } from "@/lib/layout";
 import { ReviewPanel } from "@/components/pipeline/ReviewPanel";
 import { usePipelineItemForPost } from "@/lib/pipeline/store";
 import { useReviewState } from "@/lib/review/store";
@@ -37,6 +39,7 @@ interface Props {
 }
 
 export function AttributePanel({ post }: Props) {
+  const [layout, setLayout] = useLayout();
   const collectionRows = useLiveQuery(
     () => db.collections.orderBy("position").toArray(),
     [],
@@ -95,7 +98,18 @@ export function AttributePanel({ post }: Props) {
   const status: PostStatus = post.status ?? "draft";
 
   return (
-    <aside className={`flex h-full ${tab === "review" ? "w-[360px]" : "w-[300px]"} max-w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm`}>
+    <aside
+      style={{ "--panel-w": `${layout.attributesWidth}px` } as CSSProperties}
+      className="relative flex h-full w-[300px] max-w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm [scrollbar-gutter:stable] md:w-[var(--panel-w)]"
+    >
+      <ResizeHandle
+        width={layout.attributesWidth}
+        min={ATTRIBUTES_WIDTH.min}
+        max={ATTRIBUTES_WIDTH.max}
+        onChange={(w) => setLayout({ attributesWidth: clampWidth(w) })}
+        onReset={() => setLayout({ attributesWidth: ATTRIBUTES_WIDTH.default })}
+        label="Resize details panel"
+      />
       <div className="flex items-center gap-1">
         <ButtonUtility
           size="sm"
