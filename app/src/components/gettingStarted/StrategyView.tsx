@@ -79,6 +79,11 @@ export function StrategyView({
   };
 
   const approve = async () => {
+    // Feedback typed but not sent would be dropped by approving: say so first.
+    if (feedback.trim()) {
+      toast.add({ type: "warning", title: "You have feedback that isn't sent", description: "Send it, or clear the box and approve again." });
+      return;
+    }
     setBusy(true);
     try {
       await goalsActions.approveProposal(proposal.id, proposal, []);
