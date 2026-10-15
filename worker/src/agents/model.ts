@@ -46,6 +46,8 @@ export interface Ask {
   reasoning?: Reasoning;
   /** Cache the prompt on an Anthropic model (gateway.ts CallOptions.cache). */
   cache?: boolean;
+  /** Text after the (cached) prompt: a retry's problem goes here so the prompt stays a cache hit. */
+  suffix?: string;
 }
 
 /** One model call as one step. Background work: it stops at the tenant's budget. */
@@ -79,9 +81,17 @@ export async function askJson<T>(step: string, ask: Ask, parse: (value: unknown)
   }
   const retry = await askText(`${step} (again)`, {
     ...again,
-    prompt: `${ask.prompt}\n\nYour previous answer could not be used: ${problem!}\nAnswer again with the JSON only.`,
+    ...appended(ask, `Your previous answer could not be used: ${problem!}\nAnswer again with the JSON only.`),
   });
   return parse(extractJson(retry));
+}
+
+/**
+ * The ask's prompt with `text` after it. A cached ask keeps its prompt as it was
+ * and carries the text as its suffix, so the retry reads the prompt from the cache.
+ */
+export function appended(ask: Ask, text: string): { prompt: string; suffix?: string } {
+  return ask.cache ? { prompt: ask.prompt, suffix: `${ask.suffix ?? ""}\n\n${text}` } : { prompt: `${ask.prompt}${ask.suffix ?? ""}\n\n${text}` };
 }
 
 /** The JSON value in a model's answer, ignoring fences and any prose around it. */

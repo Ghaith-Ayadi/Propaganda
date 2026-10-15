@@ -95,6 +95,12 @@ export interface CallOptions {
    * so a repeat or a fix call reads them at the cache price. Ignored for any other provider.
    */
   cache?: boolean;
+  /**
+   * Text added after the cached prompt, as its own part, so a fix call or a retry that only
+   * appends a problem still reads the prompt from the cache. Used with `cache` on an Anthropic
+   * model; on any other call it is appended to the prompt.
+   */
+  suffix?: string;
   abortSignal?: AbortSignal;
 }
 
@@ -403,8 +409,18 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
       model: route.model,
       system: opts.system,
       ...(cached
-        ? { messages: [{ role: "user" as const, content: [{ type: "text" as const, text: opts.prompt, providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } }] }] }
-        : { prompt: opts.prompt }),
+        ? {
+            messages: [
+              {
+                role: "user" as const,
+                content: [
+                  { type: "text" as const, text: opts.prompt, providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } },
+                  ...(opts.suffix ? [{ type: "text" as const, text: opts.suffix }] : []),
+                ],
+              },
+            ],
+          }
+        : { prompt: opts.suffix ? opts.prompt + opts.suffix : opts.prompt }),
       maxOutputTokens: thinkingBudget(opts.maxOutputTokens, opts.reasoning),
       ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
       abortSignal: opts.abortSignal,
