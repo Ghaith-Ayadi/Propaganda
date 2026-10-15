@@ -110,7 +110,7 @@ export function ChatPage() {
       <div className="relative flex min-h-0 flex-1">
         <section className="flex min-w-0 flex-1 flex-col">
           {messages.length > 0 || (activeId && loading) ? (
-            <Thread key={activeId ?? "new"} history={Boolean(activeId)} messages={messages} status={status} onRemember={remember} onRetry={retry} />
+            <Thread conversationId={activeId} messages={messages} status={status} onRemember={remember} onRetry={retry} />
           ) : (
             <Welcome onPick={ask} />
           )}
@@ -214,14 +214,14 @@ function Welcome({ onPick }: { onPick: (s: string) => void }) {
 }
 
 function Thread({
-  history,
+  conversationId,
   messages,
   status,
   onRemember,
   onRetry,
 }: {
-  /** An existing conversation: its loaded messages do not animate in. */
-  history: boolean;
+  /** The open conversation, null for a new one. Existing ones load without animating. */
+  conversationId: string | null;
   messages: ChatUIMessage[];
   status: ChatStatus;
   onRemember: (statement: string, messageId: string) => Promise<void>;
@@ -236,10 +236,16 @@ function Thread({
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [messages, status]);
 
-  // Only replies that arrive after the conversation opened rise in.
-  const seen = useRef<Set<string> | null>(null);
-  // History loads in after the first render, so seed on the first non-empty list.
-  if (seen.current === null && messages.length > 0) seen.current = new Set(history ? messages.map((m) => m.id) : []);
+  // Only replies that arrive after the conversation opened rise in. History loads in
+  // after the first render, so seed on the first non-empty list. A new chat getting its
+  // id on the first send keeps its seen-set (no remount); moving to another conversation resets it.
+  const seen = useRef<{ conv: string | null; ids: Set<string> | null }>({ conv: conversationId, ids: null });
+  if (seen.current.conv !== conversationId) {
+    seen.current = seen.current.conv === null ? { ...seen.current, conv: conversationId } : { conv: conversationId, ids: null };
+  }
+  if (seen.current.ids === null && messages.length > 0) {
+    seen.current.ids = new Set(conversationId ? messages.map((m) => m.id) : []);
+  }
   const last = messages[messages.length - 1];
   return (
     <div
@@ -252,7 +258,7 @@ function Thread({
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-5 md:py-5 2xl:px-8 2xl:py-8">
         {messages.map((m) => (
-          <div key={m.id} className={seen.current?.has(m.id) ? undefined : "ppg-pop"}>
+          <div key={m.id} className={seen.current.ids?.has(m.id) ? undefined : "ppg-pop"}>
           <Message
             message={m}
             streaming={status === "streaming" && m === last && m.role === "assistant"}
