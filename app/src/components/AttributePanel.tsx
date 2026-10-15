@@ -29,6 +29,8 @@ import { Button } from "@/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
 import { Tabs } from "@/components/application/tabs/tabs";
 import { ReviewPanel } from "@/components/pipeline/ReviewPanel";
+import { CommentsPanel, useOpenCommentCount } from "@/components/CommentsPanel";
+import { useCommentFocus } from "@/lib/comments/focus";
 import { usePipelineItemForPost } from "@/lib/pipeline/store";
 import { useReviewState } from "@/lib/review/store";
 
@@ -67,6 +69,12 @@ export function AttributePanel({ post }: Props) {
   useEffect(() => {
     if (activeFrom === "editor") setTab("review");
   }, [seq, activeFrom]);
+  // A passage chosen to comment on, or a comment's highlight clicked in the text, opens Comments.
+  const comments = useCommentFocus();
+  const openComments = useOpenCommentCount(post.id);
+  useEffect(() => {
+    if (comments.draft || comments.from === "editor") setTab("comments");
+  }, [comments.draft, comments.seq, comments.from]);
 
   const { site } = useWorkspace();
   const publicUrl = postPublicUrl(site, collectionSlugOf(post.type, collectionRows), post.slug);
@@ -95,7 +103,7 @@ export function AttributePanel({ post }: Props) {
   const status: PostStatus = post.status ?? "draft";
 
   return (
-    <aside className={`flex h-full ${tab === "review" ? "w-[360px]" : "w-[300px]"} max-w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm`}>
+    <aside className={`flex h-full ${tab === "review" || tab === "comments" ? "w-[360px]" : "w-[300px]"} max-w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-secondary bg-secondary px-5 py-6 text-sm`}>
       <div className="flex items-center gap-1">
         <ButtonUtility
           size="sm"
@@ -141,6 +149,7 @@ export function AttributePanel({ post }: Props) {
           <Tabs.Item id="brief">Brief</Tabs.Item>
           <Tabs.Item id="analytics">Analytics</Tabs.Item>
           <Tabs.Item id="review">Review</Tabs.Item>
+          <Tabs.Item id="comments">{openComments ? `Comments (${openComments})` : "Comments"}</Tabs.Item>
         </Tabs.List>
 
         <Tabs.Panel id="brief">
@@ -151,6 +160,9 @@ export function AttributePanel({ post }: Props) {
         </Tabs.Panel>
         <Tabs.Panel id="review">
           <ReviewPanel postId={post.id} />
+        </Tabs.Panel>
+        <Tabs.Panel id="comments">
+          <CommentsPanel postId={post.id} />
         </Tabs.Panel>
 
         <Tabs.Panel id="details" className="flex flex-col gap-5">
@@ -315,7 +327,7 @@ function FieldStack({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-type TabKey = "details" | "brief" | "analytics" | "review";
+type TabKey = "details" | "brief" | "analytics" | "review" | "comments";
 
 function BriefTab({ post }: { post: Post }) {
   const [picking, setPicking] = useState(false);

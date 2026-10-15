@@ -43,7 +43,7 @@ export function normalizeQuote(q: string): string {
 }
 
 /** Every textblock's text, normalised, with the document position of each character. */
-function textblocks(doc: PmNode): { text: string; pos: number[] }[] {
+export function textblocks(doc: PmNode): { text: string; pos: number[] }[] {
   const out: { text: string; pos: number[] }[] = [];
   doc.descendants((node, start) => {
     if (!node.isTextblock) return true;
