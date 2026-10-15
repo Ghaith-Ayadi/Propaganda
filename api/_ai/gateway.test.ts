@@ -92,6 +92,21 @@ test("cache puts a cache breakpoint on the prompt of an Anthropic call, and only
   setModelResolver(() => ok);
 });
 
+test("a suffix is a second part after the cached prompt, and joins the prompt where nothing is cached", async () => {
+  const seen: { prompt: any[] }[] = [];
+  setModelResolver(() => new MockLanguageModelV3({
+    doGenerate: async (o: any) => { seen.push(o); return await (ok as any).doGenerate(o); },
+  }));
+  await callModel({ site: "sitecache0000001", job: "t", model: "anthropic/claude-opus-5.5", background: true, system: "S", prompt: "P", cache: true, suffix: "+fix" });
+  await callModel({ site: "sitecache0000001", job: "t", model: "deepseek/deepseek-v4-pro", background: true, system: "S", prompt: "P", cache: true, suffix: "+fix" });
+  const user = (o: { prompt: any[] }) => o.prompt.find((m) => m.role === "user").content;
+  const a = user(seen[0]);
+  assert.deepEqual(a.map((p: any) => p.text), ["P", "+fix"]);
+  assert.ok(a[0].providerOptions?.anthropic?.cacheControl && !a[1].providerOptions);
+  assert.deepEqual(user(seen[1]).map((p: any) => p.text), ["P+fix"]);
+  setModelResolver(() => ok);
+});
+
 test("tenant at 100%: background refused and nothing logged; editor still runs", async () => {
   gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 }; calls.length = 0;
   await assert.rejects(callModel(opts), (e: Error) => e instanceof BudgetError && e.reason === "tenant-budget");

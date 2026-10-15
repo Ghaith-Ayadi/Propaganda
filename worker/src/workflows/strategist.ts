@@ -20,7 +20,7 @@
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { HOUSE_STYLE, TITLE_RULES } from "../agents/writing.js";
-import { askJson, MODELS } from "../agents/model.js";
+import { appended, askJson, MODELS } from "../agents/model.js";
 import { sharedIdeas } from "../agents/motifs.js";
 import { assertPublicUrl, readPage, readSite, searchWeb, searchConfigured, type SiteClaim } from "../agents/web.js";
 import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
@@ -521,7 +521,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     if (errors.length) {
       draft = await askJson("propose (fix)", {
         ...ask,
-        prompt: `${ask.prompt}\n\nYour proposal broke these rules:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nYour proposal was:\n${JSON.stringify(draft)}\n\nAnswer again with the whole proposal, fixed.`,
+        ...appended(ask, `Your proposal broke these rules:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nYour proposal was:\n${JSON.stringify(draft)}\n\nAnswer again with the whole proposal, fixed.`),
       }, parseDraft);
       draft = keepTopicNames(draft, previousTopics);
       await price(draft);
