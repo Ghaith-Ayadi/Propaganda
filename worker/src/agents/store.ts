@@ -54,7 +54,7 @@ export interface BriefRow {
   fit: unknown;
   origin: string;
   sources: { url: string; label: string }[] | null;
-  notes: { lineId: string | null; text: string; done?: boolean }[] | null;
+  notes: { lineId: string | null; text: string; quote?: string; done?: boolean }[] | null;
   outline: { id: string; text: string }[] | null;
   angle: string;
   audience: string;

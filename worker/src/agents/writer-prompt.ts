@@ -41,7 +41,8 @@ ${voice}`;
 export function briefBlock(b: BriefRow): string {
   const notes = (b.notes ?? []).map((n) => {
     const line = n.lineId ? (b.outline ?? []).find((l) => l.id === n.lineId)?.text : null;
-    return `- ${line ? `On "${line}": ` : ""}${n.text}`;
+    const on = n.quote || line;
+    return `- ${on ? `On "${on}": ` : ""}${n.text}`;
   });
   return [
     `Title: ${b.title}`,
