@@ -243,7 +243,7 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
     {
       site,
       job: "writer:draft",
-      model: MODELS.advanced,
+      model: MODELS.writer,
       maxOutputTokens: 12000,
       system: writerSystem(voice),
       prompt: `Write the full post for ${tenant?.name ?? "the tenant"} from this brief.
@@ -409,7 +409,7 @@ async function reviseRun(input: ReviseInput): Promise<WriteResult> {
   const revised = await askText("revise", {
     site,
     job: "writer:revise",
-    model: MODELS.advanced,
+    model: MODELS.writer,
     maxOutputTokens: 12000,
     system: writerSystem(voice),
     prompt: `A reviewer left these notes on the post below:

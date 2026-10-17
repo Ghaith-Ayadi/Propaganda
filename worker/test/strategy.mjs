@@ -251,6 +251,7 @@ try {
   check(!t.looksLikeSource("https://buffer.com/resources/ai-social-media-content-creation/") && !t.looksLikeSource("https://x.com/a/b.pdf"), "an article or a file is not");
   check(t.MODELS.strategist === (process.env.AGENT_MODEL_STRATEGIST || "anthropic/claude-opus-5.5"), `the Strategist runs on Claude Opus 5.5 (${t.MODELS.strategist})`);
   check(t.MODELS.pitcher === (process.env.AGENT_MODEL_PITCHER || "anthropic/claude-sonnet-5.5"), `the first pitches run on Claude Sonnet 5.5 (${t.MODELS.pitcher})`);
+  check(t.MODELS.writer === (process.env.AGENT_MODEL_WRITER || "alibaba/qwen3.7-plus"), `the Writer drafts on Qwen3.7 Plus (${t.MODELS.writer})`);
   check(t.pickHost("AirOps", ["instagram.com", "www.airops.com", "g2.com"], "propaganda.pub") === "airops.com", "a bare competitor name picks the host that carries it, not the first result");
   check(t.pickHost("AirOps", ["app.airops.com", "airops.com"], "propaganda.pub") === "airops.com", "the company's site, not its app host");
   check(t.pickHost("Box", ["dropbox.com", "box.com"], "propaganda.pub") === "box.com", "the exact name wins over a host that merely contains it");
