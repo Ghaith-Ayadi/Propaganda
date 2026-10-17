@@ -1,4 +1,5 @@
 // Checker bench: the current CHECK_SYSTEM vs a proposed one on the four round-4 drafts. Prints results.
+// 24,000 tokens: the Checker asks for 8,000 and the gateway adds 16,000 for thinking (gateway.ts THINKING_TOKENS).
 import { readFileSync } from "node:fs";
 import { generateText } from "ai";
 const pack = JSON.parse(readFileSync("/worker/checkbench/pack.json", "utf8"));
@@ -26,10 +27,10 @@ for (const [model, post] of Object.entries(pack.posts)) {
   const pages = await Promise.all(links(post.content).map(async (l) => ({ url: l.url, sentence_in_post: l.context, page_text: (await page(l.url)) || null })));
   const prompt = JSON.stringify({ post: { title: post.title, status: "draft", published_at: null, content: post.content }, claims: [], linked_pages: pages }, null, 1);
   out[model] = { pageChars: pages.map((p) => [p.url, p.page_text?.length ?? 0]) };
-  for (const which of ["current", "proposed"]) {
+  for (const which of (process.env.WHICH ?? "current,proposed").split(",")) {
     const t0 = Date.now();
     try {
-      const r = await generateText({ model: MODEL, system: pack[which], prompt, maxOutputTokens: 8000 });
+      const r = await generateText({ model: MODEL, system: pack[which], prompt, maxOutputTokens: 24000 });
       out[model][which] = { text: r.text, usage: r.usage, ms: Date.now() - t0, cost: r.providerMetadata?.gateway?.cost ?? null };
     } catch (e) { out[model][which] = { error: String(e.message ?? e) }; }
     console.error(model, which, Date.now() - t0, "ms");
