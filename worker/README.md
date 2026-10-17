@@ -181,7 +181,9 @@ public API host), `SERVICE_ROLE_KEY` (already there), `AI_GATEWAY_API_KEY`
 tenant's own Anthropic key, see `DEFAULT_MODEL` and `BYOK_MODEL` in
 `api/_ai/gateway.ts`), `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` for web search (without
 them the agents work from what they were given), and optionally
-`AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `VOICE_FROM`, `PITCHER_BATCH_CRON`.
+`AGENT_MODEL_BASE`, `AGENT_MODEL_ADVANCED`, `AGENT_MODEL_WRITER` (the Writer's draft and
+revision; default `alibaba/qwen3.7-plus`, Ayadi 2026-10-17 after four blind rounds),
+`VOICE_FROM`, `PITCHER_BATCH_CRON`.
 ## The Strategist
 
 Design: `agents/strategist.md` and `agents/strategist-cold-start-and-pacing.md`

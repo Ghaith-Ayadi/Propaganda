@@ -25,6 +25,11 @@ export function wireGateway(): void {
  * (about $0.21 a run at medium effort, less with prompt caching), and the first
  * pitches are Claude Sonnet 5.5. It was Fable 5.1 for both since 2026-10-10. On a
  * tenant's own Anthropic key they run on that key, like every `anthropic/` call.
+ * The Writer's draft and revision run on Qwen3.7 Plus (Ayadi, 2026-10-17, after
+ * four blind rounds against Opus 5.5, Sonnet 5.5, GPT-5.6 Sol and DeepSeek V4
+ * Pro: it tied the best draft in both rounds it ran, at about $0.02 a draft
+ * against $0.19 for Opus; about three minutes a draft). The Writer's other
+ * calls (research plan, rules, style) stay on the base tier.
  */
 export const MODELS = {
   base: process.env.AGENT_MODEL_BASE || DEFAULT_MODEL,
@@ -32,6 +37,8 @@ export const MODELS = {
   strategist: process.env.AGENT_MODEL_STRATEGIST || "anthropic/claude-opus-5.5",
   /** The first pitches of a plan (workflows/first-day.ts). */
   pitcher: process.env.AGENT_MODEL_PITCHER || "anthropic/claude-sonnet-5.5",
+  /** The Writer's draft and revision (agents/writer.ts). */
+  writer: process.env.AGENT_MODEL_WRITER || "alibaba/qwen3.7-plus",
 };
 
 export interface Ask {
