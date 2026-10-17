@@ -2,7 +2,8 @@
 // 24,000 tokens: the Checker asks for 8,000 and the gateway adds 16,000 for thinking (gateway.ts THINKING_TOKENS).
 import { readFileSync } from "node:fs";
 import { generateText } from "ai";
-const pack = JSON.parse(readFileSync("/worker/checkbench/pack.json", "utf8"));
+// The pack (drafts and the two prompts) stays in the project files (arena/strategy-bench/checker/pack.json), never in the repo.
+const pack = JSON.parse(readFileSync(process.env.PACK ?? "/worker/checkbench/pack.json", "utf8"));
 const MODEL = "deepseek/deepseek-v4-pro";
 const htmlToText = (h, max = 12000) => h.replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim().slice(0, max);
 function links(md, max = 6) {
