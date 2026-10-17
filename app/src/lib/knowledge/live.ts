@@ -608,7 +608,7 @@ export const liveKb: KnowledgeBackend = {
         return {
           checkedAt: check?.created ?? null,
           sources: Array.isArray(report.sources)
-            ? report.sources.map((x: Row) => ({ quote: String(x.quote ?? ""), url: String(x.url ?? ""), verdict: x.verdict, note: String(x.note ?? "") }))
+            ? report.sources.map((x: Row) => ({ quote: String(x.quote ?? ""), url: String(x.url ?? ""), verdict: x.verdict, note: String(x.note ?? ""), ...(x.fix ? { fix: String(x.fix) } : {}) }))
             : [],
           remember: Array.isArray(report.remember) ? report.remember.map((x: Row) => ({ text: String(x.text ?? ""), quote: String(x.quote ?? "") })) : [],
           flags: rows.map((r) => ({

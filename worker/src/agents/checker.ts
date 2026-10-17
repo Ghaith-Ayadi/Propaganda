@@ -30,7 +30,7 @@ sentence as you can. Never use the "That's not X. It's Y." construction; say it 
 interface CheckAnswer {
   links?: { claim: string; reliance: string; quote: string }[];
   conflicts?: { claim: string; quote: string; explanation: string; suggested_action: string; suggested_fix: string }[];
-  sources?: { url: string; quote: string; verdict: string; note: string }[];
+  sources?: { url: string; quote: string; verdict: string; note: string; fix?: string }[];
   remember?: { text: string; quote: string }[];
   summary?: string;
 }
@@ -45,8 +45,17 @@ For each claim listed, decide whether the post relies on it:
 A conflict is a passage that can't be true at the same time, scope and audience as a live claim. A post
 that is dated (it talks about the past) or explicitly about another scope doesn't conflict. A contested
 claim conflicts only when the post contradicts it outright. Quote the exact passage.
-For each linked page, check the numbers and quotes the post takes from it: "ok", "mismatch" (it says
-something else), "unsupported" (the page doesn't say it) or "unreachable" (no text was fetched).
+"sources": every statement the post makes as fact about the world outside the tenant: a number, a
+finding, a cause, how a system, a market or a product behaves. Advice, opinion and the post's own argument
+("fix your own pages first") are not statements; leave them out.
+- When the sentence links a page, or leans on a page linked in the same paragraph, check the page says it:
+  "ok", "mismatch" (it says something else), "unsupported" (the page doesn't say it, including a post that
+  claims more than the page found, or turns a finding into a mechanism the page never describes) or
+  "unreachable" (no text was fetched).
+- When no linked page backs it, "unsupported" with "url": "" and a note naming the source it would need.
+Quote the exact sentence. Give a "fix" for each mismatch or unsupported statement: the sentence softened
+to what can be backed ("can", "one study found"), or cut to "" when nothing backs it. Report the weakest
+first, at most 15.
 "remember": facts about the tenant itself (its product, pricing, customers, policies, decisions) that the
 post states and no listed claim covers, one plain standalone sentence each, with the quote. No people's
 names in the sentence, no style rules.
@@ -57,7 +66,7 @@ Answer with one JSON object and nothing else:
 {"links": [{"claim": "<id>", "reliance": "asserts|assumes|mentions", "quote": "..."}],
  "conflicts": [{"claim": "<id>", "quote": "...", "explanation": "one or two sentences",
                 "suggested_action": "edit_wording|rewrite|dated_note|unpublish", "suggested_fix": "the passage, fixed"}],
- "sources": [{"url": "...", "quote": "...", "verdict": "ok|mismatch|unsupported|unreachable", "note": "..."}],
+ "sources": [{"url": "... or empty", "quote": "...", "verdict": "ok|mismatch|unsupported|unreachable", "note": "...", "fix": "..."}],
  "remember": [{"text": "...", "quote": "..."}],
  "summary": "one or two sentences for the author"}`;
 
