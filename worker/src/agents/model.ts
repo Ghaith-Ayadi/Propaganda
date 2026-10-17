@@ -4,7 +4,7 @@
 // instead of failing it (src/limits.ts).
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { callModel, DEFAULT_MODEL, setWorkflowContext, type Reasoning } from "../../../api/_ai/gateway";
+import { callModel, DEFAULT_MODEL, setWorkflowContext, WRITER_MODEL, type Reasoning } from "../../../api/_ai/gateway";
 import { emptyAnswerOf, modelStep } from "../limits.js";
 
 let wired = false;
@@ -29,7 +29,8 @@ export function wireGateway(): void {
  * four blind rounds against Opus 5.5, Sonnet 5.5, GPT-5.6 Sol and DeepSeek V4
  * Pro: it tied the best draft in both rounds it ran, at about $0.02 a draft
  * against $0.19 for Opus; about three minutes a draft). The Writer's other
- * calls (research plan, rules, style) stay on the base tier.
+ * calls (research plan, rules, style) stay on the base tier. On a tenant's own
+ * Anthropic key the Writer runs as BYOK_MODEL on that key, as before.
  */
 export const MODELS = {
   base: process.env.AGENT_MODEL_BASE || DEFAULT_MODEL,
@@ -37,8 +38,8 @@ export const MODELS = {
   strategist: process.env.AGENT_MODEL_STRATEGIST || "anthropic/claude-opus-5.5",
   /** The first pitches of a plan (workflows/first-day.ts). */
   pitcher: process.env.AGENT_MODEL_PITCHER || "anthropic/claude-sonnet-5.5",
-  /** The Writer's draft and revision (agents/writer.ts). */
-  writer: process.env.AGENT_MODEL_WRITER || "alibaba/qwen3.7-plus",
+  /** The Writer's draft and revision (agents/writer.ts); on a tenant's own key it is BYOK_MODEL, like the base tier. */
+  writer: WRITER_MODEL,
 };
 
 export interface Ask {

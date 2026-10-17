@@ -224,7 +224,15 @@ let resolveModel: (id: string) => LanguageModel = defaultResolve;
  */
 export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "deepseek/deepseek-v4-pro";
 
-/** What a call for DEFAULT_MODEL runs on instead for a tenant that saved its own Anthropic key. BYOK_MODEL overrides it. */
+/**
+ * The Writer's draft and revision model (worker MODELS.writer): Qwen3.7 Plus,
+ * Ayadi 2026-10-17 after four blind rounds. AGENT_MODEL_WRITER overrides it. Like
+ * DEFAULT_MODEL, it is one of our tiers, so a tenant on its own Anthropic key
+ * gets BYOK_MODEL on that key instead.
+ */
+export const WRITER_MODEL = process.env.AGENT_MODEL_WRITER || "alibaba/qwen3.7-plus";
+
+/** What a call for one of our tiers (DEFAULT_MODEL, WRITER_MODEL) runs on instead for a tenant that saved its own Anthropic key. BYOK_MODEL overrides it. */
 export const BYOK_MODEL = process.env.BYOK_MODEL || "anthropic/claude-sonnet-5.5";
 
 /** For tests: swap how a model id becomes a model. */
@@ -303,7 +311,7 @@ export interface Route {
  */
 export async function routeModel(site: string, model: string): Promise<Route> {
   const ours = (): Route => ({ id: model, model: resolveModel(model), tenant: null, keyed: false, logged: {}, budgetFree: false });
-  const keyed = model === DEFAULT_MODEL ? BYOK_MODEL : model;
+  const keyed = model === DEFAULT_MODEL || model === WRITER_MODEL ? BYOK_MODEL : model;
   if (!keyed.startsWith("anthropic/")) return ours();
   const tenant = await readTenantKey(rest, site);
   if (!tenant) return ours();

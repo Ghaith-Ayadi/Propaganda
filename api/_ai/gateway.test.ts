@@ -459,6 +459,14 @@ test("DEFAULT_MODEL runs on our gateway with no key, and as BYOK_MODEL on a tena
   assert.equal(calls[0].model, g.BYOK_MODEL);
   assert.equal(calls[0].paid_by, "tenant");
 
+  // The Writer tier (Qwen) is ours too, and runs as BYOK_MODEL on a tenant's key like the default.
+  calls.length = 0; keyed = "";
+  await callModel({ ...opts, site: tenantSite, model: g.WRITER_MODEL });
+  assert.equal(g.WRITER_MODEL, "alibaba/qwen3.7-plus");
+  assert.equal(keyed, g.BYOK_MODEL);
+  assert.equal(calls[0].model, g.BYOK_MODEL);
+  assert.equal(calls[0].paid_by, "tenant");
+
   // A model asked for by name (the editor's Gemini) stays ours even with a key.
   calls.length = 0; ours = "";
   await callModel({ ...opts, site: tenantSite, model: "google/gemini-2.5-flash-lite" });
