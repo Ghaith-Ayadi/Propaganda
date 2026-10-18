@@ -45,6 +45,10 @@ await ok(admin.from("site_members").insert({ site: S, user_id: member.userId, ro
 await ok(admin.from("collections").insert({ site: S, name: "Test", emoji: "🧪", position: 1 }));
 // The site's row comes from its insert (20261010000050); move `since` back a day.
 sql(`update public.kb_agent_sites set since = now() - interval '1 day' where site = '${S}'`);
+// The dispatcher looks at every tenant, and seed.mjs's Verbatim got its row the same way (its
+// ten published posts would each be checked). Only this tenant's agents run here.
+const others = sql(`select site, checker, guardian from public.kb_agent_sites where site <> '${S}' and (checker or guardian)`);
+sql(`update public.kb_agent_sites set checker = false, guardian = false where site <> '${S}'`);
 
 // The knowledge base starts with one settled claim, admitted the way the Guardian does.
 const seedProp = newId();
@@ -179,5 +183,8 @@ try {
 } finally {
   stop();
   sql(`delete from public.kb_agent_sites where site = '${S}'`);
+  for (const [site, checker, guardian] of others) {
+    sql(`update public.kb_agent_sites set checker = ${checker === "t"}, guardian = ${guardian === "t"} where site = '${site}'`);
+  }
 }
 done("kb_agents");
