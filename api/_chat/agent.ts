@@ -23,7 +23,7 @@ import type { AgentName, ChatEvent, ChatUIMessage, Handoff, QuickAction } from "
 export { historyMessages };
 
 /**
- * The gateway's DEFAULT_MODEL (on a tenant's own key, BYOK_MODEL: Sonnet);
+ * The gateway's DEFAULT_MODEL;
  * CHAT_MODEL overrides it.
  */
 export const CHAT_MODEL = process.env.CHAT_MODEL || DEFAULT_MODEL;

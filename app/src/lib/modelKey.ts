@@ -2,6 +2,12 @@
 // sends the key once, to be tested and saved, and never gets it back: it
 // sees the last four characters and whether the last test or use worked.
 
+/**
+ * Off since 2026-10-18 (Ayadi): every model call runs on our AI Gateway, so the
+ * Settings card is hidden (it would say a saved key is used). The code stays.
+ */
+export const BYOK_ENABLED = false;
+
 import { AppError } from "@/lib/errors";
 import { authHeader } from "@/lib/supabase";
 

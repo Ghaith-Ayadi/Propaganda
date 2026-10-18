@@ -227,6 +227,11 @@ export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "deepseek/deepseek-v4-
 /** What a call for DEFAULT_MODEL runs on instead for a tenant that saved its own Anthropic key. BYOK_MODEL overrides it. */
 export const BYOK_MODEL = process.env.BYOK_MODEL || "anthropic/claude-sonnet-5.5";
 
+/** Tenants' own keys are used only with BYOK=on (off since 2026-10-18). Read per call so tests can switch it. */
+export function byokOn(): boolean {
+  return process.env.BYOK === "on";
+}
+
 /** For tests: swap how a model id becomes a model. */
 export function setModelResolver(fn: (id: string) => LanguageModel): void {
   resolveModel = fn;
@@ -234,6 +239,9 @@ export function setModelResolver(fn: (id: string) => LanguageModel): void {
 
 // ---- a tenant's own key (BYOK, modelKeys.ts) ----
 //
+// OFF since 2026-10-18 (Ayadi): every call runs on our AI Gateway, inside our
+// budgets, whatever key a tenant saved. The code and the stored keys stay;
+// BYOK=on in the environment turns it back on.
 // A tenant with a key set has every Anthropic call made with that key, and
 // nothing else of ours: no fallback to our account when it fails. Our budget
 // rules don't apply to its spend (cost_gate leaves out rows paid_by 'tenant'),
@@ -303,6 +311,7 @@ export interface Route {
  */
 export async function routeModel(site: string, model: string): Promise<Route> {
   const ours = (): Route => ({ id: model, model: resolveModel(model), tenant: null, keyed: false, logged: {}, budgetFree: false });
+  if (!byokOn()) return ours();
   const keyed = model === DEFAULT_MODEL ? BYOK_MODEL : model;
   if (!keyed.startsWith("anthropic/")) return ours();
   const tenant = await readTenantKey(rest, site);

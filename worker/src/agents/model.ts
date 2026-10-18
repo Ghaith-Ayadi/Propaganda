@@ -19,12 +19,12 @@ export function wireGateway(): void {
 /**
  * Model ids as the AI SDK / AI Gateway spells them. Both tiers are the gateway's
  * DEFAULT_MODEL (DeepSeek V4 Pro, Ayadi 2026-10-09) until a benchmark says a
- * job needs another; on a tenant's own Anthropic key it runs as BYOK_MODEL.
+ * job needs another. (Tenants' own keys are off since 2026-10-18: every call
+ * runs on our gateway; see gateway.ts byokOn.)
  * Two exceptions (Ayadi, 2026-10-14, after the blind benchmarks on PPGD): the
  * Strategist, the one document that sets a tenant's quarter, is Claude Opus 5.5
  * (about $0.21 a run at medium effort, less with prompt caching), and the first
- * pitches are Claude Sonnet 5.5. It was Fable 5.1 for both since 2026-10-10. On a
- * tenant's own Anthropic key they run on that key, like every `anthropic/` call.
+ * pitches are Claude Sonnet 5.5. It was Fable 5.1 for both since 2026-10-10.
  * The Writer's draft and revision run on Qwen3.7 Plus (Ayadi, 2026-10-17, after
  * four blind rounds against Opus 5.5, Sonnet 5.5, GPT-5.6 Sol and DeepSeek V4
  * Pro: it tied the best draft in both rounds it ran, at about $0.02 a draft
