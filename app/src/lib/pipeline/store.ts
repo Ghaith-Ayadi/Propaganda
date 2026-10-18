@@ -463,6 +463,14 @@ export async function addToColumn(stage: Stage, title: string, collection: strin
   return item;
 }
 
+/** Assigned posts go straight to the Writer, skipping the Pitcher (live data only). */
+export async function assignPosts(posts: { title: string; brief: string }[], collection: string): Promise<{ made: number; notStarted: string[] }> {
+  if (!LIVE) return { made: 0, notStarted: posts.map((p) => `${p.title}: not in the preview`) };
+  const out = await live.assign(posts, collection);
+  void refresh();
+  return out;
+}
+
 /** The draft as markdown, from the paragraphs the review step read (markers dropped). */
 function reviewMarkdown(item: PipelineItem): string {
   return (item.review?.paragraphs ?? []).map((p) => p.replace(/\[\[[a-z0-9]+\]\]|\[\[\/\]\]/g, "")).join("\n\n");

@@ -363,6 +363,10 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
   const { goals } = ctx;
 
   const collectionNames = ctx.cols.filter((c) => !c.is_hidden).map((c) => c.name);
+  const collectionLines = ctx.cols
+    .filter((c) => !c.is_hidden)
+    .map((c) => `- ${c.name}${c.description ? `: ${c.description}` : ""}${c.rules ? `\n  Rules: ${c.rules.replace(/\s*\n\s*/g, " ")}` : ""}`)
+    .join("\n");
   const posts = counted(ctx.briefs, ctx.published, quarterOf(now).start);
 
   // What the tenant decided before, and everything it has already been shown.
@@ -518,7 +522,8 @@ ${hits.map((h) => `- ${h.title} <${h.url}>${citable.has(h.url) ? "" : " (not cit
 
 ${AUTHORITY_RULE}
 
-Collections on this blog: ${collectionNames.join(", ") || "(none)"}.
+Collections on this blog (pick the one whose description and rules fit):
+${collectionLines || "(none)"}
 
 What this tenant has decided before (learn from it; their own words win):
 ${renderTaste(taste)}

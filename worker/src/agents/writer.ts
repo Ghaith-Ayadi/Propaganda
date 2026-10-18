@@ -13,6 +13,7 @@
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import {
+  collectionRulesBlock,
   collections,
   fillEmptyPost,
   getBrief,
@@ -234,6 +235,8 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
     guide = await DBOS.runStep(() => voiceGuide(site), { name: "read the new voice guide" });
   }
   const voice = ownVoice || voiceFor(guide);
+  // The collection's own rules (collection_rules). A run recorded before they were read has none.
+  const rulesBlock = collectionRulesBlock(cols ?? [], brief.collection_name || cols?.find((c) => !c.is_hidden)?.name || "");
   const { pages, claims, searches } = await research(site, brief);
   const researchGap = searches.notice();
   const edits = await DBOS.runStep(() => reviewerEdits(site, null, 5), { name: "read reviewer edits" });
@@ -249,7 +252,7 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
       prompt: `Write the full post for ${tenant?.name ?? "the tenant"} from this brief.
 
 ${briefBlock(brief)}
-
+${rulesBlock ? `\n${rulesBlock}\n` : ""}
 What the tenant knows (knowledge base; the only source for facts about the tenant):
 ${renderClaims(claims)}
 

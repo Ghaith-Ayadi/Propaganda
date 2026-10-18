@@ -33,6 +33,7 @@ import {
 import { reportError } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
 import { FitBadge, Handoff, NotesBadge, TopicBadge } from "./bits";
+import { AssignButton } from "./AssignPosts";
 import { BatchButton } from "./BatchPanel";
 import { CalendarPanel } from "./CalendarPanel";
 import { PitchDrawer } from "./PitchDrawer";
@@ -81,7 +82,12 @@ export function PipelinePage() {
     <div className="flex min-h-full flex-col xl:h-full">
       <PageHeader
         title="Content pipeline"
-        actions={<BatchButton />}
+        actions={
+          <div className="flex gap-2">
+            <AssignButton />
+            <BatchButton />
+          </div>
+        }
       />
 
       <div className="flex flex-col xl:min-h-0 xl:flex-1 xl:flex-row">
