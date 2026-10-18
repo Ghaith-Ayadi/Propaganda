@@ -32,6 +32,7 @@ import {
 import { useInboxBadge } from "@/components/inbox/badge";
 import { useKnowledgeBadge } from "@/lib/knowledge/hooks";
 import { usePipelineCount } from "@/lib/pipeline/store";
+import { useContentTree } from "@/components/pages/contentTree";
 
 export type Icon = ComponentType<{ className?: string }>;
 
@@ -124,6 +125,7 @@ export const PAGES: PageRoute[] = [
     description: "Everything you publish, by channel.",
     section: "main",
     component: lazy(() => import("@/components/pages/ContentPage").then((m) => ({ default: m.ContentPage }))),
+    useChildren: useContentTree,
   },
   {
     id: "knowledge",

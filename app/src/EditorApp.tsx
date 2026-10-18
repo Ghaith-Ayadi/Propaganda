@@ -174,7 +174,7 @@ function Shell() {
     [currentPost?.id, currentPost?.content],
   );
 
-  const sidebar = <NavBar currentCollection={route.view === "post" ? currentPost?.type : undefined} />;
+  const sidebar = <NavBar />;
   const attributes = route.view === "post" && currentPost ? <AttributePanel post={currentPost} /> : null;
 
   // The old first run's address (#/welcome) is Getting started now.
