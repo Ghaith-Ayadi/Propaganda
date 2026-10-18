@@ -1,19 +1,18 @@
-// #/content/<channel>[/<sub-channel>]. Two plain tab rows, both in the shared
-// container: the channels in the header, then (for Blog) the collections with
-// a + for a new one. Below them, the collection view (the 0.1 post table); the
-// other channels come after 0.2.
+// #/content/<channel>[/<sub-channel>]. The channel (Blog, Social, Email) is a
+// row under Content in the drawer and the header's title; Blog's collections are
+// the header's tabs, with a + for a new one. Below, the collection view (the
+// 0.1 post table); the other channels come after 0.2.
 
 import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Plus } from "@untitledui/icons";
 import { db } from "@/lib/db";
-import { cx } from "@/utils/cx";
 import type { Collection } from "@/types";
 import { useActiveCollection, setActiveCollection } from "@/lib/activeCollection";
 import { CollectionTabs } from "@/components/CollectionTabs";
-import { PageHeader, PageTabs, PageBody, CONTAINER } from "@/components/shell/PageHeader";
+import { PageHeader, PageTabs, PageBody } from "@/components/shell/PageHeader";
 import { go, goPage, usePageRest } from "@/lib/route";
-import { CHANNELS, contentRest, parseContentRest, type ChannelId } from "./contentTree";
+import { CHANNELS, contentRest, parseContentRest } from "./contentTree";
 import { NewCollectionDialog } from "@/components/NewCollectionDialog";
 import { createCollection } from "@/lib/collections";
 import { createPost } from "@/lib/posts";
@@ -31,18 +30,8 @@ export function ContentPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        title="Content"
-        tabs={
-          <PageTabs
-            label="Channels"
-            items={CHANNELS.map((c) => ({ id: c.id, label: c.label }))}
-            selected={channel}
-            onChange={(id) => goPage("content", contentRest(id as ChannelId))}
-          />
-        }
-      />
-      {channel === "blog" && <Collections active={sub ?? active} />}
+      {/* The channel is picked in the drawer; the collections are this page's tabs. */}
+      <CollectionsHeader title={current.label} active={channel === "blog" ? (sub ?? active) : null} />
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         {current.live ? (
           <CollectionTabs />
@@ -56,33 +45,41 @@ export function ContentPage() {
   );
 }
 
-function Collections({ active }: { active: string | null }) {
+function CollectionsHeader({ title, active }: { title: string; active: string | null }) {
   const collections = useLiveQuery(() => db.collections.orderBy("position").toArray(), [], [] as Collection[]);
   const [adding, setAdding] = useState(false);
+  const blog = active !== null;
   const selected = active && collections.some((c) => c.name === active) ? active : (collections[0]?.name ?? "");
   return (
-    <div className="border-b border-secondary">
-      <div className={cx(CONTAINER, "flex items-end gap-1 pt-3")}>
-        {collections.length > 0 && (
-          <div className="-mb-px min-w-0">
-            <PageTabs
-              label="Collections"
-              items={collections.map((c) => ({ id: c.name, label: c.emoji ? `${c.emoji} ${c.name}` : c.name }))}
-              selected={selected}
-              onChange={(name) => goPage("content", contentRest("blog", name))}
-            />
-          </div>
-        )}
-        <button
-          type="button"
-          aria-label="New collection"
-          title="New collection"
-          onClick={() => setAdding(true)}
-          className="mb-1.5 shrink-0 rounded-md p-1.5 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
-        >
-          <Plus className="size-4" />
-        </button>
-      </div>
+    <>
+      <PageHeader
+        title={title}
+        tabs={
+          blog ? (
+            <div className="flex items-end gap-1">
+              {collections.length > 0 && (
+                <div className="min-w-0">
+                  <PageTabs
+                    label="Collections"
+                    items={collections.map((c) => ({ id: c.name, label: c.emoji ? `${c.emoji} ${c.name}` : c.name }))}
+                    selected={selected}
+                    onChange={(name) => goPage("content", contentRest("blog", name))}
+                  />
+                </div>
+              )}
+              <button
+                type="button"
+                aria-label="New collection"
+                title="New collection"
+                onClick={() => setAdding(true)}
+                className="mb-1.5 shrink-0 rounded-md p-1.5 text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+              >
+                <Plus className="size-4" />
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
       {adding && (
         <NewCollectionDialog
           onClose={() => setAdding(false)}
@@ -96,6 +93,6 @@ function Collections({ active }: { active: string | null }) {
           }}
         />
       )}
-    </div>
+    </>
   );
 }

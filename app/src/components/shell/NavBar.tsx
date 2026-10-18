@@ -13,7 +13,6 @@ import { useWorkspace } from "@/components/Workspace";
 import { SiteSwitcher } from "@/components/workspace/SiteSwitcher";
 import { LiteCollections } from "@/components/lite/LiteCollections";
 import { hookKey, usePages } from "@/components/lite/pages";
-import { useActiveCollection } from "@/lib/activeCollection";
 import { Collapse } from "@/components/motion/Collapse";
 import { NumberPop } from "@/components/motion/NumberPop";
 import { useLayout } from "@/lib/layout";
@@ -26,7 +25,7 @@ import { setPlanView, useCanSwitchPlan, usePlan } from "@/lib/tenantPlan";
 import { cx } from "@/utils/cx";
 import { activePageOf, toggleFolded, useFolded } from "./nav";
 
-export function NavBar({ currentCollection }: { currentCollection?: string | null }) {
+export function NavBar() {
   const [route] = useRoute();
   const { site } = useWorkspace();
   const active = activePageOf(route);
@@ -110,7 +109,7 @@ export function NavBar({ currentCollection }: { currentCollection?: string | nul
           {pages
             .filter((p) => p.section === "main" && !(lite && p.id === "content"))
             .map((p) => (
-              <PageItem key={hookKey(p)} page={p} active={active === p.id} route={route} currentCollection={currentCollection} />
+              <PageItem key={hookKey(p)} page={p} active={active === p.id} route={route} />
             ))}
           {lite && (
             <li>
@@ -202,12 +201,10 @@ function PageItem({
   page,
   active,
   route,
-  currentCollection,
 }: {
   page: PageRoute;
   active: boolean;
   route: Route;
-  currentCollection?: string | null;
 }) {
   const Icon = page.icon;
   const badge = badgeOf(page.useBadge?.());
@@ -233,7 +230,7 @@ function PageItem({
       </div>
       {children && (
         <Collapse open={open}>
-          <NavTree page={page} nodes={children} route={route} currentCollection={currentCollection} depth={0} />
+          <NavTree page={page} nodes={children} route={route} depth={0} />
         </Collapse>
       )}
     </li>
@@ -258,18 +255,15 @@ function NavTree({
   page,
   nodes,
   route,
-  currentCollection,
   depth,
 }: {
   page: PageRoute;
   nodes: NavNode[];
   route: Route;
-  currentCollection?: string | null;
   depth: number;
 }) {
-  const [activeCollection] = useActiveCollection();
   const folded = useFolded();
-  const here = currentRest(page, route, currentCollection ?? activeCollection);
+  const here = currentRest(page, route);
 
   return (
     <ul className={cx("mt-0.5 flex flex-col gap-0.5 border-l border-secondary", depth === 0 ? "ml-[18px] pl-1.5" : "ml-3 pl-1.5")}>
@@ -315,7 +309,7 @@ function NavTree({
             </div>
             {n.children && n.children.length > 0 && (
               <Collapse open={open}>
-                <NavTree page={page} nodes={n.children} route={route} currentCollection={currentCollection} depth={depth + 1} />
+                <NavTree page={page} nodes={n.children} route={route} depth={depth + 1} />
               </Collapse>
             )}
           </li>
@@ -326,14 +320,11 @@ function NavTree({
 }
 
 /** The rest of the URL the tree should highlight. Content: a post's collection counts as being there. */
-function currentRest(page: PageRoute, route: Route, collection: string | null): string | null {
+function currentRest(page: PageRoute, route: Route): string | null {
   if (page.id === "content") {
-    const sub = (r: string) => `blog/${encodeURIComponent(r)}`;
-    if (route.view === "post" || route.view === "list") return collection ? sub(collection) : "blog";
-    if (route.view === "page" && route.page === "content") {
-      if (!route.rest || route.rest === "blog") return collection ? sub(collection) : "blog";
-      return route.rest;
-    }
+    // A post or a collection is Blog; Social and Email name themselves.
+    if (route.view === "post" || route.view === "list") return "blog";
+    if (route.view === "page" && route.page === "content") return (route.rest ?? "blog").split("/")[0] || "blog";
     return null;
   }
   return route.view === "page" && route.page === page.id ? route.rest : null;
