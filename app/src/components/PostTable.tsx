@@ -5,7 +5,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useFlip } from "@/lib/motion/useFlip";
-import { ArrowDown, ArrowUp, Copy04, DotsHorizontal, Plus, SearchLg, Trash01 } from "@untitledui/icons";
+import { ArrowDown, ArrowUp, Copy04, DotsHorizontal, Plus, SearchLg, Sliders04, Trash01 } from "@untitledui/icons";
 import type { Post } from "@/types";
 import { go } from "@/lib/route";
 import { formatDate, formatWordCount } from "@/lib/format";
@@ -14,6 +14,9 @@ import { formatHitsAndDuration } from "@/lib/analytics/format";
 import { deletePost, duplicatePost } from "@/lib/posts";
 import { ActionMenu } from "@/components/Menu";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
+import { POST_COLUMNS, usePostColumns, type PostColumnId } from "@/lib/postColumns";
 
 type StatusFilter = "all" | "draft" | "done" | "published";
 type SortKey = "updated" | "created";
@@ -77,6 +80,67 @@ export function PostTable({ posts, onAddPost }: Props) {
     return { all: posts.length, draft, done, published };
   }, [posts]);
 
+  const cols = usePostColumns();
+  const colCount = cols.visible.length + 1;
+
+  function cell(p: Post, id: PostColumnId) {
+    switch (id) {
+      case "number":
+        // The server numbers a post on its first push; until then it has none.
+        return <Td key={id} className="font-mono text-xs tabular-nums text-quaternary">{p.number ?? ""}</Td>;
+      case "title":
+        return (
+          <Td key={id} className="text-sm text-primary">
+            <div className="truncate">{p.title || <span className="text-quaternary">Untitled</span>}</div>
+            {cols.description && p.subtitle?.trim() && (
+              <div className="mt-0.5 truncate text-xs text-tertiary">{p.subtitle.trim()}</div>
+            )}
+          </Td>
+        );
+      case "status":
+        return (
+          <Td key={id}>
+            <StatusBadge status={(p.status ?? "draft") as "draft" | "done" | "published"} />
+          </Td>
+        );
+      case "length":
+        return <Td key={id} className="truncate whitespace-nowrap text-xs text-tertiary">{formatWordCount(p.wordCount)}</Td>;
+      case "hits":
+        return (
+          <Td key={id} className="truncate whitespace-nowrap text-xs text-tertiary">
+            <HitsCell slug={p.slug} />
+          </Td>
+        );
+      case "created":
+        return <Td key={id} className="date-pill text-xs text-quaternary">{formatDate(p.createdAt)}</Td>;
+      case "updated":
+        return <Td key={id} className="date-pill text-xs text-quaternary">{formatDate(p.updatedAt)}</Td>;
+    }
+  }
+
+  function head(id: PostColumnId, label: string) {
+    const grip = (
+      <ColumnGrip
+        label={`Resize ${label}`}
+        min={POST_COLUMNS.find((c) => c.id === id)!.min}
+        onResize={(w) => cols.setWidth(id, w)}
+        onReset={() => cols.setWidth(id, null)}
+      />
+    );
+    if (id === "created" || id === "updated") {
+      return (
+        <SortableTh key={id} grip={grip} active={sortKey === id} dir={sortDir} onClick={() => toggleSort(id)}>
+          {label}
+        </SortableTh>
+      );
+    }
+    return (
+      <Th key={id} grip={grip}>
+        {label}
+      </Th>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-secondary bg-primary">
       <Toolbar
@@ -85,31 +149,19 @@ export function PostTable({ posts, onAddPost }: Props) {
         query={query}
         onQueryChange={setQuery}
         counts={counts}
+        display={<DisplayMenu cols={cols} />}
       />
       <table className="post-table w-full table-fixed border-separate border-spacing-0 text-sm">
+        <colgroup>
+          {cols.visible.map((c) => {
+            const w = cols.widthOf(c.id);
+            return <col key={c.id} style={w ? { width: w } : undefined} />;
+          })}
+          <col style={{ width: 40 }} />
+        </colgroup>
         <thead className="z-20 md:sticky md:top-[57px]">
           <tr>
-            <Th className="w-16">ID</Th>
-            <Th>Title</Th>
-            <Th className="w-28">Status</Th>
-            <Th className="w-36">Length</Th>
-            <Th className="w-20">Hits</Th>
-            <SortableTh
-              className="w-28"
-              active={sortKey === "created"}
-              dir={sortDir}
-              onClick={() => toggleSort("created")}
-            >
-              Created
-            </SortableTh>
-            <SortableTh
-              className="w-28"
-              active={sortKey === "updated"}
-              dir={sortDir}
-              onClick={() => toggleSort("updated")}
-            >
-              Updated
-            </SortableTh>
+            {cols.visible.map((c) => head(c.id, c.label))}
             <Th className="w-10" />
           </tr>
         </thead>
@@ -125,18 +177,12 @@ export function PostTable({ posts, onAddPost }: Props) {
             }}
             className="group z-10 cursor-pointer md:sticky md:top-[93px] text-tertiary outline-none transition hover:text-primary"
           >
-            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary">
-              <Plus className="size-4" />
+            <Td colSpan={colCount} className="bg-primary text-sm group-hover:bg-secondary group-focus:bg-secondary">
+              <span className="flex items-center gap-2">
+                <Plus className="size-4" />
+                New post
+              </span>
             </Td>
-            <Td className="bg-primary text-sm group-hover:bg-secondary group-focus:bg-secondary">
-              New post
-            </Td>
-            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
-            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
-            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
-            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
-            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
-            <Td className="bg-primary group-hover:bg-secondary group-focus:bg-secondary" />
           </tr>
           {filtered.map((p) => (
             <tr
@@ -152,26 +198,7 @@ export function PostTable({ posts, onAddPost }: Props) {
               }}
               className="group cursor-pointer text-secondary outline-none transition hover:bg-secondary focus:bg-secondary"
             >
-              {/* The server numbers a post on its first push; until then it has none. */}
-              <Td className="font-mono text-xs tabular-nums text-quaternary">{p.number ?? ""}</Td>
-              <Td className="truncate text-sm text-primary">
-                {p.title || <span className="text-quaternary">Untitled</span>}
-              </Td>
-              <Td>
-                <StatusBadge status={(p.status ?? "draft") as "draft" | "done" | "published"} />
-              </Td>
-              <Td className="whitespace-nowrap text-xs text-tertiary">
-                {formatWordCount(p.wordCount)}
-              </Td>
-              <Td className="whitespace-nowrap text-xs text-tertiary">
-                <HitsCell slug={p.slug} />
-              </Td>
-              <Td className="date-pill text-xs text-quaternary">
-                {formatDate(p.createdAt)}
-              </Td>
-              <Td className="date-pill text-xs text-quaternary">
-                {formatDate(p.updatedAt)}
-              </Td>
+              {cols.visible.map((c) => cell(p, c.id))}
               <Td
                 className="text-right"
                 onClick={(e) => e.stopPropagation()}
@@ -185,7 +212,7 @@ export function PostTable({ posts, onAddPost }: Props) {
           {filtered.length === 0 && (
             <tr>
               <td
-                colSpan={8}
+                colSpan={colCount}
                 className="border-b border-secondary px-4 py-8 text-center text-sm text-tertiary last:border-b-0"
               >
                 {query ? "No matches." : "No posts in this filter."}
@@ -260,17 +287,19 @@ function SortableTh({
   active,
   dir,
   onClick,
+  grip,
 }: {
   children: React.ReactNode;
   className?: string;
   active: boolean;
   dir: SortDir;
   onClick: () => void;
+  grip?: React.ReactNode;
 }) {
   return (
     <th
       className={[
-        "border-b border-secondary bg-secondary px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-quaternary",
+        "relative border-b border-secondary bg-secondary px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-quaternary",
         className ?? "",
       ].join(" ")}
     >
@@ -279,25 +308,88 @@ function SortableTh({
         onClick={onClick}
         className="flex w-full items-center justify-between gap-1 uppercase tracking-wide transition hover:text-secondary"
       >
-        <span>{children}</span>
+        <span className="truncate">{children}</span>
         <span className="inline-flex w-3 shrink-0 items-center justify-center">
           {active && (dir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
         </span>
       </button>
+      {grip}
     </th>
   );
 }
 
-function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
+function Th({ children, className, grip }: { children?: React.ReactNode; className?: string; grip?: React.ReactNode }) {
   return (
     <th
       className={[
-        "border-b border-secondary bg-secondary px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-quaternary",
+        "relative border-b border-secondary bg-secondary px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-quaternary",
         className ?? "",
       ].join(" ")}
     >
-      {children}
+      <span className="block truncate">{children}</span>
+      {grip}
     </th>
+  );
+}
+
+/** A drag handle on a header's right edge: drag, or focus it and use the arrow keys (Shift = bigger steps); double-click resets. */
+function ColumnGrip({
+  label,
+  min,
+  onResize,
+  onReset,
+}: {
+  label: string;
+  min: number;
+  onResize: (w: number) => void;
+  onReset: () => void;
+}) {
+  const start = useRef<{ x: number; w: number } | null>(null);
+  const widthOf = (el: HTMLElement) => el.closest("th")!.getBoundingClientRect().width;
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      tabIndex={0}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start.current = { x: e.clientX, w: widthOf(e.currentTarget) };
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+      }}
+      onPointerMove={(e) => {
+        if (start.current) onResize(start.current.w + (e.clientX - start.current.x));
+      }}
+      onPointerUp={(e) => {
+        if (!start.current) return;
+        start.current = null;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }}
+      onPointerCancel={() => {
+        start.current = null;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 64 : 16;
+        const w = widthOf(e.currentTarget);
+        if (e.key === "ArrowRight") onResize(w + step);
+        else if (e.key === "ArrowLeft") onResize(Math.max(min, w - step));
+        else return;
+        e.preventDefault();
+      }}
+      onDoubleClick={onReset}
+      className="group absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none outline-none"
+    >
+      <span className="absolute inset-y-1.5 left-1/2 w-px -translate-x-1/2 bg-transparent transition group-hover:w-0.5 group-hover:bg-brand-solid group-focus-visible:w-0.5 group-focus-visible:bg-brand-solid group-active:w-0.5 group-active:bg-brand-solid" />
+    </div>
   );
 }
 
@@ -322,7 +414,9 @@ function Toolbar({
   query,
   onQueryChange,
   counts,
+  display,
 }: {
+  display?: React.ReactNode;
   filter: StatusFilter;
   onFilterChange: (s: StatusFilter) => void;
   query: string;
@@ -345,6 +439,8 @@ function Toolbar({
           Published <Count n={counts.published} />
         </Chip>
       </div>
+      <div className="flex items-center gap-2">
+      {display}
       <label className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-1.5 text-sm shadow-xs ring-1 ring-inset ring-primary transition-shadow duration-100 ease-linear focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand">
         <SearchLg className="size-3.5 shrink-0 text-quaternary" />
         <input
@@ -355,7 +451,48 @@ function Toolbar({
           className="w-full min-w-0 bg-transparent text-primary md:w-36 outline-none placeholder:text-quaternary"
         />
       </label>
+      </div>
     </div>
+  );
+}
+
+function DisplayMenu({ cols }: { cols: ReturnType<typeof usePostColumns> }) {
+  return (
+    <DialogTrigger>
+      <AriaButton
+        aria-label="Display options"
+        className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-sm text-secondary shadow-xs ring-1 ring-inset ring-primary outline-none transition hover:bg-primary_hover data-[focus-visible]:ring-2 data-[focus-visible]:ring-brand data-[pressed]:bg-primary_hover"
+      >
+        <Sliders04 className="size-3.5 text-quaternary" />
+        Display
+      </AriaButton>
+      <Popover
+        placement="bottom end"
+        className="z-50 w-56 rounded-xl border border-secondary bg-secondary p-3 shadow-2xl ring-1 ring-primary entering:animate-in entering:fade-in entering:zoom-in-95 entering:duration-100 exiting:animate-out exiting:fade-out exiting:zoom-out-95 exiting:duration-75"
+      >
+        <Dialog aria-label="Display options" className="flex flex-col gap-2.5 outline-none">
+          <div className="text-xs text-tertiary">Columns</div>
+          {POST_COLUMNS.map((c) => (
+            <Checkbox
+              key={c.id}
+              label={c.label}
+              isSelected={!cols.hidden.includes(c.id)}
+              isDisabled={!cols.hidden.includes(c.id) && cols.visible.length === 1}
+              onChange={(on) => cols.setShown(c.id, on)}
+            />
+          ))}
+          <div className="my-0.5 border-t border-secondary" />
+          <Checkbox label="Description under the title" isSelected={cols.description} onChange={cols.setDescription} />
+          <button
+            type="button"
+            onClick={cols.reset}
+            className="mt-0.5 self-start text-xs text-tertiary transition hover:text-secondary"
+          >
+            Reset columns
+          </button>
+        </Dialog>
+      </Popover>
+    </DialogTrigger>
   );
 }
 
