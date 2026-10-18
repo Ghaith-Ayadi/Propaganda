@@ -299,6 +299,8 @@ export interface Rules {
   thesis?: boolean;
   /** One idea in one topic at most (2026-10-14); false on a run recorded before. */
   motifs?: boolean;
+  /** A topic's name may borrow a site headline; only the thesis is held to it (2026-10-18). False on a run recorded before. */
+  headlineNames?: boolean;
   /** Sentences and headings from the tenant's own site: a name or thesis that repeats one is their slogan, not an angle. */
   siteSentences?: string[];
 }
@@ -723,7 +725,7 @@ export function validate(d: Draft, r: Rules): string[] {
         if (r.titleRules !== false) for (const h of (r.houseStyle ? houseTitleHits : titleHits)(thesis)) errors.push(`Topic "${t.name}": the thesis breaks the title rules (${h.rule}): one plain sentence, no colon, no dash, no second half, no negation (rule 2).`);
         if (echoesSite(thesis, r.siteSentences ?? [])) errors.push(`Topic "${t.name}": the thesis repeats a sentence from their own site. That is their positioning, not a thesis; say what they know about the buyer or the market that the site only implies (rule 2).`);
       }
-      if (!kept && echoesSite(t.name, r.siteSentences ?? [])) errors.push(`Topic "${t.name}" is a sentence from their own site. Their slogan is never a topic; name the angle in a few words (rule 2).`);
+      if (!kept && !r.headlineNames && echoesSite(t.name, r.siteSentences ?? [])) errors.push(`Topic "${t.name}" is a sentence from their own site. Their slogan is never a topic; name the angle in a few words (rule 2).`);
     }
   }
   if (r.motifs && d.topics.length >= 3) {
