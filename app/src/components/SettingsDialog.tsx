@@ -27,6 +27,7 @@ import { toast } from "@/components/base/toast/toast";
 import { coded, userMessage } from "@/lib/errors";
 import { reportError } from "@/lib/telemetry";
 import { ModelKeyCard } from "@/components/settings/ModelKeyCard";
+import { BYOK_ENABLED } from "@/lib/modelKey";
 import { asDesign, DESIGN_KEY, DRAFT_KEY, THEMES_KEY, asCustomThemes, themeOf } from "@/blog/theme/design";
 
 // The Design editor carries the blog's stylesheet and fonts: loaded when opened.
@@ -89,9 +90,11 @@ export function SettingsDialog({ onClose }: Props) {
           <TabButton active={tab === "templates"} onClick={() => setTab("templates")} icon={<File02 className="size-4" />}>
             Templates
           </TabButton>
-          <TabButton active={tab === "anthropic"} onClick={() => setTab("anthropic")} icon={<Key01 className="size-4" />}>
-            Anthropic key
-          </TabButton>
+          {BYOK_ENABLED && (
+            <TabButton active={tab === "anthropic"} onClick={() => setTab("anthropic")} icon={<Key01 className="size-4" />}>
+              Anthropic key
+            </TabButton>
+          )}
         </nav>
 
         {/* Body */}
@@ -113,7 +116,7 @@ export function SettingsDialog({ onClose }: Props) {
             {tab === "design" && <DesignTab onOpen={() => setStudio(true)} />}
             {tab === "editor" && <EditorTab />}
             {tab === "templates" && <TemplatesTab />}
-            {tab === "anthropic" && <ModelKeyCard />}
+            {BYOK_ENABLED && tab === "anthropic" && <ModelKeyCard />}
           </div>
         </div>
       </div>

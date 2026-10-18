@@ -120,7 +120,10 @@ messages, tools, text, reasoning, tool calls and results, or the error) also lan
 it holds drafts and call transcripts. A capture never fails the call; `MODEL_CAPTURE=off`
 turns it off. It is the input Labs replays.
 
-**Own keys (BYOK).** A tenant may save its own Anthropic key (Settings, "Your Anthropic
+**Own keys (BYOK), OFF since 2026-10-18 (Ayadi).** Every call runs on our AI Gateway, inside our
+budgets, whatever key a tenant saved; the Settings card is hidden (`BYOK_ENABLED` in
+`app/src/lib/modelKey.ts`) and `BYOK=on` on the server turns routing back on. The code and stored
+keys stay. When on: a tenant may save its own Anthropic key (Settings, "Your Anthropic
 key", through `api/model-key.ts`; owners set or remove it). It is stored only as AES-GCM ciphertext under
 `MODEL_KEY_SECRET` in `model_keys` (service role only; `api/_ai/modelKeys.ts`) and never goes
 back to a browser, a log or a message. With a key saved, every `anthropic/` call for that

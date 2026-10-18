@@ -195,6 +195,23 @@ const tenantSite = "sitebbbbbbbbbbb";
 const failing = (statusCode: number, message: string, responseHeaders: Record<string, string> = {}) =>
   new MockLanguageModelV3({ doGenerate: async () => { throw Object.assign(new Error(message), { statusCode, responseHeaders }); } });
 
+test("BYOK off (the default): a tenant's saved key is ignored, the call runs on our gateway and inside our budget", async () => {
+  const { encryptKey } = await import("./modelKeys.js");
+  keyRows[tenantSite] = { secret: encryptKey(tenantSite, KEY), last4: "1234", status: "ok", error: "", checked: "2026-10-08T00:00:00Z" };
+  delete process.env.BYOK;
+  gate = { ...open }; calls.length = 0;
+  await callModel({ ...opts, site: tenantSite, model: "anthropic/claude-sonnet-5.5" });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].paid_by, undefined);
+  assert.equal(calls[0].credential, undefined);
+  gate = { ...open, tenant_monthly_limit: 10, tenant_month_usd: 10 };
+  await assert.rejects(callModel({ ...opts, site: tenantSite, model: "anthropic/claude-sonnet-5.5" }), BudgetError);
+  gate = { ...open };
+  delete keyRows[tenantSite];
+  // The tests below are BYOK's own, with it switched on.
+  process.env.BYOK = "on";
+});
+
 async function withKey(status = "ok") {
   const { encryptKey } = await import("./modelKeys.js");
   keyRows[tenantSite] = { secret: encryptKey(tenantSite, KEY), last4: "1234", status, error: "", checked: "2026-10-08T00:00:00Z" };

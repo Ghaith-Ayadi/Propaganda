@@ -8,6 +8,7 @@ import {
   useVoiceSuggestion,
   useVoiceGuide,
 } from "@/lib/tenantConfig";
+import { BYOK_ENABLED } from "@/lib/modelKey";
 import { ModelKeyCard } from "./ModelKeyCard";
 import { Card, Note, TextArea } from "./ui";
 
@@ -21,7 +22,7 @@ export function AgentsSection() {
       <RosterCard />
       <TasteCard />
       <ModelsCard />
-      <ModelKeyCard />
+      {BYOK_ENABLED && <ModelKeyCard />}
     </div>
   );
 }
