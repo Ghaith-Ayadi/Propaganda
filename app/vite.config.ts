@@ -261,6 +261,8 @@ export default defineConfig(({ mode }) => {
         injectRegister: false,
         includeAssets: ["favicon.svg", "favicon.ico", "apple-touch-icon.png"],
         manifest: {
+          // Icon URLs carry ?v so Chrome re-fetches the installed app icon when the
+          // logo changes (it only refreshes on a changed URL). Bump it with the logo.
           // Stable identity pinned to the admin app so the installed PWA is the
           // writing tool, not the public reader.
           id: "/admin",
@@ -274,10 +276,10 @@ export default defineConfig(({ mode }) => {
           start_url: "/admin",
           scope: "/",
           icons: [
-            { src: "/favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
-            { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-            { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-            { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+            { src: "/favicon.svg?v=2", sizes: "any", type: "image/svg+xml", purpose: "any" },
+            { src: "/icon-192.png?v=2", sizes: "192x192", type: "image/png", purpose: "any" },
+            { src: "/icon-512.png?v=2", sizes: "512x512", type: "image/png", purpose: "any" },
+            { src: "/icon-maskable-512.png?v=2", sizes: "512x512", type: "image/png", purpose: "maskable" },
           ],
         },
         workbox: {
