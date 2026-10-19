@@ -15,6 +15,7 @@ import { createBrief } from "@/lib/plan/briefs";
 import { createCollection } from "@/lib/collections";
 import { UI_PREVIEW } from "@/lib/preview";
 import { onScopeReset, siteId } from "@/lib/scope";
+import { sb } from "@/lib/supabase";
 import { reportError } from "@/lib/telemetry";
 import { onServerChange } from "@/lib/serverChanges";
 import { placeholderAdapter, type PipelineAdapter } from "./adapter";
@@ -83,11 +84,35 @@ function siteOrNull(): string | null {
 
 let loading: Promise<void> | null = null;
 
+/**
+ * A read refused for lack of privilege (42501) or an unauthorised request
+ * (401) reached the API without a live session: the token expired while the
+ * tab slept, or the session was not restored yet. The signed-in role has the
+ * grant, so this is the anonymous role being refused.
+ */
+function lacksSession(err: unknown): boolean {
+  const e = ((err as { cause?: unknown } | null)?.cause ?? err) as { code?: string; status?: number } | null;
+  return e?.code === "42501" || e?.status === 401;
+}
+
+/** loadLive, once more after the session is refreshed when it ran without one. */
+async function loadLiveWithSession() {
+  const client = sb;
+  try {
+    return await loadLive();
+  } catch (err) {
+    if (!lacksSession(err)) throw err;
+    const { data } = await client.auth.refreshSession();
+    if (!data.session || client !== sb) throw err;
+    return loadLive();
+  }
+}
+
 /** Re-read the tenant's pipeline (live only). Safe to call any time. */
 export function refresh(): Promise<void> {
   if (!LIVE || !siteOrNull()) return Promise.resolve();
   if (loading) return loading;
-  loading = loadLive()
+  loading = loadLiveWithSession()
     .then((d) => {
       if (d.site !== siteOrNull()) return; // switched site while loading
       snapshot = { items: d.items, batches: d.batches, tasteLog: d.tasteLog, people: d.people, settings: d.settings, placeholder: false, loading: false };
