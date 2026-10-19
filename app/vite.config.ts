@@ -259,8 +259,17 @@ export default defineConfig(({ mode }) => {
         registerType: "autoUpdate",
         // EditorApp registers the worker itself: blogs never load it.
         injectRegister: false,
-        includeAssets: ["favicon.svg", "favicon.ico", "apple-touch-icon.png"],
+        includeAssets: [
+          "favicon.svg",
+          "favicon.ico",
+          "apple-touch-icon.png",
+          "icon-192.png",
+          "icon-512.png",
+          "icon-maskable-512.png",
+        ],
         manifest: {
+          // Icon URLs carry ?v so Chrome re-fetches the installed app icon when the
+          // logo changes (it only refreshes on a changed URL). Bump it with the logo.
           // Stable identity pinned to the admin app so the installed PWA is the
           // writing tool, not the public reader.
           id: "/admin",
@@ -274,13 +283,15 @@ export default defineConfig(({ mode }) => {
           start_url: "/admin",
           scope: "/",
           icons: [
-            { src: "/favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
-            { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-            { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-            { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+            { src: "/favicon.svg?v=2", sizes: "any", type: "image/svg+xml", purpose: "any" },
+            { src: "/icon-192.png?v=2", sizes: "192x192", type: "image/png", purpose: "any" },
+            { src: "/icon-512.png?v=2", sizes: "512x512", type: "image/png", purpose: "any" },
+            { src: "/icon-maskable-512.png?v=2", sizes: "512x512", type: "image/png", purpose: "maskable" },
           ],
         },
         workbox: {
+          // The manifest icons carry ?v=; let those requests hit the precache.
+          ignoreURLParametersMatching: [/^v$/],
           // Cache the shell. API requests pass through; Dexie holds the data.
           navigateFallback: "/index.html",
           // The backend shares this origin (Caddy sends /auth/v1, /rest/v1 and
