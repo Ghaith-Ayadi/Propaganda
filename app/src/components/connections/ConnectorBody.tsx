@@ -1,12 +1,15 @@
 // The right-hand side of Connections: what the picked connector is, and how to set it up.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash01 } from "@untitledui/icons";
 import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { toast } from "@/components/base/toast/toast";
 import { CopyField, Note } from "@/components/settings/ui";
+import { createApiToken, listApiTokens, MCP_URL, revokeApiToken, type ApiToken } from "@/lib/apiTokens";
+import { userMessage } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
 import { mcpUrl, transcriptUrlShape, useConnection, useWatchedSites } from "@/lib/tenantConfig";
 import type { Connector } from "./connectors";
 import { Logo } from "./logos";
@@ -45,7 +48,7 @@ function Body({ connector: c }: { connector: Connector }) {
     case "websites":
       return <WatchedSites />;
     case "claude":
-      return <Mcp client="Claude" steps={["Open Settings, then Connectors.", "Choose Add custom connector.", "Paste the server URL and sign in."]} />;
+      return <ClaudePlugin />;
     case "chatgpt":
       return <Mcp client="ChatGPT" steps={["Open Settings, then Connectors.", "Add a custom MCP server.", "Paste the server URL and sign in."]} />;
     case "cursor":
@@ -159,6 +162,88 @@ const CAN = [
   "Ask for a pitch or a draft, and see it land in the pipeline",
   "Remember a fact, which goes through the Guardian like any other",
 ];
+
+/** The Claude plugin: an API token, the MCP server's address, and how to install it. */
+function ClaudePlugin() {
+  const [tokens, setTokens] = useState<ApiToken[] | null>(null);
+  const [label, setLabel] = useState("");
+  const [fresh, setFresh] = useState<{ id: string; token: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      setTokens(await listApiTokens());
+    } catch (err) {
+      reportError("connections.apiTokens", err);
+      setTokens([]);
+    }
+  };
+  useEffect(() => void load(), []);
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const made = await createApiToken(label.trim() || "Claude");
+      setFresh(made);
+      setLabel("");
+      await load();
+    } catch (err) {
+      reportError("connections.apiTokens.create", err);
+      toast.add({ type: "error", title: userMessage(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const revoke = async (t: ApiToken) => {
+    try {
+      await revokeApiToken(t.id);
+      if (fresh?.id === t.id) setFresh(null);
+      await load();
+    } catch (err) {
+      reportError("connections.apiTokens.revoke", err);
+      toast.add({ type: "error", title: userMessage(err) });
+    }
+  };
+
+  return (
+    <>
+      <p className="text-sm text-secondary">
+        With the Propaganda plugin, Claude puts posts on your blog from wherever you are working: say "blog about this" and the Writer takes it from there, in your voice, for your review.
+      </p>
+      <ol className="list-decimal space-y-1 pl-5 text-sm text-secondary">
+        <li>
+          In Claude, add the marketplace <code className="font-mono text-xs">Ghaith-Ayadi/Propaganda</code> and install the <code className="font-mono text-xs">propaganda</code> plugin.
+        </li>
+        <li>Make a token below and give it to the plugin as PROPAGANDA_TOKEN.</li>
+      </ol>
+      <CopyField label="MCP server URL" value={MCP_URL} />
+      {fresh && (
+        <div className="flex flex-col gap-2 rounded-lg border border-secondary p-3">
+          <CopyField label="Your new token" value={fresh.token} />
+          <Note>Copy it now: it is shown once. Anyone holding it can post to this blog as you, so keep it with your other keys.</Note>
+        </div>
+      )}
+      {tokens && tokens.length > 0 && (
+        <ul className="divide-y divide-secondary rounded-lg border border-secondary">
+          {tokens.map((t) => (
+            <li key={t.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+              <span className="min-w-0 flex-1 truncate font-medium text-primary">{t.label || "Claude"}</span>
+              <span className="text-tertiary">{t.lastSeen ? `Used ${new Date(t.lastSeen).toLocaleDateString()}` : "Never used"}</span>
+              <Button size="sm" color="tertiary" aria-label={`Revoke ${t.label || "Claude"}`} iconLeading={Trash01} onClick={() => void revoke(t)} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-end gap-2">
+        <Input size="sm" label="Token name" placeholder="Claude on my Mac" value={label} onChange={(v) => setLabel(String(v))} wrapperClassName="flex-1" />
+        <Button size="sm" color="secondary" iconLeading={Plus} isLoading={busy} onClick={() => void create()}>
+          Make a token
+        </Button>
+      </div>
+      <Note>A token acts as you, on this blog only. Revoke one here and it stops at once.</Note>
+    </>
+  );
+}
 
 function Mcp({ client, steps }: { client: string; steps: string[] }) {
   return (

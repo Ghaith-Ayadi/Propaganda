@@ -158,6 +158,10 @@ from `strategy_proposals` requests; only a member's `strategy_approve()` writes 
 The Listener (`worker/src/listener/`, `docs/listener.md`) turns call transcripts and Slack
 threads into ideas and Guardian proposals; transcripts are `kb_sources` rows, private to
 their tenant, and connectors never read calls from before they were connected.
+The MCP server (`worker/src/mcp/`, `docs/plugin.md`) is how the Claude plugin
+(`plugin/propaganda`, marketplace `.claude-plugin/marketplace.json`) puts posts on a blog
+with an API token from Settings > Connections > Claude; `assign_post` makes a regular post
+whose brief carries the material (`origin = 'assigned'`) and starts the Writer.
 
 ## Telemetry: PostHog
 

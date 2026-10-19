@@ -168,7 +168,8 @@ async function research(site: string, brief: BriefRow): Promise<{ pages: Page[];
   // Guarded: a run recorded before this reads its sources unfiltered.
   const gated = await DBOS.patch("writer-authority");
   const ownHosts = gated ? await DBOS.runStep(() => ownHostsOf(site), { name: "read the site's hosts" }) : [];
-  const urls: string[] = (brief.sources ?? []).map((s) => s.url);
+  // Attachments (images, PDFs) aren't pages to read; the prompt places them (briefBlock).
+  const urls: string[] = (brief.sources ?? []).filter((s) => !s.kind).map((s) => s.url);
   const searches = new SearchSession();
   const found: Awaited<ReturnType<typeof searchDurably>> = [];
   for (const [n, q] of queries.entries()) {

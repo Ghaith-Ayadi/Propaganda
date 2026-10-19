@@ -8,9 +8,18 @@
 //
 // Env: BLOB_READ_WRITE_TOKEN  (set in Vercel dashboard → Storage → Connect Blob store)
 
+import { timingSafeEqual } from "node:crypto";
 import { put } from "@vercel/blob";
 import { requireMember } from "./_auth.js";
 import { withTelemetry } from "./_telemetry.js";
+
+function fromWorker(request: Request): boolean {
+  const secret = process.env.WORKER_DISPATCH_SECRET;
+  if (!secret) return false;
+  const got = Buffer.from((request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, ""));
+  const want = Buffer.from(secret);
+  return got.length === want.length && timingSafeEqual(got, want);
+}
 
 // Node.js runtime required — @vercel/blob uses Node streams (not Edge-compatible).
 
@@ -27,11 +36,15 @@ async function handle(request: Request): Promise<Response> {
     return new Response("Missing site field", { status: 400 });
   }
 
-  try {
-    await requireMember(request, site);
-  } catch (err) {
-    if (err instanceof Response) return err;
-    return new Response("Auth failed", { status: 500 });
+  // The worker stores an assigned post's attachments here (worker/src/mcp/assign.ts),
+  // with the dispatch secret it already shares with Chat's hand-off; it has no Blob token.
+  if (!fromWorker(request)) {
+    try {
+      await requireMember(request, site);
+    } catch (err) {
+      if (err instanceof Response) return err;
+      return new Response("Auth failed", { status: 500 });
+    }
   }
 
   const file = formData.get("file");

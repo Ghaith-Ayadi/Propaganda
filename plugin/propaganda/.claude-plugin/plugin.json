@@ -1,0 +1,9 @@
+{
+  "name": "propaganda",
+  "version": "0.1.0",
+  "description": "Put posts on your Propaganda blog from Claude: say \"blog about this\" and the Writer drafts it in your voice, for your review.",
+  "author": { "name": "Propaganda", "url": "https://propaganda.pub" },
+  "homepage": "https://propaganda.pub",
+  "repository": "https://github.com/Ghaith-Ayadi/Propaganda",
+  "keywords": ["blog", "writing", "content", "propaganda"]
+}

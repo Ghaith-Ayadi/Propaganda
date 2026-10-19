@@ -55,7 +55,8 @@ export interface BriefRow {
   topics: string[] | null;
   fit: unknown;
   origin: string;
-  sources: { url: string; label: string }[] | null;
+  /** Pages the Pitcher chose; with a kind, an attachment an assigned post came with (mcp/assign.ts). */
+  sources: { url: string; label: string; kind?: "image" | "pdf" }[] | null;
   notes: { lineId: string | null; text: string; quote?: string; done?: boolean }[] | null;
   outline: { id: string; text: string }[] | null;
   angle: string;

@@ -19,6 +19,7 @@ await build({
     "src/agents/testing.ts",
     "src/testkit.ts",
     "src/listener/testing.ts",
+    "src/mcp/testing.ts",
   ],
   outdir: "dist",
   outbase: "src",
