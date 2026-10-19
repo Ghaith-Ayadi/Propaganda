@@ -76,3 +76,56 @@ assert.match(hashToken(t), /^[0-9a-f]{64}$/);
 assert.notEqual(newApiToken(), t);
 
 console.log("mcp: ok");
+
+// ---- assignPost against a stub PostgREST (fetch is replaced; no database, no Writer) ----
+process.env.SUPABASE_URL = "http://stub";
+process.env.SUPABASE_SERVICE_ROLE_KEY = "stub";
+process.env.WORKER_DISPATCH_SECRET = "";
+const { assignPost } = await import("../dist/mcp/testing.js");
+
+/** The calls made, and a backend that fails where `failOn` says. */
+function stubBackend({ failOn = null } = {}) {
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = new URL(url);
+    const method = init.method ?? "GET";
+    const path = u.pathname.replace(/^\/rest\/v1/, "");
+    calls.push(`${method} ${path}`);
+    const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+    if (path === "/collections") return json([{ id: "col000000000001", name: "Research", slug: "research", description: "", is_hidden: false }]);
+    if (path === "/collection_rules") return json([]);
+    if (path === "/posts" && method === "GET") return json([]);
+    if (path === "/posts" && method === "POST") return json([JSON.parse(init.body)]);
+    if (path === "/posts" && method === "DELETE") return json([]);
+    if (path === "/briefs" && method === "POST") return failOn === "briefs" ? json({ code: "23503", message: "nope" }, 409) : json([JSON.parse(init.body)]);
+    return json({ message: `unexpected ${method} ${path}` }, 500);
+  };
+  return calls;
+}
+
+const base = { site: "site00000000001", user: "00000000-0000-4000-8000-000000000001", title: "A post", collection: "research", markdown: "# body", via: "test" };
+{
+  const calls = stubBackend();
+  const r = await assignPost(null, base);
+  assert.match(r.post, /^[a-z0-9]{15}$/);
+  assert.equal(r.collection, "Research");
+  assert.match(r.url, new RegExp(`/admin#/post/${r.post}$`));
+  // the draft goes in before the brief that references it
+  assert.deepEqual(calls.filter((c) => c.startsWith("POST")), ["POST /posts", "POST /briefs"]);
+  assert.ok(!calls.some((c) => c.startsWith("DELETE")));
+  // no Writer is registered here: said so, not thrown
+  assert.equal(r.run, null);
+  assert.match(r.notStarted, /Writer/);
+}
+{
+  const calls = stubBackend({ failOn: "briefs" });
+  await assert.rejects(() => assignPost(null, base), /briefs insert/);
+  // the empty draft is taken back
+  assert.ok(calls.some((c) => c.startsWith("DELETE /posts")));
+}
+{
+  stubBackend();
+  await assert.rejects(() => assignPost(null, { ...base, collection: "Nope" }), (err) => err instanceof AssignError && err.status === 404);
+}
+
+console.log("mcp assign: ok");

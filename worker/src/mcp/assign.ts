@@ -10,7 +10,7 @@
 // uploads do; a URL is kept as it is.
 
 import type { Pool } from "pg";
-import { insert } from "../agents/backend.js";
+import { insert, rest } from "../agents/backend.js";
 import { newId } from "../agents/ids.js";
 import { collections, insertDraftPost } from "../agents/store.js";
 import { config } from "../config.js";
@@ -152,9 +152,10 @@ export async function assignPost(db: Pool, input: AssignInput): Promise<AssignRe
 
   const postId = newId();
   const briefId = newId();
-  // The brief first: a failure then leaves nothing behind. The post next; a
-  // failure there leaves a brief with a post id that doesn't resolve, which
-  // the pipeline shows as a brief and the Writer skips ("no such post").
+  // The draft first (the brief's post column references it), then the brief.
+  // A brief that fails to save takes its empty draft with it: the id was
+  // minted here, so the delete can touch nothing else.
+  await insertDraftPost({ id: postId, site: input.site, title: input.title, subtitle: "", type: col.name, excerpt: "", content_md: "", word_count: 0 });
   await insert("briefs", {
     id: briefId,
     site: input.site,
@@ -168,8 +169,10 @@ export async function assignPost(db: Pool, input: AssignInput): Promise<AssignRe
     writer: "agent",
     reviewer: input.user,
     planned_date: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+  }).catch(async (err: unknown) => {
+    await rest(`/posts?id=eq.${encodeURIComponent(postId)}&site=eq.${encodeURIComponent(input.site)}`, { method: "DELETE" }).catch(() => {});
+    throw err;
   });
-  await insertDraftPost({ id: postId, site: input.site, title: input.title, subtitle: "", type: col.name, excerpt: "", content_md: "", word_count: 0 });
 
   let run: string | null = null;
   let notStarted: string | undefined;
