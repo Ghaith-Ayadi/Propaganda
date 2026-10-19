@@ -36,7 +36,9 @@ export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-const COLS = `id, site, label, scopes, created_by, last_seen, created`;
+const COLS = `t.id, t.site, t.label, t.scopes, t.created_by, t.last_seen, t.created`;
+/** A token dies with its member's membership: removed from the site, their tokens stop and drop out of the list. */
+const STILL_MEMBER = `exists (select 1 from public.site_members m where m.site = t.site and m.user_id = t.created_by)`;
 
 function row(r: Record<string, unknown>): ApiToken {
   return {
@@ -54,7 +56,7 @@ function row(r: Record<string, unknown>): ApiToken {
 export async function tokenOf(db: Pool, bearer: string): Promise<ApiToken | null> {
   if (!TOKEN_RE.test(bearer)) return null;
   try {
-    const r = await db.query(`select ${COLS} from private.api_tokens where token_hash = $1 and revoked is null`, [hashToken(bearer)]);
+    const r = await db.query(`select ${COLS} from private.api_tokens t where token_hash = $1 and revoked is null and ${STILL_MEMBER}`, [hashToken(bearer)]);
     return r.rows[0] ? row(r.rows[0]) : null;
   } catch (err) {
     if ((err as { code?: string }).code === "42P01") return null;
@@ -64,7 +66,7 @@ export async function tokenOf(db: Pool, bearer: string): Promise<ApiToken | null
 
 export async function listTokens(db: Pool, site: string): Promise<ApiToken[]> {
   try {
-    const r = await db.query(`select ${COLS} from private.api_tokens where site = $1 and revoked is null order by created`, [site]);
+    const r = await db.query(`select ${COLS} from private.api_tokens t where site = $1 and revoked is null and ${STILL_MEMBER} order by created`, [site]);
     return r.rows.map(row);
   } catch (err) {
     if ((err as { code?: string }).code === "42P01") return [];

@@ -68,7 +68,7 @@ export const TOOLS: Tool[] = [
     },
     run: async (args, ctx) => {
       const input = checkAssign(args);
-      const r = await assignPost(ctx.db, { ...input, site: ctx.token.site, user: ctx.token.createdBy, via: "mcp" });
+      const r = await assignPost(ctx.db, { ...input, site: ctx.token.site, user: ctx.token.createdBy, via: "mcp", limitKey: ctx.token.id });
       return {
         post: r.post,
         collection: r.collection,

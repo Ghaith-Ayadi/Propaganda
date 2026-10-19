@@ -33,6 +33,15 @@ that produced something worth a post) is offered once.
   are listed as attachments the Writer can't open yet. The reviewer sees the
   material under the draft's Brief tab, with the attachments as links.
 
+## On the box and on Vercel
+
+The worker stores an assigned post's images through the app's `/api/upload`
+with `WORKER_DISPATCH_SECRET`, the secret it already shares with Chat's
+hand-off: Vercel's copy must equal the box's, or plugin images fail with 401
+and the post carries no image. A token may assign 20 posts an hour
+(`ASSIGNS_PER_HOUR`, in the worker's memory); the global daily cap is the
+brake after that.
+
 ## The other doors
 
 The same hand-off, from inside the app:

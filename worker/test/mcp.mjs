@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 process.env.POSTGRES_PASSWORD ??= "unused";
 
-const { handle, handleBody, TOOLS, PROTOCOL, checkAssign, AssignError, newApiToken, hashToken, TOKEN_RE } = await import("../dist/mcp/testing.js");
+const { handle, handleBody, TOOLS, PROTOCOL, checkAssign, AssignError, allowAssign, ASSIGNS_PER_HOUR, newApiToken, hashToken, TOKEN_RE } = await import("../dist/mcp/testing.js");
 
 const token = { id: "tok000000000001", site: "site00000000001", label: "t", scopes: ["read", "assign"], createdBy: "00000000-0000-4000-8000-000000000001", lastSeen: null, created: "" };
 const ctx = { db: null, token };
@@ -61,6 +61,13 @@ assert.throws(() => checkAssign({ title: "x" }), /markdown/);
 assert.throws(() => checkAssign({ title: "x", markdown: "y", assets: [{ name: "a", kind: "video", url: "https://x" }] }), /image or pdf/);
 assert.throws(() => checkAssign({ title: "x", markdown: "y", assets: [{ name: "a", kind: "pdf" }] }), /url or base64/);
 assert.equal(checkAssign({ title: "x", markdown: "y", assets: [{ name: "a", kind: "pdf", data: "AAAA" }] }).assets[0].data, "AAAA");
+
+// the hourly cap per token
+const t0 = 1_000_000_000_000;
+for (let i = 0; i < ASSIGNS_PER_HOUR; i++) assert.equal(allowAssign("tok", t0 + i), true);
+assert.equal(allowAssign("tok", t0 + 100), false);
+assert.equal(allowAssign("other", t0 + 100), true);
+assert.equal(allowAssign("tok", t0 + 3_600_001), true);
 
 // tokens
 const t = newApiToken();

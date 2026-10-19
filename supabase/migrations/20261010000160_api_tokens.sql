@@ -30,6 +30,9 @@ create index api_tokens_site_idx on private.api_tokens (site);
 create unique index api_tokens_hash_key on private.api_tokens (token_hash);
 
 alter table private.api_tokens enable row level security;
+-- Nobody but the worker's pool and the functions below reads it; the schema's own grants don't reach a new table by accident.
+revoke all on private.api_tokens from anon, authenticated;
+grant all on private.api_tokens to service_role;
 
 /** Mint one. p: { site, label, token_hash, scopes?, created_by }. Returns the id. */
 create function public.api_token_save(p jsonb) returns text

@@ -40,6 +40,8 @@ export interface AssignInput {
   assets?: AssetIn[];
   /** Where it was assigned from, for the run's record ("mcp", "pipeline"). */
   via: string;
+  /** What the hourly cap counts on (the token's id); none for a caller with its own brake. */
+  limitKey?: string;
 }
 
 export interface AssignResult {
@@ -112,7 +114,27 @@ async function storeAsset(site: string, a: AssetIn): Promise<string> {
   return url;
 }
 
+/** A leaked token's blast radius: this many assigns an hour per token, before the global daily cap. */
+export const ASSIGNS_PER_HOUR = 20;
+const recent = new Map<string, number[]>();
+
+/** Counts an assign for `key` (a token id); false when the hour is spent. */
+export function allowAssign(key: string, now = Date.now()): boolean {
+  const hour = now - 3_600_000;
+  const times = (recent.get(key) ?? []).filter((t) => t > hour);
+  if (times.length >= ASSIGNS_PER_HOUR) {
+    recent.set(key, times);
+    return false;
+  }
+  times.push(now);
+  recent.set(key, times);
+  return true;
+}
+
 export async function assignPost(db: Pool, input: AssignInput): Promise<AssignResult> {
+  if (input.limitKey && !allowAssign(input.limitKey)) {
+    throw new AssignError(429, `This token has assigned ${ASSIGNS_PER_HOUR} posts in the last hour; wait a while`);
+  }
   const cols = await collections(input.site);
   const visible = cols.filter((c) => !c.is_hidden);
   const col = input.collection
@@ -130,7 +152,9 @@ export async function assignPost(db: Pool, input: AssignInput): Promise<AssignRe
 
   const postId = newId();
   const briefId = newId();
-  await insertDraftPost({ id: postId, site: input.site, title: input.title, subtitle: "", type: col.name, excerpt: "", content_md: "", word_count: 0 });
+  // The brief first: a failure then leaves nothing behind. The post next; a
+  // failure there leaves a brief with a post id that doesn't resolve, which
+  // the pipeline shows as a brief and the Writer skips ("no such post").
   await insert("briefs", {
     id: briefId,
     site: input.site,
@@ -145,6 +169,7 @@ export async function assignPost(db: Pool, input: AssignInput): Promise<AssignRe
     reviewer: input.user,
     planned_date: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
   });
+  await insertDraftPost({ id: postId, site: input.site, title: input.title, subtitle: "", type: col.name, excerpt: "", content_md: "", word_count: 0 });
 
   let run: string | null = null;
   let notStarted: string | undefined;

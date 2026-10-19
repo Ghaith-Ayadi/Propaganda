@@ -91,7 +91,7 @@ export async function mcpRoute(db: Pool, req: IncomingMessage, res: ServerRespon
     if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(400, "Body is not an object");
     try {
       const input = checkAssign(body as Record<string, unknown>);
-      send(res, 202, await assignPost(db, { ...input, site: token.site, user: token.createdBy, via: "api" }));
+      send(res, 202, await assignPost(db, { ...input, site: token.site, user: token.createdBy, via: "api", limitKey: token.id }));
     } catch (err) {
       if (err instanceof AssignError) throw new HttpError(err.status, err.message);
       throw err;

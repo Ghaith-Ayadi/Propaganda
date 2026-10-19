@@ -12,6 +12,7 @@ import { createPost } from "@/lib/posts";
 import { createCollection } from "@/lib/collections";
 import { db } from "@/lib/db";
 import { coded } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
 import { currentScope, siteId } from "@/lib/scope";
 import { authHeader, must, newId, sb } from "@/lib/supabase";
 import { runSync, scheduleSync, waitForSyncIdle } from "@/lib/sync";
@@ -285,9 +286,14 @@ export const live = {
     let made = 0;
     for (const p of posts) {
       const title = p.title.trim().slice(0, 300) || "Untitled";
-      const postId = await newDraft(collection, title);
-      if (!postId) throw coded("PIPELINE-ASSIGN", new Error("no draft"), "Couldn't create the drafts. Try again.");
-      await must(
+      // One failing post doesn't undo the ones before it: the toast says how
+      // many were made and which were not, so a retry is of those only.
+      const postId = await newDraft(collection, title).catch(() => null);
+      if (!postId) {
+        notStarted.push(`${title}: couldn't create its draft`);
+        continue;
+      }
+      const saved = await must(
         sb.from("briefs").insert({
           id: newId(),
           site: siteId(),
@@ -301,9 +307,17 @@ export const live = {
           reviewer: me,
           planned_date: ymd(new Date(Date.now() + 14 * 86_400_000)),
         }),
-      ).catch((err) => {
-        throw coded("PIPELINE-ASSIGN", err, "Couldn't save the assignments. Try again.");
-      });
+      ).then(
+        () => true,
+        (err) => {
+          reportError("pipeline.assign", coded("PIPELINE-ASSIGN", err, "Couldn't save an assignment."));
+          return false;
+        },
+      );
+      if (!saved) {
+        notStarted.push(`${title}: couldn't save its brief (an empty draft was made)`);
+        continue;
+      }
       made++;
       const why = await startAgent({ agent: "writer", post: postId, task: title });
       if (why) notStarted.push(`${title}: ${why}`);
