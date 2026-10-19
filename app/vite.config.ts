@@ -259,7 +259,14 @@ export default defineConfig(({ mode }) => {
         registerType: "autoUpdate",
         // EditorApp registers the worker itself: blogs never load it.
         injectRegister: false,
-        includeAssets: ["favicon.svg", "favicon.ico", "apple-touch-icon.png"],
+        includeAssets: [
+          "favicon.svg",
+          "favicon.ico",
+          "apple-touch-icon.png",
+          "icon-192.png",
+          "icon-512.png",
+          "icon-maskable-512.png",
+        ],
         manifest: {
           // Icon URLs carry ?v so Chrome re-fetches the installed app icon when the
           // logo changes (it only refreshes on a changed URL). Bump it with the logo.
@@ -283,6 +290,8 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          // The manifest icons carry ?v=; let those requests hit the precache.
+          ignoreURLParametersMatching: [/^v$/],
           // Cache the shell. API requests pass through; Dexie holds the data.
           navigateFallback: "/index.html",
           // The backend shares this origin (Caddy sends /auth/v1, /rest/v1 and
