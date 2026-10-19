@@ -35,13 +35,14 @@ const DOWN_REPORT_MS = 5 * 60 * 1000;
 function watchChannel(sb: Ctx["sb"], where: string) {
   let downTimer: ReturnType<typeof setTimeout> | null = null;
   let lastErr: unknown = null;
-  return (status: string, err?: Error) => {
+  let disposed = false;
+  const watch = (status: string, err?: Error) => {
     if (status === "SUBSCRIBED") {
       if (downTimer) clearTimeout(downTimer);
       downTimer = null;
       return;
     }
-    if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
+    if (disposed || (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT")) return;
     lastErr = err ?? new Error(status.toLowerCase());
     console.warn(`${where}: ${status}`, lastErr);
     void sb.auth
@@ -50,9 +51,23 @@ function watchChannel(sb: Ctx["sb"], where: string) {
       .catch(() => {});
     downTimer ??= setTimeout(() => reportError(`${where} down for 5 minutes`, lastErr), DOWN_REPORT_MS);
   };
+  /** The channel was left on purpose: no "down" report for it any more. */
+  const dispose = () => {
+    if (downTimer) clearTimeout(downTimer);
+    downTimer = null;
+    lastErr = null;
+    disposed = true;
+  };
+  return { watch, dispose };
 }
 
-let current: { ctx: Ctx; channel: RealtimeChannel; agents: RealtimeChannel; comments: RealtimeChannel } | null = null;
+let current: {
+  ctx: Ctx;
+  channel: RealtimeChannel;
+  agents: RealtimeChannel;
+  comments: RealtimeChannel;
+  dispose: () => void;
+} | null = null;
 
 async function readRow<R>(ctx: Ctx, table: string, id: string): Promise<R | null> {
   try {
@@ -102,6 +117,12 @@ export async function startRealtime() {
   const changed = (e: { eventType: string; new: unknown }) =>
     e.eventType === "DELETE" ? null : (e.new as { id: string }).id;
 
+  const watchers = [
+    watchChannel(sb, "Realtime channel"),
+    watchChannel(sb, "Realtime agents channel"),
+    watchChannel(sb, "Realtime comments channel"),
+  ];
+
   const channel = sb
     .channel(`site:${site}:${Math.random().toString(36).slice(2)}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "posts", filter }, (e) => {
@@ -134,7 +155,7 @@ export async function startRealtime() {
     .on("system", {}, (m: { extension?: string; status?: string }) => {
       if (m.extension === "postgres_changes" && m.status === "ok") void runSync();
     })
-    .subscribe(watchChannel(sb, "Realtime channel"));
+    .subscribe(watchers[0].watch);
 
   // What the agents write, on a channel of its own so a refusal here (a server
   // whose publication doesn't carry these tables yet) leaves the posts above
@@ -164,7 +185,7 @@ export async function startRealtime() {
         serverChanged("pipeline");
       }
     })
-    .subscribe(watchChannel(sb, "Realtime agents channel"));
+    .subscribe(watchers[1].watch);
 
   // Comments, on a channel of their own: a server whose publication doesn't
   // carry the table yet refuses only this one.
@@ -178,15 +199,16 @@ export async function startRealtime() {
       const id = (e.old as { id?: string }).id;
       if (id) void db.comments.delete(id);
     })
-    .subscribe();
+    .subscribe(watchers[2].watch);
 
-  current = { ctx, channel, agents, comments };
+  current = { ctx, channel, agents, comments, dispose: () => watchers.forEach((w) => w.dispose()) };
 }
 
 export async function stopRealtime() {
   const was = current;
   current = null;
   if (!was) return;
+  was.dispose();
   try {
     await was.ctx.sb.removeChannel(was.channel);
     await was.ctx.sb.removeChannel(was.agents);
