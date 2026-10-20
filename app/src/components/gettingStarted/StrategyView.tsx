@@ -25,7 +25,9 @@ import type { PipelineItem } from "@/lib/pipeline/types";
 import { userMessage } from "@/lib/errors";
 import { reportError, track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
+import { activeSite } from "@/lib/scope";
 import { SectionTitle, Spinner } from "./bits";
+import { BUCKETS, bucketOf, COLUMNS, ColumnHeader, SearchCells } from "@/components/goals/searchBits";
 import type { StrategistProgress } from "./progress";
 import { MAX_ROUNDS } from "./state";
 
@@ -39,6 +41,28 @@ function Reveal({ i, children, className }: { i: number; children: React.ReactNo
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US");
+
+const BUCKET_DOT: Record<"success" | "blue" | "gray", string> = { success: "bg-success-primary", blue: "bg-brand-solid", gray: "bg-quaternary" };
+
+/** A topic card shows its thesis; the why and the basis sit behind "Read more" (Ayadi, 2026-10-20: reading seven full topics is a job). */
+function TopicReason({ thesis, why, basis }: { thesis?: string; why: string; basis: string }) {
+  const [open, setOpen] = useState(false);
+  const lead = thesis || why;
+  const rest = thesis ? [why, basis ? `Based on: ${basis}` : ""].filter(Boolean) : basis ? [`Based on: ${basis}`] : [];
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-sm text-secondary">{lead}</p>
+      {rest.length > 0 && (
+        <>
+          {open && rest.map((line) => <p key={line} className="text-sm text-tertiary">{line}</p>)}
+          <button type="button" onClick={() => setOpen((v) => !v)} className="self-start text-xs font-medium text-brand-secondary hover:underline">
+            {open ? "Less" : "Read more"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function StrategyView({
   proposal,
@@ -57,6 +81,9 @@ export function StrategyView({
 }) {
   const [feedback, setFeedback] = useState("");
   const [answers, setAnswers] = useState<string[]>(() => proposal.questions.map(() => ""));
+  const siteName = activeSite()?.name ?? "You";
+  /** Proposals since 2026-10-20 mark each search's bucket; older ones are shown as one list. */
+  const buckets = proposal.ranking.searches.some((s) => s.bucket);
   const [busy, setBusy] = useState(false);
   const previous = usePreviousProposal(proposal);
   const questions = proposal.questions;
@@ -129,6 +156,12 @@ export function StrategyView({
         <div className="mb-3">
           <Badge color="gray" size="sm">{quarterLabel(proposal.quarter)} plan</Badge>
         </div>
+        {proposal.profile && (
+          <div className="mb-6">
+            <SectionTitle title={`${siteName} according to what you gave us`} lede="Who you are, from your answers, your site and the search data. If this is off, tell us below." />
+            <p className="text-base leading-relaxed text-secondary">{proposal.profile}</p>
+          </div>
+        )}
         <SectionTitle title="Summary" lede="What we're going to do, why, and how, in a nutshell." />
         <p className="font-serif text-2xl leading-snug text-primary md:text-[28px] md:leading-[36px]">{proposal.summary}</p>
       </Reveal>
@@ -140,7 +173,7 @@ export function StrategyView({
       </Reveal>
 
       <Reveal i={2}>
-        <SectionTitle title="Your topics" lede="Up to four, so readers and Google can tell what you're about. Under each, the first posts we pitched." />
+        <SectionTitle title="Your topics" lede="As many as you have things to say, up to eight, so readers and Google can tell what you're about. Under each, the first posts we pitched." />
         <div className="grid gap-4 md:grid-cols-2">
           {proposal.topics.map((t, i) => {
             const mine = pitches.filter((p) => p.topics[0] === t.name);
@@ -148,7 +181,7 @@ export function StrategyView({
               <Card key={t.name}>
                 <CardHeader title={`${i + 1}. ${t.name}`} description={t.low === t.high ? `${t.low} posts` : `${t.low} to ${t.high} posts`} />
                 <CardBody className="flex flex-col gap-3">
-                  <p className="text-sm text-secondary">{t.why}</p>
+                  <TopicReason thesis={t.thesis} why={t.why} basis={t.basis} />
                   <div className="border-t border-secondary pt-3">
                     <p className="mb-2 text-xs font-medium tracking-wide text-quaternary uppercase">First pitches</p>
                     {mine.length ? (
@@ -191,46 +224,56 @@ export function StrategyView({
 
       {proposal.ranking.searches.length > 0 && (
         <Reveal i={4}>
-          <SectionTitle title="Searches to win" lede="Long-tail first: a new blog ranks slowly." />
+          <SectionTitle title="Searches to win" lede={buckets ? "Three kinds: what a post can win this quarter, what the business has to own over time, and what the data can't price yet." : "Long-tail first: a new blog ranks slowly."} />
+          {proposal.readersFind && (
+            <div className="mb-4">
+              <p className="mb-1 text-sm font-medium text-primary">What your readers find today</p>
+              <p className="text-sm leading-relaxed text-secondary">{proposal.readersFind}</p>
+            </div>
+          )}
           <Card>
-            <CardBody className="grid gap-3 border-b border-secondary text-sm text-secondary md:grid-cols-3">
-              <p>
-                <span className="font-medium text-primary">Volume.</span> How many times a month people search it.
-              </p>
-              <p>
-                <span className="font-medium text-primary">Difficulty.</span> 0 to 100. Under 30 is winnable for a new blog; 30 to 60 is contested; above 60 belongs to the big sites.
-              </p>
-              <p>
-                <span className="font-medium text-primary">Position.</span> Where you appear on Google today. New blogs start outside the top 100.
-              </p>
-            </CardBody>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b border-secondary text-left text-xs text-tertiary">
                   <tr>
                     <th className="px-5 py-2.5 font-medium">Target search term</th>
-                    <th className="px-3 py-2.5 font-medium">Volume</th>
-                    <th className="px-3 py-2.5 font-medium">Difficulty</th>
-                    <th className="px-3 py-2.5 font-medium">Position</th>
+                    {COLUMNS.map((c) => (
+                      <ColumnHeader key={c.key} label={c.label} why={c.why} className="px-3 py-2.5" />
+                    ))}
                     <th className="px-5 py-2.5 font-medium">Why this one</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-secondary">
-                  {proposal.ranking.searches.map((s) => (
-                    <tr key={s.query}>
-                      <td className="px-5 py-2.5">
-                        <code className="rounded bg-brand-primary px-1.5 py-0.5 font-mono text-[13px] text-brand-secondary">{s.query}</code>
-                      </td>
-                      <td className="px-3 py-2.5 text-secondary tabular-nums">{s.volume != null ? fmt(s.volume) : "–"}</td>
-                      <td className="px-3 py-2.5 text-secondary tabular-nums">{s.difficulty != null ? s.difficulty : "–"}</td>
-                      <td className="px-3 py-2.5 text-tertiary tabular-nums">{s.position != null ? `#${s.position}` : "Not in the top 100"}</td>
-                      <td className="px-5 py-2.5 text-tertiary">{s.why}</td>
-                    </tr>
-                  ))}
-                </tbody>
+                {(buckets ? BUCKETS : [null]).map((b) => {
+                  const rows = b ? proposal.ranking.searches.filter((s) => bucketOf(s) === b.key) : proposal.ranking.searches;
+                  if (!rows.length) return null;
+                  return (
+                    <tbody key={b?.key ?? "all"} className="divide-y divide-secondary border-b border-secondary last:border-b-0">
+                      {b && (
+                        <tr className="bg-secondary">
+                          <td colSpan={COLUMNS.length + 2} className="px-5 py-2">
+                            <span className="inline-flex items-center gap-2 text-xs font-medium text-primary">
+                              <span className={cx("inline-block size-2 rounded-full", BUCKET_DOT[b.color])} aria-hidden />
+                              {b.label}
+                              <span className="font-normal text-tertiary">· {b.why}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                      {rows.map((s) => (
+                        <tr key={s.query}>
+                          <td className="px-5 py-2.5">
+                            <code className="rounded bg-brand-primary px-1.5 py-0.5 font-mono text-[13px] text-brand-secondary">{s.query}</code>
+                          </td>
+                          <SearchCells s={s} />
+                          <td className="px-5 py-2.5 text-tertiary">{s.why}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  );
+                })}
               </table>
             </div>
-            <CardFooter>Volumes and rankings from DataForSEO, this week.</CardFooter>
+            <CardFooter>Volumes, links and rankings from DataForSEO, this week. Hover a column's name for what it means.</CardFooter>
           </Card>
         </Reveal>
       )}
