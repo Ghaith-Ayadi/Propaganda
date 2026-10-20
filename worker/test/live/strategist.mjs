@@ -156,7 +156,7 @@ try {
   check(Array.isArray(p.questions), "questions for the tenant");
   const calls = db.model_calls.filter((c) => c.job === "strategist" && !String(c.model).startsWith("dataforseo/"));
   check(calls.length >= 1 && calls.every((c) => c.status === "ok" && c.priced), `every model call logged and priced (${calls.length})`);
-  check(calls.length <= 4, `two drafts at most, each with one retry for bad JSON (${calls.length} calls)`);
+  check(calls.length <= 5, `the vocabulary, then two drafts at most, each with one retry for bad JSON (${calls.length} calls)`);
   // Only a sent proposal starts the first pitches; waiting on them after a failure never returns.
   const first = res.status === "sent" ? await t.DBOS.retrieveWorkflow(t.firstPitchesId("liveproposal001")).getResult() : null;
   check(/Lite/.test(first?.skipped ?? ""), `sending started the first pitches (skipped here: ${first?.skipped})`);
