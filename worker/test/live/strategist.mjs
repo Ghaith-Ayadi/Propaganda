@@ -155,8 +155,12 @@ try {
   check(p.readership?.value == null, "no Readership target without readers");
   check(Array.isArray(p.questions), "questions for the tenant");
   const calls = db.model_calls.filter((c) => c.job === "strategist" && !String(c.model).startsWith("dataforseo/"));
-  check(calls.length >= 1 && calls.every((c) => c.status === "ok" && c.priced), `every model call logged and priced (${calls.length})`);
-  check(calls.length <= 5, `the vocabulary, then two drafts at most, each with one retry for bad JSON (${calls.length} calls)`);
+  // A call the gateway timed out on is logged as an error at $0 (billed upstream for an amount we
+  // don't know) and the step runs it again; the plumbing is right when every answer is priced.
+  const answered = calls.filter((c) => c.status === "ok");
+  const failed = calls.filter((c) => c.status !== "ok");
+  check(answered.length >= 1 && answered.every((c) => c.priced) && failed.every((c) => !c.priced), `every model call logged, each answer priced, a timed-out call unpriced and retried (${answered.length} answered, ${failed.length} failed)`);
+  check(answered.length <= 5, `the vocabulary, then two drafts at most, each with one retry for bad JSON (${answered.length} answered)`);
   // Only a sent proposal starts the first pitches; waiting on them after a failure never returns.
   const first = res.status === "sent" ? await t.DBOS.retrieveWorkflow(t.firstPitchesId("liveproposal001")).getResult() : null;
   check(/Lite/.test(first?.skipped ?? ""), `sending started the first pitches (skipped here: ${first?.skipped})`);
