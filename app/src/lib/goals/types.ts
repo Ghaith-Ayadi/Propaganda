@@ -27,14 +27,31 @@ export interface TopicTarget {
   high: number;
 }
 
+/**
+ * Where a target search sits (since 2026-10-20): winnable now (page one this
+ * quarter), a must-win the business has to own over a year or two (a position
+ * goal), or one the data has no number for, kept because the intent is exact.
+ * Absent on proposals from before.
+ */
+export type SearchBucket = "now" | "later" | "nodata";
+
 export interface RankingSearch {
   query: string;
   topic: string;
   /** Google position today; null = not in the top 100. */
   position: number | null;
-  /** Monthly searches (DataForSEO). */
+  /** Monthly searches (DataForSEO); absent when the data has no number. */
   volume?: number;
-  difficulty?: number;
+  difficulty?: number | null;
+  bucket?: SearchBucket;
+  /** Distinct sites linking to an average page-one result. */
+  referringDomains?: number | null;
+  /** The last six months' searches against the six before, as a percentage. */
+  trend6?: number | null;
+  /** The month (1 to 12) the search peaks in. */
+  peakMonth?: number | null;
+  /** Google shows an AI overview for it. */
+  aiOverview?: boolean | null;
 }
 
 /** The targets of one goal version. Every number here was approved by the tenant. */
@@ -173,6 +190,10 @@ export interface Proposal {
   kind: ProposalKind;
   status: ProposalStatus;
   createdAt: Day;
+  /** "{Company} according to what you gave us": who they are, from the inputs. Absent on proposals from before 2026-10-20. */
+  profile?: string;
+  /** Who ranks on page one for the reader's searches today, by kind, and what it means for the blog. */
+  readersFind?: string;
   summary: string;
   covers: { from: Day; to: Day; weeks: number; prorated: boolean };
   volume: Reasoned<number>;

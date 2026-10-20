@@ -217,19 +217,39 @@ by hand (for Admin's "Run now").
    the taste summary, the searches that contain or sit next to the tenant's own
    (DataForSEO Labs `keyword_suggestions` and `related_keywords` per seed, short
    phrases only, kept when they carry the seed's words or the offer's, 100 at
-   most) and ranked keywords, and who ranks for the tenant's own searches (at
-   most 5 searches);
+   most) and ranked keywords; then, since 2026-10-20 (searches first), the
+   reader's job vocabulary from one small model call (`jobVocabulary`: 50 to
+   80 searches the people the tenant sells to make about their own work, and
+   the tenant's own names and hosted customer pages as never-targets), priced
+   in one `keyword_overview` call with SERP info (page one's referring
+   domains, the AI overview flag, intent, a 6-month trend and the peak month),
+   Google Ads volume for what Labs has no row for (`adsSearchVolume`; no number
+   stays `null`, never 0), who ranks across the ten biggest of them
+   (`serp_competitors`, each domain by kind: government, trade body, competitor,
+   forum, video), and who ranks for the tenant's own searches (at most 5
+   web searches);
 2. sizes the window in code (`windowFor`: the join-week rule, weeks 9 to 13
-   plan next quarter), the volume cap (`volumeCap`: review capacity and 2 a
-   week on day one, last quarter +20% after) and, for a new tenant, the Launch
+   plan next quarter), the volume cap (`volumeCap`: review capacity on day
+   one, last quarter +20% after; the old "2 a week in a first quarter" line
+   only on runs recorded before 2026-10-20) and, for a new tenant, the Launch
    (`launchFor`: 15 posts, prorated after week 9);
-3. asks the model once for the proposal as JSON;
-4. checks it (`validate`): the cap, 1 to 4 topics with low ends inside the
-   volume, 5 to 10 winnable searches each in a topic, 3 to 8 watched sites,
-   no Readership target without 4 weeks of readers, at most 2 on page one and
-   no AI-mention target in a first quarter, at most 3 questions. A draft that
-   breaks a rule goes back once with the errors; a second failure fails the
-   row (`failed`, with the reasons) and never reaches the tenant;
+3. asks the model once for the proposal as JSON (a `profile` paragraph, a
+   `readersFind` paragraph, the summary, the numbers);
+4. checks it (`validate`): the cap, 1 to 8 topics with low ends inside the
+   volume, 15 to 20 target searches each in a topic and each in its bucket
+   (`now`: difficulty under 30 and page one under 30 referring domains, or
+   page two already, 10 to 15; `later`: 200+ a month with page one under 100
+   referring domains or difficulty at most 50, 3 to 5 and required when the
+   data has them; `nodata`: at most 3; the never-targets refused), 3 to 8
+   watched sites with at least 3 among the sites that rank for the reader's
+   searches when the data has them, no Readership target without 4 weeks of
+   readers, at most 2 on page one in a first quarter, an AI-mention target no
+   bigger than the target searches that show an AI overview, at most 3
+   questions. A draft that breaks a rule goes back once with the errors; a
+   second failure fails the row (`failed`, with the reasons) and never reaches
+   the tenant. Runs recorded before 2026-10-20 (`DBOS.patch("strategist-searches-first")`)
+   replay the old rules: 1 to 4 topics, 5 to 10 winnable searches, no AI
+   target in a first quarter;
 5. drops watched sites it can't read, adds the window, batches and Launch, and
    sends it (`sent`; the quarter's older sent proposal is superseded).
 

@@ -796,7 +796,7 @@ function PlanStep({
       </div>
 
       <section>
-        <SectionTitle title="Your topics" lede="Up to four, so readers and Google can tell what you're about. Under each, the first posts the Strategist pitched." />
+        <SectionTitle title="Your topics" lede="As many as you have things to say, up to eight. Under each, the first posts the Strategist pitched." />
         <div className="grid gap-4 md:grid-cols-2">
           {TOPICS.map((t, i) => (
             <Card key={t.name}>

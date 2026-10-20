@@ -141,6 +141,17 @@ const KEYWORDS = [
   { keyword: "workflow orchestration", vol: 9900, kd: 78 },
 ];
 const labsItem = (k) => ({ keyword: k.keyword, keyword_info: { search_volume: k.vol }, keyword_properties: { keyword_difficulty: k.kd } });
+/** The job vocabulary the stand-in model writes: two the ideas pull priced, one only Google Ads prices, one nobody does. */
+const VOCAB = ["batch job retries", "retry failed cron job", "job queue backoff", "idempotent jobs", "dead letter queue retries", "exponential backoff cron"];
+const months = (vol) => Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: 12 - i, search_volume: i < 6 ? vol * 1.5 : vol }));
+/** An overview row with SERP info: page one's links, the AI overview, the intent and a year of months (peaks in December, up by half). */
+const richItem = (k, links = 8) => ({
+  ...labsItem(k),
+  keyword_info: { search_volume: k.vol, monthly_searches: months(k.vol) },
+  serp_info: { serp_item_types: ["organic", "ai_overview"] },
+  avg_backlinks_info: { referring_main_domains: links },
+  search_intent_info: { main_intent: "informational" },
+});
 const calls = [];
 const realFetch = globalThis.fetch;
 async function web(input, init) {
@@ -151,9 +162,24 @@ async function web(input, init) {
     if (url.includes("related_keywords")) return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: [{ keyword_data: labsItem({ keyword: "ai image generator", vol: 500000, kd: 90 }) }] }] }] });
     if (url.includes("ranked_keywords")) return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: [] }] }] });
     if (url.includes("keyword_overview")) {
-      const asked = JSON.parse(init.body)[0].keywords;
-      const priced = asked.includes("cron job alerting") ? [labsItem({ keyword: "cron job alerting", vol: 140, kd: 9 })] : [];
+      const task = JSON.parse(init.body)[0];
+      const asked = task.keywords;
+      const rows = KEYWORDS.filter((k) => asked.includes(k.keyword));
+      if (asked.includes("cron job alerting")) rows.push({ keyword: "cron job alerting", vol: 140, kd: 9 });
+      const priced = rows.map((k) => (task.include_serp_info ? richItem(k) : labsItem(k)));
       return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: priced }] }] });
+    }
+    if (url.includes("google_ads/search_volume")) {
+      const asked = JSON.parse(init.body)[0].keywords;
+      const rows = asked.includes("job queue backoff") ? [{ keyword: "job queue backoff", search_volume: 70, monthly_searches: months(70) }] : [];
+      return Response.json({ status_code: 20000, cost: 0.05, tasks: [{ status_code: 20000, result: rows }] });
+    }
+    if (url.includes("serp_competitors")) {
+      const items = [
+        { domain: WEB.replace(/^https?:\/\//, ""), keywords_count: 3, avg_position: 4 },
+        { domain: "www.youtube.com", keywords_count: 2, avg_position: 20.4 },
+      ];
+      return Response.json({ status_code: 20000, cost: 0.015, tasks: [{ status_code: 20000, result: [{ items }] }] });
     }
     if (url.includes("serp/google/organic")) {
       return Response.json({ cost: 0.002, tasks: [{ status_code: 20000, result: [{ items: [{ type: "organic", url: "https://prefect.io/blog/retries", title: "Retries", rank_absolute: 1 }] }] }] });
@@ -170,10 +196,14 @@ globalThis.fetch = web;
 // ---- a stand-in model ----
 
 const prompts = [];
+/** The job-vocabulary step's prompts, kept apart from the proposal's. */
+const vocabPrompts = [];
 let answers = [];
 const usage = { inputTokens: { total: 4000, noCache: 4000, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 800, text: 800, reasoning: 0 } };
 const r = (value, why = "Because.", basis = "Your answers.") => ({ value, why, basis });
 const GOOD = {
+  profile: "Kontra sells durable batch jobs to platform teams. It grows through its docs and competes with Prefect and Dagster.",
+  readersFind: "Page one for these searches is Prefect's docs and YouTube; a plain answer from a vendor that runs the jobs is missing.",
   summary: "Start steady: reliability first, two posts a week.",
   volume: r(18, "What your team can review.", "Your answer: 8 posts a month"),
   topics: [
@@ -181,7 +211,7 @@ const GOOD = {
     { name: "Scraping at scale", thesis: "Scrapers fail on volume long before they fail on parsing, and nobody plans for that.", low: 3, high: 5, why: "A search you named.", basis: "DataForSEO: 210/month" },
   ],
   ranking: {
-    searches: ["batch job retries", "durable batch jobs", "retry failed cron job", "nightly etl failures", "run scrapers at scale", "cron job alerting"].map((q, i) => ({
+    searches: ["batch job retries", "durable batch jobs", "retry failed cron job", "nightly etl failures", "run scrapers at scale", "cron job alerting", "job queue backoff"].map((q, i) => ({
       query: q,
       topic: i === 4 ? "Scraping at scale" : "Reliability",
       why: "Winnable.",
@@ -201,6 +231,11 @@ const GOOD = {
 const model = new MockLanguageModelV3({
   doGenerate: async ({ prompt }) => {
     const text = prompt.map((m) => (typeof m.content === "string" ? m.content : m.content.map((c) => c.text ?? "").join(""))).join("\n");
+    if (/never a target for its blog/.test(text)) {
+      vocabPrompts.push(text);
+      const vocab = { job: "platform engineers keeping batch jobs running", searches: VOCAB, notTargets: ["kontra login"] };
+      return { content: [{ type: "text", text: JSON.stringify(vocab) }], finishReason: { unified: "stop", raw: "stop" }, usage, warnings: [] };
+    }
     prompts.push(text);
     const next = answers.shift() ?? GOOD;
     return { content: [{ type: "text", text: typeof next === "string" ? next : JSON.stringify(next) }], finishReason: { unified: "stop", raw: "stop" }, usage, warnings: [] };
@@ -240,13 +275,23 @@ try {
 
   console.log("rules");
   check(t.volumeCap({ weeks: 12, perMonth: 8, lastQuarterPublished: null }) === 22, "day one: 8 a month over 12 weeks is 22");
-  check(t.volumeCap({ weeks: 12, perMonth: 40, lastQuarterPublished: null }) === 24, "and never more than 2 a week");
+  check(t.volumeCap({ weeks: 12, perMonth: 40, lastQuarterPublished: null }) === 110, "40 a month is 110: the cap is their number (2026-10-20)");
+  check(t.volumeCap({ weeks: 12, perMonth: 40, lastQuarterPublished: null, firstQuarterLimit: true }) === 24, "a run recorded before keeps the 2-a-week line");
   check(t.volumeCap({ weeks: 13, perMonth: 8, lastQuarterPublished: 20 }) === 24, "with history: last quarter + 20%");
   check(t.winnable({ keyword: "x", volume: 50, difficulty: 29, position: null }), "easy and searched is winnable");
   check(!t.winnable({ keyword: "x", volume: 9900, difficulty: 78, position: null }), "hard is not");
   check(t.winnable({ keyword: "x", volume: 10, difficulty: 80, position: 14 }), "page two is");
   check(!t.winnable({ keyword: "ai assistant", volume: 301000, difficulty: 25, position: null }, { newDomain: true }), "a head term is not, for a new domain, whatever its difficulty");
   check(t.winnable({ keyword: "ai assistant", volume: 301000, difficulty: 25, position: null }), "but is with history");
+  check(t.winnable({ keyword: "x", volume: null, difficulty: null, position: null }), "no data passes the winnable check");
+  check(!t.winnable({ keyword: "smart snacks", volume: 1600, difficulty: 0, position: null, referringDomains: 48 }), "difficulty 0 with 48 linking sites on page one is not winnable");
+  check(t.bucketOf({ keyword: "x", volume: 320, difficulty: 0, position: null, referringDomains: 3 }) === "now", "easy, searched and open page one is \"now\"");
+  check(t.bucketOf({ keyword: "cep", volume: 18100, difficulty: 34, position: null, referringDomains: 49 }) === "later", "18,100 a month at difficulty 34 and 49 links is a must-win");
+  check(t.bucketOf({ keyword: "usda foods", volume: 1600, difficulty: 47, position: null, referringDomains: 2993 }) === null, "page one with 2,993 links is no target at all");
+  check(t.bucketOf({ keyword: "x", volume: 90, difficulty: 44, position: null, referringDomains: 60 }) === null, "too small for a must-win and too hard for now is no target");
+  check(t.bucketOf({ keyword: "x", volume: null, difficulty: null, position: null }) === "nodata" && t.bucketOf(undefined) === "nodata", "no number is \"nodata\"");
+  check(t.mustWin({ keyword: "school lunch", volume: 49500, difficulty: 46, position: null, referringDomains: 106 }), "difficulty at most 50 keeps a must-win even past 100 links");
+  check(t.bucketNamed("Must win over time") === "later" && t.bucketNamed("no data") === "nodata" && t.bucketNamed("winnable now") === "now" && t.bucketNamed("") === undefined, "a bucket in the model's own words is read");
   check(t.looksLikeSource("https://www.airops.com/") && t.looksLikeSource("https://example.com/blog"), "a site or a blog index is a source");
   check(!t.looksLikeSource("https://buffer.com/resources/ai-social-media-content-creation/") && !t.looksLikeSource("https://x.com/a/b.pdf"), "an article or a file is not");
   check(t.MODELS.strategist === (process.env.AGENT_MODEL_STRATEGIST || "anthropic/claude-opus-5.5"), `the Strategist runs on Claude Opus 5.5 (${t.MODELS.strategist})`);
@@ -389,6 +434,50 @@ try {
   check(t.validate(headDraft, { ...rules, keywords: kw([...KEYWORDS, head]) }).some((e) => e.includes("is a head term")), "catches a head term on a new domain");
   const rich = Array.from({ length: 20 }, (_, i) => ({ keyword: `long tail ${i}`, vol: 100 + i, kd: 10 }));
   check(t.validate(draft, { ...rules, keywords: kw([...KEYWORDS, ...rich]) }).some((e) => e.includes("at least 8 target searches")), "rich data wants 8 searches, 6 from the data");
+
+  console.log("searches first (2026-10-20)");
+  const JOB = [
+    ...KEYWORDS.slice(0, 5).map((k) => ({ ...k, links: 6 })),
+    { keyword: "community eligibility provision", vol: 18100, kd: 34, links: 49 },
+    { keyword: "school lunch", vol: 49500, kd: 46, links: 106 },
+    { keyword: "menus for schools", vol: 12100, kd: 52, links: 82 },
+    { keyword: "smart snacks", vol: 1600, kd: 0, links: 48 },
+    { keyword: "usda foods", vol: 1600, kd: 47, links: 2993 },
+    { keyword: "cron job alerting", vol: 140, kd: 9, links: 2 },
+    { keyword: "job queue backoff", vol: 70, kd: null, links: null },
+  ];
+  const kwJob = (list) => new Map(list.map((k) => [k.keyword, { keyword: k.keyword, volume: k.vol, difficulty: k.kd, position: k.pos ?? null, referringDomains: k.links ?? null, aiOverview: k.keyword !== "usda foods" }]));
+  const firstRules = { ...rules, keywords: kwJob(JOB), searchesFirst: true, notTargets: ["kontra login", "audubon elementary lunch menu"], whoRanks: ["fns.usda.gov", "education.mn.gov", "schoolnutrition.org"] };
+  const sf = (patch) => t.validate(t.parseDraft({ ...GOOD, ...patch }), firstRules);
+  const errs1 = sf({});
+  check(errs1.some((e) => /Give \d+ to 20 target searches/.test(e)), `7 searches is too few when the data holds more (${errs1.find((e) => /target searches/.test(e))})`);
+  check(errs1.some((e) => /searches the business has to own over time/.test(e)), "and the must-win bucket is required when the data has candidates");
+  check(errs1.some((e) => /among those that rank for the reader's searches/.test(e)), "and watched sites must come from who ranks");
+  const topicsOf = (n) => Array.from({ length: n }, (_, i) => ({ name: `Topic number ${i + 1}`, thesis: `Claim ${i + 1} about the buyer's week that posts can show.`, low: 1, high: 2, why: "x", basis: "y" }));
+  check(sf({ topics: topicsOf(8) }).every((e) => !/Give 1 to/.test(e)) && sf({ topics: topicsOf(9) }).some((e) => /Give 1 to 8 topics/.test(e)), "up to 8 topics");
+  check(sf({ profile: "" }).some((e) => /profile is missing/.test(e)), "a profile paragraph is required");
+  const searchesOf = (list) => list.map(([query, bucket]) => ({ query, topic: "Reliability", bucket, why: "x" }));
+  const full = searchesOf([
+    ["batch job retries", "now"], ["durable batch jobs", "now"], ["retry failed cron job", "now"], ["nightly etl failures", "now"], ["run scrapers at scale", "now"], ["cron job alerting", "now"], ["job queue backoff", "now"],
+    ["community eligibility provision", "later"], ["school lunch", "later"], ["menus for schools", "later"],
+    ["idempotent jobs", "nodata"],
+  ]);
+  const okSites = [{ url: "https://www.fns.usda.gov/", topic: "Reliability", why: "USDA." }, { url: "https://education.mn.gov/", topic: "Reliability", why: "State agency." }, { url: "https://schoolnutrition.org/", topic: "Reliability", why: "SNA." }];
+  const good1 = sf({ ranking: { ...GOOD.ranking, searches: full, aiMentionTarget: r(2) }, watchedSites: okSites });
+  check(good1.length === 0, `11 searches in three buckets, an AI target and watched sites from who ranks pass (${good1.join(" | ")})`);
+  const smart = sf({ ranking: { ...GOOD.ranking, searches: [...full, ...searchesOf([["smart snacks", "now"]])], aiMentionTarget: r(2) }, watchedSites: okSites });
+  check(smart.some((e) => /"smart snacks" is not winnable this quarter/.test(e) && /fits "later"/.test(e)), "difficulty 0 with 48 links on page one is sent back as a must-win, not a now");
+  const usda = sf({ ranking: { ...GOOD.ranking, searches: [...full, ...searchesOf([["usda foods", "later"]])], aiMentionTarget: r(2) }, watchedSites: okSites });
+  check(usda.some((e) => /"usda foods" is not a must-win/.test(e)), "2,993 links on page one is no must-win");
+  const brand = sf({ ranking: { ...GOOD.ranking, searches: [...full, ...searchesOf([["audubon elementary lunch menu", "now"]])], aiMentionTarget: r(2) }, watchedSites: okSites });
+  check(brand.some((e) => /page it hosts for a customer/.test(e)), "a hosted customer page is never a target");
+  const noData = sf({ ranking: { ...GOOD.ranking, searches: [...full, ...searchesOf([["nobody searches this", "nodata"], ["nor this", "nodata"], ["nor that", "nodata"]])], aiMentionTarget: r(2) }, watchedSites: okSites });
+  check(noData.some((e) => /4 searches have no data; at most 3/.test(e)), "at most 3 with no data");
+  const ai = sf({ ranking: { ...GOOD.ranking, searches: full, aiMentionTarget: r(5) }, watchedSites: okSites });
+  check(ai.some((e) => /ranking.aiMentionTarget is 5/.test(e)) && sf({ ranking: { ...GOOD.ranking, searches: full, aiMentionTarget: r(null) }, watchedSites: okSites }).length === 0, "an AI target is allowed in a first quarter, up to 3 of the searches with an overview");
+  const inferred = t.finish(t.parseDraft({ ...GOOD, ranking: { ...GOOD.ranking, searches: full.map(({ bucket, ...x }) => x) } }), { kind: "onboarding", window: t.windowFor("onboarding", new Date("2026-10-20T12:00:00Z")), cadence: "weekly", launch: null, keywords: kwJob(JOB), searchesFirst: true });
+  check(inferred.ranking.searches.find((x) => x.query === "school lunch")?.bucket === "later" && inferred.ranking.searches.find((x) => x.query === "idempotent jobs")?.bucket === "nodata" && inferred.ranking.searches.find((x) => x.query === "batch job retries")?.referringDomains === 6, `finish() fills the bucket from the data when the model wrote none, and carries page one's links (${JSON.stringify(inferred.ranking.searches[0])})`);
+  check(!("volume" in inferred.ranking.searches.find((x) => x.query === "idempotent jobs")), "and no volume at all for a search without a number, never 0");
   let threw = false;
   try { t.parseDraft({ summary: "x" }); } catch { threw = true; }
   check(threw, "a draft missing its parts doesn't parse");
@@ -424,8 +513,14 @@ try {
   check(p.quarter === "2026-Q4" && p.covers.from && p.kind === "onboarding" && p.launch?.target === 15, "with its window and the Launch");
   check(p.watchedSites.length === 3 && !p.watchedSites.some((w) => w.url.includes("dead")), "the watched site that didn't answer was dropped");
   check(p.ranking.searches.find((s) => s.query === "batch job retries")?.volume === 320, "searches carry their volume");
-  check(row.inputs?.pricedSearches === 1, `the inputs count the priced search (${JSON.stringify(row.inputs)})`);
-  check(calls.filter((u) => u.includes("keyword_overview")).length === 1, `one overview call, and none for the fix draft since nothing new was proposed (${calls.filter((u) => u.includes("keyword_overview")).length})`);
+  // Two: "cron job alerting" (never in any pull) and "nightly etl failures" (dropped by the relevance filter, so looked up).
+  check(row.inputs?.pricedSearches === 2, `the inputs count the priced searches (${JSON.stringify(row.inputs)})`);
+  check(calls.filter((u) => u.includes("keyword_overview")).length === 2, `two overview calls (the job vocabulary, then the proposed search), and none for the fix draft since nothing new was proposed (${calls.filter((u) => u.includes("keyword_overview")).length})`);
+  check(vocabPrompts.length === 1 && vocabPrompts[0].includes("Durable batch jobs") && prompts[0].includes("job queue backoff: 70/month") && prompts[0].includes("idempotent jobs: no data") && prompts[0].includes("batch job retries: 320/month, difficulty 12, page one averages 8 referring domains, 6-month trend +50%, peaks in Dec, intent informational, AI overview yes"), `the job vocabulary was asked once, priced wide (Ads for what Labs lacks, no data kept as no data) and put in the prompt with page one's links and the season (${prompts[0].split("\n").filter((l) => /job queue|idempotent|batch job retries: 320/.test(l)).join(" | ")})`);
+  check(prompts[0].includes("Who ranks in Google's top 100 across the 3 biggest") && prompts[0].includes("youtube.com (video)") && prompts[0].includes("Never targets") && prompts[0].includes("kontra login"), "and who ranks across them, by kind, and the never-targets");
+  check(p.ranking.searches.every((s) => s.bucket === "now") && p.ranking.searches.find((s) => s.query === "job queue backoff")?.volume === 70 && row.inputs?.jobSearches === 6 && row.inputs?.jobSearchesPriced === 3 && row.inputs?.whoRanks === 2, `the sent proposal carries each search's bucket and the inputs count the job searches (${JSON.stringify({ buckets: p.ranking.searches.map((s) => s.bucket), inputs: row.inputs })})`);
+  check(p.profile === GOOD.profile && p.readersFind === GOOD.readersFind, "and the profile and readers-find paragraphs");
+  if (process.env.STRATEGY_DUMP) (await import("node:fs")).writeFileSync(process.env.STRATEGY_DUMP, `${vocabPrompts[0]}\n\n=====\n\n${prompts[0]}`);
   check(p.ranking.searches.find((s) => s.query === "cron job alerting")?.volume === 140, `a search the data never listed was priced before the check and carries its numbers (${JSON.stringify(p.ranking.searches.find((s) => s.query === "cron job alerting"))}, priced ${row.inputs?.pricedSearches}, overview calls ${calls.filter((u) => u.includes("keyword_overview")).length})`);
   check(p.batches.value >= 1 && /Weekly/.test(p.batches.why), "and the batch count from the cadence");
   check(db.tenant_profile[0].plan_read_at, "the plan is marked read");
@@ -433,7 +528,7 @@ try {
   check(calls.filter((u) => u.includes("keyword_suggestions")).length === 2 && calls.filter((u) => u.includes("related_keywords")).length === 2 && calls.filter((u) => u.includes("serp/google")).length === 2, `it asked DataForSEO for suggestions and related searches per seed and searched both of the tenant's searches (${calls.filter((u) => u.includes("dataforseo_labs")).length} labs calls)`);
   check(row.inputs?.keywords === 4 && !prompts[0].includes("ai image generator"), `the keyword list kept the rows that share a word with a seed or the offer and dropped the rest (${row.inputs?.keywords} kept)`);
   const stepNames = ((await t.DBOS.listWorkflowSteps(ids[0])) ?? []).map((s) => s.name);
-  check(stepNames.includes("keyword data") && stepNames.indexOf("who ranks") > stepNames.indexOf("keyword data"), `searches, then who ranks, as two steps (${stepNames.join(", ")})`);
+  check(stepNames.includes("keyword data") && stepNames.indexOf("job searches") > stepNames.indexOf("keyword data") && stepNames.indexOf("who ranks") > stepNames.indexOf("job searches"), `keyword data, then the job searches, then who ranks, as steps (${stepNames.join(", ")})`);
   const first = await t.DBOS.retrieveWorkflow(t.firstPitchesId("proposal0000001")).getResult();
   check(/Lite/.test(first?.skipped ?? ""), `sending started the first pitches (a Lite tenant here, so none: ${first?.skipped})`);
 
