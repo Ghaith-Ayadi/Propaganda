@@ -23,12 +23,12 @@ import {
   Stars02,
   Target04,
   CheckVerified02,
+  ChevronDown,
 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { Badge } from "@/components/base/badges/badges";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
 import { toast } from "@/components/base/toast/toast";
-import { AGENT_LABEL } from "@/lib/chat/adapter";
 import type { AgentName, ChatUIMessage, Citation, Handoff, QuickAction, RefKind } from "@/lib/chat/types";
 import { reportError } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
@@ -132,21 +132,22 @@ function Reply({
 }) {
   const citations: Citation[] = [];
   const actions: QuickAction[] = [];
-  const handoffs: Handoff[] = [];
+  const lookups: Handoff[] = [];
   const shown: Part[] = [];
   for (const p of message.parts) {
     if (p.type === "data-citation") citations.push(p.data);
     else if (p.type === "data-action") actions.push(p.data);
     else if (p.type === "data-handoff") {
-      handoffs.push(p.data);
-      shown.push(p);
+      if (isLookup(p.data)) lookups.push(p.data);
+      else shown.push(p);
     } else if (p.type === "text") shown.push(p);
   }
   const last = shown[shown.length - 1];
 
   return (
     <ReplyRow>
-      {shown.length === 0 && streaming && <Thinking />}
+      {lookups.length > 0 && <Lookups lookups={lookups} />}
+      {shown.length === 0 && lookups.length === 0 && streaming && <Thinking />}
 
       {shown.map((p, i) =>
         p.type === "data-handoff" ? (
@@ -166,7 +167,7 @@ function Reply({
         </div>
       )}
 
-      {!streaming && <Footer message={message} handoffs={handoffs} />}
+      {!streaming && <Footer message={message} />}
     </ReplyRow>
   );
 }
@@ -177,7 +178,7 @@ export function ReplyError({ onRetry }: { onRetry: () => void }) {
     <ReplyRow>
       <div className="flex items-center gap-2 text-sm text-error-primary">
         <AlertCircle className="size-4" />
-        <span>The agent didn't answer.</span>
+        <span>We didn't get an answer.</span>
         <Button size="xs" color="link-gray" onClick={onRetry}>
           Try again
         </Button>
@@ -195,11 +196,9 @@ export function Thinking() {
   );
 }
 
-function Footer({ message, handoffs }: { message: ChatUIMessage; handoffs: Handoff[] }) {
-  const agents = new Set(handoffs.map((h) => h.agent)).size;
+function Footer({ message }: { message: ChatUIMessage }) {
   const bits: string[] = [];
   if (message.metadata?.stopped) bits.push("Stopped");
-  if (agents > 0) bits.push(`${agents} ${agents === 1 ? "agent" : "agents"}`);
   if (message.metadata?.costUsd !== undefined) bits.push(formatUsd(message.metadata.costUsd));
   if (bits.length === 0) return null;
   return <p className="text-xs text-quaternary">{bits.join(" · ")}</p>;
@@ -296,6 +295,53 @@ function Sources({ citations }: { citations: Citation[] }) {
   );
 }
 
+/** A search or a read, as opposed to work handed off. Replies stored before `kind` existed say it in the task. */
+function isLookup(h: Handoff): boolean {
+  if (h.kind) return h.kind === "lookup";
+  return !h.runId && /^(Search|Read) /.test(h.task);
+}
+
+/**
+ * Where the reply looked, as one quiet line: what it is reading while it
+ * works, "Looked in 4 places" after, opening to the list. The answer is the
+ * reply's text; the lookups only show where it came from.
+ */
+function Lookups({ lookups }: { lookups: Handoff[] }) {
+  const [open, setOpen] = useState(false);
+  const running = lookups.find((h) => h.status === "running");
+  const failed = lookups.filter((h) => h.status === "failed").length;
+  const places = lookups.length;
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-fit items-center gap-1.5 rounded-md py-0.5 text-sm text-tertiary transition hover:text-secondary"
+      >
+        {running ? <Loading02 className="size-4 animate-spin" /> : <SearchLg className="size-4" />}
+        <span>
+          {running
+            ? `${running.task.replace(/^Searched/, "Searching").replace(/^Read /, "Reading ")}`
+            : `Looked in ${places} ${places === 1 ? "place" : "places"}${failed ? `, ${failed} failed` : ""}`}
+        </span>
+        <ChevronDown className={cx("size-4 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <ul className="flex flex-col gap-1 border-l border-secondary pl-3 text-sm">
+          {lookups.map((h, i) => (
+            <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-secondary">{h.task}</span>
+              {h.summary && <span className={cx("text-xs", h.status === "failed" ? "text-error-primary" : "text-tertiary")}>{h.summary}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Work handed to another agent: it runs on its own, so it gets a card with its status. */
 function HandoffCard({ handoff: h }: { handoff: Handoff }) {
   const Icon = AGENT_ICON[h.agent];
   return (
@@ -305,15 +351,14 @@ function HandoffCard({ handoff: h }: { handoff: Handoff }) {
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-medium text-primary">{AGENT_LABEL[h.agent]}</span>
+          <span className="text-sm font-medium text-primary">{h.task}</span>
           <HandoffStatus status={h.status} />
           {h.runId && (
             <Badge color="gray" type="modern" size="sm">
-              Runs on the worker
+              In the background
             </Badge>
           )}
         </div>
-        <p className="text-sm text-tertiary">{h.task}</p>
         {h.summary && <p className="mt-1 text-sm text-secondary">{h.summary}</p>}
       </div>
       {h.costUsd !== undefined && (
@@ -357,7 +402,7 @@ function ActionButton({ action, onRemember }: { action: QuickAction; onRemember:
   if (action.kind === "remember") {
     const statement = action.statement ?? "";
     return (
-      <Tooltip title="Send to the Guardian" description={`“${statement}”`}>
+      <Tooltip title="We check it before it joins the knowledge base" description={`“${statement}”`}>
         <Button
           size="sm"
           color="secondary"
@@ -371,17 +416,17 @@ function ActionButton({ action, onRemember }: { action: QuickAction; onRemember:
               setState("sent");
               toast.add({
                 type: "success",
-                title: "Sent to the Guardian",
-                description: "It checks the statement against the knowledge base before it's admitted.",
+                title: "Sent for review",
+                description: "We check it against the knowledge base before it's added.",
               });
             } catch (err) {
               reportError("chat.remember", err);
               setState("idle");
-              toast.add({ type: "error", title: "Couldn't send it to the Guardian", description: "Try again in a moment." });
+              toast.add({ type: "error", title: "Couldn't send it for review", description: "Try again in a moment." });
             }
           }}
         >
-          {state === "sent" ? "Sent to the Guardian" : action.label}
+          {state === "sent" ? "Sent for review" : action.label}
         </Button>
       </Tooltip>
     );

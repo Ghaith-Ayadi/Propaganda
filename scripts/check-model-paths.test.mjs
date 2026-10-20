@@ -5,6 +5,7 @@ import { scanSource } from "./check-model-paths.mjs";
 
 test("browser chat UI imports of ai and @ai-sdk/react are allowed under app/src", () => {
   assert.deepEqual(scanSource("app/src/lib/chat/useChat.ts", `import { useChat } from "@ai-sdk/react";`), []);
+  assert.deepEqual(scanSource("app/src/lib/chat/useChat.ts", `import { Chat, useChat } from "@ai-sdk/react";`), []);
   assert.deepEqual(scanSource("app/src/lib/chat/types.ts", `import type { UIMessage } from "ai";`), []);
   assert.deepEqual(scanSource("app/src/components/chat/ChatPage.tsx", `import { DefaultChatTransport } from 'ai';`), []);
 });

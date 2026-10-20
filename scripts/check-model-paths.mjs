@@ -7,7 +7,7 @@
 // (@ai-sdk/anthropic, openai, ...) and model-call functions (generateText,
 // streamText, ...). Allowed under app/src only: type imports from `ai` and
 // `@ai-sdk/react`, plus a named allowlist of their runtime exports (the chat
-// UI: useChat, DefaultChatTransport). They post to our own /api and never
+// UI: useChat, the Chat it runs on, DefaultChatTransport). They post to our own /api and never
 // reach a provider. Namespace, default and unlisted named imports (even
 // aliased) are blocked.
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -27,7 +27,7 @@ const HOSTS = [
 const CALLS = /\b(generateText|streamText|generateObject|streamObject|embedMany)\s*\(/;
 const IMPORT = /(?:from|import)\s*\(?\s*["']([^"']+)["']/;
 const UI_PACKAGES = new Set(["ai", "@ai-sdk/react"]);
-const UI_RUNTIME_ALLOWED = new Set(["useChat", "DefaultChatTransport"]);
+const UI_RUNTIME_ALLOWED = new Set(["useChat", "Chat", "DefaultChatTransport"]);
 // import / export-from statements of the UI packages, across lines.
 const UI_STATEMENT = /\b(import|export)\s+(type\s+)?([^;'"]*?)\s*from\s*["'](ai|@ai-sdk\/react)["']/gs;
 const UI_DYNAMIC = /\bimport\s*\(\s*["'](?:ai|@ai-sdk\/react)["']\s*\)|\brequire\s*\(\s*["'](?:ai|@ai-sdk\/react)["']\s*\)/g;

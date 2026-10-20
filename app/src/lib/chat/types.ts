@@ -42,6 +42,8 @@ export interface Citation extends Ref {
 /** Work the Chat agent handed to another agent (or the knowledge base). */
 export interface Handoff {
   agent: AgentName;
+  /** A lookup (a search, the goals, their website) or work handed to another agent. Older replies have neither. */
+  kind?: "lookup" | "agent";
   /** What it was asked, in a few words: "Search the knowledge base for SOC 2". */
   task: string;
   status: "queued" | "running" | "done" | "failed";

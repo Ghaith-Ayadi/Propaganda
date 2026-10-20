@@ -58,6 +58,20 @@ const server = createServer((req, res) => {
         { id: "postbbbbbbbbbbb", title: "Prompt post", status: "draft", type: "Blog", published_at: null, excerpt: "", content_md: `${"y ".repeat(300)}each tests one shared prompt on a topic nobody owns, where no claim can be wrong. ${"z ".repeat(50)}` },
       ]));
     if (u.startsWith("/rest/v1/sites")) return void res.end(JSON.stringify([{ name: "Kontra" }]));
+    if (u.startsWith("/rest/v1/goal_versions")) return void res.end("[]");
+    if (u.startsWith("/rest/v1/strategy_proposals"))
+      return void res.end(JSON.stringify([{
+        quarter: "2026-Q4",
+        status: "sent",
+        proposal: {
+          summary: "The blog answers what a director settles before July.",
+          volume: { value: 20 },
+          topics: [{ name: "What ultra-processed means on a tray", low: 2, high: 4, why: "The Collective session on October 22 gives the first post its material.", basis: "Their site says: the definition diverges (Collective session, Oct 22)." }],
+          questions: ["Can we write a post from the October 22 Collective session?"],
+        },
+        inputs: { website: "https://www.example.com/", pages: ["https://www.example.com/", "https://www.example.com/collective", "https://www.example.com/collective"] },
+      }]));
+    if (u.startsWith("/rest/v1/app_settings")) return void res.end(JSON.stringify([{ value: "https://www.example.com/" }]));
     if (u.startsWith("/rest/v1/rpc/kb_search"))
       return void res.end(JSON.stringify([{ id: "claimaaaaaaaaaa", text: "The starter plan includes 5 seats.", status: "settled", topics: ["Pricing"] }]));
     res.statusCode = 404; res.end("{}");
@@ -287,6 +301,87 @@ test("offer_open says a button shows, and the prompt does not let Chat claim it 
   const action = es.find((e) => e.type === "action");
   assert.ok(action?.type === "action" && action.action.kind === "open" && action.action.target?.kind === "brief");
   assert.ok(es.some((e) => e.type === "handoff" && e.handoff.agent === "pitcher"));
+});
+
+test("read_goals shows a waiting proposal in full: topics, reasons, sources, questions and the pages it read", async () => {
+  const { readGoals } = await import("./lookups.js");
+  const out = await readGoals("t", "siteaaaaaaaaaaa");
+  assert.match(out, /No goals approved yet/);
+  assert.match(out, /PROPOSED goals for 2026-Q4/);
+  assert.match(out, /Topic "What ultra-processed means on a tray": 2 to 4 posts/);
+  assert.match(out, /Based on: Their site says: the definition diverges \(Collective session, Oct 22\)/);
+  assert.match(out, /Can we write a post from the October 22 Collective session\?/);
+  assert.match(out, /Website pages it read \(read_website opens them\): https:\/\/www\.example\.com\/, https:\/\/www\.example\.com\/collective$/);
+});
+
+test("read_website reads only the tenant's own host, follows redirects there, and finds the passage", async () => {
+  const web = await import("./website.js");
+  assert.equal(typeof web.onTheirSite("https://evil.example.org/x", "https://www.example.com/"), "string");
+  assert.equal((web.onTheirSite("/collective", "https://www.example.com/") as URL).toString(), "https://www.example.com/collective");
+  assert.equal((web.onTheirSite("https://example.com/a", "https://www.example.com/") as URL).hostname, "example.com");
+  const html = `<html><head><title>Gaia Collective</title><script>x()</script></head><body><nav>Menu</nav><main>${"<p>Filler.</p>".repeat(900)}<h3>Making Sense of Ultra-Processed Foods</h3><p>Upcoming &middot; Oct 22. Tarrah Westercamp talks.</p></main></body></html>`;
+  web.setWebsiteTransport(async (u) => {
+    if (u.pathname === "/old") return { status: 301, headers: { location: "/collective" }, body: "" };
+    if (u.pathname === "/off") return { status: 302, headers: { location: "https://elsewhere.org/" }, body: "" };
+    return { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: html };
+  });
+  const r = await web.readWebsite("t", "siteaaaaaaaaaaa", "/old", "ultra-processed Oct 22", 1_000);
+  assert.ok(r.ok);
+  assert.equal(r.page.url, "https://www.example.com/collective");
+  assert.equal(r.page.title, "Gaia Collective");
+  assert.match(r.page.text, /### Making Sense of Ultra-Processed Foods/);
+  assert.match(r.page.text, /Oct 22\. Tarrah Westercamp/);
+  assert.doesNotMatch(r.page.text, /Menu|x\(\)/);
+  const off = await web.readWebsite("t", "siteaaaaaaaaaaa", "/off");
+  assert.ok(!off.ok && /off their site/.test(off.reason));
+  assert.equal(typeof web.onTheirSite("https://www.example.com:9001/", "https://www.example.com/"), "string");
+  web.setWebsiteTransport(null);
+});
+
+test("read_website's address guard: embedded IPv4 forms, and the address checked is the one connected to", async () => {
+  const web = await import("./website.js");
+  for (const ip of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "100.64.0.1", "192.0.0.8", "198.18.0.1", "::1", "::", "fe80::1", "fd00::1",
+    "::ffff:7f00:1", "[::ffff:7f00:1]", "::ffff:127.0.0.1", "::ffff:a9fe:a9fe", "64:ff9b::7f00:1", "2002:7f00:1::", "2001:db8::1", "ff02::1", "not-an-ip"]) {
+    assert.equal(web.isPublicAddress(ip), false, ip);
+  }
+  for (const ip of ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946", "::ffff:5db8:d822", "2002:5db8:d822::1"]) assert.equal(web.isPublicAddress(ip), true, ip);
+  assert.equal(new URL("http://[::ffff:127.0.0.1]:9001/").hostname, "[::ffff:7f00:1]");
+
+  assert.equal(web.isPublicAddress(new URL("http://[::ffff:a9fe:a9fe]/").hostname), false);
+
+  // The lookup the socket connects through resolves once and checks that answer:
+  // a host that answers public first and loopback next is refused the second time.
+  let calls = 0;
+  const lookup = web.guardedLookup(async () => (++calls === 1 ? ["93.184.216.34"] : ["93.184.216.34", "127.0.0.1"]));
+  const ask = () =>
+    new Promise<{ err: string; address: unknown }>((r) =>
+      lookup("rebind.example.com", { all: true }, (err, address) => r({ err: err?.message ?? "", address })),
+    );
+  const first = await ask();
+  assert.equal(first.err, "");
+  assert.deepEqual(first.address, [{ address: "93.184.216.34", family: 4 }]);
+  const second = await ask();
+  assert.match(second.err, /not a public address: rebind\.example\.com \(127\.0\.0\.1\)/);
+  assert.equal(calls, 2);
+
+  // The real request path: their host resolving to loopback is refused at connect.
+  web.setWebsiteTransport(null, async () => ["127.0.0.1"]);
+  const r = await web.readWebsite("t", "siteaaaaaaaaaaa", "/");
+  assert.ok(!r.ok && /not a public address/.test(r.reason), JSON.stringify(r));
+  web.setWebsiteTransport(null, async () => ["::ffff:7f00:1"]);
+  const r2 = await web.readWebsite("t", "siteaaaaaaaaaaa", "/");
+  assert.ok(!r2.ok && /not a public address/.test(r2.reason), JSON.stringify(r2));
+});
+
+test("a reply that promises a button without offer_open gets one for what it cited", () => {
+  const c = { kind: "brief" as const, id: "briefaaaaaaaaaa", label: "Parents call any food they distrust ultra-processed", n: 1 };
+  const a = agent.promisedButton("The button below opens that pitch.", [c], false);
+  assert.equal(a?.kind, "open");
+  assert.equal(a?.target?.id, "briefaaaaaaaaaa");
+  assert.equal(agent.promisedButton("The button below opens it.", [c], true), null);
+  assert.equal(agent.promisedButton("That pitch says so.", [c], false), null);
+  assert.equal(agent.pageName("https://www.example.com/collective/"), "/collective");
+  assert.equal(agent.pageName("https://www.example.com/"), "the home page");
 });
 
 test.after(() => server.close());
