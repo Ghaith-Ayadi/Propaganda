@@ -24,7 +24,7 @@ export { pitcher, pitchFromRequest } from "./pitcher.js";
 export { writer, reviser, briefForTask } from "./writer.js";
 export { voiceGuideWorkflow, DEFAULT_VOICE } from "./voice.js";
 export { saveVoiceGuide } from "./store.js";
-export { pitchBatch, dailyBatches } from "./pitcher.js";
+export { pitchBatch, dailyBatches, keepLearned, ATTRIBUTION_RULE } from "./pitcher.js";
 export { nextQuota, approvalRate, pitchesFor, unassigned } from "./batches.js";
 export { similarity, nearest } from "./taste.js";
 export { voiceSuggest, diffDraft } from "./edits.js";

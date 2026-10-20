@@ -35,7 +35,7 @@ import { APPROVED, approvalRate, isOpen, nextQuota, pitchesFor, targetMet, type 
 import { isoWeek, quarterOf, readGoals, standing, type CountedPost, type Goals } from "./goals.js";
 import { claimsFor, renderClaims } from "./kb.js";
 import { overusedIdeas, overusedLine } from "./motifs.js";
-import { nearest, readTaste, renderTaste, seenLine, type Seen } from "./taste.js";
+import { nearest, readTaste, renderTaste, seenLine, type Seen, type Taste } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
 import { HOUSE_STYLE, RULE_NAMES, TITLE_RULES, houseTitleHits, noDashes, titleHits, type PolishStats } from "./writing.js";
@@ -261,6 +261,17 @@ export const ANGLE_RULES = `The angle and the sources:
 - Sources prefer primary ones: studies, official documentation, the people involved. A source from the ranking list is fine when it is one of those.
 - Never write the state of the knowledge base into a pitch (an empty one included), and keep the "learned" line to the one decision or note that shaped the pitch.`;
 
+/**
+ * Who said what (2026-10-20: a pitch told the tenant "You said the October 22
+ * session gives the first post its material" when that sentence was the
+ * Strategist's, read off the tenant's website). Only the tenant's own words
+ * are "you said"; everything else is named by where it came from.
+ */
+export const ATTRIBUTION_RULE = `Who said what:
+- "You said", "your note", "your answer" and "your decision" are only for the tenant's own words: a reviewer's note or decision in the taste section, or the tenant's own words about what it wants. Nothing else is them talking to you.
+- The Strategist's plan, an idea's summary and evidence, the website, a call, a search result and a knowledge base claim are named by what they are: "the plan says", "your site says", "on the October 22 call", "a claim in the knowledge base". A sentence from the plan or the site is never "you said".
+- The "learned" line names one reviewer decision or note from the taste section that shaped this pitch, and says which. When no decision or note shaped it, the line is empty, whatever else did.`;
+
 export const PITCHER_SYSTEM = `You are the Pitcher for Propaganda, a content team that runs a tenant's blog. You turn ideas into pitches that serve the tenant's goals for the quarter. You are blunt about weak ideas: an idea with no reason to be written now is rejected and kept for later, and that's a good outcome.
 You never write the post. You write briefs a writer can work from.
 Use "tenant" for the business you work for. Never invent facts about the tenant: what it knows is in the knowledge base claims you're given.
@@ -270,7 +281,19 @@ ${HOUSE_STYLE}
 
 ${TITLE_RULES}
 
-${ANGLE_RULES}`;
+${ANGLE_RULES}
+
+${ATTRIBUTION_RULE}`;
+
+/**
+ * The "learned" line stands only when the tenant has said something to learn
+ * from: a reviewer's note or decision, or its own words about its taste. A
+ * line written with none of those turns the plan, the site or a call into
+ * "you said", so it goes.
+ */
+export function keepLearned(learned: string, taste: Pick<Taste, "notes" | "recent">): string {
+  return taste.notes.trim() || taste.recent.trim() ? learned : "";
+}
 
 /**
  * A title that breaks the title rules is asked for again, once, in a small call
@@ -525,10 +548,12 @@ ${renderTaste(taste)}
 ${lean.length ? `\nIdeas the pipeline already leans on: ${overusedLine(lean)} (how many titles carry each). Don't build this pitch around one of them; if it comes up, give it a clause, not the argument.\n` : ""}${input.topUp ? `\nThis is a top-up: ${input.topUp}\n` : ""}${j.changed ? `\nThis is close to something pitched before (${seenLine(close.get(idea.id)!)}). What changed since: ${j.changed} Make the brief about what changed.\n` : ""}
 
 Answer with JSON only:
-{"title": "a specific, slightly provocative title: one plain statement under twelve words, by the title rules", "why": "one sentence: why this, why now", "angle": "the claim this post makes that the person searching needs and the ranking pages don't give them; never a rebuttal of a page or a format", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the decision or note that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,
+{"title": "a specific, slightly provocative title: one plain statement under twelve words, by the title rules", "why": "one sentence: why this, why now", "angle": "the claim this post makes that the person searching needs and the ranking pages don't give them; never a rebuttal of a page or a format", "audience": "who it's for and what they need", "length": "e.g. 1,000 to 1,400 words", "collection": "one of the collections", "outline": ["4 to 10 lines, each a section as a claim"], "sources": [{"url": "only URLs from the evidence or the search results above", "label": "what it backs"}], "learned": "one line, addressed to the tenant, naming the reviewer decision or note (from the taste section only) that shaped this pitch, e.g. Written after your note on batch 2: no product pitch in the intro. Empty if none applied."}`,
       },
       parsePitch(allowed, collectionNames),
     );
+    // With no decision or note to learn from, the line can only be putting words in the tenant's mouth.
+    written = { ...written, learned: keepLearned(written.learned, taste) };
     // The twenty rules (2026-10-12): hard checks on the title, then one polish
     // call on the brief. Runs recorded before them replay without either.
     const styled = await DBOS.patch("pitcher-house-style");
