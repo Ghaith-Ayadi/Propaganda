@@ -55,6 +55,30 @@ const KEYWORDS = [
   { keyword: "crm", vol: 450000, kd: 92 },
 ];
 const labsItem = (k) => ({ keyword: k.keyword, keyword_info: { search_volume: k.vol }, keyword_properties: { keyword_difficulty: k.kd } });
+const months = (vol) => Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: 12 - i, search_volume: i < 6 ? Math.round(vol * 1.2) : vol }));
+/** An overview row with SERP info: page one's links, the intent, a year of months and, on some, an AI overview. */
+const richItem = (k) => ({
+  ...labsItem(k),
+  keyword_info: { search_volume: k.vol, monthly_searches: months(k.vol) },
+  serp_info: { serp_item_types: k.ai ? ["organic", "ai_overview"] : ["organic"] },
+  avg_backlinks_info: { referring_main_domains: k.links },
+  search_intent_info: { main_intent: "informational" },
+});
+/** A small stable hash of a phrase, so a real model's own vocabulary prices the same way on every run. */
+const hashOf = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+/**
+ * The numbers behind any phrase the model asks about: the listed ones as listed; the rest by hash,
+ * most of them winnable (under 30 links and difficulty 30), one in five a must-win (bigger, harder),
+ * one in five unknown to Labs (Google Ads may still price it, below), as real data looks.
+ */
+function priced(keyword) {
+  const known = KEYWORDS.find((k) => k.keyword === keyword);
+  if (known) return { ...known, links: known.kd < 30 ? 6 + (known.kd % 20) : 60 + known.kd, ai: known.kd % 2 === 0 };
+  const h = hashOf(keyword);
+  if (h % 5 === 0) return null;
+  if (h % 5 === 1) return { keyword, vol: 300 + (h % 900), kd: 32 + (h % 18), links: 45 + (h % 50), ai: h % 3 === 0 };
+  return { keyword, vol: 60 + (h % 700), kd: 6 + (h % 22), links: 4 + (h % 24), ai: h % 3 === 0 };
+}
 const realFetch = globalThis.fetch;
 async function web(input, init) {
   const url = String(input);
@@ -62,6 +86,25 @@ async function web(input, init) {
     if (url.includes("keyword_suggestions")) return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items: KEYWORDS.map(labsItem) }] }] });
     if (url.includes("related_keywords")) return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items: [] }] }] });
     if (url.includes("ranked_keywords")) return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items: [] }] }] });
+    if (url.includes("keyword_overview")) {
+      const task = JSON.parse(init.body)[0];
+      const rows = task.keywords.map(priced).filter(Boolean);
+      return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items: rows.map((k) => (task.include_serp_info ? richItem(k) : labsItem(k))) }] }] });
+    }
+    if (url.includes("google_ads/search_volume")) {
+      // Google Ads knows half of what Labs does not, at a lower volume.
+      const asked = JSON.parse(init.body)[0].keywords;
+      const rows = asked.filter((k) => !priced(k) && hashOf(k) % 2 === 0).map((k) => ({ keyword: k, search_volume: 40 + (hashOf(k) % 60), monthly_searches: months(40 + (hashOf(k) % 60)) }));
+      return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: rows }] });
+    }
+    if (url.includes("serp_competitors")) {
+      const items = [
+        { domain: "www.pipedrive.com", keywords_count: 6, avg_position: 3.2 },
+        { domain: "www.close.com", keywords_count: 4, avg_position: 5.8 },
+        { domain: "www.youtube.com", keywords_count: 3, avg_position: 12.1 },
+      ];
+      return Response.json({ status_code: 20000, cost: 0, tasks: [{ status_code: 20000, result: [{ items }] }] });
+    }
     if (url.includes("serp/google/organic")) {
       return Response.json({ cost: 0, tasks: [{ status_code: 20000, result: [{ items: [
         { type: "organic", url: "https://www.pipedrive.com/en/blog/sales-follow-up", title: "Sales follow-up", rank_absolute: 1 },
@@ -103,16 +146,19 @@ try {
   check(p.kind === "onboarding" && p.quarter && p.covers?.from && p.launch?.target >= 3, "with its window and the Launch");
   check(typeof p.summary === "string" && p.summary.length > 20, "a summary");
   check(p.volume?.value > 0 && p.volume.why && p.volume.basis, "a volume target with its reason and basis");
-  check(Array.isArray(p.topics) && p.topics.length >= 1 && p.topics.length <= 4, `1 to 4 topics (${p.topics?.map((x) => x.name).join(", ")})`);
+  check(Array.isArray(p.topics) && p.topics.length >= 1 && p.topics.length <= t.TOPICS_MAX, `1 to ${t.TOPICS_MAX} topics (${p.topics?.map((x) => x.name).join(", ")})`);
   const searches = p.ranking?.searches ?? [];
   check(searches.length >= 3 && searches.every((s) => p.topics.some((x) => x.name === s.topic)), `target searches, each in a topic (${searches.map((s) => s.query).join(", ")})`);
+  check(typeof p.profile === "string" && p.profile.length > 40, "the tenant's profile, as the model read it");
+  check(searches.every((s) => t.bucketNamed(s.bucket)) && searches.some((s) => s.bucket === "now"), `every search in a bucket, some winnable now (${searches.map((s) => `${s.query}: ${s.bucket}`).join("; ")})`);
   check(!searches.some((s) => s.query === "crm"), "not the head term a new domain can't win");
   check(p.readership?.value == null, "no Readership target without readers");
   check(Array.isArray(p.questions), "questions for the tenant");
   const calls = db.model_calls.filter((c) => c.job === "strategist" && !String(c.model).startsWith("dataforseo/"));
   check(calls.length >= 1 && calls.every((c) => c.status === "ok" && c.priced), `every model call logged and priced (${calls.length})`);
-  check(calls.length <= 4, `two drafts at most, each with one retry for bad JSON (${calls.length} calls)`);
-  const first = await t.DBOS.retrieveWorkflow(t.firstPitchesId("liveproposal001")).getResult();
+  check(calls.length <= 5, `the vocabulary, then two drafts at most, each with one retry for bad JSON (${calls.length} calls)`);
+  // Only a sent proposal starts the first pitches; waiting on them after a failure never returns.
+  const first = res.status === "sent" ? await t.DBOS.retrieveWorkflow(t.firstPitchesId("liveproposal001")).getResult() : null;
   check(/Lite/.test(first?.skipped ?? ""), `sending started the first pitches (skipped here: ${first?.skipped})`);
 } catch (err) {
   // A run that throws is a failure like any other; the cost so far is still reported.
