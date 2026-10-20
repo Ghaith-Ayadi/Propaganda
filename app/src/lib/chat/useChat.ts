@@ -4,7 +4,7 @@
 // the placeholder for the real backend changes no UI.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useChat } from "@ai-sdk/react";
+import { Chat, useChat } from "@ai-sdk/react";
 import { newId } from "@/lib/supabase";
 import { reportError, track } from "@/lib/telemetry";
 import { chatBackend } from "./adapter";
@@ -39,6 +39,7 @@ export function useConversations(site: string) {
   const remove = useCallback(
     async (id: string) => {
       await chatBackend.deleteConversation(site, id);
+      dropLiveChat(site, id);
       setConversations((cs) => (cs ?? []).filter((c) => c.id !== id));
     },
     [site],
@@ -56,10 +57,78 @@ export function useConversations(site: string) {
   return { conversations, create, remove, touch, placeholder: chatBackend.placeholder };
 }
 
+/** What a conversation's Chat reports to the page showing it, kept current by useConversation. */
+interface Listener {
+  touch: (id: string, patch: Partial<Conversation>) => void;
+}
+
+interface Live {
+  chat: Chat<ChatUIMessage>;
+  /** Its messages came from the server, or it started here: never load over it. */
+  loaded: boolean;
+}
+
+/**
+ * Conversations live outside the page: one Chat per (site, conversation) for
+ * the whole visit. Leaving the Chat page, or switching conversation, used to
+ * drop useChat's own instance, which stopped a reply mid-stream and lost
+ * what the next load hadn't stored yet; now a reply keeps streaming and the
+ * conversation is as it was when the reader comes back.
+ */
+const live = new Map<string, Live>();
+const listeners = new Map<string, Listener>();
+const MAX_LIVE = 30;
+
+function liveChat(site: string, id: string): Live {
+  const key = `${site}:${id}`;
+  const found = live.get(key);
+  if (found) {
+    // Most recently used last, so the oldest idle one goes first.
+    live.delete(key);
+    live.set(key, found);
+    return found;
+  }
+  const entry: Live = {
+    loaded: false,
+    chat: new Chat<ChatUIMessage>({
+      id,
+      transport: chatBackend.transport(site),
+      onData: (part) => {
+        if (part.type === "data-title") listeners.get(site)?.touch(id, { title: part.data.title });
+      },
+      onFinish: ({ messages, isAbort }) => {
+        let out = messages;
+        if (isAbort) {
+          const last = out[out.length - 1];
+          if (last?.role === "assistant") {
+            out = [...out.slice(0, -1), { ...last, metadata: { ...last.metadata, stopped: true } }];
+            entry.chat.messages = out;
+          }
+        }
+        listeners.get(site)?.touch(id, {});
+        chatBackend.saveMessages(site, id, out).catch((err) => reportError("chat.saveMessages", err));
+      },
+      onError: (err) => reportError("chat.send", err),
+    }),
+  };
+  live.set(key, entry);
+  for (const [k, v] of live) {
+    if (live.size <= MAX_LIVE) break;
+    if (v.chat.status === "ready" || v.chat.status === "error") live.delete(k);
+  }
+  return entry;
+}
+
+/** Forgets a deleted conversation's live state. */
+export function dropLiveChat(site: string, id: string) {
+  live.get(`${site}:${id}`)?.chat.stop();
+  live.delete(`${site}:${id}`);
+}
+
 /**
  * One conversation. `activeId` is the open conversation, or null for a new
- * chat: then useChat runs on a fresh draft id, and the first message creates
- * the conversation under that same id, so the chat isn't interrupted when the
+ * chat: then it runs on a fresh draft id, and the first message creates the
+ * conversation under that same id, so the chat isn't interrupted when the
  * page moves to it.
  */
 export function useConversation(
@@ -72,58 +141,42 @@ export function useConversation(
   },
 ) {
   const [draftId, setDraftId] = useState(newId);
-  const started = useRef(new Set<string>());
   const chatId = activeId ?? draftId;
+  const entry = useMemo(() => liveChat(site, chatId), [site, chatId]);
 
-  // Back on "New chat" after using the draft: mint the next one.
-  useEffect(() => {
-    if (activeId === null && started.current.has(draftId)) setDraftId(newId());
-  }, [activeId, draftId]);
-
-  const transport = useMemo(() => chatBackend.transport(site), [site]);
   const optsRef = useRef(opts);
   optsRef.current = opts;
-  const setMessagesRef = useRef<(ms: ChatUIMessage[]) => void>(() => {});
-
-  const chat = useChat<ChatUIMessage>({
-    id: chatId,
-    transport,
-    onData: (part) => {
-      if (part.type === "data-title") optsRef.current.touch(chatId, { title: part.data.title });
-    },
-    onFinish: ({ messages, isAbort, isError }) => {
-      let out = messages;
-      if (isAbort) {
-        const last = out[out.length - 1];
-        if (last?.role === "assistant") {
-          out = [...out.slice(0, -1), { ...last, metadata: { ...last.metadata, stopped: true } }];
-          setMessagesRef.current(out);
-        }
-      }
-      optsRef.current.touch(chatId, {});
-      chatBackend.saveMessages(site, chatId, out).catch((err) => reportError("chat.saveMessages", err));
-    },
-    onError: (err) => reportError("chat.send", err),
-  });
-
-  // Opening a saved conversation: load what it said. A conversation this hook
-  // just started already has its messages in useChat.
-  const [loading, setLoading] = useState(false);
-  const { setMessages } = chat;
-  setMessagesRef.current = setMessages;
   useEffect(() => {
-    if (!activeId || started.current.has(activeId)) return;
-    let live = true;
-    setLoading(true);
+    listeners.set(site, { touch: (id, patch) => optsRef.current.touch(id, patch) });
+  }, [site]);
+
+  // Back on "New chat" after the draft became a conversation: mint the next draft.
+  useEffect(() => {
+    if (activeId === null && live.get(`${site}:${draftId}`)?.loaded) setDraftId(newId());
+  }, [activeId, draftId, site]);
+
+  const chat = useChat<ChatUIMessage>({ chat: entry.chat });
+
+  // Opening a saved conversation: load what it said, once per visit. One that
+  // is streaming or was started here already holds its messages.
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeId || entry.loaded) return;
+    entry.loaded = true;
+    setLoadingId(activeId);
     chatBackend
       .loadMessages(site, activeId)
-      .then((ms) => live && setMessages(ms))
-      .catch((err) => reportError("chat.loadMessages", err))
-      .finally(() => live && setLoading(false));
-    return () => {
-      live = false;
-    };
-  }, [site, activeId, setMessages]);
+      .then((ms) => {
+        // A reply that began while this loaded wins over the stored copy.
+        if (entry.chat.messages.length === 0) entry.chat.messages = ms;
+      })
+      .catch((err) => {
+        entry.loaded = false;
+        reportError("chat.loadMessages", err);
+      })
+      .finally(() => setLoadingId((cur) => (cur === activeId ? null : cur)));
+  }, [site, activeId, entry]);
+  const loading = loadingId !== null && loadingId === activeId;
 
   const busy = chat.status === "submitted" || chat.status === "streaming";
 
@@ -132,14 +185,14 @@ export function useConversation(
       const body = text.trim();
       if (!body || busy) return;
       if (!activeId) {
-        started.current.add(chatId);
+        entry.loaded = true;
         await optsRef.current.create(chatId);
         optsRef.current.onStarted(chatId);
       }
       track("chat_message_sent");
       await chat.sendMessage({ text: body });
     },
-    [activeId, chatId, busy, chat],
+    [activeId, chatId, busy, chat, entry],
   );
 
   const remember = useCallback(

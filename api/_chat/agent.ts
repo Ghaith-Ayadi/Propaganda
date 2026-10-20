@@ -18,7 +18,7 @@ import { report } from "../_telemetry.js";
 import { CitationStream, Sources } from "./citations.js";
 import { siteName } from "./lookups.js";
 import { chatTools, historyMessages, systemPrompt } from "./toolkit.js";
-import type { AgentName, ChatEvent, ChatUIMessage, Handoff, QuickAction } from "./types.js";
+import type { AgentName, ChatEvent, ChatUIMessage, Citation, Handoff, QuickAction } from "./types.js";
 
 export { historyMessages };
 
@@ -37,6 +37,29 @@ export interface ChatTurn {
   /** Earlier messages of the conversation, oldest first, without this turn. */
   history: ChatUIMessage[];
   signal: AbortSignal;
+}
+
+/** "/collective" for https://www.example.com/collective, "the home page" for the root. */
+export function pageName(raw: string | undefined): string {
+  try {
+    const path = new URL(raw || "/", "https://x.invalid").pathname.replace(/\/+$/, "");
+    return path ? path : "the home page";
+  } catch {
+    return "a page";
+  }
+}
+
+/**
+ * The Open button a reply talks about when the model wrote "the button below"
+ * without calling offer_open: the first post, pitch or claim it cited, so the
+ * reply stays true. Null when it offered one, or said nothing of a button.
+ */
+export function promisedButton(text: string, cited: Citation[], offered: boolean): QuickAction | null {
+  if (offered || !/\bbutton\b/i.test(text)) return null;
+  const c = cited.find((x) => x.kind === "post" || x.kind === "brief" || x.kind === "claim");
+  if (!c) return null;
+  const label = c.kind === "claim" ? "Open the claim" : `Open “${c.label.length > 40 ? `${c.label.slice(0, 38)}…` : c.label}”`;
+  return { kind: "open", label, target: { kind: c.kind, id: c.id, label: c.label } };
 }
 
 /** What the reader sees for a failure, in their words. Unexpected ones are reported. */
@@ -87,12 +110,23 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
   const tools = chatTools({ ...turn, tenant, sources, pending });
 
   // Which agent a lookup shows as, and how its task reads.
-  const shown: Record<string, (input: Record<string, string>) => { agent: AgentName; task: string } | null> = {
-    search_knowledge: (i) => ({ agent: "guardian", task: `Search the knowledge base for “${i.query}”` }),
-    search_posts: (i) => ({ agent: "chat", task: `Search posts for “${i.query}”` }),
-    search_pitches: (i) => ({ agent: "pitcher", task: `Search pitches and ideas for “${i.query}”` }),
-    read_goals: () => ({ agent: "strategist", task: "Read the approved goals" }),
-    ask_agent: (i) => ({ agent: i.agent as AgentName, task: i.task }),
+  const shown: Record<string, (input: Record<string, string>) => Pick<Handoff, "agent" | "kind" | "task"> | null> = {
+    search_knowledge: (i) => ({ agent: "guardian", kind: "lookup", task: `Searched the knowledge base for “${i.query}”` }),
+    search_posts: (i) => ({ agent: "chat", kind: "lookup", task: `Searched posts for “${i.query}”` }),
+    search_pitches: (i) => ({ agent: "pitcher", kind: "lookup", task: `Searched pitches and ideas for “${i.query}”` }),
+    read_goals: () => ({ agent: "strategist", kind: "lookup", task: "Read the goals and the strategy" }),
+    read_website: (i) => ({ agent: "chat", kind: "lookup", task: `Read ${pageName(i.url)} on their website` }),
+    ask_agent: (i) => ({ agent: i.agent as AgentName, kind: "agent", task: i.task }),
+  };
+  // What the reply said, cited and offered: a reply that promises a button gets one.
+  let said = "";
+  const cited: Citation[] = [];
+  let offeredOpen = false;
+  const watch = (e: ChatEvent): ChatEvent => {
+    if (e.type === "text") said += e.delta;
+    else if (e.type === "citation") cited.push(e.citation);
+    else if (e.type === "action" && e.action.kind === "open") offeredOpen = true;
+    return e;
   };
 
   let stream;
@@ -118,10 +152,10 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
     for await (const part of stream.parts) {
       switch (part.type) {
         case "text-delta":
-          yield* cites.push(part.text);
+          for (const e of cites.push(part.text)) yield watch(e);
           break;
         case "tool-call": {
-          yield* cites.flush();
+          for (const e of cites.flush()) yield watch(e);
           const view = shown[part.toolName]?.(part.input as Record<string, string>);
           if (view) {
             const h: Handoff = { ...view, status: "running" };
@@ -143,7 +177,7 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
             handoffs.set(part.toolCallId, next);
             yield { type: "handoff", id: part.toolCallId, handoff: next };
           }
-          for (const a of pending.splice(0)) yield { type: "action", action: a };
+          for (const a of pending.splice(0)) yield watch({ type: "action", action: a });
           break;
         }
         case "tool-error": {
@@ -153,9 +187,11 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
         }
       }
     }
-    yield* cites.flush();
+    for (const e of cites.flush()) yield watch(e);
     // Stopped: the reader already marks the reply; the stopped call is in the cost log.
     if (turn.signal.aborted) return;
+    const promised = promisedButton(said, cited, offeredOpen);
+    if (promised) yield { type: "action", action: promised };
     yield { type: "done", costUsd: stream.costUsd() };
   } catch (err) {
     yield* cites.flush();

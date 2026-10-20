@@ -87,7 +87,7 @@ export function ChatPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Chat"
-        description={`Ask the agent about anything in ${site?.name ?? "your site"}: pitches, goals, the knowledge base.`}
+        description={`Ask about anything in ${site?.name ?? "your site"}: pitches, goals, the knowledge base.`}
         actions={
           <>
             {placeholder && (
@@ -191,8 +191,8 @@ function Welcome({ onPick }: { onPick: (s: string) => void }) {
         </span>
         <h2 className="type-title text-primary">What do you want to know?</h2>
         <p className="max-w-md text-sm text-tertiary">
-          The agent answers from your knowledge base and your content, and brings in the other agents when it needs
-          them: the Pitcher for a pitch, the Checker for a flag, the Strategist for your goals.
+          We answer from your knowledge base, your strategy, your pitches and posts, and your website. Work that
+          takes longer, like a new pitch or a check, runs in the background and shows up here.
         </p>
       </div>
       <div className="flex w-full max-w-2xl flex-col gap-2">
@@ -314,7 +314,7 @@ function Composer({ streaming, onSend, onStop }: { streaming: boolean; onSend: (
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Ask something"
-          aria-label="Message the agent"
+          aria-label="Ask something"
           className="max-h-50 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm text-primary outline-hidden placeholder:text-placeholder"
         />
         {streaming ? (

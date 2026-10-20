@@ -234,39 +234,109 @@ export async function remember(token: string, site: string, statement: string): 
   }
 }
 
+interface TopicLine {
+  name: string;
+  low?: number;
+  high?: number;
+  thesis?: string;
+  why?: string;
+  basis?: string;
+}
+
+interface SearchLine {
+  query: string;
+  topic?: string;
+  why?: string;
+}
+
 interface GoalVersionRow {
   quarter: string;
   version: number;
   targets: {
-    volume?: { total?: number; topics?: { name: string; low: number; high: number }[] };
-    ranking?: { searches?: { query: string; topic: string }[]; pageOneTarget?: number };
+    volume?: { total?: number; topics?: TopicLine[] };
+    ranking?: { searches?: SearchLine[]; pageOneTarget?: number | { value?: number } };
   } | null;
 }
 
+/** A proposal as the Strategist wrote it (worker/src/agents/strategy.ts): what Goals shows before approval. */
+interface ProposalRow {
+  quarter: string;
+  status: string;
+  proposal: {
+    summary?: string;
+    topics?: TopicLine[];
+    volume?: { value?: number; why?: string };
+    ranking?: { searches?: SearchLine[] };
+    questions?: string[];
+  } | null;
+  inputs: { website?: string; pages?: string[] } | null;
+}
+
+const clip = (s: unknown, n = 400) => {
+  const t = typeof s === "string" ? s.replace(/\s+/g, " ").trim() : "";
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+};
+
+/** A topic with the reasons the Strategist gave for it: where a pitch's angle and timing come from. */
+function topicLines(topics: TopicLine[]): string[] {
+  return topics.map((t) => {
+    const range = t.low !== undefined && t.high !== undefined ? `: ${t.low} to ${t.high} posts` : "";
+    const bits = [
+      t.thesis && `Thesis: ${clip(t.thesis)}`,
+      t.why && `Why now: ${clip(t.why)}`,
+      t.basis && `Based on: ${clip(t.basis)}`,
+    ].filter(Boolean);
+    return `- Topic "${t.name}"${range}.${bits.length ? ` ${bits.join(" ")}` : ""}`;
+  });
+}
+
+const searchLine = (searches: SearchLine[]) =>
+  searches.length ? `Searches to rank for: ${searches.map((s) => `"${s.query}"${s.topic ? ` (${s.topic})` : ""}`).join(", ")}.` : "";
+
 /**
- * The tenant's approved goals for the newest quarter, and whether a proposal
- * from the Strategist is being written or waits on approval: what Chat reads
- * before it answers "what should we write" or asks the Strategist for anything.
+ * The tenant's approved goals for the newest quarter, and the Strategist's
+ * proposal that is being written or waits on approval, in full: its topics and
+ * the reasons and sources behind them, the searches, its questions to the
+ * operator and the website pages it read. Chat reads it before it answers
+ * "what should we write", "why this pitch" or a question about the strategy.
  */
 export async function readGoals(token: string, site: string): Promise<string> {
   const db = asUser(token);
   const [versions, proposals] = await Promise.all([
     db.get<GoalVersionRow[]>(`/goal_versions?select=quarter,version,targets&site=${eq(site)}&order=quarter.desc,version.desc&limit=1`),
-    db.get<{ quarter: string; status: string }[]>(`/strategy_proposals?select=quarter,status&site=${eq(site)}&status=in.(requested,running,sent)`),
+    db.get<ProposalRow[]>(
+      `/strategy_proposals?select=quarter,status,proposal,inputs&site=${eq(site)}&status=in.(requested,running,sent)&order=created.desc&limit=2`,
+    ),
   ]);
   const lines: string[] = [];
   const v = versions[0];
   if (v) {
     const vol = v.targets?.volume;
     lines.push(`Approved goals for ${v.quarter} (version ${v.version}): ${vol?.total ?? "?"} posts planned.`);
-    for (const t of vol?.topics ?? []) lines.push(`- Topic "${t.name}": ${t.low} to ${t.high} posts`);
+    lines.push(...topicLines(vol?.topics ?? []));
     const searches = v.targets?.ranking?.searches ?? [];
-    if (searches.length) lines.push(`Ranking: page one for ${v.targets?.ranking?.pageOneTarget ?? 0} of these searches: ${searches.map((s) => `"${s.query}"`).join(", ")}.`);
+    const target = v.targets?.ranking?.pageOneTarget;
+    const n = typeof target === "number" ? target : target?.value;
+    if (searches.length) lines.push(`Ranking: page one for ${n ?? 0} of these. ${searchLine(searches)}`);
   } else {
     lines.push("No goals approved yet.");
   }
   for (const p of proposals) {
-    lines.push(p.status === "sent" ? `A Strategist proposal for ${p.quarter} is waiting on the operator's approval in Goals.` : `The Strategist is already writing a proposal for ${p.quarter}.`);
+    if (p.status !== "sent") {
+      lines.push(`The Strategist is already writing a proposal for ${p.quarter}.`);
+      continue;
+    }
+    const prop = p.proposal ?? {};
+    lines.push("", `PROPOSED goals for ${p.quarter}, waiting on the operator's approval in Goals (not approved, so call them "the proposal"):`);
+    if (prop.summary) lines.push(`Summary: ${clip(prop.summary)}`);
+    if (prop.volume?.value) lines.push(`${prop.volume.value} posts planned.${prop.volume.why ? ` ${clip(prop.volume.why)}` : ""}`);
+    lines.push(...topicLines(prop.topics ?? []));
+    const s = searchLine(prop.ranking?.searches ?? []);
+    if (s) lines.push(s);
+    if (prop.questions?.length) lines.push("Questions it asks the operator:", ...prop.questions.map((q) => `- ${clip(q)}`));
+    // "Their site says" in a basis is one of these pages: read_website opens them.
+    const pages = [...new Set(p.inputs?.pages ?? [])];
+    if (pages.length) lines.push(`Website pages it read (read_website opens them): ${pages.join(", ")}`);
   }
   return lines.join("\n");
 }

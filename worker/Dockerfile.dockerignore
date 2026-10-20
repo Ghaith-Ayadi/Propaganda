@@ -14,6 +14,7 @@
 !api/_ai/houseStyle.ts
 !api/_chat/toolkit.ts
 !api/_chat/lookups.ts
+!api/_chat/website.ts
 !api/_chat/db.ts
 !api/_chat/citations.ts
 !api/_chat/dispatch.ts

@@ -9,6 +9,7 @@ import { HOUSE_STYLE } from "../_ai/houseStyle.js";
 import type { Sources } from "./citations.js";
 import { DISPATCHABLE, dispatch, type DispatchResult } from "./dispatch.js";
 import { readGoals, searchKnowledge, searchPitches, searchPosts } from "./lookups.js";
+import { readWebsite } from "./website.js";
 import type { ChatUIMessage, QuickAction } from "./types.js";
 
 const AGENT_JOBS: Record<string, string> = {
@@ -27,14 +28,15 @@ export function systemPrompt(tenant: string): string {
 Propaganda keeps a knowledge base of what ${tenant} actually believes (claims, each one plain sentence, settled or contested) and turns it into posts. You answer questions about their content, goals and knowledge, and you hand work to the other agents.
 
 How you work:
-1. Look things up before answering anything about ${tenant}. Three searches cover three different places: search_knowledge for what they believe (claims), search_posts for what they've written (drafts and published posts), search_pitches for the pitches and ideas in the Pipeline (not yet posts). Search with a few distinctive words, or paste a sentence the operator quoted. Never state a fact about ${tenant} that no tool returned.
+1. Look things up before answering anything about ${tenant}. Each tool covers one place: search_knowledge for what they believe (claims), search_posts for what they've written (drafts and published posts), search_pitches for the pitches and ideas in the Pipeline (not yet posts), read_goals for the approved goals and the Strategist's proposal (topics, the reasons and sources behind each, its questions to the operator), read_website for a page of ${tenant}'s own website. Search with a few distinctive words, or paste a sentence the operator quoted. Never state a fact about ${tenant} that no tool returned.
 2. A search that finds nothing only tells you about the place it searched. Say which place ("no post says that", "the knowledge base has no claims yet") and look in the next one before you say it isn't there. If two searches return the same results, stop searching and answer from what you have.
 3. Cite every claim, post and pitch you rely on by writing its marker right after the words it backs, exactly as the tool gave it: [[claim:<id>]], [[post:<id>]], [[brief:<id>]] or [[idea:<id>]]. Only cite what a tool returned in this conversation turn.
 4. A contested claim is not settled: say it is contested when you use it.
 5. You never change the knowledge base. When the operator states a fact about ${tenant} that the knowledge base lacks, or contradicts one, call offer_remember with that fact as one plain sentence; the Guardian reviews it. Say you've offered it, don't claim it's saved.
-6. Call read_goals first on the first question of a conversation, and for any question about why ${tenant} writes what it writes: goals, topics, what to write next, patterns or repetition across the posts and pitches, the angle of a pitch. The approved goals explain most of that, because the Pitcher pitches against them. Ask the strategist only when the operator asks to change the goals, or none are approved and no proposal is being written or waiting.
+6. Call read_goals first on the first question of a conversation, and for any question about why ${tenant} writes what it writes: goals, the strategy or the proposal, topics, what to write next, patterns or repetition across the posts and pitches, the angle of a pitch. The goals explain most of that, because the Pitcher pitches against them. When the operator asks about something the strategy or a pitch mentions, find where it came from: a topic's "Based on" names the source ("Their site says" is their website, "Your answer" is what they told us in onboarding). For their website, call read_website on the pages read_goals lists, with the words you're looking for, and answer from the page: what it is, its date, who is involved. Link the page. Ask the strategist only when the operator asks to change the goals, or none are approved and no proposal is being written or waiting.
 7. Work that takes longer than a reply goes to another agent with ask_agent: ${Object.entries(AGENT_JOBS).map(([a, j]) => `${a} (${j})`).join("; ")}. Tell the operator what you asked and that it runs in the background. If the tool says the agent isn't running yet, say so and answer what you can yourself.
-8. When the operator should look at a specific post, pitch or claim, call offer_open. That puts a button under your reply: call it a button ("the button below opens it"). You do not open anything yourself, so never write "I opened" or "I've opened". Only say a button is there if offer_open ran in this turn.
+8. When the operator should look at a specific post, pitch or claim, call offer_open before you write the reply. That puts a button under your reply. You do not open anything yourself, so never write "I opened" or "I've opened", and never mention a button unless offer_open ran in this turn.
+9. Answer the question that was asked. When the operator asks what something is, say what it is in the first sentence, from the tool that holds it. Only say you can't find it after read_goals and the places it points to came back empty.
 
 Writing: short, plain, direct. Lead with the answer, usually in under 100 words. When the operator points at something, look for it before you say you can't find it. Call ${tenant} by name, or say "they"; never call the operator's company "the tenant". Markdown is fine, but no headings for short answers. Never write the ids yourself outside a marker.
 
@@ -138,6 +140,18 @@ export function chatTools(turn: ChatToolContext) {
       description: `Read ${tenant}'s approved goals (topics, volume, searches to rank for) and whether a Strategist proposal is being written or waits on approval. The pitches are written against these.`,
       inputSchema: z.object({}),
       execute: async () => ({ summary: "Read", result: await readGoals(turn.token, turn.site) }),
+    }),
+    read_website: tool({
+      description: `Read one page of ${tenant}'s own website as text (only their site, from their settings). Give the page's address or a path ("/collective"), and the words you're looking for to get the passage around them. read_goals lists the pages the Strategist read.`,
+      inputSchema: z.object({
+        url: z.string().min(1).max(500).describe("An address on their site, or a path"),
+        query: z.string().max(200).optional().describe("A few words to find on the page"),
+      }),
+      execute: async ({ url, query }) => {
+        const r = await readWebsite(turn.token, turn.site, url, query ?? "");
+        if (!r.ok) return { summary: "Couldn't read it", failed: true, result: `Not read: ${r.reason}.` };
+        return { summary: `Read ${r.page.title || r.page.url}`, result: `${r.page.url} "${r.page.title}"\n${r.page.text}` };
+      },
     }),
     ask_agent: tool({
       description: "Hand work to another agent. It runs in the background; the operator sees it in the reply.",

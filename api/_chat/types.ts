@@ -23,6 +23,8 @@ export interface Citation extends Ref {
 
 export interface Handoff {
   agent: AgentName;
+  /** A lookup (a search, the goals, their website) or work handed to another agent. Older replies have neither. */
+  kind?: "lookup" | "agent";
   task: string;
   status: "queued" | "running" | "done" | "failed";
   summary?: string;

@@ -58,6 +58,20 @@ const server = createServer((req, res) => {
         { id: "postbbbbbbbbbbb", title: "Prompt post", status: "draft", type: "Blog", published_at: null, excerpt: "", content_md: `${"y ".repeat(300)}each tests one shared prompt on a topic nobody owns, where no claim can be wrong. ${"z ".repeat(50)}` },
       ]));
     if (u.startsWith("/rest/v1/sites")) return void res.end(JSON.stringify([{ name: "Kontra" }]));
+    if (u.startsWith("/rest/v1/goal_versions")) return void res.end("[]");
+    if (u.startsWith("/rest/v1/strategy_proposals"))
+      return void res.end(JSON.stringify([{
+        quarter: "2026-Q4",
+        status: "sent",
+        proposal: {
+          summary: "The blog answers what a director settles before July.",
+          volume: { value: 20 },
+          topics: [{ name: "What ultra-processed means on a tray", low: 2, high: 4, why: "The Collective session on October 22 gives the first post its material.", basis: "Their site says: the definition diverges (Collective session, Oct 22)." }],
+          questions: ["Can we write a post from the October 22 Collective session?"],
+        },
+        inputs: { website: "https://www.example.com/", pages: ["https://www.example.com/", "https://www.example.com/collective", "https://www.example.com/collective"] },
+      }]));
+    if (u.startsWith("/rest/v1/app_settings")) return void res.end(JSON.stringify([{ value: "https://www.example.com/" }]));
     if (u.startsWith("/rest/v1/rpc/kb_search"))
       return void res.end(JSON.stringify([{ id: "claimaaaaaaaaaa", text: "The starter plan includes 5 seats.", status: "settled", topics: ["Pricing"] }]));
     res.statusCode = 404; res.end("{}");
@@ -287,6 +301,58 @@ test("offer_open says a button shows, and the prompt does not let Chat claim it 
   const action = es.find((e) => e.type === "action");
   assert.ok(action?.type === "action" && action.action.kind === "open" && action.action.target?.kind === "brief");
   assert.ok(es.some((e) => e.type === "handoff" && e.handoff.agent === "pitcher"));
+});
+
+test("read_goals shows a waiting proposal in full: topics, reasons, sources, questions and the pages it read", async () => {
+  const { readGoals } = await import("./lookups.js");
+  const out = await readGoals("t", "siteaaaaaaaaaaa");
+  assert.match(out, /No goals approved yet/);
+  assert.match(out, /PROPOSED goals for 2026-Q4/);
+  assert.match(out, /Topic "What ultra-processed means on a tray": 2 to 4 posts/);
+  assert.match(out, /Based on: Their site says: the definition diverges \(Collective session, Oct 22\)/);
+  assert.match(out, /Can we write a post from the October 22 Collective session\?/);
+  assert.match(out, /Website pages it read \(read_website opens them\): https:\/\/www\.example\.com\/, https:\/\/www\.example\.com\/collective$/);
+});
+
+test("read_website reads only the tenant's own host, follows redirects there, and finds the passage", async () => {
+  const web = await import("./website.js");
+  assert.equal(typeof web.onTheirSite("https://evil.example.org/x", "https://www.example.com/"), "string");
+  assert.equal((web.onTheirSite("/collective", "https://www.example.com/") as URL).toString(), "https://www.example.com/collective");
+  assert.equal((web.onTheirSite("https://example.com/a", "https://www.example.com/") as URL).hostname, "example.com");
+  const html = `<html><head><title>Gaia Collective</title><script>x()</script></head><body><nav>Menu</nav><main>${"<p>Filler.</p>".repeat(900)}<h3>Making Sense of Ultra-Processed Foods</h3><p>Upcoming &middot; Oct 22. Tarrah Westercamp talks.</p></main></body></html>`;
+  const seen: string[] = [];
+  web.setWebsiteFetch(
+    (async (u: URL | string) => {
+      seen.push(String(u));
+      if (String(u).endsWith("/old")) return new Response("", { status: 301, headers: { location: "/collective" } });
+      if (String(u).endsWith("/off")) return new Response("", { status: 302, headers: { location: "https://elsewhere.org/" } });
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }) as typeof fetch,
+    async () => ["93.184.216.34"],
+  );
+  const r = await web.readWebsite("t", "siteaaaaaaaaaaa", "/old", "ultra-processed Oct 22", 1_000);
+  assert.ok(r.ok);
+  assert.equal(r.page.url, "https://www.example.com/collective");
+  assert.equal(r.page.title, "Gaia Collective");
+  assert.match(r.page.text, /### Making Sense of Ultra-Processed Foods/);
+  assert.match(r.page.text, /Oct 22\. Tarrah Westercamp/);
+  assert.doesNotMatch(r.page.text, /Menu|x\(\)/);
+  const off = await web.readWebsite("t", "siteaaaaaaaaaaa", "/off");
+  assert.ok(!off.ok && /off their site/.test(off.reason));
+  web.setWebsiteFetch(globalThis.fetch, async () => ["10.0.0.5"]);
+  const inside = await web.readWebsite("t", "siteaaaaaaaaaaa", "/");
+  assert.ok(!inside.ok && /not a public address/.test(inside.reason));
+});
+
+test("a reply that promises a button without offer_open gets one for what it cited", () => {
+  const c = { kind: "brief" as const, id: "briefaaaaaaaaaa", label: "Parents call any food they distrust ultra-processed", n: 1 };
+  const a = agent.promisedButton("The button below opens that pitch.", [c], false);
+  assert.equal(a?.kind, "open");
+  assert.equal(a?.target?.id, "briefaaaaaaaaaa");
+  assert.equal(agent.promisedButton("The button below opens it.", [c], true), null);
+  assert.equal(agent.promisedButton("That pitch says so.", [c], false), null);
+  assert.equal(agent.pageName("https://www.example.com/collective/"), "/collective");
+  assert.equal(agent.pageName("https://www.example.com/"), "the home page");
 });
 
 test.after(() => server.close());
