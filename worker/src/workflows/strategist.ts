@@ -240,8 +240,13 @@ async function gather(site: string, request: string, now: Date, quarter = quarte
 
 // ---- keyword data, the reader's searches, and who ranks ----
 
-/** A site that ranks for the reader's searches today, by what it is. */
-export type RankerKind = "government" | "school" | "trade body or nonprofit" | "competitor they named" | "company" | "video" | "forum";
+/**
+ * A site that ranks for the reader's searches today, by what its address
+ * says. An address says little: ".org" is a trade body as often as a
+ * tutorial site (geeksforgeeks.org, 2026-10-20), so the kind is a hint and
+ * the model judges who each one is by name.
+ */
+export type RankerKind = "government" | "school" | "competitor they named" | "video" | "forum" | ".org" | "site";
 
 export interface Ranker {
   domain: string;
@@ -384,8 +389,8 @@ function rankerKind(domain: string, competitors: string[]): RankerKind {
   if (/(^|\.)(facebook|reddit|quora|linkedin|x|twitter|instagram|pinterest)\.com$/.test(d)) return "forum";
   if (/\.(gov|mil)$/.test(d) || /\.state\.[a-z]{2}\.us$/.test(d) || /\.k12\.[a-z]{2}\.us$/.test(d) || /\.[a-z]{2}\.us$/.test(d)) return "government";
   if (/\.edu$/.test(d)) return "school";
-  if (/\.org$/.test(d)) return "trade body or nonprofit";
-  return "company";
+  if (/\.org$/.test(d)) return ".org";
+  return "site";
 }
 
 /** Price the job's vocabulary wide, then ask who ranks across the biggest of it. One DBOS step; each call that fails is logged and skipped. */
@@ -593,7 +598,7 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
       ? `\nDataForSEO, the searches the reader makes about the job (${m.job || "the people this company sells to, about their own work"}), priced, biggest first. "no data" means DataForSEO has no number, not zero. "Page one averages N referring domains" is how many distinct websites link to a page that ranks on page one today: under 10 is open ground for a good post, 10 to 30 takes a quarter with a few sites linking to the post, 30 to 80 takes a year, above that is beyond a blog post. The 6-month trend compares the last six months with the six before; the peak month says when the search is biggest. "AI overview yes" means Google answers this search with an AI overview that cites pages.\n${kw(m.priced, 100)}`
       : "",
     m.whoRanks?.length
-      ? `\nWho ranks in Google's top 100 across the ${m.rankedFor?.length ?? 0} biggest of those searches (${(m.rankedFor ?? []).join(", ")}), by kind:\n${m.whoRanks.map((r) => `- ${r.domain} (${r.kind}): ranks for ${r.keywords} of the ${m.rankedFor?.length ?? 0}, average position ${r.avgPosition}`).join("\n")}`
+      ? `\nWho ranks in Google's top 100 across the ${m.rankedFor?.length ?? 0} biggest of those searches (${(m.rankedFor ?? []).join(", ")}). The kind in brackets is read from the address (a .gov is government, a .org may be a trade body or a tutorial site): say who each one is by name:\n${m.whoRanks.map((r) => `- ${r.domain} (${r.kind}): ranks for ${r.keywords} of the ${m.rankedFor?.length ?? 0}, average position ${r.avgPosition}`).join("\n")}`
       : "",
     `\nDataForSEO, searches that contain theirs or sit next to them (relevant first, then by volume):\n${kw(m.keywords, 60)}`,
     `\nSearches they already rank for:\n${kw(ours, 25)}`,

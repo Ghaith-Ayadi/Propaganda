@@ -225,8 +225,9 @@ by hand (for Admin's "Run now").
    domains, the AI overview flag, intent, a 6-month trend and the peak month),
    Google Ads volume for what Labs has no row for (`adsSearchVolume`; no number
    stays `null`, never 0), who ranks across the ten biggest of them
-   (`serp_competitors`, each domain by kind: government, trade body, competitor,
-   forum, video), and who ranks for the tenant's own searches (at most 5
+   (`serp_competitors`, each domain with a kind read from its address:
+   government, school, a named competitor, video, forum, .org, or site; the
+   model says who each one is by name), and who ranks for the tenant's own searches (at most 5
    web searches);
 2. sizes the window in code (`windowFor`: the join-week rule, weeks 9 to 13
    plan next quarter), the volume cap (`volumeCap`: review capacity on day
