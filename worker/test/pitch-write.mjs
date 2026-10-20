@@ -360,6 +360,11 @@ try {
     check(h.texts[0] === "Intro.\n\nBody.", `applyPolish: a deleted heading leaves no bare "## " (desk review) (${JSON.stringify(h.texts[0])})`);
   }
   check(t.noDashes(t.HOUSE_STYLE) === t.HOUSE_STYLE && !/\u2014/.test(t.HOUSE_RULES + t.TITLE_RULES + t.PITCHER_SYSTEM), "the rules themselves carry no em dash");
+  // Who said what (2026-10-20): the plan or the site is never "you said", and a learned line with no note or decision behind it goes.
+  check(t.PITCHER_SYSTEM.includes(t.ATTRIBUTION_RULE) && t.ATTRIBUTION_RULE.includes('"the plan says"'), "the Pitcher is told who said what");
+  check(t.keepLearned("You said the October 22 session gives the first post its material.", { notes: "", recent: "" }) === "", "no note, no decision: the learned line goes");
+  check(t.keepLearned("Written after your note: no listicles.", { notes: "", recent: "approved: No listicles, please." }) === "Written after your note: no listicles.", "a decision keeps the learned line");
+  check(t.keepLearned("Written after your note: short intros.", { notes: "Short intros.", recent: "" }) === "Written after your note: short intros.", "the tenant's own words keep the learned line");
   {
     const p = t.proposalWithoutDashes({ summary: "One post a week—then more", topics: [{ name: "A—B", why: "Because—yes" }], ranking: { searches: [{ query: "ai cms — best", topic: "A—B" }] } });
     check(p.summary === "One post a week, then more" && p.topics[0].why === "Because, yes" && p.topics[0].name === "A—B" && p.ranking.searches[0].query === "ai cms — best", "a proposal loses its dashes, never in names or searches");
