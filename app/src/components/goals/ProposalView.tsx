@@ -13,6 +13,7 @@ import { Button } from "@/components/base/buttons/button";
 import { toast } from "@/components/base/toast/toast";
 import { reportError } from "@/lib/telemetry";
 import { Card, Reason } from "./bits";
+import { BucketBadge, fmtTrend, fmtVolume, MONTHS } from "./searchBits";
 import { cx } from "@/utils/cx";
 
 const STATUS: Record<Proposal["status"], { label: string; color: "gray" | "brand" | "warning" | "success" }> = {
@@ -96,6 +97,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
           </Badge>
         }
       >
+        {proposal.profile && <p className="mb-3 text-sm leading-relaxed text-secondary">{proposal.profile}</p>}
         <p className="text-sm text-primary">{proposal.summary}</p>
         <p className="mt-2 text-sm text-tertiary">
           Covers {shortDate(proposal.covers.from)} to {shortDate(proposal.covers.to)}, {proposal.covers.weeks} weeks
@@ -186,7 +188,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
             <Reason {...draft.ranking.aiMentionTarget} />
           </div>
         </div>
-        <SearchList searches={draft.ranking.searches} topics={draft.topics.map((t) => t.name)} editable={editable} onChange={(searches) => set({ ranking: { ...draft.ranking, searches } })} />
+        <SearchList searches={draft.ranking.searches} topics={draft.topics.map((t) => t.name)} readersFind={proposal.readersFind} editable={editable} onChange={(searches) => set({ ranking: { ...draft.ranking, searches } })} />
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -322,8 +324,7 @@ function TopicList({ topics, editable, onChange }: { topics: ProposedTopic[]; ed
               )}
             </div>
             <div className="pl-8">
-              {t.thesis && <p className="text-sm text-secondary">{t.thesis}</p>}
-              <Reason why={t.why} basis={t.basis} origin={t.origin} />
+              {t.thesis ? <Collapsed lead={t.thesis} why={t.why} basis={t.basis} origin={t.origin} /> : <Reason why={t.why} basis={t.basis} origin={t.origin} />}
             </div>
           </li>
         ))}
@@ -344,20 +345,42 @@ function TopicList({ topics, editable, onChange }: { topics: ProposedTopic[]; ed
   );
 }
 
-function SearchList({ searches, topics, editable, onChange }: { searches: ProposedSearch[]; topics: string[]; editable: boolean; onChange: (s: ProposedSearch[]) => void }) {
+/** A topic's thesis on the card; its why and basis behind "Read more" (Ayadi, 2026-10-20). */
+function Collapsed({ lead, why, basis, origin }: { lead: string; why: string; basis: string; origin?: ProposedTopic["origin"] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <p className="text-sm text-secondary">{lead}</p>
+      {open && <Reason why={why} basis={basis} origin={origin} />}
+      <button type="button" onClick={() => setOpen((v) => !v)} className="mt-1 text-xs font-medium text-brand-secondary hover:underline">
+        {open ? "Less" : "Read more"}
+      </button>
+    </div>
+  );
+}
+
+function SearchList({ searches, topics, readersFind, editable, onChange }: { searches: ProposedSearch[]; topics: string[]; readersFind?: string; editable: boolean; onChange: (s: ProposedSearch[]) => void }) {
   const [q, setQ] = useState("");
   return (
     <div className="mt-5 border-t border-secondary pt-4">
       <p className="mb-2 text-sm font-medium text-secondary">The {searches.length} searches</p>
+      {readersFind && <p className="mb-3 text-sm text-secondary">{readersFind}</p>}
       <ul className="divide-y divide-secondary">
         {searches.map((s, i) => (
           <li key={s.query} className="flex items-start gap-3 py-2.5">
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-primary">{s.query}</p>
+              <p className="flex flex-wrap items-center gap-2 text-sm text-primary">
+                {s.query}
+                {s.bucket && <BucketBadge bucket={s.bucket} />}
+              </p>
               <p className="text-xs text-tertiary">
                 {s.topic}
-                {s.volume != null && ` · ${s.volume.toLocaleString("en-US")} searches a month`}
+                {s.volume != null && ` · ${fmtVolume(s.volume)} searches a month`}
+                {s.trend6 != null && ` · ${fmtTrend(s.trend6)} over 6 months`}
+                {s.peakMonth != null && ` · peaks in ${MONTHS[s.peakMonth - 1]}`}
                 {s.difficulty != null && ` · difficulty ${s.difficulty}`}
+                {s.referringDomains != null && ` · page one averages ${s.referringDomains} linking sites`}
+                {s.aiOverview && " · AI overview"}
               </p>
               <p className="text-xs text-quaternary">{s.why}</p>
             </div>
@@ -365,7 +388,7 @@ function SearchList({ searches, topics, editable, onChange }: { searches: Propos
           </li>
         ))}
       </ul>
-      {editable && searches.length < 10 && (
+      {editable && searches.length < 20 && (
         <AddRow
           placeholder="Add a search"
           value={q}

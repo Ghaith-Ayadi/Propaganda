@@ -251,12 +251,41 @@ export async function llmMentions(w: Where, domain: string, platform: "google" |
 
 export interface KeywordRow {
   keyword: string;
-  /** Monthly Google searches. */
-  volume: number;
+  /** Monthly Google searches; null when DataForSEO has no number (never 0 for "unknown"). */
+  volume: number | null;
   /** DataForSEO's 0 to 100; null when it has none. */
   difficulty: number | null;
   /** The domain's Google position, for ranked keywords; null otherwise. */
   position: number | null;
+  /** Distinct sites linking to an average page-one result (avg_backlinks_info.referring_main_domains); with SERP info only. */
+  referringDomains?: number | null;
+  /** The last six months' searches against the six before, as a percentage (+50 is half as many again); null without 12 months of data. */
+  trend6?: number | null;
+  /** The month (1 to 12) with the most searches over the last 12; null without the data. */
+  peakMonth?: number | null;
+  /** DataForSEO's main intent: informational, navigational, commercial, transactional. */
+  intent?: string | null;
+  /** Google shows an AI overview for this search (serp_info.serp_item_types); null when SERP info wasn't asked for. */
+  aiOverview?: boolean | null;
+}
+
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+/** The 6-month trend and the peak month from keyword_info.monthly_searches (newest first or not: sorted here). */
+function seasonOf(monthly: unknown): { trend6: number | null; peakMonth: number | null } {
+  if (!Array.isArray(monthly)) return { trend6: null, peakMonth: null };
+  const rows = (monthly as Record<string, unknown>[])
+    .map((m) => ({ year: Number(m.year), month: Number(m.month), volume: Number(m.search_volume) }))
+    .filter((m) => Number.isFinite(m.year) && Number.isFinite(m.month) && Number.isFinite(m.volume))
+    .sort((a, b) => b.year - a.year || b.month - a.month);
+  const last12 = rows.slice(0, 12);
+  if (last12.length < 12) return { trend6: null, peakMonth: null };
+  const sum = (xs: typeof rows) => xs.reduce((n, m) => n + m.volume, 0);
+  const recent = sum(last12.slice(0, 6));
+  const before = sum(last12.slice(6, 12));
+  const trend6 = before > 0 ? Math.round(((recent - before) / before) * 100) : recent > 0 ? null : 0;
+  const peak = last12.reduce((best, m) => (m.volume > best.volume ? m : best), last12[0]!);
+  return { trend6, peakMonth: peak.volume > 0 ? peak.month : null };
 }
 
 function keywordOf(i: Record<string, unknown>): KeywordRow {
@@ -264,13 +293,22 @@ function keywordOf(i: Record<string, unknown>): KeywordRow {
   const info = (data.keyword_info as Record<string, unknown> | undefined) ?? {};
   const props = (data.keyword_properties as Record<string, unknown> | undefined) ?? {};
   const serp = ((i.ranked_serp_element as Record<string, unknown> | undefined)?.serp_item as Record<string, unknown> | undefined) ?? null;
+  const serpInfo = (data.serp_info as Record<string, unknown> | undefined) ?? null;
+  const links = (data.avg_backlinks_info as Record<string, unknown> | undefined) ?? null;
+  const intent = (data.search_intent_info as Record<string, unknown> | undefined) ?? null;
   const difficulty = Number(props.keyword_difficulty);
-  return {
+  const row: KeywordRow = {
     keyword: str(data.keyword),
-    volume: Number(info.search_volume) || 0,
+    // No number is no number: a 0 here used to make every unknown search "not winnable" (Havoc, 2026-10-20).
+    volume: num(info.search_volume),
     difficulty: Number.isFinite(difficulty) && props.keyword_difficulty !== null ? difficulty : null,
     position: serp ? Number(serp.rank_group) || null : null,
   };
+  if (info.monthly_searches !== undefined) Object.assign(row, seasonOf(info.monthly_searches));
+  if (intent) row.intent = str(intent.main_intent) || null;
+  if (links) row.referringDomains = num(links.referring_main_domains) === null ? null : Math.round(num(links.referring_main_domains)!);
+  if (serpInfo) row.aiOverview = Array.isArray(serpInfo.serp_item_types) ? (serpInfo.serp_item_types as unknown[]).includes("ai_overview") : null;
+  return row;
 }
 
 /** Searches related to `seeds` (at most 20 seeds), with volume and difficulty. */
@@ -329,18 +367,68 @@ export async function relatedKeywords(w: Where, job: string, seed: string, limit
 /**
  * Volume and difficulty for exact `keywords` (at most 700): the Strategist
  * prices the searches the model proposed that the ideas pull never covered.
- * A keyword DataForSEO has no row for is left out.
+ * A keyword DataForSEO has no row for is left out. With `serpInfo`, each row
+ * also carries page one's referring domains, the AI overview flag, the intent
+ * and the season (a 6-month trend and the peak month).
  */
-export async function keywordOverview(w: Where, job: string, keywords: string[]): Promise<KeywordRow[]> {
+export async function keywordOverview(w: Where, job: string, keywords: string[], o: { serpInfo?: boolean } = {}): Promise<KeywordRow[]> {
   if (!keywords.length) return [];
   const result = await callPaidApi({ site: w.site, job, service: "dataforseo/keyword-overview", background: true }, () =>
     live("/v3/dataforseo_labs/google/keyword_overview/live", {
       keywords: keywords.slice(0, 700),
       location_code: w.locationCode,
       language_code: w.languageCode,
+      ...(o.serpInfo ? { include_serp_info: true } : {}),
     }),
   );
   return items(result).map(keywordOf).filter((k) => k.keyword);
+}
+
+/**
+ * Google Ads' own monthly volume for exact `keywords` (at most 1000): the
+ * fallback when Labs has no row for a phrase (its index is thinner than
+ * Google's). A keyword Ads has no number for is left out.
+ */
+export async function adsSearchVolume(w: Where, job: string, keywords: string[]): Promise<KeywordRow[]> {
+  if (!keywords.length) return [];
+  const result = await callPaidApi({ site: w.site, job, service: "dataforseo/ads-search-volume", background: true }, async () => {
+    const body = await call("/v3/keywords_data/google_ads/search_volume/live", [
+      { keywords: keywords.slice(0, 1000), location_code: w.locationCode, language_code: w.languageCode },
+    ]);
+    const t = body.tasks?.[0];
+    if (!t || t.status_code !== OK) throw new DataForSeoError(`DataForSEO task: ${t?.status_message ?? "no task"}`, t?.status_code);
+    return { value: t.result ?? [], costUsd: Number(body.cost ?? t.cost ?? 0) || 0 };
+  });
+  const rows = Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
+  return rows
+    .filter((r) => str(r.keyword) && num(r.search_volume) !== null)
+    .map((r) => ({ keyword: str(r.keyword), volume: num(r.search_volume), difficulty: null, position: null, ...seasonOf(r.monthly_searches) }));
+}
+
+export interface SerpCompetitor {
+  domain: string;
+  /** How many of the seed searches it is in the top 100 for. */
+  keywords: number;
+  avgPosition: number;
+}
+
+/**
+ * The domains that rank for `keywords` (at most 200 seeds) across Google's
+ * top 100, best first: who the reader finds today. One request.
+ */
+export async function serpCompetitors(w: Where, job: string, keywords: string[], limit = 25): Promise<SerpCompetitor[]> {
+  if (!keywords.length) return [];
+  const result = await callPaidApi({ site: w.site, job, service: "dataforseo/serp-competitors", background: true }, () =>
+    live("/v3/dataforseo_labs/google/serp_competitors/live", {
+      keywords: keywords.slice(0, 200),
+      location_code: w.locationCode,
+      language_code: w.languageCode,
+      limit,
+    }),
+  );
+  return items(result)
+    .map((i) => ({ domain: str(i.domain).replace(/^www\./, ""), keywords: Number(i.keywords_count) || 0, avgPosition: Math.round(Number(i.avg_position) || 0) }))
+    .filter((c) => c.domain);
 }
 
 /** Searches `domain` already ranks for (top 100), best first. */

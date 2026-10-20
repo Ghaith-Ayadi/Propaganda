@@ -132,14 +132,17 @@ export function reviewPerMonth(v: unknown): number {
 /**
  * The most posts the proposal may ask for (rule 1). With history: last
  * quarter's real output plus 20%, scaled to the weeks covered. Day one: what
- * the team can review a month, and no more than 2 a week.
+ * the team said it can review a month, and nothing else. The "no more than 2
+ * a week in a first quarter" line went on 2026-10-20 (Havoc: 16 a month
+ * answered, 20 posts allowed; Ayadi: the cap is their number). A run
+ * recorded before keeps it (`firstQuarterLimit`), so its replay matches.
  */
-export function volumeCap(o: { weeks: number; perMonth: number; lastQuarterPublished: number | null }): number {
+export function volumeCap(o: { weeks: number; perMonth: number; lastQuarterPublished: number | null; firstQuarterLimit?: boolean }): number {
   if (o.lastQuarterPublished !== null && o.lastQuarterPublished > 0) {
     return Math.max(1, Math.floor(o.lastQuarterPublished * 1.2 * Math.min(1, o.weeks / 13)));
   }
   const byReview = Math.floor((o.perMonth * o.weeks) / 4.33);
-  return Math.max(1, Math.min(byReview, 2 * o.weeks));
+  return Math.max(1, o.firstQuarterLimit ? Math.min(byReview, 2 * o.weeks) : byReview);
 }
 
 /** How many batches the covered weeks make (cadence: weekly over the first two months, or one flood). */
@@ -167,13 +170,26 @@ export interface ProposedTopic {
   basis: string;
 }
 
+/**
+ * Where a target search sits (rule 5, 2026-10-20): winnable now (a post can
+ * reach page one this quarter), a must-win the business has to own over a
+ * year or two (a position goal, not page one), or one the data has no number
+ * for, kept because the intent is exact.
+ */
+export type SearchBucket = "now" | "later" | "nodata";
+
 export interface ProposedSearch {
   query: string;
   topic: string;
   why: string;
+  bucket?: SearchBucket;
   volume?: number;
   difficulty?: number | null;
   position?: number | null;
+  referringDomains?: number | null;
+  trend6?: number | null;
+  peakMonth?: number | null;
+  aiOverview?: boolean | null;
 }
 
 export interface WatchedSite {
@@ -184,6 +200,10 @@ export interface WatchedSite {
 
 /** What the model writes. The code adds the window, the Launch and the keyword numbers. */
 export interface Draft {
+  /** "{Company} according to what you gave us": one paragraph on who they are, from the inputs (2026-10-20). Absent on earlier proposals. */
+  profile?: string;
+  /** Who ranks on page one for the reader's searches today, by kind, and what it means for the blog (2026-10-20). */
+  readersFind?: string;
   summary: string;
   volume: Reasoned<number>;
   topics: ProposedTopic[];
@@ -222,11 +242,23 @@ function reasoned<T>(v: unknown, what: string, value: (x: unknown) => T): Reason
   return { value: value(o.value), why: str(o.why, `${what}.why`, { max: 400 }), basis: str(o.basis, `${what}.basis`, { max: 400 }) };
 }
 
+/** The bucket a model wrote, in any of its spellings ("now", "winnable now", "must win over time", "no data"); undefined when it wrote none. */
+export function bucketNamed(v: string): SearchBucket | undefined {
+  const k = v.trim().toLowerCase();
+  if (!k) return undefined;
+  if (/no.?data|unknown|unpriced/.test(k)) return "nodata";
+  if (/later|must|over time|long|ambitious/.test(k)) return "later";
+  if (/now|winnable|quarter/.test(k)) return "now";
+  return undefined;
+}
+
 /** Shape check of the model's JSON (throws a sentence the model can act on). Rules come after, in `validate`. */
 export function parseDraft(value: unknown): Draft {
   const o = obj(value, "The answer");
   const ranking = obj(o.ranking, "ranking");
   return {
+    profile: str(o.profile, "profile", { optional: true, max: 1500 }).trim(),
+    readersFind: str(o.readersFind, "readersFind", { optional: true, max: 1500 }).trim(),
     summary: str(o.summary, "summary", { max: 300 }),
     volume: reasoned(o.volume, "volume", (x) => int(x, "volume.value")),
     topics: arr(o.topics, "topics").map((t, i) => {
@@ -244,10 +276,12 @@ export function parseDraft(value: unknown): Draft {
     ranking: {
       searches: arr(ranking.searches, "ranking.searches").map((s, i) => {
         const x = obj(s, `ranking.searches[${i}]`);
+        const bucket = bucketNamed(str(x.bucket, `ranking.searches[${i}].bucket`, { optional: true, max: 40 }));
         return {
           query: str(x.query, `ranking.searches[${i}].query`, { max: 200 }).trim(),
           topic: str(x.topic, `ranking.searches[${i}].topic`, { max: 120 }),
           why: str(x.why, `ranking.searches[${i}].why`, { max: 400 }),
+          ...(bucket ? { bucket } : {}),
         };
       }),
       pageOneTarget: reasoned(ranking.pageOneTarget, "ranking.pageOneTarget", (x) => int(x, "ranking.pageOneTarget.value")),
@@ -268,9 +302,16 @@ export function parseDraft(value: unknown): Draft {
 
 export interface Keyword {
   keyword: string;
-  volume: number;
+  /** Monthly searches; null when the data has no number (never 0 for unknown). */
+  volume: number | null;
   difficulty: number | null;
   position: number | null;
+  /** Distinct sites linking to an average page-one result; absent or null without SERP info. */
+  referringDomains?: number | null;
+  trend6?: number | null;
+  peakMonth?: number | null;
+  intent?: string | null;
+  aiOverview?: boolean | null;
 }
 
 export interface Rules {
@@ -303,7 +344,20 @@ export interface Rules {
   headlineNames?: boolean;
   /** Sentences and headings from the tenant's own site: a name or thesis that repeats one is their slogan, not an angle. */
   siteSentences?: string[];
+  /**
+   * Searches first (2026-10-20): 15 to 20 target searches in three buckets, up
+   * to 8 topics, a profile paragraph, watched sites from who ranks, an AI
+   * target allowed from the start. False on a run recorded before (replays).
+   */
+  searchesFirst?: boolean;
+  /** Lower-cased queries that are never a target: the company's own names, and pages it hosts for customers. */
+  notTargets?: string[];
+  /** Registrable domains that rank for the reader's searches today (institutions, not forums or video), for the watched-sites check. */
+  whoRanks?: string[];
 }
+
+/** Topics since 2026-10-20: as many as the company has distinct things to say, up to this many (4 before). */
+export const TOPICS_MAX = 8;
 
 /** A topic name is a label: this many characters at most, and at most TOPIC_NAME_MAX_WORDS words. */
 export const TOPIC_NAME_MAX = 60;
@@ -323,12 +377,52 @@ export const RICH_DATA = 20;
  * (over NEW_DOMAIN_MAX_VOLUME searches a month) is out whatever its difficulty.
  */
 export function winnable(k: Keyword | undefined, o: { newDomain?: boolean } = {}): boolean {
-  if (!k) return true;
+  if (!k || k.volume === null) return true;
   if (k.position !== null && k.position > 10 && k.position <= 20) return true;
   if (k.position !== null && k.position <= 10) return true; // already there: keeping it is a goal too
   if (o.newDomain && k.volume > NEW_DOMAIN_MAX_VOLUME) return false;
+  // Page one's links say more than the difficulty score: a government page scores easy and is not (Havoc, 2026-10-20).
+  if (typeof k.referringDomains === "number" && k.referringDomains >= WINNABLE_MAX_LINKS) return false;
   return (k.difficulty === null || k.difficulty < 30) && k.volume >= 50;
 }
+
+/** Page one averaging this many referring domains or more is a year's work, not a quarter's. */
+export const WINNABLE_MAX_LINKS = 30;
+/** A must-win (rule 5): searched at least this much, and page one under MUST_WIN_MAX_LINKS referring domains or difficulty at most MUST_WIN_MAX_DIFFICULTY. */
+export const MUST_WIN_MIN_VOLUME = 200;
+export const MUST_WIN_MAX_LINKS = 100;
+export const MUST_WIN_MAX_DIFFICULTY = 50;
+/** Past this many referring domains on page one, no difficulty score makes a search a must-win: it belongs to the big sites. */
+export const MUST_WIN_HARD_LINKS = 300;
+
+/**
+ * A search the business has to own over a year or two: big enough to matter
+ * and not beyond a blog (rule 5). Winnable-now searches qualify too; the
+ * bucket is the model's call between the two.
+ */
+export function mustWin(k: Keyword | undefined): boolean {
+  if (!k || k.volume === null || k.volume < MUST_WIN_MIN_VOLUME) return false;
+  if (k.position !== null && k.position <= 20) return true;
+  const links = typeof k.referringDomains === "number" ? k.referringDomains : null;
+  if (links !== null && links <= MUST_WIN_MAX_LINKS) return true;
+  return k.difficulty !== null && k.difficulty <= MUST_WIN_MAX_DIFFICULTY && (links === null || links <= MUST_WIN_HARD_LINKS);
+}
+
+/** The bucket the data puts a search in; null when it is a target in none (too hard, or too small for a must-win). */
+export function bucketOf(k: Keyword | undefined, o: { newDomain?: boolean } = {}): SearchBucket | null {
+  if (!k || k.volume === null) return "nodata";
+  if (winnable(k, o)) return "now";
+  if (mustWin(k)) return "later";
+  return null;
+}
+
+/** Rule 5's counts. */
+export const SEARCHES_MIN = 15;
+export const SEARCHES_MAX = 20;
+export const NOW_MAX = 15;
+export const LATER_MIN = 3;
+export const LATER_MAX = 5;
+export const NODATA_MAX = 3;
 
 /**
  * A watched site is a source that keeps publishing (a site, a blog or news
@@ -604,7 +698,7 @@ export function searchSeeds(lines: string[], max = 5): string[] {
  * each. A pull around "AI CMS" otherwise comes back as every "ai" search there
  * is ("character ai", 2,000,000 a month), which no new domain can use.
  */
-export function relevantKeywords<K extends { keyword: string; volume: number }>(rows: K[], seeds: string[], offer = "", limit = 100): K[] {
+export function relevantKeywords<K extends { keyword: string; volume: number | null }>(rows: K[], seeds: string[], offer = "", limit = 100): K[] {
   const seedWords = new Set<string>();
   for (const s of seeds) for (const w of stems(s)) seedWords.add(w);
   const offerWords = stems(offer);
@@ -625,7 +719,7 @@ export function relevantKeywords<K extends { keyword: string; volume: number }>(
     if (enough) scored.push({ row, score: fromSeeds * 2 + fromOffer });
   }
   return scored
-    .sort((a, b) => b.score - a.score || b.row.volume - a.row.volume)
+    .sort((a, b) => b.score - a.score || (b.row.volume ?? 0) - (a.row.volume ?? 0))
     .slice(0, limit)
     .map((x) => x.row);
 }
@@ -694,7 +788,9 @@ export function validate(d: Draft, r: Rules): string[] {
   if (d.volume.value < 1) errors.push("volume.value must be at least 1.");
   if (d.volume.value > r.volumeCap) errors.push(`volume.value is ${d.volume.value}; the most allowed is ${r.volumeCap} (rule 1).`);
 
-  if (d.topics.length < 1 || d.topics.length > 4) errors.push(`Give 1 to 4 topics (there are ${d.topics.length}).`);
+  const topicMax = r.searchesFirst ? TOPICS_MAX : 4;
+  if (d.topics.length < 1 || d.topics.length > topicMax) errors.push(`Give 1 to ${topicMax} topics (there are ${d.topics.length}).`);
+  if (r.searchesFirst && !(d.profile ?? "").trim()) errors.push("profile is missing: one paragraph headed by their name on who they are, what they sell and to whom, how they grow and who they are up against, from their answers, their site and the data.");
   for (const t of d.topics) {
     if (t.low < 0 || t.high < t.low) errors.push(`Topic "${t.name}": low must be 0 or more and high at least low.`);
   }
@@ -744,35 +840,106 @@ export function validate(d: Draft, r: Rules): string[] {
   }
 
   const searches = d.ranking.searches;
-  if (searches.length < 5 || searches.length > 10) errors.push(`Give 5 to 10 target searches (there are ${searches.length}); 10 when the data allows (rule 5).`);
-  const known = [...r.keywords.values()].filter((k) => winnable(k, { newDomain: !r.hasHistory })).length;
-  const withData = searches.filter((s) => r.keywords.has(s.query.toLowerCase())).length;
-  if (known >= RICH_DATA && (searches.length < 8 || withData < 6)) {
-    errors.push(
-      `The data has ${known} winnable searches, so give at least 8 target searches with at least 6 of them from the data (there are ${searches.length}, ${withData} from the data) (rule 5).`,
-    );
-  }
+  const newDomain = !r.hasHistory;
+  const notTargets = new Set((r.notTargets ?? []).map((q) => q.trim().toLowerCase()).filter(Boolean));
   const seen = new Set<string>();
-  for (const s of searches) {
-    const q = s.query.toLowerCase();
-    if (seen.has(q)) errors.push(`Search "${s.query}" is listed twice.`);
-    seen.add(q);
-    if (!topicNames.has(s.topic.toLowerCase())) errors.push(`Search "${s.query}" names topic "${s.topic}", which is not one of the topics.`);
-    if (!winnable(r.keywords.get(q), { newDomain: !r.hasHistory })) {
-      const k = r.keywords.get(q)!;
-      const head = !r.hasHistory && k.volume > NEW_DOMAIN_MAX_VOLUME && (k.position === null || k.position > 20);
+  if (r.searchesFirst) {
+    // Rule 5 since 2026-10-20: 15 to 20 searches in three buckets. The floor
+    // follows the data: a niche DataForSEO barely prices can't fill 15 rows.
+    const priced = [...r.keywords.entries()].filter(([q, k]) => k.volume !== null && !notTargets.has(q));
+    const candidates = priced.filter(([, k]) => bucketOf(k, { newDomain }) !== null).length;
+    const min = Math.min(SEARCHES_MIN, Math.max(5, candidates));
+    if (searches.length < min || searches.length > SEARCHES_MAX) {
+      errors.push(`Give ${min} to ${SEARCHES_MAX} target searches (there are ${searches.length}): 10 to 15 winnable now, 3 to 5 must-wins, at most 3 with no data (rule 5).`);
+    }
+    // The must-wins the data offers: big searches a post can't win this quarter (a winnable one may be marked "later" too, but is never owed).
+    const laterCandidates = priced.filter(([, k]) => mustWin(k) && !winnable(k, { newDomain })).length;
+    const count = { now: 0, later: 0, nodata: 0 };
+    for (const s of searches) {
+      const q = s.query.toLowerCase();
+      if (seen.has(q)) errors.push(`Search "${s.query}" is listed twice.`);
+      seen.add(q);
+      if (!topicNames.has(s.topic.toLowerCase())) errors.push(`Search "${s.query}" names topic "${s.topic}", which is not one of the topics.`);
+      if (notTargets.has(q)) {
+        errors.push(`Search "${s.query}" is the company's own name or a page it hosts for a customer: never a target, however well it ranks (rule 5). Drop it.`);
+        continue;
+      }
+      const k = r.keywords.get(q);
+      const fits = bucketOf(k, { newDomain });
+      const bucket = s.bucket ?? fits ?? "now";
+      count[bucket]++;
+      const facts = k && k.volume !== null ? `${k.volume} searches a month, difficulty ${k.difficulty ?? "unknown"}${typeof k.referringDomains === "number" ? `, page one averages ${k.referringDomains} referring domains` : ""}` : "no data";
+      if (bucket === "nodata" && k && k.volume !== null) errors.push(`Search "${s.query}" has data (${facts}); its bucket is not "nodata" (rule 5).`);
+      else if (bucket === "now" && fits !== "now") {
+        errors.push(
+          fits === "nodata"
+            ? `Search "${s.query}" has no data; its bucket is "nodata" (rule 5).`
+            : fits === "later"
+              ? `Search "${s.query}" is not winnable this quarter (${facts}): page one needs under ${WINNABLE_MAX_LINKS} referring domains and difficulty under 30. It fits "later", a must-win with a position goal (rule 5).`
+              : `Search "${s.query}" is beyond a blog post (${facts}): winnable now means difficulty under 30 and page one under ${WINNABLE_MAX_LINKS} referring domains, or page two already; a must-win needs ${MUST_WIN_MIN_VOLUME}+ searches with page one under ${MUST_WIN_MAX_LINKS} referring domains, or difficulty at most ${MUST_WIN_MAX_DIFFICULTY} with page one under ${MUST_WIN_HARD_LINKS} (rule 5). Drop it.`,
+        );
+      } else if (bucket === "later" && fits !== "later" && fits !== "now") {
+        errors.push(
+          fits === "nodata"
+            ? `Search "${s.query}" has no data; its bucket is "nodata" (rule 5).`
+            : `Search "${s.query}" is not a must-win (${facts}): a must-win has ${MUST_WIN_MIN_VOLUME}+ searches a month with page one under ${MUST_WIN_MAX_LINKS} referring domains, or difficulty at most ${MUST_WIN_MAX_DIFFICULTY} with page one under ${MUST_WIN_HARD_LINKS} (rule 5). Drop it.`,
+        );
+      }
+    }
+    if (count.now > NOW_MAX) errors.push(`${count.now} searches are winnable now; at most ${NOW_MAX} (rule 5).`);
+    if (count.nodata > NODATA_MAX) errors.push(`${count.nodata} searches have no data; at most ${NODATA_MAX} (rule 5).`);
+    if (count.later > LATER_MAX) errors.push(`${count.later} must-win searches; at most ${LATER_MAX} (rule 5).`);
+    const laterMin = Math.min(LATER_MIN, laterCandidates);
+    if (count.later < laterMin) {
+      errors.push(`The data holds ${laterCandidates} searches the business has to own over time (${MUST_WIN_MIN_VOLUME}+ a month, page one under ${MUST_WIN_MAX_LINKS} referring domains or difficulty at most ${MUST_WIN_MAX_DIFFICULTY}); give ${laterMin} to ${LATER_MAX} of them as "later", each with a position goal in its why (rule 5). There are ${count.later}.`);
+    }
+    const p1 = d.ranking.pageOneTarget.value;
+    if (p1 < 0 || p1 > Math.max(count.now, 0)) errors.push(`ranking.pageOneTarget must be between 0 and the number of winnable-now searches (${count.now}).`);
+    if (newDomain && p1 > 2) errors.push(`A new domain's first quarter targets at most 2 searches on page one (rule 5); it says ${p1}.`);
+    const ai = d.ranking.aiMentionTarget.value;
+    const withOverview = searches.filter((s) => r.keywords.get(s.query.toLowerCase())?.aiOverview === true).length;
+    const known = searches.some((s) => typeof r.keywords.get(s.query.toLowerCase())?.aiOverview === "boolean");
+    if (ai !== null) {
+      const most = known ? Math.min(withOverview, newDomain ? 3 : searches.length) : newDomain ? 3 : searches.length;
+      if (ai < 0 || ai > most) {
+        errors.push(
+          known
+            ? `ranking.aiMentionTarget is ${ai}; ${withOverview} of the target searches show an AI overview${newDomain ? ", and a new domain aims for 1 to 3" : ""}, so at most ${most} (rule 5).`
+            : `ranking.aiMentionTarget is ${ai}; at most ${most} (rule 5).`,
+        );
+      }
+      if (known && withOverview === 0) errors.push("None of the target searches shows an AI overview: set ranking.aiMentionTarget.value to null and say why (rule 5).");
+    }
+  } else {
+    if (searches.length < 5 || searches.length > 10) errors.push(`Give 5 to 10 target searches (there are ${searches.length}); 10 when the data allows (rule 5).`);
+    const known = [...r.keywords.values()].filter((k) => winnable(k, { newDomain })).length;
+    const withData = searches.filter((s) => r.keywords.has(s.query.toLowerCase())).length;
+    if (known >= RICH_DATA && (searches.length < 8 || withData < 6)) {
       errors.push(
-        head
-          ? `Search "${s.query}" is a head term: ${k.volume} searches a month. A new domain can't reach page one for it in a quarter; pick long-tail searches under ${NEW_DOMAIN_MAX_VOLUME} a month (rule 5).`
-          : `Search "${s.query}" isn't winnable: difficulty ${k.difficulty ?? "unknown"}, ${k.volume} searches a month, ${k.position === null ? "not ranking" : `position ${k.position}`}. Pick one under difficulty 30 with 50+ searches, or one where we're on page two (rule 5).`,
+        `The data has ${known} winnable searches, so give at least 8 target searches with at least 6 of them from the data (there are ${searches.length}, ${withData} from the data) (rule 5).`,
       );
     }
-  }
-  const p1 = d.ranking.pageOneTarget.value;
-  if (p1 < 0 || p1 > searches.length) errors.push(`ranking.pageOneTarget must be between 0 and the number of searches.`);
-  if (!r.hasHistory && p1 > 2) errors.push(`A new domain's first quarter targets at most 2 searches on page one (rule 5); it says ${p1}.`);
-  if (!r.hasHistory && d.ranking.aiMentionTarget.value !== null) {
-    errors.push("No AI-mention target in a tenant's first quarter: set ranking.aiMentionTarget.value to null and say why.");
+    for (const s of searches) {
+      const q = s.query.toLowerCase();
+      if (seen.has(q)) errors.push(`Search "${s.query}" is listed twice.`);
+      seen.add(q);
+      if (!topicNames.has(s.topic.toLowerCase())) errors.push(`Search "${s.query}" names topic "${s.topic}", which is not one of the topics.`);
+      if (!winnable(r.keywords.get(q), { newDomain })) {
+        const k = r.keywords.get(q)!;
+        const head = newDomain && (k.volume ?? 0) > NEW_DOMAIN_MAX_VOLUME && (k.position === null || k.position > 20);
+        errors.push(
+          head
+            ? `Search "${s.query}" is a head term: ${k.volume} searches a month. A new domain can't reach page one for it in a quarter; pick long-tail searches under ${NEW_DOMAIN_MAX_VOLUME} a month (rule 5).`
+            : `Search "${s.query}" isn't winnable: difficulty ${k.difficulty ?? "unknown"}, ${k.volume} searches a month, ${k.position === null ? "not ranking" : `position ${k.position}`}. Pick one under difficulty 30 with 50+ searches, or one where we're on page two (rule 5).`,
+        );
+      }
+    }
+    const p1 = d.ranking.pageOneTarget.value;
+    if (p1 < 0 || p1 > searches.length) errors.push(`ranking.pageOneTarget must be between 0 and the number of searches.`);
+    if (newDomain && p1 > 2) errors.push(`A new domain's first quarter targets at most 2 searches on page one (rule 5); it says ${p1}.`);
+    if (newDomain && d.ranking.aiMentionTarget.value !== null) {
+      errors.push("No AI-mention target in a tenant's first quarter: set ranking.aiMentionTarget.value to null and say why.");
+    }
   }
 
   if (r.readerWeeks < 4 && d.readership.value !== null) {
@@ -780,6 +947,21 @@ export function validate(d: Draft, r: Rules): string[] {
   }
 
   if (d.watchedSites.length < 3 || d.watchedSites.length > 8) errors.push(`Give 3 to 8 watched sites (there are ${d.watchedSites.length}) (rule 4).`);
+  const ranking = (r.whoRanks ?? []).map(siteOf).filter(Boolean);
+  if (r.searchesFirst && ranking.length) {
+    // The sites the reader finds today (regulators, state agencies, trade bodies) come before the competitors they named (rule 4).
+    const need = Math.min(3, ranking.length);
+    const from = d.watchedSites.filter((w) => {
+      try {
+        return ranking.includes(siteOf(new URL(w.url).hostname));
+      } catch {
+        return false;
+      }
+    }).length;
+    if (from < need) {
+      errors.push(`Only ${from} watched site${from === 1 ? "" : "s"} ${from === 1 ? "is" : "are"} among those that rank for the reader's searches today (${ranking.slice(0, 8).join(", ")}); take at least ${need} from them, then the competitors they named (rule 4).`);
+    }
+  }
   for (const w of d.watchedSites) {
     if (!/^https?:\/\/[^\s/]+\.[^\s]+/.test(w.url)) errors.push(`Watched site "${w.url}" must be a full https address.`);
     else if (!looksLikeSource(w.url)) {
@@ -811,7 +993,7 @@ export function validate(d: Draft, r: Rules): string[] {
 /** The model's draft plus what code decides: the window, batches, the Launch, the keyword numbers. */
 export function finish(
   d: Draft,
-  o: { kind: ProposalKind; window: Window; cadence: "weekly" | "flood"; launch: LaunchPlan | null; keywords: Map<string, Keyword> },
+  o: { kind: ProposalKind; window: Window; cadence: "weekly" | "flood"; launch: LaunchPlan | null; keywords: Map<string, Keyword>; searchesFirst?: boolean },
 ): StoredProposal {
   const n = batchCount(o.cadence, o.window.covers.weeks);
   return {
@@ -820,7 +1002,15 @@ export function finish(
       ...d.ranking,
       searches: d.ranking.searches.map((s) => {
         const k = o.keywords.get(s.query.toLowerCase());
-        return k ? { ...s, volume: k.volume, difficulty: k.difficulty, position: k.position } : { ...s, position: null };
+        if (!k) return o.searchesFirst ? { ...s, position: null, bucket: s.bucket ?? "nodata" } : { ...s, position: null };
+        const out: ProposedSearch = { ...s, difficulty: k.difficulty, position: k.position };
+        if (k.volume !== null) out.volume = k.volume;
+        if (typeof k.referringDomains === "number") out.referringDomains = k.referringDomains;
+        if (typeof k.trend6 === "number") out.trend6 = k.trend6;
+        if (typeof k.peakMonth === "number") out.peakMonth = k.peakMonth;
+        if (typeof k.aiOverview === "boolean") out.aiOverview = k.aiOverview;
+        if (o.searchesFirst) out.bucket = s.bucket ?? bucketOf(k, { newDomain: o.kind === "onboarding" }) ?? "now";
+        return out;
       }),
     },
     quarter: o.window.quarter,

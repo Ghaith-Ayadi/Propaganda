@@ -301,7 +301,7 @@ function StrategistTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; t
           <ul className="list-disc space-y-1 pl-5 text-sm text-secondary">
             <li>The morning after you approve: 5 to 8 briefs in your inbox, the 3 strongest already written.</li>
             <li>15 posts written in 20 days, in three batches (day 1, 8 and 15), published over 30 days.</li>
-            <li>Up to four topics, buying-intent posts first, a named person on every byline.</li>
+            <li>As many topics as you have things to say (up to eight), buying-intent posts first, a named person on every byline.</li>
             <li>The first public post goes out once 3 are approved, unless you pick a date.</li>
           </ul>
           <div className="mt-4">
