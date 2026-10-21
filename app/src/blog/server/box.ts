@@ -46,7 +46,8 @@
 // BLOG_SWEEP_HOURS (24), BLOG_PORT (3030, /health), BLOG_INDEXNOW (off).
 
 import { createServer } from "node:http";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { collectionSlugOf } from "@/lib/slug";
@@ -98,7 +99,19 @@ interface State {
   sites: Record<string, SiteState>;
   /** IndexNow keys, one per host. */
   keys?: Record<string, string>;
+  /** The renderer that wrote the files (BUILD): a new one renders every site again. */
+  build?: string;
 }
+
+/** A fingerprint of the running bundle: the files on disk came from one renderer, and a
+ *  new deploy changes what a page contains without any row changing, so it renders all. */
+const BUILD = (() => {
+  try {
+    return createHash("sha256").update(readFileSync(process.argv[1] ?? "")).digest("hex").slice(0, 16);
+  } catch {
+    return "unknown";
+  }
+})();
 
 let state: State = { sweptAt: null, global: "", sites: {}, keys: {} };
 let shellTag = "";
@@ -353,7 +366,9 @@ async function tick(): Promise<void> {
   ticking = true;
   try {
     await refreshShell().catch((err) => log(`shell: ${(err as Error).message}`));
-    const sweep = sweepDue();
+    const rebuilt = state.build !== BUILD;
+    const sweep = sweepDue() || rebuilt;
+    if (rebuilt) log(`renderer ${BUILD}: rendering every site again`);
     const global = await globalMark();
     if (!sweep && global === state.global && !Object.values(state.sites).some((s) => s.retryAt)) return;
     const sites = await allSites(api);
@@ -381,6 +396,7 @@ async function tick(): Promise<void> {
     for (const id of Object.keys(state.sites)) if (!sites.some((s) => s.id === id)) delete state.sites[id];
     await pruneHosts(hostsNow);
     state.global = global;
+    state.build = BUILD;
     if (sweep) state.sweptAt = now();
     await saveState();
   } catch (err) {
