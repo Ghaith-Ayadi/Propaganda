@@ -89,7 +89,7 @@ export async function siteByDomain(api: Api, domain: string): Promise<BlogSite |
  */
 export const PUBLIC_SETTING_KEYS = [
   "site.title", "site.tagline", "site.manifesto", "favicon.url",
-  "author.name", "author.tagline", "author.location", "author.links", "author.avatar",
+  "author.name", "author.tagline", "author.location", "author.bio", "author.links", "author.avatar",
   "blog.design", "blog.themes",
 ] as const;
 
