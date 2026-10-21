@@ -61,6 +61,7 @@
 //   COLLECTION-RULES    a collection's rules for the agents couldn't be loaded or saved
 //   PIPELINE-ASSIGN     assigning posts to the Writer failed
 //   API-TOKENS          an API token for the Claude plugin could not be listed, made or revoked
+//   KB-STYLES           the knowledge base's style rules couldn't be listed, added or retired
 
 import { BackendError } from "@/lib/supabase";
 

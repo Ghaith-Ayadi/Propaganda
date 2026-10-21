@@ -14,6 +14,8 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import {
   collectionRulesBlock,
+  styles,
+  stylesBlock,
   collections,
   fillEmptyPost,
   getBrief,
@@ -238,6 +240,10 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
   const voice = ownVoice || voiceFor(guide);
   // The collection's own rules (collection_rules). A run recorded before they were read has none.
   const rulesBlock = collectionRulesBlock(cols ?? [], brief.collection_name || cols?.find((c) => !c.is_hidden)?.name || "");
+  // The tenant's style rules (kb_styles). A run recorded before they were read has none.
+  const tenantStyles = (await DBOS.patch("writer-styles"))
+    ? stylesBlock(await DBOS.runStep(() => styles(site), { name: "read the tenant's styles" }))
+    : "";
   const { pages, claims, searches } = await research(site, brief);
   const researchGap = searches.notice();
   const edits = await DBOS.runStep(() => reviewerEdits(site, null, 5), { name: "read reviewer edits" });
@@ -249,7 +255,7 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
       job: "writer:draft",
       model: MODELS.writer,
       maxOutputTokens: 12000,
-      system: writerSystem(voice),
+      system: writerSystem(voice, tenantStyles),
       prompt: `Write the full post for ${tenant?.name ?? "the tenant"} from this brief.
 
 ${briefBlock(brief)}
@@ -409,13 +415,16 @@ async function reviseRun(input: ReviseInput): Promise<WriteResult> {
   if (!current) return { status: "skipped", reason: "no such post" };
   if (current.status === "published") return { status: "skipped", reason: "the post is published" };
   const voice = ownVoice || voiceFor(guide);
+  const tenantStyles = (await DBOS.patch("writer-revise-styles"))
+    ? stylesBlock(await DBOS.runStep(() => styles(site), { name: "read the tenant's styles" }))
+    : "";
 
   const revised = await askText("revise", {
     site,
     job: "writer:revise",
     model: MODELS.writer,
     maxOutputTokens: 12000,
-    system: writerSystem(voice),
+    system: writerSystem(voice, tenantStyles),
     prompt: `A reviewer left these notes on the post below:
 ${input.notes}
 

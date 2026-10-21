@@ -23,7 +23,7 @@ import { HOUSE_STYLE, TITLE_RULES } from "../agents/writing.js";
 import { appended, arr, askJson, MODELS, obj, str } from "../agents/model.js";
 import { sharedIdeas } from "../agents/motifs.js";
 import { fetchPublic, readPage, readSite, searchWeb, searchConfigured, type SiteClaim, readBlog } from "../agents/web.js";
-import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
+import { getSite, publishedPosts, styles, stylesBlock, tasteProfile } from "../agents/store.js";
 import {
   claimProposal,
   earlierProposals,
@@ -723,12 +723,16 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       whoRanks: (m.whoRanks ?? []).filter((r) => !["forum", "video"].includes(r.kind)).slice(0, 12).map((r) => r.domain),
     };
     const previousTopics = rules.previousTopics;
+    // The tenant's style rules (kb_styles), after the twenty. A run recorded before they were read has none.
+    const tenantStyles = (await DBOS.patch("strategist-styles"))
+      ? stylesBlock(await DBOS.runStep(() => styles(site), { name: "read the tenant's styles" }))
+      : "";
 
     const ask = {
       site,
       job: JOB,
       model: MODELS.strategist,
-      system: SYSTEM,
+      system: tenantStyles ? `${SYSTEM}\n\n${tenantStyles}` : SYSTEM,
       prompt: promptFor(pack, m, { kind, quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now), searchesFirst, theirBlog }),
       // 20 searches, up to 8 topics and two paragraphs since 2026-10-20: the old 6,000 cut a full proposal short.
       maxOutputTokens: searchesFirst ? 12_000 : 6_000,
@@ -843,8 +847,9 @@ export async function strategistInput(site: string, now = new Date()): Promise<{
   const hasHistory = pack.history.publishedLastQuarter > 0;
   const cap = volumeCap({ weeks: window.covers.weeks, perMonth: pack.perMonth, lastQuarterPublished: hasHistory ? pack.history.publishedLastQuarter : null });
   const launch = !hasHistory ? launchFor(now, window.join) : null;
+  const tenantStyles = stylesBlock(await styles(site));
   return {
-    system: SYSTEM,
+    system: tenantStyles ? `${SYSTEM}\n\n${tenantStyles}` : SYSTEM,
     prompt: promptFor(pack, m, { kind: "onboarding", quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now), searchesFirst: true, theirBlog: true }),
     cap,
     thinAnswers: thinAnswers(pack.answers, pack.perMonthAnswered),
