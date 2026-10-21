@@ -9,7 +9,6 @@
 // in; BlogApp keeps it on screen until its first real render (TakeOver).
 
 import { renderToString } from "react-dom/server";
-import shell from "../../../dist/index.html?raw";
 import blogCss from "../styles.css?inline";
 import pgCss from "../theme/pg.css?inline";
 import { Home } from "../components/Home";
@@ -29,7 +28,7 @@ import type { BlogSite } from "../siteTypes";
 import type { Collection } from "@/types";
 import { collectionSlugOf } from "@/lib/slug";
 import { absolute, postUrl, siteUrl, type Hosts } from "./urls";
-import { fillShell, type FillOptions } from "./fill";
+import type { FillOptions } from "./fill";
 
 export interface SiteData {
   site: BlogSite;
@@ -38,9 +37,11 @@ export interface SiteData {
   posts: BlogPost[];
 }
 
-export interface Page {
+/** A rendered page before it goes into the shell: entry.tsx fills the build's
+ * shell (fill.ts); the box writes the parts as a fragment for Caddy to wrap. */
+export interface Rendered {
   status: number;
-  html: string;
+  parts: FillOptions;
 }
 
 interface Head {
@@ -105,33 +106,28 @@ function headTags(h: Head, data: SiteData, hosts: Hosts, siteTitle: string): str
   return tags.join("\n    ");
 }
 
-/** The built shell with the head, the styles and the page's markup in it (fill.ts). */
-function fill(opts: FillOptions): string {
-  return fillShell(shell, { ...opts, favicon: opts.favicon ? esc(opts.favicon) : null });
+/** The parts of a page, with the favicon URL escaped for its attribute. */
+function parts(opts: FillOptions): FillOptions {
+  return { ...opts, favicon: opts.favicon ? esc(opts.favicon) : null };
 }
 
-/** The shell as the browser gets it today: no page in it. The app renders everything. */
-export function plainShell(): string {
-  return shell;
-}
-
-export function siteNotFoundPage(): Page {
+export function siteNotFoundParts(): Rendered {
   const markup = renderToString(<SiteNotFound />);
   const head = [`<title>Site not found</title>`, `<meta name="robots" content="noindex">`].join("\n    ");
-  return { status: 404, html: fill({ head, css: [blogCss], markup }) };
+  return { status: 404, parts: parts({ head, css: [blogCss], markup }) };
 }
 
 /* ---------------------------------------------------------------- original */
 
 const noop = () => {};
 
-function originalPage(route: BlogRoute, data: SiteData, hosts: Hosts): Page {
+function originalPage(route: BlogRoute, data: SiteData, hosts: Hosts): Rendered {
   const { site, settings, collections, posts } = data;
   const original = originalSettingsOf(get(settings), site);
   const siteTitle = (settings.get("site.title") as string) || site.name;
   const favicon = (settings.get("favicon.url") as string) || null;
   const hidden = new Set(collections.filter((c) => c.isHidden).map((c) => c.name));
-  const home = (): Page => {
+  const home = (): Rendered => {
     const initialTab = route.view === "collection" ? collections.find((c) => (c.slug || collectionSlugOf(c.name, collections)) === route.collection)?.name ?? null : null;
     const markup = renderToString(<Home collections={collections} posts={posts} site={site} settings={original} initialTab={initialTab} />);
     const head: Head = {
@@ -141,7 +137,7 @@ function originalPage(route: BlogRoute, data: SiteData, hosts: Hosts): Page {
       type: "website",
       jsonLd: { "@context": "https://schema.org", "@type": "Blog", name: siteTitle, url: siteUrl(site, hosts) },
     };
-    return { status: 200, html: fill({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
+    return { status: 200, parts: parts({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
   };
   if (route.view !== "post") return home();
 
@@ -159,7 +155,7 @@ function originalPage(route: BlogRoute, data: SiteData, hosts: Hosts): Page {
       </div>,
     );
     const head: Head = { title: `${isHidden ? "Private collection" : "Not found"} — ${siteTitle}`, description: "", canonical: siteUrl(site, hosts), type: "website", noindex: true };
-    return { status: 404, html: fill({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
+    return { status: 404, parts: parts({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
   }
   const markup = renderToString(<ReaderArticle post={post} collections={collections} posts={posts} site={site} author={original.author} onBack={noop} />);
   const canonical = postUrl(site, hosts, route.collection, post.slug);
@@ -174,7 +170,7 @@ function originalPage(route: BlogRoute, data: SiteData, hosts: Hosts): Page {
     modified: post.updatedAt,
     jsonLd: postJsonLd(post, canonical, image, original.author.name || siteTitle, siteTitle),
   };
-  return { status: 200, html: fill({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
+  return { status: 200, parts: parts({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
 }
 
 function postJsonLd(post: BlogPost, url: string, image: string | null, author: string, publisher: string): Record<string, unknown> {
@@ -211,7 +207,7 @@ function pgRouteOf(r: BlogRoute): PgRoute {
   return { tpl: "home" };
 }
 
-function themedPage(route: BlogRoute, data: SiteData, hosts: Hosts): Page {
+function themedPage(route: BlogRoute, data: SiteData, hosts: Hosts): Rendered {
   const { site, settings, collections, posts } = data;
   const themed = themedSettingsOf(get(settings), site);
   const design = themed.design!;
@@ -277,7 +273,7 @@ function themedPage(route: BlogRoute, data: SiteData, hosts: Hosts): Page {
   const headHtml = `${headTags(head, data, hosts, title)}\n    <style id="pg-theme">${themeCss(compiled)}</style>`;
   return {
     status,
-    html: fill({ head: headHtml, css: [pgCss], htmlAttrs: `style="background:${esc(compiled.palette.paper)}"`, markup, favicon }),
+    parts: parts({ head: headHtml, css: [pgCss], htmlAttrs: `style="background:${esc(compiled.palette.paper)}"`, markup, favicon }),
   };
 }
 
@@ -286,7 +282,7 @@ export function isThemed(settings: Map<string, unknown>): boolean {
   return !!themedSettingsOf(get(settings), { id: "", slug: "", domain: "", name: "", analyticsTenant: "" }).design;
 }
 
-export function renderPage(route: BlogRoute, data: SiteData, hosts: Hosts): Page {
+export function renderParts(route: BlogRoute, data: SiteData, hosts: Hosts): Rendered {
   return isThemed(data.settings) ? themedPage(route, data, hosts) : originalPage(route, data, hosts);
 }
 

@@ -87,7 +87,9 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
   `X-Propaganda-Host` to every blog host's request, `vercel.json` sends those to `api/blog.ts`,
   which runs the bundle `app/vite.ssr.config.ts` builds from `app/src/blog/server/` (never
   committed). Blog components take the site and settings as props and stay free of `window`
-  outside handlers, so the server and the browser render the same markup.
+  outside handlers, so the server and the browser render the same markup. On the box,
+  `app/src/blog/server/box.ts` (`propaganda-blog`) writes every page as a fragment file that
+  Caddy wraps in the current shell and serves; the function is the fallback.
 - Blog themes: [docs/blog-themes.md](docs/blog-themes.md). A site's `blog.design` setting
   switches its public blog from the original renderer to the themed templates; writing it
   (or `blog.themes`) on a real site is the owner's call, like any other live data.

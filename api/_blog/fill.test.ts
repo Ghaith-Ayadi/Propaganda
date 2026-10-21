@@ -4,7 +4,8 @@
 // would otherwise splice the shell into the page.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fillShell } from "../../app/src/blog/server/fill.js";
+import * as fillModule from "../../app/src/blog/server/fill.js";
+const { fillShell } = fillModule;
 
 const shell = `<!doctype html>
 <html lang="en">
@@ -38,4 +39,15 @@ test("fillShell leaves the html tag and favicon alone when not asked", () => {
   const out = fillShell(shell, { head: "<title>T</title>", css: [], markup: "<p>x</p>" });
   assert.ok(out.includes('<html lang="en">'));
   assert.ok(out.includes('href="/favicon.svg"'));
+});
+
+test("a fragment wrapped in the shell's pieces is the filled shell, with and without a favicon or attributes", () => {
+  const { fragmentOf, shellPieces, wrap } = fillModule;
+  const pieces = shellPieces(shell);
+  const cases = [
+    { head: `<title>Money $& $' tips</title>`, css: [`.pg{--price:"$$5"}`], markup: `<h1>$&</h1>`, htmlAttrs: `style="background:#fff"`, favicon: "/x$&.png" },
+    { head: "<title>T</title>", css: [], markup: "<p>x</p>" },
+  ];
+  for (const c of cases) assert.equal(wrap(pieces, fragmentOf(c)), fillShell(shell, c));
+  assert.throws(() => shellPieces("<html><body></body></html>"), /not the app's shell/);
 });
