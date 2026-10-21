@@ -7,7 +7,8 @@
 -- the unpublished design draft, hosting choices. So reading is split in two:
 --
 --   public   the keys the public blog renders (site identity, author, the
---            published design and the site's own themes): anyone
+--            published design and the site's own themes, the AI crawler
+--            rule the server-rendered blog applies): anyone
 --   the rest members of the row's site only
 --
 -- Writes are unchanged (members, from 20261002000003). Realtime follows the
@@ -24,7 +25,7 @@ create policy "public settings" on public.app_settings for select
   using (key in (
     'site.title', 'site.tagline', 'site.manifesto', 'favicon.url',
     'author.name', 'author.tagline', 'author.location', 'author.avatar', 'author.bio', 'author.links',
-    'blog.design', 'blog.themes'
+    'blog.design', 'blog.themes', 'blog.ai_crawlers'
   ));
 
 create policy "members read settings" on public.app_settings for select
