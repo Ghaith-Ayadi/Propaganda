@@ -1,4 +1,6 @@
-// Network settings for model calls.
+// Network settings for model calls. WORKER_MODEL_TIMEOUT_SECONDS (default 1200) is how long a call
+// may wait for the gateway's first byte and for the rest of the body. Read from the environment
+// here, not config.ts, which needs the database settings that tests importing the agents don't have.
 
 import { Agent, fetch as undiciFetch } from "undici";
 

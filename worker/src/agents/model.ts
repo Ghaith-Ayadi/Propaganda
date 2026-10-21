@@ -5,7 +5,6 @@
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { callModel, DEFAULT_MODEL, setGatewayFetch, setWorkflowContext, type Reasoning } from "../../../api/_ai/gateway";
-import { config } from "../config.js";
 import { gatewayFetch } from "../net.js";
 import { emptyAnswerOf, modelStep } from "../limits.js";
 
@@ -16,7 +15,7 @@ export function wireGateway(): void {
   if (wired) return;
   wired = true;
   setWorkflowContext(() => ({ workflowId: DBOS.workflowID ?? null, stepId: DBOS.stepID ?? null }));
-  setGatewayFetch(gatewayFetch(config.modelTimeoutSeconds));
+  setGatewayFetch(gatewayFetch(Number(process.env.WORKER_MODEL_TIMEOUT_SECONDS ?? 1200)));
 }
 
 /**
