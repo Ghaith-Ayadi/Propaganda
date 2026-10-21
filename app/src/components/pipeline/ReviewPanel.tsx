@@ -2,7 +2,7 @@
 // Every note is anchored to the words it is about: they're highlighted in the
 // editor, and hovering or clicking either one lights up the other and scrolls
 // it into view. Three sections, one colour each: the tenant's own notes from
-// the pitch, the source check on numbers and quotes, and the knowledge base.
+// the pitch, the source check on every factual claim, and the knowledge base.
 // Below them, the reviewer's decision (approve and schedule, or send back).
 // Nothing here blocks approval.
 //
@@ -33,7 +33,7 @@ const SECTIONS: { id: ReviewSection; title: string; hint: string; empty: string 
   {
     id: "sources",
     title: "Source checks",
-    hint: "Numbers and quotes, checked against their sources.",
+    hint: "Every factual claim, checked against its sources.",
     empty: "Runs when the draft is sent for review.",
   },
   {
@@ -78,7 +78,7 @@ export function ReviewPanel({ postId }: { postId: string }) {
           section={s}
           notes={notes.filter((n) => n.section === s.id)}
           found={review.found}
-          empty={s.id === "sources" && (review.checkedAt || item?.review) ? "No numbers or quotes to check." : s.empty}
+          empty={s.id === "sources" && (review.checkedAt || item?.review) ? "No claims to check." : s.empty}
         />
       ))}
 
