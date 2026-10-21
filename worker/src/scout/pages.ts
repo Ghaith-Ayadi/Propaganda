@@ -7,8 +7,9 @@
 // page is only fetched from a public address: every hop of a redirect is
 // checked, and private, loopback and link-local addresses are refused.
 
-import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { isPublicAddress } from "../../../api/_chat/website";
+import { guardedFetch } from "../safe-fetch.js";
 
 export interface PageLink {
   url: string;
@@ -46,21 +47,26 @@ export function privateAddress(ip: string): boolean {
 /** Tests fetch from a local server. */
 const allowPrivate = () => process.env.SCOUT_ALLOW_PRIVATE_FETCH === "1";
 
-async function assertPublic(url: URL): Promise<void> {
+/**
+ * http(s) only, and an address written in the URL must be public. A name is judged
+ * when the socket connects (guardedFetch), not here, so the address checked is
+ * the address used.
+ */
+function assertPublic(url: URL): void {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new PageError(`Not a web address: ${url.protocol}`);
   if (allowPrivate()) return;
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => []);
-  if (addrs.length === 0) throw new PageError(`Can't resolve ${host}`);
-  if (addrs.some((a) => privateAddress(a.address))) throw new PageError(`${host} is not a public address`);
+  if ((isIP(host) && !isPublicAddress(host)) || host.toLowerCase() === "localhost" || host.toLowerCase().endsWith(".localhost")) {
+    throw new PageError(`${host} is not a public address`);
+  }
 }
 
 /** The page's HTML, following at most 3 redirects, each checked. */
 export async function fetchPage(address: string): Promise<{ url: string; html: string }> {
   let url = new URL(address);
   for (let hop = 0; hop < 4; hop++) {
-    await assertPublic(url);
-    const res = await fetch(url, {
+    assertPublic(url);
+    const res = await (allowPrivate() ? fetch : guardedFetch)(url, {
       redirect: "manual",
       headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml" },
       signal: AbortSignal.timeout(20_000),

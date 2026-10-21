@@ -11,9 +11,10 @@
 // says it cost, next to the model calls.
 
 import { isIP } from "node:net";
-import { Agent, fetch as undiciFetch } from "undici";
 import { callPaidApi } from "../../../api/_ai/gateway";
-import { guardedLookup, isPublicAddress, type Resolver } from "../../../api/_chat/website";
+import { isPublicAddress } from "../../../api/_chat/website";
+import { guardedFetch } from "../safe-fetch.js";
+export { guardedPageFetch } from "../safe-fetch.js";
 
 export interface SearchHit {
   url: string;
@@ -32,18 +33,7 @@ export interface Page {
 type Fetch = typeof fetch;
 let fetchImpl: Fetch = (...a) => fetch(...a);
 
-/**
- * Reading a page connects to an address a tenant chose, so it connects through
- * Chat's guarded lookup (api/_chat/website.ts): the address is resolved once, at
- * connect time, and refused unless public. The address checked is the address
- * used, so a host can't answer a public one to a check and 127.0.0.1 to the
- * connection, on the first request or on any redirect hop.
- */
-export function guardedPageFetch(resolver?: Resolver): Fetch {
-  const dispatcher = new Agent({ connect: { lookup: guardedLookup(resolver) } });
-  return (((url: unknown, init?: object) => undiciFetch(url as never, { ...init, dispatcher })) as unknown) as Fetch;
-}
-let pageFetch: Fetch = guardedPageFetch();
+let pageFetch: Fetch = guardedFetch;
 
 /** For tests: replaces both the page reader's fetch and the search's. */
 export function setWebFetch(f: Fetch): void {
@@ -205,20 +195,25 @@ export async function readPage(raw: string, maxChars = 12_000): Promise<Page> {
 }
 
 /** readPage plus the raw HTML, for the links a site's home page carries. */
-async function readPageWithHtml(raw: string, maxChars: number): Promise<{ page: Page; html: string }> {
+/**
+ * A GET of an address a tenant gave, following up to 4 redirects, each judged by
+ * assertPublicUrl and connected to through the guarded lookup.
+ */
+export async function fetchPublic(raw: string, headers: Record<string, string>): Promise<{ res: Response; url: URL }> {
   let url = await assertPublicUrl(raw);
   let res: Response | null = null;
   for (let hop = 0; hop < 5; hop++) {
-    res = await pageFetch(url, {
-      redirect: "manual",
-      headers: { "User-Agent": "PropagandaBot/0.2 (+https://propaganda.pub)", Accept: "text/html,text/plain;q=0.9,*/*;q=0.5" },
-      signal: AbortSignal.timeout(20_000),
-    });
+    res = await pageFetch(url, { redirect: "manual", headers, signal: AbortSignal.timeout(20_000) });
     const next = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
     if (!next) break;
     url = await assertPublicUrl(new URL(next, url).toString());
   }
-  if (!res || !res.ok) throw new Error(`${url.hostname} answered ${res?.status ?? "nothing"}`);
+  return { res: res!, url };
+}
+
+async function readPageWithHtml(raw: string, maxChars: number): Promise<{ page: Page; html: string }> {
+  const { res, url } = await fetchPublic(raw, { "User-Agent": "PropagandaBot/0.2 (+https://propaganda.pub)", Accept: "text/html,text/plain;q=0.9,*/*;q=0.5" });
+  if (!res.ok) throw new Error(`${url.hostname} answered ${res.status}`);
   const type = res.headers.get("content-type") ?? "";
   if (!/text\/html|text\/plain|application\/xhtml/.test(type)) throw new Error(`not a text page (${type || "no type"})`);
   const body = (await res.text()).slice(0, MAX_BYTES);

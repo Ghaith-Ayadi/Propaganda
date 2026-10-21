@@ -22,7 +22,7 @@ import { DBOS } from "@dbos-inc/dbos-sdk";
 import { HOUSE_STYLE, TITLE_RULES } from "../agents/writing.js";
 import { appended, arr, askJson, MODELS, obj, str } from "../agents/model.js";
 import { sharedIdeas } from "../agents/motifs.js";
-import { assertPublicUrl, readPage, readSite, searchWeb, searchConfigured, type SiteClaim, readBlog } from "../agents/web.js";
+import { fetchPublic, readPage, readSite, searchWeb, searchConfigured, type SiteClaim, readBlog } from "../agents/web.js";
 import { getSite, publishedPosts, styles, stylesBlock, tasteProfile } from "../agents/store.js";
 import {
   claimProposal,
@@ -186,8 +186,7 @@ async function gather(site: string, request: string, now: Date, quarter = quarte
   for (const f of (prof?.plan_files ?? []).slice(0, 5)) {
     if (!f.url || !/\.(md|markdown|txt|csv)$/i.test(f.name)) continue;
     try {
-      const url = await assertPublicUrl(f.url);
-      const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      const { res } = await fetchPublic(f.url, { "User-Agent": "PropagandaBot/0.2 (+https://propaganda.pub)" });
       if (res.ok) planTexts.push(`## ${f.name}\n${(await res.text()).slice(0, 10_000)}`);
     } catch {
       /* unreadable: listed by name */
