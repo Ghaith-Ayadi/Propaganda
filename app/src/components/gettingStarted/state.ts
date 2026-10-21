@@ -89,7 +89,8 @@ export function useFirstDay(): FirstDay {
   // "I got it" comes after an approved plan; the pre-0.2 wizard wrote the key before any plan existed.
   const { site } = useWorkspace();
   // Connected, or skipped for now (the Skip button writes the same key the old strip did).
-  const domainDone = !!site.domain || !!useSetting<string>("onboarding.domainStripDismissed", "");
+  const domainSkipped = useSetting<string>("onboarding.domainStripDismissed", "");
+  const domainDone = !!site.domain || !!domainSkipped;
   const completedSetting = !!useSetting<string>("onboarding.completed", "");
   const strategist = useStrategistState();
   const proposal = useLatestProposal();
