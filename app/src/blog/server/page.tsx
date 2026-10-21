@@ -142,24 +142,39 @@ function originalPage(route: BlogRoute, data: SiteData, hosts: Hosts): Rendered 
     };
     return { status: 200, parts: parts({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
   };
-  if (route.view !== "post") return home();
-
-  const post = posts.find((p) => p.slug === route.slug && collectionSlugOf(p.type, collections) === route.collection) ?? null;
-  if (!post || hidden.has(post.type)) {
-    const isHidden = !!post;
+  const notFound = (isHidden: boolean, what: "post" | "collection"): Rendered => {
     const markup = renderToString(
       <div className="blog-app">
         <Topbar site={site} backLabel="Index" onBack={noop} />
         <article className="blog-article">
           <h1>{isHidden ? "Private collection." : "Not found."}</h1>
-          <p className="dek">{isHidden ? "This post belongs to a collection that isn't publicly available." : "That post isn't published, or the URL is off."}</p>
+          <p className="dek">
+            {isHidden
+              ? what === "post"
+                ? "This post belongs to a collection that isn't publicly available."
+                : "This collection isn't publicly available."
+              : what === "post"
+                ? "That post isn't published, or the URL is off."
+                : "There's no collection at this address."}
+          </p>
         </article>
         <Colophon site={site} />
       </div>,
     );
     const head: Head = { title: `${isHidden ? "Private collection" : "Not found"} — ${siteTitle}`, description: "", canonical: siteUrl(site, hosts), type: "website", noindex: true };
     return { status: 404, parts: parts({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
+  };
+  if (route.view === "collection") {
+    // The browser shows the index for any one-segment path; a crawler gets a 404 for
+    // a collection that doesn't exist or is hidden, not a copy of the home page.
+    const collection = collections.find((c) => (c.slug || collectionSlugOf(c.name, collections)) === route.collection);
+    if (!collection) return notFound(false, "collection");
+    if (collection.isHidden) return notFound(true, "collection");
   }
+  if (route.view !== "post") return home();
+
+  const post = posts.find((p) => p.slug === route.slug && collectionSlugOf(p.type, collections) === route.collection) ?? null;
+  if (!post || hidden.has(post.type)) return notFound(!!post, "post");
   const markup = renderToString(<ReaderArticle post={post} collections={collections} posts={posts} site={site} author={original.author} onBack={noop} />);
   const canonical = postUrl(site, hosts, route.collection, post.slug);
   const image = imageOf(post, site, hosts);
