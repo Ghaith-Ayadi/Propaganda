@@ -14,7 +14,6 @@ await build({
   entryPoints: [
     "src/main.ts",
     "src/limits.ts",
-    "src/net.ts",
     "src/failures.ts",
     "src/flows.ts",
     "src/agents/testing.ts",

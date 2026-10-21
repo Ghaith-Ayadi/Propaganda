@@ -3,9 +3,31 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
+import { MockLanguageModelV3 as BaseMock, simulateReadableStream } from "ai/test";
 import { z } from "zod";
 
+// callModel streams, so a mock written as doGenerate answers the stream the same way.
+class MockLanguageModelV3 extends BaseMock {
+  constructor(o: any = {}) {
+    super(
+      o.doGenerate && !o.doStream
+        ? {
+            ...o,
+            doStream: async (opts: any) => {
+              const r = await o.doGenerate(opts);
+              const parts: any[] = [{ type: "stream-start", warnings: r.warnings ?? [] }];
+              (r.content as any[]).forEach((c, i) => {
+                const kind = c.type === "reasoning" ? "reasoning" : "text";
+                parts.push({ type: `${kind}-start`, id: String(i) }, { type: `${kind}-delta`, id: String(i), delta: c.text }, { type: `${kind}-end`, id: String(i) });
+              });
+              parts.push({ type: "finish", finishReason: r.finishReason, usage: r.usage, providerMetadata: r.providerMetadata });
+              return { stream: simulateReadableStream({ chunks: parts }) };
+            },
+          }
+        : o,
+    );
+  }
+}
 const calls: Record<string, unknown>[] = [];
 // What the gateway captured (model_call_io), and what that endpoint answers.
 const captures: Record<string, any>[] = [];

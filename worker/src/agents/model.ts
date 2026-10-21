@@ -4,8 +4,7 @@
 // instead of failing it (src/limits.ts).
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { callModel, DEFAULT_MODEL, setGatewayFetch, setWorkflowContext, type Reasoning } from "../../../api/_ai/gateway";
-import { gatewayFetch } from "../net.js";
+import { callModel, DEFAULT_MODEL, setWorkflowContext, type Reasoning } from "../../../api/_ai/gateway";
 import { emptyAnswerOf, modelStep } from "../limits.js";
 
 let wired = false;
@@ -15,7 +14,6 @@ export function wireGateway(): void {
   if (wired) return;
   wired = true;
   setWorkflowContext(() => ({ workflowId: DBOS.workflowID ?? null, stepId: DBOS.stepID ?? null }));
-  setGatewayFetch(gatewayFetch(Number(process.env.WORKER_MODEL_TIMEOUT_SECONDS ?? 1200)));
 }
 
 /**

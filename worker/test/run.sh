@@ -5,7 +5,6 @@ set -eu
 cd "$(dirname "$0")/.."
 npm run build
 node test/limits.mjs
-node test/gateway-fetch.mjs
 node test/failures.mjs
 node test/flows.mjs
 node test/shared.mjs

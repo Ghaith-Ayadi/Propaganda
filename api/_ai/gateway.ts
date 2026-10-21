@@ -16,7 +16,6 @@
 // browser. Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
 
 import {
-  createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
@@ -212,21 +211,7 @@ function defaultResolve(id: string): LanguageModel {
   if (id.startsWith("google/") && gemini) {
     return createGoogleGenerativeAI({ apiKey: gemini })(id.slice("google/".length));
   }
-  if (gatewayFetch) return (gatewayProvider ??= createGateway({ fetch: gatewayFetch }))(id);
   return id;
-}
-
-let gatewayFetch: typeof fetch | undefined;
-let gatewayProvider: ReturnType<typeof createGateway> | undefined;
-
-/**
- * Where the gateway's requests go out, when the process needs other timeouts
- * than Node's: the worker waits longer than five minutes for a slow model's
- * first byte (worker/src/agents/model.ts). Unset (Vercel), nothing changes.
- */
-export function setGatewayFetch(fn: typeof fetch | undefined): void {
-  gatewayFetch = fn;
-  gatewayProvider = undefined;
 }
 
 let resolveModel: (id: string) => LanguageModel = defaultResolve;
@@ -429,7 +414,8 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
   const { tenant } = route;
   try {
     const cached = opts.cache && route.id.startsWith("anthropic/");
-    const result = await generateText({
+    let streamError: unknown;
+    const stream = streamText({
       model: route.model,
       system: opts.system,
       ...(cached
@@ -450,7 +436,25 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
       abortSignal: opts.abortSignal,
       // A refused key is refused again: no point in the SDK's own retries.
       ...(route.keyed ? { maxRetries: 0 } : {}),
+      onError: ({ error }) => {
+        streamError = error;
+      },
     });
+    // Streamed so the first byte arrives at once: a long answer or a long think is
+    // then a slow stream, not a silent connection that a timeout cuts off. The
+    // caller still gets one finished result, and a failure is the original error.
+    let result;
+    try {
+      result = {
+        text: await stream.text,
+        reasoningText: await stream.reasoningText,
+        finishReason: await stream.finishReason,
+        totalUsage: await stream.totalUsage,
+        providerMetadata: await stream.providerMetadata,
+      };
+    } catch (err) {
+      throw streamError ?? err;
+    }
     await tenantKeyWorked(opts.site, tenant);
     return result;
   } catch (err) {
