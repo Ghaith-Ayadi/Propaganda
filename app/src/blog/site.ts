@@ -16,13 +16,9 @@
 import { must, publicSb } from "@/lib/supabase";
 import { parseLegacySitePath, platformSlugOf, sitePublicUrl } from "@/lib/siteUrl";
 
-export interface BlogSite {
-  id: string;
-  slug: string;
-  domain: string;
-  name: string;
-  analyticsTenant: string;
-}
+import type { BlogSite } from "./siteTypes";
+
+export type { BlogSite };
 
 interface SiteRecord {
   id: string;

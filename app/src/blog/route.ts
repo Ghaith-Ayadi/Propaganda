@@ -42,7 +42,8 @@ function relativePath(pathname: string): string {
   return pathname;
 }
 
-function routeOf(path: string): BlogRoute {
+/** The route a site-relative path names (pure; the rendering function uses it too). */
+export function routeOf(path: string): BlogRoute {
   const legacy = path.match(/^\/p\/([^/]+)\/?$/);
   if (legacy) return { view: "legacy", slug: decodeURIComponent(legacy[1]) };
   const m = path.match(/^\/([^/]+)\/([^/]+)\/?$/);

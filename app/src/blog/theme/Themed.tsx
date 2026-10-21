@@ -6,21 +6,19 @@
 import { useEffect, useMemo, useState } from "react";
 import "./pg.css";
 import { PgSite, postOf } from "./Site";
-import { buildVM, firstParagraph, type PgInput, type PgLinks, type PgRoute } from "./vm";
+import { buildVM, type PgInput, type PgLinks, type PgRoute } from "./vm";
 import { resolveDesign } from "./schema";
-import { asCustomThemes, asDesign, compiledOf, DESIGN_KEY, DRAFT_KEY, themeCss, themeOf, THEMES_KEY, type SiteDesign } from "./design";
+import { asDesign, compiledOf, DESIGN_KEY, DRAFT_KEY, themeCss, themeOf, type SiteDesign } from "./design";
+import { themedInputOf, themedSettingsOf } from "./input";
 import type { ThemeSource } from "./compile";
 import { fetchPostAt, fetchLegacyPost, type BlogPost } from "@/blog/data";
 import { homeHref, navigateTo, routeHref, themedRouteOfHref, type BlogRoute } from "@/blog/route";
 import type { BlogSite } from "@/blog/site";
 import { installPageTracker } from "@/blog/track";
-import { useSetting } from "@/lib/settings";
-import { collectionSlugOf, postPath } from "@/lib/slug";
-import { appOrigin, siteHost } from "@/lib/siteUrl";
+import { getSetting, useSetting, useSettingsVersion } from "@/lib/settings";
+import { postPath } from "@/lib/slug";
+import { appOrigin } from "@/lib/siteUrl";
 import type { Collection } from "@/types";
-
-const VERBATIM_MANIFESTO =
-  "It's called Verbatim because none of it is edited. I don't edit what I write. If I don't like what I said, I don't publish. No AI writing, no nonsense.";
 
 // Read once, at load: navigating inside the frame drops the query string.
 const DRAFT_PREVIEW = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pg-preview") === "draft";
@@ -88,45 +86,17 @@ function pgRouteOf(r: BlogRoute): PgRoute {
 }
 
 export function Themed({ site, design, route, collections, posts, previewTheme }: Props) {
-  const customThemes = asCustomThemes(useSetting<unknown>(THEMES_KEY, null));
-  const title = useSetting<string>("site.title", site.name) || site.name;
-  const tagline = useSetting<string>("site.tagline", "") ?? "";
-  const authorTagline = useSetting<string>("author.tagline", "") ?? "";
-  const manifesto = useSetting<string>("site.manifesto", site.slug === "verbatim" ? VERBATIM_MANIFESTO : "") ?? "";
-  const author = {
-    name: useSetting<string>("author.name", "") ?? "",
-    tagline: authorTagline,
-    location: useSetting<string>("author.location", "") ?? "",
-    bio: useSetting<string>("author.bio", "") ?? "",
-    avatar: useSetting<string | null>("author.avatar", null) ?? null,
-    links: useSetting<{ label: string; url: string }[]>("author.links", []) ?? [],
-  };
+  // Every setting the templates read, as one snapshot (re-read on any change).
+  const version = useSettingsVersion();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const settings = useMemo(() => themedSettingsOf(getSetting, site), [version, site]);
+  const { title, customThemes } = settings;
 
   const theme = (previewTheme && previewTheme.id === design.theme ? previewTheme : null) ?? themeOf(design.theme, customThemes);
   const compiled = compiledOf(theme);
   const resolved = useMemo(() => resolveDesign(theme, design.overrides).design, [theme, design.overrides]);
 
-  const input: PgInput = useMemo(
-    () => ({
-      site: { name: title, host: siteHost(site), lang: "en", tagline: tagline || authorTagline, manifesto },
-      author,
-      collections: collections.map((c) => ({ name: c.name, slug: c.slug || collectionSlugOf(c.name, collections), description: c.description, emoji: c.emoji, hidden: c.isHidden })),
-      posts: posts.map((p) => ({
-        id: p.id,
-        number: p.number,
-        slug: p.slug,
-        collection: collectionSlugOf(p.type, collections),
-        title: p.title,
-        subtitle: p.subtitle,
-        excerpt: p.excerpt || firstParagraph(p.content),
-        date: p.publishedAt,
-        words: p.wordCount,
-        content: p.content,
-      })),
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [title, tagline, authorTagline, manifesto, JSON.stringify(author), collections, posts, site],
-  );
+  const input: PgInput = useMemo(() => themedInputOf(settings, collections, posts), [settings, collections, posts]);
   const vm = useMemo(() => buildVM(input, compiled, links, theme.layout?.headerAlign), [input, compiled, theme]);
   const pgRoute = pgRouteOf(route);
   const post = postOf(vm, pgRoute);

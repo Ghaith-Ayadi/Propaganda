@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import "./styles.css";
 import { useBlogData } from "./data";
 import { useBlogRoute } from "./route";
@@ -7,7 +7,8 @@ import { Reader } from "./components/Reader";
 import { AdminStrip } from "./components/AdminStrip";
 import { SiteNotFound } from "./components/SiteNotFound";
 import { customDomainTarget, legacyAddressTarget, resolveBlogSite, type BlogSite } from "./site";
-import { bindPublicSettings, installSettings, useSetting } from "@/lib/settings";
+import { bindPublicSettings, getSetting, installSettings, useSetting, useSettingsVersion } from "@/lib/settings";
+import { originalSettingsOf } from "./original";
 import { publicSb } from "@/lib/supabase";
 import { Themed, useActiveDesign } from "./theme/Themed";
 
@@ -20,7 +21,22 @@ function useSettingsReady(): boolean {
   return ready;
 }
 
+// The page the rendering function sent (api/blog.ts, blog/server/): the same
+// markup this app is about to render, kept on screen until the data is here.
+const SERVER_MARKUP = "pg-ssr";
+const serverMarkup = () => (typeof document === "undefined" ? null : document.getElementById(SERVER_MARKUP));
+
+/** Mounted with the first real render: takes the server's page down in the same frame. */
+function TakeOver() {
+  useLayoutEffect(() => {
+    serverMarkup()?.remove();
+  }, []);
+  return null;
+}
+
 function Loading() {
+  // Nothing to say while the server's page is still showing.
+  if (serverMarkup()) return null;
   return (
     <div
       className="blog-app"
@@ -64,7 +80,13 @@ export function BlogApp() {
   }, []);
 
   if (site === undefined) return <Loading />;
-  if (site === null) return <SiteNotFound />;
+  if (site === null)
+    return (
+      <>
+        <TakeOver />
+        <SiteNotFound />
+      </>
+    );
   return <BlogAppInner site={site} />;
 }
 
@@ -76,6 +98,9 @@ function BlogAppInner({ site }: { site: BlogSite }) {
   const settingsReady = useSettingsReady();
   const faviconUrl = useSetting<string | null>("favicon.url", null);
   const siteTitle = useSetting<string>("site.title", site.name);
+  const version = useSettingsVersion();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const original = useMemo(() => originalSettingsOf(getSetting, site), [version, site]);
 
   useEffect(() => {
     void installSettings();
@@ -100,6 +125,7 @@ function BlogAppInner({ site }: { site: BlogSite }) {
   if (error) {
     return (
       <div className="blog-app">
+        <TakeOver />
         <AdminStrip />
         <div className="blog-article">
           <h1>Something broke.</h1>
@@ -114,6 +140,7 @@ function BlogAppInner({ site }: { site: BlogSite }) {
   if (design) {
     return (
       <>
+        <TakeOver />
         <AdminStrip />
         <Themed site={site} design={design} route={route} collections={collections} posts={posts} previewTheme={previewTheme} />
       </>
@@ -123,11 +150,18 @@ function BlogAppInner({ site }: { site: BlogSite }) {
   // The original blog has no collection or author pages: those addresses show its home.
   return (
     <>
+      <TakeOver />
       <AdminStrip />
       {route.view === "post" || route.view === "legacy" ? (
-        <Reader route={route} site={site} />
+        <Reader route={route} site={site} settings={original} />
       ) : (
-        <Home collections={collections} posts={posts} site={site} />
+        <Home
+          collections={collections}
+          posts={posts}
+          site={site}
+          settings={original}
+          initialTab={route.view === "collection" ? collections.find((c) => (c.slug || "") === route.collection)?.name ?? null : null}
+        />
       )}
     </>
   );

@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "dev:ui": "VITE_UI_PREVIEW=1 vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build -c vite.ssr.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "check:weights": "node scripts/check-font-weights.mjs"
+    "check:weights": "node scripts/check-font-weights.mjs",
+    "build:blog": "vite build -c vite.ssr.config.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.136",
