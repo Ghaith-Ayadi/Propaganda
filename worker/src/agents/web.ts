@@ -10,9 +10,10 @@
 // so it is charged to the tenant's budget and logged with what DataForSEO
 // says it cost, next to the model calls.
 
-import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { Agent, fetch as undiciFetch } from "undici";
 import { callPaidApi } from "../../../api/_ai/gateway";
+import { guardedLookup, isPublicAddress, type Resolver } from "../../../api/_chat/website";
 
 export interface SearchHit {
   url: string;
@@ -31,9 +32,23 @@ export interface Page {
 type Fetch = typeof fetch;
 let fetchImpl: Fetch = (...a) => fetch(...a);
 
-/** For tests. */
+/**
+ * Reading a page connects to an address a tenant chose, so it connects through
+ * Chat's guarded lookup (api/_chat/website.ts): the address is resolved once, at
+ * connect time, and refused unless public. The address checked is the address
+ * used, so a host can't answer a public one to a check and 127.0.0.1 to the
+ * connection, on the first request or on any redirect hop.
+ */
+export function guardedPageFetch(resolver?: Resolver): Fetch {
+  const dispatcher = new Agent({ connect: { lookup: guardedLookup(resolver) } });
+  return (((url: unknown, init?: object) => undiciFetch(url as never, { ...init, dispatcher })) as unknown) as Fetch;
+}
+let pageFetch: Fetch = guardedPageFetch();
+
+/** For tests: replaces both the page reader's fetch and the search's. */
 export function setWebFetch(f: Fetch): void {
   fetchImpl = f;
+  pageFetch = f;
 }
 
 export function searchConfigured(): boolean {
@@ -162,27 +177,13 @@ export async function searchOnce(query: string, limit: number, opts: SearchOptio
 
 const MAX_BYTES = 2_000_000;
 
-function privateAddress(ip: string): boolean {
-  if (isIP(ip) === 6) {
-    const v = ip.toLowerCase();
-    if (v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80")) return true;
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(v);
-    return mapped ? privateAddress(mapped[1]) : false;
-  }
-  const [a, b] = ip.split(".").map(Number);
-  return (
-    a === 10 ||
-    a === 127 ||
-    a === 0 ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    a >= 224
-  );
-}
-
-/** Refuses anything but http(s) on a public address: the worker sits next to the database. */
+/**
+ * Refuses anything but http(s) without credentials, and an address written in
+ * the URL unless it is public (isPublicAddress reads every spelling, the
+ * IPv4-mapped IPv6 forms included). A name is judged when the socket connects
+ * (pageFetch), not here: resolving it twice is what DNS rebinding beats.
+ * The worker sits next to the database.
+ */
 export async function assertPublicUrl(raw: string): Promise<URL> {
   let url: URL;
   try {
@@ -193,8 +194,8 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error(`not http(s): ${raw}`);
   if (url.username || url.password) throw new Error("URLs with credentials are not fetched");
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
-  if (addresses.length === 0 || addresses.some(privateAddress)) throw new Error(`not a public address: ${url.hostname}`);
+  if (isIP(host) && !isPublicAddress(host)) throw new Error(`not a public address: ${url.hostname}`);
+  if (host.toLowerCase() === "localhost" || host.toLowerCase().endsWith(".localhost")) throw new Error(`not a public address: ${url.hostname}`);
   return url;
 }
 
@@ -208,7 +209,7 @@ async function readPageWithHtml(raw: string, maxChars: number): Promise<{ page: 
   let url = await assertPublicUrl(raw);
   let res: Response | null = null;
   for (let hop = 0; hop < 5; hop++) {
-    res = await fetchImpl(url, {
+    res = await pageFetch(url, {
       redirect: "manual",
       headers: { "User-Agent": "PropagandaBot/0.2 (+https://propaganda.pub)", Accept: "text/html,text/plain;q=0.9,*/*;q=0.5" },
       signal: AbortSignal.timeout(20_000),
