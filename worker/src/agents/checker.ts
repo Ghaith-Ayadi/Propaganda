@@ -3,7 +3,8 @@
 //   check    a post version: links it to the claims it relies on, opens a
 //            flag for each conflict (closes as fixed the ones the new version
 //            no longer has), checks numbers and quotes against the pages it
-//            links, and offers Remember on the tenant facts it found
+//            links (every factual claim since #196, not only numbers and quotes),
+//            and offers Remember on the tenant facts it found
 //   recheck  a claim a post relies on changed: does the post still hold?
 //   contest  a person pushed back on a flag in one sentence: draft the
 //            changes and the argument they submit to the Guardian

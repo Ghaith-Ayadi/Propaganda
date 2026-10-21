@@ -1,5 +1,5 @@
 // Everything the Review tab says about one post, as one list of notes: the
-// tenant's own notes from the pitch, the source check on numbers and quotes,
+// tenant's own notes from the pitch, the source check on every factual claim,
 // and the knowledge base's flags and Remember offers. Each note carries the
 // words it is about (its anchor in the text) and what can be done about it.
 //

@@ -212,7 +212,11 @@ by hand (for Admin's "Run now").
 **A run** (`strategist`, the advanced model):
 1. gathers in code: the onboarding answers and the plan drop
    (`tenant_profile`; Markdown, text and CSV files are read, other files are
-   listed by name), the website as text (home, /pricing, /about, /product),
+   listed by name), the website as text (home and the pages its menu points
+   at, never the blog), their own blog (`readBlog`: the index the home page
+   links to, then up to 30 posts, title and first lines, so a topic is never
+   a post they already have retitled: the validator refuses that, and the
+   prompt asks for theses that build on them),
    last quarter's posts and pitch outcomes, the last approved proposal's edits,
    the taste summary, the searches that contain or sit next to the tenant's own
    (DataForSEO Labs `keyword_suggestions` and `related_keywords` per seed, short
