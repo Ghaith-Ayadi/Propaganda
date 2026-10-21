@@ -3,7 +3,8 @@
 // a stand-in price list. Nothing here talks to a real model.
 
 import { createServer } from "node:http";
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
+import { simulateReadableStream } from "ai/test";
+import { MockLanguageModelV3, streamFromGenerate } from "./mock-model.mjs";
 
 const SITE = "testsite0000000";
 const ARENA_SITE = "verbatimsite000";
@@ -103,9 +104,9 @@ const { setModelResolver, runRound, worstCase, checkModels, judgePrompt, THINKIN
 
 const prompts = [];
 const usage = { inputTokens: { total: 1000, noCache: 1000, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 200, text: 200, reasoning: 0 } };
-setModelResolver((id) =>
-  new MockLanguageModelV3({
-    doStream: async ({ prompt }) => {
+setModelResolver((id) => {
+  // Chat (with tools) is scripted as a stream; the agents' plain calls stream what doGenerate answers.
+  const chat = async ({ prompt }) => {
       const text = prompt.map((m) => (typeof m.content === "string" ? m.content : m.content.map((c) => c.text ?? JSON.stringify(c.output ?? "")).join(""))).join("\n");
       prompts.push({ id, text });
       const fin = (unified) => ({ type: "finish", finishReason: { unified, raw: unified }, usage });
@@ -114,8 +115,8 @@ setModelResolver((id) =>
         ? [{ type: "stream-start", warnings: [] }, { type: "text-start", id: "t" }, { type: "text-delta", id: "t", delta: `${id} read the goals: best ai blog writer.` }, { type: "text-end", id: "t" }, fin("stop")]
         : [{ type: "stream-start", warnings: [] }, { type: "tool-call", toolCallId: "c1", toolName: "read_goals", input: "{}" }, fin("tool-calls")];
       return { stream: simulateReadableStream({ initialDelayInMs: 0, chunkDelayInMs: 0, chunks }) };
-    },
-    doGenerate: async ({ prompt }) => {
+  };
+  const generate = async ({ prompt }) => {
       const text = prompt.map((m) => (typeof m.content === "string" ? m.content : m.content.map((c) => c.text ?? "").join(""))).join("\n");
       prompts.push({ id, text });
       let answer;
@@ -136,9 +137,10 @@ setModelResolver((id) =>
         warnings: [],
         providerMetadata: { gateway: { cost: id === "cheap/a" ? "0.0012" : "0.0007" } },
       };
-    },
-  }),
-);
+  };
+  const stream = streamFromGenerate(generate);
+  return new MockLanguageModelV3({ doGenerate: generate, doStream: (o) => (o.tools?.length ? chat(o) : stream(o)) });
+});
 
 // ---- the Pitcher ----
 

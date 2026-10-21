@@ -1,5 +1,5 @@
 // Everything the Review tab says about one post, as one list of notes: the
-// tenant's own notes from the pitch, the source check on numbers and quotes,
+// tenant's own notes from the pitch, the source check on every factual claim,
 // and the knowledge base's flags and Remember offers. Each note carries the
 // words it is about (its anchor in the text) and what can be done about it.
 //
@@ -226,7 +226,7 @@ export function useReviewNotes(postId: string, item: PipelineItem | undefined) {
             return;
           }
           track("review_fix_applied", { section: "kb" });
-          if (live) resolve(id, "Fixed. The Checker confirms it on the next version.");
+          if (live) resolve(id, "Fixed. We confirm it on the next version.");
           else setStatus("fixed");
         },
       });
@@ -307,7 +307,7 @@ export function useReviewNotes(postId: string, item: PipelineItem | undefined) {
             await kb().remember({ text: r.text, topics: [], scope: {} });
             track("claim_remembered", { from: "review" });
             resolve(id, "Remembered");
-            h.toast("Remembered. The Guardian files it in the knowledge base.");
+            h.toast("Remembered. We file it in the knowledge base.");
           },
         },
         { label: "Not a fact", run: () => resolve(id, "Not a fact") },

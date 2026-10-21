@@ -12,7 +12,7 @@
 import type { Pool } from "pg";
 import { insert, rest } from "../agents/backend.js";
 import { newId } from "../agents/ids.js";
-import { collections, insertDraftPost } from "../agents/store.js";
+import { collections, insertDraftPost, oneLine } from "../agents/store.js";
 import { config } from "../config.js";
 import { publicUrl } from "../listener/sources/public.js";
 import { dispatchAgent } from "../workflows/agents.js";
@@ -72,7 +72,7 @@ const MAX_ASSET_BYTES = 4_000_000;
 
 /** The input, checked. Throws AssignError(400) on bad input. */
 export function checkAssign(body: Record<string, unknown>): Pick<AssignInput, "title" | "collection" | "markdown" | "assets"> {
-  const title = typeof body.title === "string" ? body.title.trim().slice(0, 300) : "";
+  const title = typeof body.title === "string" ? oneLine(body.title).trim().slice(0, 300) : "";
   if (!title) throw new AssignError(400, "A title is required");
   const collection = typeof body.collection === "string" ? body.collection.trim() : "";
   const markdown = typeof body.markdown === "string" ? body.markdown.trim() : "";

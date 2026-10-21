@@ -30,7 +30,7 @@ export const CONNECTORS: Connector[] = [
   { id: "slack", group: "sources", name: "Slack", logo: "slack", connection: "slack",
     summary: "Where ideas live and facts come from.", detailLabel: "Workspace", detailPlaceholder: "ledgerline.slack.com" },
   { id: "websites", group: "sources", name: "Websites we watch", logo: "websites",
-    summary: "Pages the Scout follows, each tied to a topic." },
+    summary: "Pages we follow, each tied to a topic." },
   { id: "newsletter", group: "sources", name: "Newsletter", logo: "newsletter", connection: "newsletter",
     summary: "Your existing archive, read into Propaganda.", detailLabel: "Archive or feed URL", detailPlaceholder: "https://example.com/newsletter/rss" },
 

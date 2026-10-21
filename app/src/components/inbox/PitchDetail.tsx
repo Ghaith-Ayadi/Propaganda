@@ -58,11 +58,11 @@ export function PitchDetail({ pitch, source }: { pitch: Pitch; source: InboxSour
         )}
 
         {!pitch.decision && mode !== "idle" && (
-          <CardSection label={mode === "notes" ? "Notes for the Writer" : "Why not?"}>
+          <CardSection label={mode === "notes" ? "Notes for us" : "Why not?"}>
             <p className="mb-3 text-sm text-tertiary">
               {mode === "notes"
                 ? "What to keep in mind while writing. The brief stays as it is."
-                : "One line is enough. The Pitcher reads it before the next batch."}
+                : "One line is enough. We read it before the next batch."}
             </p>
             <TextArea label={mode === "notes" ? "Notes" : "Reason"} value={note} onChange={setNote} autoFocus />
             <div className="mt-3 flex gap-2">

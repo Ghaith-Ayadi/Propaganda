@@ -571,7 +571,7 @@ export const liveAdapter: GoalsAdapter & {
     const st = s();
     const q = quarter ?? quarterOf(today());
     const id = (await must(sb.rpc("strategy_request", { p_site: st.site, p_kind: kind, p_quarter: q, p_request: note })).catch((err) => {
-      throw coded("GOALS-REQUEST", err, "Couldn't reach the Strategist. Try again.");
+      throw coded("GOALS-REQUEST", err, "Couldn't reach us. Try again.");
     })) as string;
     await refreshGoals();
     return id;

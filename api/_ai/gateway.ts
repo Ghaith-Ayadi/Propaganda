@@ -414,7 +414,8 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
   const { tenant } = route;
   try {
     const cached = opts.cache && route.id.startsWith("anthropic/");
-    const result = await generateText({
+    let streamError: unknown;
+    const stream = streamText({
       model: route.model,
       system: opts.system,
       ...(cached
@@ -435,7 +436,27 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
       abortSignal: opts.abortSignal,
       // A refused key is refused again: no point in the SDK's own retries.
       ...(route.keyed ? { maxRetries: 0 } : {}),
+      onError: ({ error }) => {
+        streamError = error;
+      },
     });
+    // Streamed so the first byte arrives at once: a long answer or a long think is
+    // then a slow stream, not a silent connection that a timeout cuts off. The
+    // caller still gets one finished result, and a failure is the original error.
+    let result;
+    try {
+      result = {
+        text: await stream.text,
+        reasoningText: await stream.reasoningText,
+        finishReason: await stream.finishReason,
+        totalUsage: await stream.totalUsage,
+        providerMetadata: await stream.providerMetadata,
+      };
+    } catch (err) {
+      // An abort ends the stream without an answer: say it was an abort.
+      if (opts.abortSignal?.aborted) throw opts.abortSignal.reason ?? err;
+      throw streamError ?? err;
+    }
     await tenantKeyWorked(opts.site, tenant);
     return result;
   } catch (err) {

@@ -335,7 +335,7 @@ export async function approvePitch(
     updateItem(id, { ...decision, stage: drafted ? "in_review" : "writing", postId });
     void refresh();
     if (agentNote) {
-      toast.add({ title: "The Writer didn't start", description: `The worker says ${agentNote}. Write it yourself, or ask Chat to write it later.` });
+      toast.add({ title: "Writing didn't start", description: `The worker says ${agentNote}. Write it yourself, or ask Chat to write it later.` });
     }
     return postId;
   }

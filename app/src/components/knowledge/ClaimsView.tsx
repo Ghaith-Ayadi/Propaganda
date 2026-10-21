@@ -117,7 +117,7 @@ export function ClaimsView({ selected }: { selected: string | null }) {
               <span key={p.id}>
                 {i > 0 && " · "}
                 {p.origin === "remember" ? `"${p.title}"` : p.title}
-                {p.status === "escalated" ? " (waiting on the topic owner)" : " (with the Guardian)"}
+                {p.status === "escalated" ? " (waiting on the topic owner)" : " (with us)"}
               </span>
             ))}
           </div>

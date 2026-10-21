@@ -91,7 +91,7 @@ function SocialCard() {
         </Button>
       </div>
       <div className="mt-3">
-        <Note>Social writing and publishing come after 0.2. Channels are saved now so the Strategist can plan for them.</Note>
+        <Note>Social writing and publishing come after 0.2. Channels are saved now so we can plan for them.</Note>
       </div>
     </Card>
   );

@@ -332,6 +332,8 @@ export interface Rules {
   previousTopics?: string[];
   /** The revision's request talks about the topics, so renaming them is what was asked. */
   requestAboutTopics?: boolean;
+  /** The titles of the posts on their own blog: a topic is never one of them retitled (2026-10-21). */
+  theirPosts?: string[];
   /** Topic names are held to the title rules (false on a run recorded before them: replays must match). */
   titleRules?: boolean;
   /** The twenty rules' hard checks (an em dash, "the hard part is") on topic names too (false on a run recorded before them). */
@@ -781,9 +783,35 @@ export function asksAboutTopics(request: string): boolean {
 }
 
 /** Every rule the draft breaks, as sentences for the model. Empty means it passes. */
+/** Words a title carries that say nothing about what it is about. */
+const TITLE_NOISE = new Set(["a", "an", "the", "of", "for", "to", "in", "on", "at", "and", "or", "with", "your", "our", "is", "are", "how", "what", "why", "when", "that", "this", "it", "its", "from", "by", "vs"]);
+
+/** A title's words that carry meaning, lower-cased, numbers kept. */
+function titleWords(s: string): string[] {
+  return s.toLowerCase().replace(/[\u2019']s\b/g, "").split(/[^a-z0-9]+/).filter((w) => w.length > 1 && !TITLE_NOISE.has(w));
+}
+
+/**
+ * True when a topic's name is one of their posts retitled: the same words, or
+ * one inside the other with at least three words in common. Catches a copied
+ * title, not a copied idea; the prompt's rule covers the rest.
+ */
+export function restatesPost(name: string, post: string): boolean {
+  const a = new Set(titleWords(name));
+  const b = new Set(titleWords(post));
+  if (!a.size || !b.size) return false;
+  const shared = [...a].filter((w) => b.has(w)).length;
+  if (shared === a.size && shared === b.size) return true;
+  return shared >= 3 && (shared === a.size || shared === b.size);
+}
+
 export function validate(d: Draft, r: Rules): string[] {
   const errors: string[] = [];
   const topicNames = new Set(d.topics.map((t) => t.name.toLowerCase()));
+  for (const t of d.topics) {
+    const hit = (r.theirPosts ?? []).find((p) => restatesPost(t.name, p));
+    if (hit) errors.push(`Topic "${t.name}" is their post "${hit}" retitled: their blog already has it (rule 2). Build on it (the thesis says what the new posts add) or drop it.`);
+  }
 
   if (d.volume.value < 1) errors.push("volume.value must be at least 1.");
   if (d.volume.value > r.volumeCap) errors.push(`volume.value is ${d.volume.value}; the most allowed is ${r.volumeCap} (rule 1).`);

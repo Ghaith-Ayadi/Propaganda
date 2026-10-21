@@ -63,7 +63,7 @@ function AssignDialog({ onClose }: { onClose: () => void }) {
       track("posts_assigned", { posts: made });
       toast.add({
         type: notStarted.length ? "warning" : "success",
-        title: `${made} ${made === 1 ? "post is" : "posts are"} with the Writer, in ${target}.`,
+        title: `${made} ${made === 1 ? "post is" : "posts are"} with us, in ${target}.`,
         description: notStarted.length ? `Not started: ${notStarted.join("; ")}` : "Each draft shows up in Writing when it's ready.",
       });
       onClose();
@@ -87,7 +87,7 @@ function AssignDialog({ onClose }: { onClose: () => void }) {
             <div>
               <h2 className="type-title text-primary">Assign posts</h2>
               <p className="mt-1 text-sm text-tertiary">
-                Posts you've already decided on. They skip the pitches and go straight to the Writer, which follows the collection's rules.
+                Posts you've already decided on. They skip the pitches and go straight to writing, and we follow the collection's rules.
               </p>
             </div>
             <CloseButton size="md" onPress={onClose} label="Close" className="-mr-2 shrink-0" />

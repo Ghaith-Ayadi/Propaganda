@@ -1,4 +1,4 @@
-// The Strategist's proposal for a quarter: every number with one line of why
+// Our proposal for a quarter: every number with one line of why
 // and what it's based on. The tenant edits any of it in place, then approves
 // (a new goal version, the quarter recalculated) or asks for changes.
 // agents/strategist.md sections 4 and 5.
@@ -77,7 +77,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
       await goalsActions.requestChanges(proposal.id, text);
       setAsking(false);
       setAnswers({});
-      toast.add({ type: "success", title: "Sent to the Strategist", description: "A revision comes back here." });
+      toast.add({ type: "success", title: "Sent to us", description: "A revision comes back here." });
     } catch (err) {
       reportError("goals.requestChanges", err);
       toast.add({ type: "error", title: "Couldn't send that", description: "Try again in a moment." });
@@ -90,7 +90,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   return (
     <div className="space-y-4">
       <Card
-        title={`The Strategist's proposal for ${quarterLabel(proposal.quarter)}`}
+        title={`Our proposal for ${quarterLabel(proposal.quarter)}`}
         aside={
           <Badge type="pill-color" color={s.color} size="sm">
             {s.label}
@@ -106,7 +106,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
         </p>
         {proposal.changeRequest && (
           <p className="mt-3 rounded-lg bg-secondary p-3 text-sm text-secondary">
-            You asked: "{proposal.changeRequest}". The Strategist is revising.
+            You asked: "{proposal.changeRequest}". We're revising.
           </p>
         )}
         {proposal.questions.length > 0 && (
@@ -130,7 +130,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                 </ol>
                 <div className="mt-3 flex items-center justify-end gap-3">
                   <p className="text-xs text-tertiary">
-                    {allAnswered ? "The Strategist revises the proposal with your answers." : `Answer all ${proposal.questions.length} to send them.`}
+                    {allAnswered ? "We revise the proposal with your answers." : `Answer all ${proposal.questions.length} to send them.`}
                   </p>
                   <Button size="sm" color="primary" isDisabled={!allAnswered || busy} onClick={() => void ask(answerNote())}>
                     Send answers
@@ -157,7 +157,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
         </div>
       </Card>
 
-      <Card title="Topics" subtitle="About four, ranked, each a range. The low end is what counts as on target. The Strategist pitches across all of them, and Goals shows how many it pitched next to what's done.">
+      <Card title="Topics" subtitle="About four, ranked, each a range. The low end is what counts as on target. We pitch across all of them, and Goals shows how many it pitched next to what's done.">
         <TopicList topics={draft.topics} editable={editable} onChange={(topics) => set({ topics })} />
       </Card>
 
@@ -204,7 +204,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
         </Card>
       </div>
 
-      <Card title="Sites we watch" subtitle="The Scout reads these every day for timely posts. Each one is tied to a topic.">
+      <Card title="Sites we watch" subtitle="We read these every day for timely posts. Each one is tied to a topic.">
         <SiteList sites={draft.watchedSites} topics={draft.topics.map((t) => t.name)} editable={editable} onChange={(watchedSites) => set({ watchedSites })} />
       </Card>
 
@@ -251,7 +251,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                   Cancel
                 </Button>
                 <Button size="sm" color="primary" isDisabled={!note.trim() || busy} onClick={() => void ask(note)}>
-                  Send to the Strategist
+                  Send to us
                 </Button>
               </div>
             </div>

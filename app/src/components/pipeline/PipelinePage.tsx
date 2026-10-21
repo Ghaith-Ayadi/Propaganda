@@ -98,11 +98,11 @@ export function PipelinePage() {
             <div className="mx-4 mt-6 rounded-xl p-4 ring-1 ring-secondary ring-inset md:mx-8">
               <p className="type-heading text-primary">Nothing in the pipeline yet</p>
               <p className="mt-1 text-sm text-tertiary">
-                Pitches come from your goals and your sources: approve the Strategist's plan in{" "}
+                Pitches come from your goals and your sources: approve our plan in{" "}
                 <a href={pageHref("goals")} className="font-medium text-brand-secondary hover:underline">
                   Goals
                 </a>{" "}
-                and the Pitcher sends the first ones. Pitch an idea of your own with the + on Pitched.
+                and we send the first ones. Pitch an idea of your own with the + on Pitched.
               </p>
             </div>
           )}
@@ -235,7 +235,7 @@ function Column({
     }
   };
 
-  /** The Writer drafts it from the title and whatever was pasted, in the current collection. */
+  /** The draft is written from the title and whatever was pasted, in the current collection. */
   const assign = async () => {
     if (busy || !title.trim()) return;
     setBusy(true);
@@ -245,12 +245,12 @@ function Column({
       close();
       toast.add({
         type: notStarted.length ? "warning" : "success",
-        title: made ? "It's with the Writer." : "Couldn't hand it over",
+        title: made ? "It's with us." : "Couldn't hand it over",
         description: notStarted[0] ?? "The draft shows up here when it's ready.",
       });
     } catch (err) {
       reportError("pipeline.assignFromColumn", err);
-      toast.add({ type: "error", title: "Couldn't hand it to the Writer", description: "Try again in a moment." });
+      toast.add({ type: "error", title: "Couldn't hand it to us", description: "Try again in a moment." });
     } finally {
       setBusy(false);
     }
@@ -309,8 +309,8 @@ function Column({
               onKeyDown={(e) => {
                 if (e.key === "Escape") close();
               }}
-              placeholder="For the Writer: paste everything you have. Notes, a draft, a transcript, links."
-              aria-label="Material for the Writer"
+              placeholder="For us: paste everything you have. Notes, a draft, a transcript, links."
+              aria-label="Material to write from"
               className="w-full resize-y bg-transparent px-1 py-1 text-sm text-primary outline-hidden placeholder:text-placeholder"
             />
           )}
@@ -318,7 +318,7 @@ function Column({
             <div className="flex items-center justify-between gap-2 px-1">
               <p className="text-xs text-quaternary">Enter to write it yourself</p>
               <Button size="sm" color="secondary" isDisabled={!title.trim()} isLoading={busy} onClick={() => void assign()}>
-                Writer drafts it
+                We draft it
               </Button>
             </div>
           ) : (

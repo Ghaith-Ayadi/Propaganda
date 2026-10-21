@@ -29,7 +29,7 @@ import { PlanDrop } from "./PlanDrop";
 type Tab = "goals" | "strategist" | "batches" | "plan";
 const TABS: { id: Tab; label: string }[] = [
   { id: "goals", label: "Goals" },
-  { id: "strategist", label: "Strategist" },
+  { id: "strategist", label: "Proposal" },
   { id: "batches", label: "Batches" },
   { id: "plan", label: "Your plan" },
 ];
@@ -192,7 +192,7 @@ function NextQuarterCard({ quarter, onTab }: { quarter: QuarterKey; onTab: (t: T
       aside={<CalendarDate className="size-5 text-fg-quaternary" aria-hidden />}
     >
       <ol className="grid gap-3 text-sm sm:grid-cols-3">
-        <Step done={ctx.today >= clock.draftOn || !!proposal} label="The Strategist drafts it" day={clock.draftOn} />
+        <Step done={ctx.today >= clock.draftOn || !!proposal} label="We draft it" day={clock.draftOn} />
         <Step done={!!goals.current} label="You approve it" day={clock.approveBy} warn={late} />
         <Step done={ctx.today >= clock.firstBatchBy && !!goals.current} label="Batch 1 in your inbox" day={clock.firstBatchBy} />
       </ol>
@@ -219,7 +219,7 @@ function Step({ done, label, day, warn }: { done: boolean; label: string; day: s
 function NextQuarterEmpty({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; thisQuarter: QuarterKey; onTab: (t: Tab, q?: QuarterKey) => void }) {
   const clock = nextQuarterClock(thisQuarter);
   return (
-    <Card title={`${quarterLabel(quarter)} isn't planned yet`} subtitle={`The Strategist drafts it on ${shortDate(clock.draftOn)}, four weeks before ${quarterLabel(quarter)} starts on ${shortDate(quarterStart(quarter))}.`}>
+    <Card title={`${quarterLabel(quarter)} isn't planned yet`} subtitle={`We draft it on ${shortDate(clock.draftOn)}, four weeks before ${quarterLabel(quarter)} starts on ${shortDate(quarterStart(quarter))}.`}>
       <p className="text-sm text-secondary">
         It starts from the planned posts pushed from {quarterLabel(thisQuarter)}, what you rejected and why, and the bonus posts that earned a slot. Anything you already know about {quarterLabel(quarter)} helps: drop it in Your plan.
       </p>
@@ -234,7 +234,7 @@ function NextQuarterEmpty({ quarter, thisQuarter, onTab }: { quarter: QuarterKey
 
 /**
  * What the Strategist is doing (asked, writing, or failed), and for the
- * superadmin a "Run the Strategist now" button: a manual run, for testing.
+ * superadmin a "Run strategy now" button: a manual run, for testing.
  */
 function StrategistStatus({ quarter }: { quarter: QuarterKey }) {
   const state = useStrategistState();
@@ -249,10 +249,10 @@ function StrategistStatus({ quarter }: { quarter: QuarterKey }) {
     setAsking(true);
     try {
       await goalsActions.askStrategist("revision", "Run by hand from the Goals page.", quarter);
-      toast.add({ type: "success", title: "The Strategist is on it", description: "The proposal shows here when it's done, usually within a few minutes." });
+      toast.add({ type: "success", title: "We're on it", description: "The proposal shows here when it's done, usually within a few minutes." });
     } catch (err) {
       reportError("goals.runStrategist", err);
-      toast.add({ type: "error", title: "Couldn't start the Strategist", description: userMessage(err) });
+      toast.add({ type: "error", title: "Couldn't start the proposal", description: userMessage(err) });
     } finally {
       setAsking(false);
     }
@@ -261,14 +261,14 @@ function StrategistStatus({ quarter }: { quarter: QuarterKey }) {
     <div className="flex flex-col gap-3 rounded-xl bg-secondary px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
       <p className="text-secondary">
         {working
-          ? "The Strategist is writing a proposal. It shows here when it's done."
+          ? "We're writing a proposal. It shows here when it's done."
           : failed
-            ? "The Strategist's last run didn't finish, so nothing changed. It's in Admin > Runs."
-            : "Admin: start a Strategist run for this tenant now."}
+            ? "Our last run didn't finish, so nothing changed. It's in Admin > Runs."
+            : "Admin: start a strategy run for this tenant now."}
       </p>
       {admin && (
         <Button size="sm" color="secondary" isLoading={asking} isDisabled={asking || !!working} onClick={() => void run()}>
-          Run the Strategist now
+          Run strategy now
         </Button>
       )}
     </div>
@@ -285,7 +285,7 @@ function StrategistTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; t
         {quarter > thisQuarter ? (
           <NextQuarterEmpty quarter={quarter} thisQuarter={thisQuarter} onTab={onTab} />
         ) : (
-          <Card title="No proposal for this quarter" subtitle="The Strategist proposes goals once you've answered its questions, and again two weeks before each quarter." />
+          <Card title="No proposal for this quarter" subtitle="We propose goals once you've answered our questions, and again two weeks before each quarter." />
         )}
       </div>
     );
@@ -312,7 +312,7 @@ function StrategistTab({ quarter, thisQuarter, onTab }: { quarter: QuarterKey; t
       <p className="text-center text-sm text-tertiary">
         Have a plan of your own?{" "}
         <button type="button" className="font-medium text-brand-secondary hover:underline" onClick={() => onTab("plan")}>
-          Give it to the Strategist
+          Give it to us
         </button>
       </p>
     </div>
@@ -327,7 +327,7 @@ function BatchesTab({ quarter, onTab }: { quarter: QuarterKey; onTab: (t: Tab, q
     return (
       <Card title="No batches yet" subtitle="Batches come from approved goals: the quarter's planned posts, always delivered in batches.">
         <Button size="sm" color="secondary" iconTrailing={ArrowRight} onClick={() => onTab("strategist")}>
-          The Strategist's proposal
+          Our proposal
         </Button>
       </Card>
     );

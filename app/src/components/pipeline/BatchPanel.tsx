@@ -37,12 +37,12 @@ export async function askForPitches(): Promise<void> {
     const why = await requestNextBatch();
     toast.add(
       why
-        ? { type: "error", title: "The Pitcher didn't start", description: `The worker says ${why}.` }
-        : { type: "success", title: "The Pitcher is on it.", description: "Its pitches show up here as it writes them." },
+        ? { type: "error", title: "Pitching didn't start", description: `The worker says ${why}.` }
+        : { type: "success", title: "We're on it.", description: "Its pitches show up here as it writes them." },
     );
   } catch (err) {
     reportError("pipeline.requestNextBatch", err);
-    toast.add({ type: "error", title: "Couldn't ask the Pitcher", description: userMessage(err) });
+    toast.add({ type: "error", title: "Couldn't start pitching", description: userMessage(err) });
   }
 }
 
@@ -102,7 +102,7 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
     toast.add({
       type: "success",
       title: `Batch ${b.number} is on the board.`,
-      description: count ? `${count} ${count === 1 ? "pitch is" : "pitches are"} waiting on you.` : "Its pitches arrive as the Pitcher writes them.",
+      description: count ? `${count} ${count === 1 ? "pitch is" : "pitches are"} waiting on you.` : "Its pitches arrive as we write them.",
     });
     onClose();
   };
@@ -183,7 +183,7 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
                     <div className="mt-3 text-sm text-secondary">
                       <p>
                         About {b.quota} approved briefs
-                        {b.expectedTopics?.length ? ` on ${b.expectedTopics.join(" and ")}` : ""}. The Pitcher sends a few more pitches than
+                        {b.expectedTopics?.length ? ` on ${b.expectedTopics.join(" and ")}` : ""}. We send a few more pitches than
                         that and reads your decisions on the batches before it.
                       </p>
                       {next?.number === b.number && (
@@ -214,7 +214,7 @@ function BatchPanel({ onClose }: { onClose: () => void }) {
               >
                 Send the next batch now
               </Button>
-              <p className="text-sm text-tertiary">The Pitcher pitches the best ideas waiting, without waiting for the next batch's day.</p>
+              <p className="text-sm text-tertiary">We pitch the best ideas waiting, without waiting for the next batch's day.</p>
             </div>
           )}
         </Dialog>

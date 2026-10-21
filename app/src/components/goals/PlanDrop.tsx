@@ -129,7 +129,7 @@ export function PlanDrop({ compact = false }: { compact?: boolean }) {
     setSaving(true);
     try {
       await draft.save();
-      toast.add({ type: "success", title: "The Strategist will read this", description: "It goes into the next proposal, item by item." });
+      toast.add({ type: "success", title: "We'll read this", description: "It goes into the next proposal, item by item." });
     } catch (err) {
       reportError("goals.planDrop", err);
       toast.add({ type: "error", title: "Couldn't save your plan", description: "Try again in a moment." });
@@ -147,11 +147,11 @@ export function PlanDrop({ compact = false }: { compact?: boolean }) {
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-quaternary">
-          {drop.readAt ? `The Strategist read this on ${shortDate(drop.readAt)}.` : drop.text || drop.files.length ? "Saved. The Strategist reads it in the next proposal." : ""}
+          {drop.readAt ? `We read this on ${shortDate(drop.readAt)}.` : drop.text || drop.files.length ? "Saved. We read it in the next proposal." : ""}
           {sample && " Sample data: files stay in this browser tab."}
         </p>
         <Button size="sm" color="primary" isDisabled={!dirty || saving} isLoading={saving} onClick={() => void save()}>
-          Give it to the Strategist
+          Give it to us
         </Button>
       </div>
     </Card>

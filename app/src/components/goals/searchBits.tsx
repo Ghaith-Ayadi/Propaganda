@@ -11,7 +11,7 @@ import type { RankingSearch, SearchBucket } from "@/lib/goals/types";
 export const BUCKETS: { key: SearchBucket; label: string; color: "success" | "blue" | "gray"; why: string }[] = [
   { key: "now", label: "Winnable now", color: "success", why: "A post can reach page one this quarter: difficulty under 30 and under 30 sites linking to an average page-one result, or you already sit on page two." },
   { key: "later", label: "Must win over time", color: "blue", why: "The searches your business has to own in a year or two. The goal this quarter is a position (into the top 30, then the top 20), not page one." },
-  { key: "nodata", label: "No data yet", color: "gray", why: "DataForSEO has no number for it. Kept because the intent is exactly right; the Scout reports its position all the same." },
+  { key: "nodata", label: "No data yet", color: "gray", why: "DataForSEO has no number for it. Kept because the intent is exactly right; we report its position all the same." },
 ];
 
 export function bucketOf(s: Pick<RankingSearch, "bucket">): SearchBucket {

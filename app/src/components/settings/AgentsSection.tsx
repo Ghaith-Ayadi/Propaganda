@@ -30,7 +30,7 @@ export function AgentsSection() {
 function RosterCard() {
   const [open, setOpen] = useState<string | null>("writer");
   return (
-    <Card title="The agents" description="Eight agents, each with one job. They run on the server, and every model call is logged to the cost log.">
+    <Card title="What we do for you" description="Eight jobs. They run on our servers, and every model call is logged to the cost log.">
       <ul className="divide-y divide-secondary rounded-lg border border-secondary">
         {AGENTS.map((a) => (
           <li key={a.id}>
@@ -41,8 +41,7 @@ function RosterCard() {
               className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-primary_hover"
             >
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-primary">{a.name}</div>
-                <div className="text-xs text-tertiary">{a.job}</div>
+                <div className="text-sm font-medium text-primary">{a.job}</div>
               </div>
               {a.internet && <Globe01 aria-label="Can search the web" className="size-4 text-quaternary" />}
             </button>
@@ -66,10 +65,10 @@ function WriterPanel() {
           rows={8}
           value={guide}
           onChange={setGuide}
-          placeholder="Plain sentences about how this tenant sounds: who is speaking, how formal, what to avoid. Left empty, the Writer uses the default voice."
+          placeholder="Plain sentences about how this tenant sounds: who is speaking, how formal, what to avoid. Left empty, we use the default voice."
         />
         <p className="mt-1.5 text-xs text-tertiary">
-          The Writer's first job is to read your published content and propose this. Edit it any time; it applies to the next draft.
+          Our first job is to read your published content and propose this. Edit it any time; it applies to the next draft.
         </p>
       </div>
       <div className="rounded-lg border border-secondary bg-primary p-3">
@@ -87,7 +86,7 @@ function WriterPanel() {
         ) : (
           <>
             <p className="text-xs text-tertiary">
-              When reviewers make the same edit again and again, the Writer proposes a line for the guide here. Nothing yet.
+              When reviewers make the same edit again and again, we propose a line for the guide here. Nothing yet.
             </p>
             <Button size="sm" color="link-gray" className="mt-2" onClick={showExample}>Show an example</Button>
           </>
@@ -108,11 +107,11 @@ function TasteCard() {
   return (
     <Card
       title="Taste"
-      description="What the Pitcher has learned from your yes and no on pitches and drafts. It reads this before every batch."
+      description="What we've learned from your yes and no on pitches and drafts. We read this before every batch."
     >
       <div className="space-y-4">
         <div>
-          <div className="mb-1 type-eyebrow text-quaternary">Summary, written by the Pitcher</div>
+          <div className="mb-1 type-eyebrow text-quaternary">Summary, written by us</div>
           {taste.summary ? (
             <p className="whitespace-pre-wrap text-sm text-primary">{taste.summary}</p>
           ) : (
@@ -126,7 +125,7 @@ function TasteCard() {
             rows={4}
             value={taste.myNotes}
             onChange={setNotes}
-            placeholder="Things you always want or never want pitched. Only you can edit your notes; the Pitcher reads everyone's."
+            placeholder="Things you always want or never want pitched. Only you can edit your notes; we read everyone's."
           />
         </div>
         <Note>Placeholder: the summary and notes are not read from or saved to the server yet.</Note>
@@ -139,7 +138,7 @@ function ModelsCard() {
   return (
     <Card
       title="Models"
-      description="On Propaganda's account, the Strategist runs on Claude Fable and every other agent on DeepSeek V4 Pro. With your Anthropic key below, they all run on Claude with your key, on your bill: the Strategist on Fable, the others on Sonnet."
+      description="We pick the model for each job, and every call is logged to the cost log."
     />
   );
 }
