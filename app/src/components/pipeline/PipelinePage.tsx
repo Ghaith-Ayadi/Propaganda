@@ -235,7 +235,7 @@ function Column({
     }
   };
 
-  /** The We draft it from the title and whatever was pasted, in the current collection. */
+  /** The draft is written from the title and whatever was pasted, in the current collection. */
   const assign = async () => {
     if (busy || !title.trim()) return;
     setBusy(true);
