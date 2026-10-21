@@ -3,7 +3,7 @@
 // fetch is a stub serving the fixtures.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { htmlToText, dropDecoration, sitePaths, siteClaims, readSite, setWebFetch } from "../dist/agents/testing.js";
+import { htmlToText, dropDecoration, sitePaths, siteClaims, readSite, setWebFetch, assertPublicUrl, guardedPageFetch } from "../dist/agents/testing.js";
 
 let failures = 0;
 async function check(name, fn) {
@@ -111,6 +111,24 @@ await check("readSite survives an unreadable home page", async () => {
   assert.equal(site.skipped.length, 1);
 });
 setWebFetch(fetch);
+
+await check("assertPublicUrl refuses every spelling of a private address", async () => {
+  for (const u of ["http://169.254.169.254/", "http://127.0.0.1/", "http://[::1]/", "http://[::ffff:127.0.0.1]/", "http://[::ffff:7f00:1]/", "http://[::ffff:a9fe:a9fe]/", "http://[fd00::1]/", "http://localhost/", "http://x.localhost/", "http://user:pw@93.184.215.14/", "ftp://93.184.215.14/"]) {
+    await assert.rejects(() => assertPublicUrl(u), undefined, u);
+  }
+  await assertPublicUrl("https://93.184.215.14/");
+  await assertPublicUrl("https://example.com/");
+});
+
+await check("a name that resolves to a private address is refused at connect time, rebinding included", async () => {
+  let asked = 0;
+  // A public answer to the first question, loopback to the second: the connection gets one answer only.
+  const rebinding = guardedPageFetch(async () => (++asked === 1 ? ["127.0.0.1"] : ["93.184.215.14"]));
+  await assert.rejects(() => rebinding("http://rebind.example/"), /fetch failed/);
+  assert.equal(asked, 1, "resolved once");
+  const mapped = guardedPageFetch(async () => ["::ffff:7f00:1"]);
+  await assert.rejects(() => mapped("http://mapped.example/"), /fetch failed/);
+});
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL PASSED");
 process.exit(failures ? 1 : 0);

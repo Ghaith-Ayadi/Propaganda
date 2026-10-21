@@ -5,7 +5,7 @@ export { DBOS } from "@dbos-inc/dbos-sdk";
 export { setModelResolver } from "../../../api/_ai/gateway";
 export { registerQueues, dispatchAgent } from "../workflows/agents.js";
 export { wireGateway, extractJson, MODELS } from "./model.js";
-export { setWebFetch, setSearchSleep, htmlToText, dropDecoration, sitePaths, blogPath, postLinks, readBlog, siteClaims, readSite, assertPublicUrl } from "./web.js";
+export { setWebFetch, setSearchSleep, htmlToText, dropDecoration, sitePaths, blogPath, postLinks, readBlog, siteClaims, readSite, assertPublicUrl, guardedPageFetch } from "./web.js";
 export { setSearchWaits, asAttempt } from "./search.js";
 export { newId, stableId } from "./ids.js";
 // The knowledge base agents' pure parts (test/agents.mjs).
