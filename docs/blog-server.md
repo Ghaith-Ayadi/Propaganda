@@ -53,10 +53,17 @@ include the header).
 
 ## When it fails
 
-The API unreachable, a row that will not parse, the bundle missing: `api/blog.ts` reports
-the error (`api/_telemetry.ts`, PostHog) and answers the plain shell with
-`X-Blog-Render: failed`, so readers get the app in the browser as before. Nothing in the
+The API unreachable, a row that will not parse: the bundle reports the error
+(`api/_telemetry.ts`, PostHog) and answers its copy of the plain shell with
+`X-Blog-Render: failed`, so readers get the app in the browser as before. The bundle itself
+missing (a build that left `api/_blog/dist/entry.js` out): `api/blog.ts` fetches the
+deployment's own static `/index.html` (no host header, so the rewrite stays out of it) and
+answers that with `X-Blog-Render: unavailable`; only if that fails too is the answer a 503.
+Production Caddy has no fallback of its own, so a 5xx would blank the blog. Nothing in the
 browser depends on the server's page.
+
+Settings: the server fetches only the keys it renders (`PUBLIC_SETTING_KEYS` in
+`app/src/blog/server/api.ts`); a private key is never read, whatever the API allows.
 
 ## Working on it
 

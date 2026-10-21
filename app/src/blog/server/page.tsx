@@ -29,6 +29,7 @@ import type { BlogSite } from "../siteTypes";
 import type { Collection } from "@/types";
 import { collectionSlugOf } from "@/lib/slug";
 import { absolute, postUrl, siteUrl, type Hosts } from "./urls";
+import { fillShell, type FillOptions } from "./fill";
 
 export interface SiteData {
   site: BlogSite;
@@ -104,15 +105,9 @@ function headTags(h: Head, data: SiteData, hosts: Hosts, siteTitle: string): str
   return tags.join("\n    ");
 }
 
-/** The built shell with the head, the styles and the page's markup in it. */
-function fill(opts: { head: string; css: string[]; htmlAttrs?: string; markup: string; favicon?: string | null }): string {
-  let out = shell;
-  if (opts.htmlAttrs) out = out.replace(/<html lang="en">/, `<html lang="en" ${opts.htmlAttrs}>`);
-  if (opts.favicon) out = out.replace(/<link rel="icon"[^>]*>/, `<link rel="icon" href="${esc(opts.favicon)}">`);
-  const styles = opts.css.map((c) => `<style>${c}</style>`).join("\n    ");
-  out = out.replace(/<title>[^<]*<\/title>/, `${opts.head}\n    ${styles}`);
-  out = out.replace('<div id="root"></div>', `<div id="pg-ssr">${opts.markup}</div>\n    <div id="root"></div>`);
-  return out;
+/** The built shell with the head, the styles and the page's markup in it (fill.ts). */
+function fill(opts: FillOptions): string {
+  return fillShell(shell, { ...opts, favicon: opts.favicon ? esc(opts.favicon) : null });
 }
 
 /** The shell as the browser gets it today: no page in it. The app renders everything. */

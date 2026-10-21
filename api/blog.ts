@@ -9,9 +9,12 @@
 // head, or the sitemap, feed and robots.txt. The browser then loads the app
 // as before and takes the page over.
 //
-// Should rendering fail (the API down, the bundle missing), the reader gets
-// the plain shell and the app renders in the browser as it did before this
-// function existed; the failure is reported.
+// Should rendering fail (the API down, a bug), the bundle answers with the
+// plain shell and the app renders in the browser as it did before this
+// function existed. Should the bundle itself be missing (a build that left it
+// out), the shell is fetched from this deployment's own /index.html, which
+// the browser gets without the host header; only if that fails too does the
+// reader see an error. Either failure is reported.
 //
 // Env (all optional; the bundle carries the build's values):
 //   SUPABASE_URL / VITE_SUPABASE_URL, SUPABASE_ANON_KEY / VITE_SUPABASE_ANON_KEY
@@ -24,6 +27,20 @@ type Entry = typeof import("./_blog/dist/entry.js");
 let entry: Promise<Entry> | null = null;
 const load = (): Promise<Entry> => (entry ??= import("./_blog/dist/entry.js"));
 
+const HTML = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
+
+let shell: string | null = null;
+
+/** The built shell, from the deployment itself: the static /index.html, no host header. */
+async function fetchShell(request: Request): Promise<string> {
+  if (shell) return shell;
+  const origin = new URL(request.url).origin;
+  const res = await fetch(`${origin}/index.html`, { signal: AbortSignal.timeout(5000), redirect: "manual" });
+  const body = await res.text();
+  if (!res.ok || !body.includes('<div id="root">')) throw new Error(`shell from ${origin}/index.html: ${res.status}`);
+  return (shell = body);
+}
+
 export async function GET(request: Request): Promise<Response> {
   let mod: Entry;
   try {
@@ -31,7 +48,12 @@ export async function GET(request: Request): Promise<Response> {
   } catch (err) {
     entry = null;
     await report(err, "blog", { stage: "load" });
-    return new Response("<!doctype html><title>Propaganda</title>", { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+    try {
+      return new Response(await fetchShell(request), { status: 200, headers: { ...HTML, "X-Blog-Render": "unavailable" } });
+    } catch (err2) {
+      await report(err2, "blog", { stage: "shell" });
+      return new Response("<!doctype html><title>Propaganda</title><p>This blog is unavailable right now.</p>", { status: 503, headers: HTML });
+    }
   }
   try {
     return await mod.handle(request, {
