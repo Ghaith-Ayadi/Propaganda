@@ -44,3 +44,20 @@ export function stripDashes(text: string): string {
     .replace(/, (?=[,.;:!?)\]"'’”]|\n|$)/g, "")
     .replace(/,,/g, ",");
 }
+
+/** One of a tenant's own style rules (public.kb_styles). */
+export interface StyleRow {
+  rule: string;
+  example: string;
+}
+
+/**
+ * The tenant's style rules as a prompt block, read after the twenty rules; "" when it has none.
+ * A rule may add to the twenty or relax a judgement call; the ones code checks (em dashes) still hold.
+ */
+export function stylesBlock(rows: StyleRow[] | undefined): string {
+  const list = (rows ?? []).filter((r) => r.rule.trim());
+  if (list.length === 0) return "";
+  const lines = list.map((r, i) => `${i + 1}. ${r.rule.trim()}${r.example.trim() ? `\n   The tone they want (learn the register, never reuse the line): ${r.example.trim()}` : ""}`);
+  return `The tenant's own style rules (they wrote them; they add to the twenty rules above and win where they relax a judgement call, but a rule code checks, like zero em dashes, still holds):\n${lines.join("\n")}`;
+}

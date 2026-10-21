@@ -10,6 +10,7 @@
 
 import { useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useWorkspace } from "@/components/Workspace";
 import { db } from "@/lib/db";
 import { useSetting } from "@/lib/settings";
 import { useLatestProposal, useStrategistState } from "@/lib/goals/useGoals";
@@ -32,7 +33,7 @@ export function stopReason(error: string | null | undefined): string {
   return "Nothing was lost. Ask it again; your answers are saved.";
 }
 
-export type StepId = "business" | "strategy" | "planning" | "plan" | "pitches" | "drafts" | "publish";
+export type StepId = "business" | "strategy" | "planning" | "plan" | "pitches" | "drafts" | "publish" | "domain";
 
 export interface TimelineStep {
   id: StepId;
@@ -51,6 +52,7 @@ export const TIMELINE: TimelineStep[] = [
   { id: "pitches", label: "Your first pitches", minutes: 10 },
   { id: "drafts", label: "We draft the strongest 3", minutes: 5, agent: true },
   { id: "publish", label: "Publish your first article", minutes: 5 },
+  { id: "domain", label: "Connect your domain", minutes: 5 },
 ];
 
 /** A safety limit on revisions, never shown: the plan has no preset number of rounds. The worker holds the same number (agents/strategy.ts MAX_PLAN_ROUNDS): keep them equal. */
@@ -85,6 +87,10 @@ export function useFirstDay(): FirstDay {
   const firstArticle = useSetting<string>("onboarding.firstArticle", "") || null;
   const after = useSetting<string>("onboarding.after", "") === "guide" ? "guide" : null;
   // "I got it" comes after an approved plan; the pre-0.2 wizard wrote the key before any plan existed.
+  const { site } = useWorkspace();
+  // Connected, or skipped for now (the Skip button writes the same key the old strip did).
+  const domainSkipped = useSetting<string>("onboarding.domainStripDismissed", "");
+  const domainDone = !!site.domain || !!domainSkipped;
   const completedSetting = !!useSetting<string>("onboarding.completed", "");
   const strategist = useStrategistState();
   const proposal = useLatestProposal();
@@ -134,6 +140,9 @@ export function useFirstDay(): FirstDay {
 
     const active = new Set<StepId>([step]);
     if (step === "pitches" && !done.has("drafts")) active.add("drafts");
+    if (domainDone) done.add("domain");
+    // After the first article the domain is the open step, beside "what happens next".
+    if (step === "publish" && !domainDone) active.add("domain");
     if (completed) for (const t of TIMELINE) done.add(t.id);
 
     return {
@@ -152,7 +161,7 @@ export function useFirstDay(): FirstDay {
       after,
       completed,
     };
-  }, [business, firstArticle, after, completedSetting, strategist, proposal, firstPitches, drafted, loading]);
+  }, [business, firstArticle, after, completedSetting, domainDone, strategist, proposal, firstPitches, drafted, loading]);
 }
 
 /** The minutes left on the timeline (an agent's step beside a person's doesn't add). */

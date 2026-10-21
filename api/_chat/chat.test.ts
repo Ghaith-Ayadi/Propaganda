@@ -385,3 +385,15 @@ test("a reply that promises a button without offer_open gets one for what it cit
 });
 
 test.after(() => server.close());
+
+test("the tenant's style rules follow the twenty rules in Chat's prompt", async () => {
+  const { systemPrompt } = await import("./toolkit.js");
+  const { stylesBlock } = await import("../_ai/houseStyle.js");
+  assert.equal(stylesBlock([]), "");
+  assert.equal(stylesBlock([{ rule: "  ", example: "" }]), "");
+  const block = stylesBlock([{ rule: "Jokes are welcome.", example: "A ski instructor line." }]);
+  const prompt = systemPrompt("Acme", block);
+  assert.ok(prompt.indexOf("Jokes are welcome.") > prompt.indexOf("20. Write to one reader"));
+  assert.match(prompt, /never reuse the line\): A ski instructor line\./);
+  assert.ok(!systemPrompt("Acme").includes("own style rules"));
+});

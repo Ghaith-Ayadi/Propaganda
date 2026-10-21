@@ -11,11 +11,18 @@
 //   tenant.timezone        an IANA zone; sweeps and quarters follow it
 //   tenant.language        the content language, a BCP 47 tag
 //
-// How the blog looks is blog.design, which Settings › Design edits (the themes
+// How the blog looks is blog.design, which the Site page's Design tab edits (the themes
 // work, blog/theme/design.ts). This page only says which theme is published:
 // designName() reads the stored value without the theme code.
 
 import { setSetting, useSetting } from "@/lib/settings";
+
+/**
+ * The design a new blog starts with: the default theme, no overrides. Written
+ * as a literal so onboarding doesn't load the theme code; keep it equal to
+ * DEFAULT_THEME (blog/theme/themes.ts).
+ */
+export const NEW_SITE_DESIGN = { api: 1, theme: "rubric", overrides: {} } as const;
 
 export type Hosting = "propaganda" | "elsewhere";
 

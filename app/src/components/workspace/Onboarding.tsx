@@ -8,6 +8,7 @@ import { must } from "@/lib/supabase";
 import { siteHost } from "@/lib/siteUrl";
 import { REVIEW_OPTIONS } from "@/components/onboarding/SetupStep";
 import { NativeSelect } from "@/components/base/select/select-native";
+import { NEW_SITE_DESIGN } from "@/components/site/hosting";
 import { rememberPlan, type Plan } from "@/lib/tenantPlan";
 import { cx } from "@/utils/cx";
 import { coded, userMessage } from "@/lib/errors";
@@ -136,7 +137,9 @@ export function Onboarding({
     // the author on this screen — they can fix it up in Settings afterward.
     try {
       const c = clientFor(account);
-      const settings: Array<[string, string]> = [
+      // New blogs start on the themed templates; only older sites keep the original renderer.
+      const settings: Array<[string, unknown]> = [
+        ["blog.design", NEW_SITE_DESIGN],
         ["tenant.plan", plan],
         ["site.title", name.trim()],
         ["author.name", authorName.trim()],

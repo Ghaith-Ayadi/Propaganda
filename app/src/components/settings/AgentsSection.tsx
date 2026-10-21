@@ -4,10 +4,12 @@ import { Button } from "@/components/base/buttons/button";
 import {
   AGENTS,
   WRITER_RULE,
-  useTaste,
-  useVoiceSuggestion,
   useVoiceGuide,
 } from "@/lib/tenantConfig";
+import { toast } from "@/components/base/toast/toast";
+import { userMessage } from "@/lib/errors";
+import { useTaste } from "@/lib/taste";
+import { reportError } from "@/lib/telemetry";
 import { BYOK_ENABLED } from "@/lib/modelKey";
 import { ModelKeyCard } from "./ModelKeyCard";
 import { Card, Note, TextArea } from "./ui";
@@ -55,7 +57,6 @@ function RosterCard() {
 
 function WriterPanel() {
   const [guide, setGuide] = useVoiceGuide();
-  const { suggestion, apply, dismiss, showExample } = useVoiceSuggestion();
   return (
     <div className="space-y-4 border-t border-secondary bg-secondary/40 px-4 py-4">
       <div>
@@ -72,28 +73,6 @@ function WriterPanel() {
         </p>
       </div>
       <div className="rounded-lg border border-secondary bg-primary p-3">
-        <div className="mb-1 type-eyebrow text-quaternary">Suggested change</div>
-        {suggestion ? (
-          <>
-            <p className="text-sm text-primary">{suggestion.reason}</p>
-            <p className="mt-1 text-sm text-secondary">Add: “{suggestion.addition}”</p>
-            <p className="mt-1 text-xs text-tertiary">Built from {suggestion.editCount} reviewer edits. The guide stays as it is until you apply this.</p>
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" color="primary" onClick={apply}>Apply</Button>
-              <Button size="sm" color="secondary" onClick={dismiss}>Dismiss</Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-xs text-tertiary">
-              When reviewers make the same edit again and again, we propose a line for the guide here. Nothing yet.
-            </p>
-            <Button size="sm" color="link-gray" className="mt-2" onClick={showExample}>Show an example</Button>
-          </>
-        )}
-        <div className="mt-2"><Note>Placeholder: suggestions are not read from the server yet, and nothing here is saved.</Note></div>
-      </div>
-      <div className="rounded-lg border border-secondary bg-primary p-3">
         <div className="mb-1 type-eyebrow text-quaternary">House rule, always on</div>
         <p className="text-sm text-primary">{WRITER_RULE.rule}</p>
         <p className="mt-1 text-xs text-tertiary">{WRITER_RULE.instead}</p>
@@ -103,7 +82,26 @@ function WriterPanel() {
 }
 
 function TasteCard() {
-  const [taste, setNotes] = useTaste();
+  const { taste, error, saveNotes } = useTaste();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const notes = draft ?? taste?.notes ?? "";
+  const dirty = draft !== null && draft.trim() !== (taste?.notes ?? "").trim();
+
+  async function save() {
+    setSaving(true);
+    try {
+      await saveNotes(notes);
+      setDraft(null);
+      toast.add({ type: "success", title: "Saved. We read it before the next batch." });
+    } catch (err) {
+      reportError("settings.saveTaste", err);
+      toast.add({ type: "error", title: userMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <Card
       title="Taste"
@@ -112,7 +110,9 @@ function TasteCard() {
       <div className="space-y-4">
         <div>
           <div className="mb-1 type-eyebrow text-quaternary">Summary, written by us</div>
-          {taste.summary ? (
+          {!taste ? (
+            <p className="text-sm text-tertiary">Loading…</p>
+          ) : taste.summary ? (
             <p className="whitespace-pre-wrap text-sm text-primary">{taste.summary}</p>
           ) : (
             <p className="text-sm text-tertiary">Empty until the first batch has been reviewed.</p>
@@ -123,12 +123,17 @@ function TasteCard() {
           <TextArea
             label="Your taste notes"
             rows={4}
-            value={taste.myNotes}
-            onChange={setNotes}
-            placeholder="Things you always want or never want pitched. Only you can edit your notes; we read everyone's."
+            value={notes}
+            onChange={setDraft}
+            placeholder="Things you always want or never want pitched. Everyone on this tenant shares these notes."
           />
+          <div className="mt-2 flex items-center gap-3">
+            <Button size="sm" color="primary" isDisabled={!dirty || !taste} isLoading={saving} onClick={() => void save()}>
+              Save notes
+            </Button>
+            {error != null && <span className="text-xs text-error-primary">{userMessage(error)}</span>}
+          </div>
         </div>
-        <Note>Placeholder: the summary and notes are not read from or saved to the server yet.</Note>
       </div>
     </Card>
   );

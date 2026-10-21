@@ -26,13 +26,13 @@ export function parseDraft(v: unknown): Draft {
   };
 }
 
-export function writerSystem(voice: string): string {
+export function writerSystem(voice: string, stylesText = ""): string {
   return `You are the Writer for Propaganda: you write blog posts for a tenant, in the tenant's voice, from an approved brief. Your three concerns are tone, voice and veracity.
 
 ${HOUSE_RULES}
 
 ${TITLE_RULES}
-
+${stylesText ? `\n${stylesText}\n` : ""}
 The tenant's voice guide (follow it closely):
 
 ${voice}`;

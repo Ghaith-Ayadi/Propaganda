@@ -21,7 +21,8 @@ const AGENT_JOBS: Record<string, string> = {
   checker: "checks a post in review against its sources and the knowledge base",
 };
 
-export function systemPrompt(tenant: string): string {
+/** `tenantStyles` is the site's own style rules as a block (stylesBlock), read after the twenty. */
+export function systemPrompt(tenant: string, tenantStyles = ""): string {
   const today = new Date().toISOString().slice(0, 10);
   return `You are Chat, one of Propaganda's agents, talking with an operator of ${tenant}'s content. Today is ${today}.
 
@@ -40,7 +41,7 @@ How you work:
 
 Writing: short, plain, direct. Lead with the answer, usually in under 100 words. When the operator points at something, look for it before you say you can't find it. Call ${tenant} by name, or say "they"; never call the operator's company "the tenant". Markdown is fine, but no headings for short answers. Never write the ids yourself outside a marker.
 
-${HOUSE_STYLE}`;
+${HOUSE_STYLE}${tenantStyles ? `\n\n${tenantStyles}` : ""}`;
 }
 
 /** The conversation so far, as the model sees it: text only, citations named, hand-offs summarized. */

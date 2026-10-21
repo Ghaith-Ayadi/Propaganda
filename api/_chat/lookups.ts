@@ -3,6 +3,7 @@
 // pulls the dozen nearest claims (public.kb_search, keyword and meaning merged).
 
 import { BackendError, asUser, eq } from "./db.js";
+import type { StyleRow } from "../_ai/houseStyle.js";
 
 export interface ClaimHit {
   id: string;
@@ -217,6 +218,16 @@ export async function searchPitches(token: string, site: string, query: string, 
 export async function siteName(token: string, site: string): Promise<string> {
   const [row] = await asUser(token).get<{ name: string }[]>(`/sites?select=name&id=${eq(site)}`);
   return row?.name ?? "this site";
+}
+
+/** The site's active style rules (public.kb_styles); none on a server without the table. */
+export async function siteStyles(token: string, site: string): Promise<StyleRow[]> {
+  try {
+    return await asUser(token).get<StyleRow[]>(`/kb_styles?select=rule,example&status=eq.active&site=${eq(site)}&order=created.asc&limit=100`);
+  } catch (err) {
+    if (err instanceof BackendError && err.status === 404) return [];
+    throw err;
+  }
 }
 
 /** Proposes a statement to the Guardian (public.kb_remember opens the proposal; only the Guardian admits it). */

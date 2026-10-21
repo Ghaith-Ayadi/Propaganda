@@ -3,7 +3,7 @@
 // writes, memberships, site management, writing activity. The pre-multi-tenant
 // checks (creates without a site from old builds) are gone with PocketBase: a
 // site is required.
-import { V, anon, check, done, newId, ok, status, user } from "./lib.mjs";
+import { V, admin, anon, check, done, newId, ok, status, user } from "./lib.mjs";
 
 const owner = await user("alaarabi16@gmail.com");
 const stranger = await user("stranger@test.local");
@@ -99,5 +99,21 @@ const stamped = await ok(stranger.from("posts").insert({ id: newId(), site: site
 check("clients can't set created / updated", !stamped.created.startsWith("2000") && !stamped.updated.startsWith("2000"));
 const bumped = await ok(stranger.from("posts").update({ title: "t2" }).eq("id", stamped.id).select().single());
 check("an update moves `updated`, not `created`", bumped.created === stamped.created && Date.parse(bumped.updated) >= Date.parse(stamped.updated));
+
+// ---- taste notes: the app saves with update-then-insert (an upsert also sets `site`, which members can't) ----
+const saveNotes = async (u, siteId, notes) => {
+  const upd = await u.from("taste_profiles").update({ notes }).eq("site", siteId).select("site");
+  if (upd.error) return upd.error;
+  if (upd.data.length) return null;
+  return (await u.from("taste_profiles").insert({ site: siteId, notes })).error;
+};
+check("member saves taste notes when no row exists (insert path)", (await saveNotes(stranger, site.id, "first")) === null);
+check("…and the notes are there", (await ok(stranger.from("taste_profiles").select("notes").eq("site", site.id)))[0]?.notes === "first");
+await ok(admin.from("taste_profiles").update({ summary: "the Pitcher wrote this" }).eq("site", site.id));
+check("member saves taste notes when a row exists (update path)", (await saveNotes(stranger, site.id, "second")) === null);
+const taste = (await ok(stranger.from("taste_profiles").select("summary, notes").eq("site", site.id)))[0];
+check("…notes change, the Pitcher's summary stays", taste?.notes === "second" && taste?.summary === "the Pitcher wrote this");
+check("an upsert on an existing row is refused (why the app doesn't use it)", (await stranger.from("taste_profiles").upsert({ site: site.id, notes: "x" }, { onConflict: "site" })).error !== null);
+check("owner of another site can't write these notes", (await ok(owner.from("taste_profiles").update({ notes: "pwn" }).eq("site", site.id).select("site"))).length === 0);
 
 done("ACCESS");
