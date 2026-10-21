@@ -39,7 +39,7 @@ export function planBatches(cadence: BatchCadence, quarter: QuarterKey, firstDue
 
 /** What we tell the tenant when they switch cadence. Ayadi's words, 2026-10-08. */
 export const CADENCE_RATIONALE =
-  "We can give you everything at once. Your briefs and drafts don't change with how you review the posts inside a batch. Your feedback on a batch does shape the next one, a lot: the Pitcher reads what you approved and rejected before it writes the next batch.";
+  "We can give you everything at once. Your briefs and drafts don't change with how you review the posts inside a batch. Your feedback on a batch does shape the next one, a lot: we read what you approved and rejected before it writes the next batch.";
 
 export const CADENCE_COPY: Record<BatchCadence, { label: string; hint: string }> = {
   weekly: {

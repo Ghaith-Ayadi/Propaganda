@@ -196,7 +196,7 @@ export function useHome(): Home {
     }
 
     // The tenant's own goals, or an honest "no goals yet".
-    const noGoals = "No goals yet: the Strategist proposes them in Goals.";
+    const noGoals = "No goals yet: we propose them in Goals.";
     const now = goalsNow.now;
     const topics = targets?.volume.topics.map((t) => ({
       name: t.name,

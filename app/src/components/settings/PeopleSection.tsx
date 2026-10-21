@@ -97,7 +97,7 @@ function OwnersCard({ people }: { people: { id: string; name: string }[] }) {
   return (
     <Card
       title="Topic owners"
-      description="When the Guardian sends a change of position up, the owner of the topic decides. Their word is final, short of the top authority."
+      description="When we send a change of position up, the owner of the topic decides. Their word is final, short of the top authority."
     >
       <div className="space-y-4">
         <Select

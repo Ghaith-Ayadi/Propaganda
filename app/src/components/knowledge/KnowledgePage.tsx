@@ -42,7 +42,7 @@ export function KnowledgePage() {
     <>
       <PageHeader
         title="Knowledge base"
-        description="What your tenant actually believes, claim by claim. The Guardian is the only thing that writes to it."
+        description="What your tenant actually believes, claim by claim. Only we write to it."
         actions={
           <Button size="md" color="primary" iconLeading={Plus} onClick={() => setRemembering(true)}>
             Remember

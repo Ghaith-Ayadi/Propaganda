@@ -135,7 +135,7 @@ export function InboxPage() {
             picked={picked}
             onPick={(id) => open("pitches", id)}
             onBack={() => open("pitches")}
-            empty={<EmptyState title="No pitches waiting" body="The next batch lands here when the Strategist's plan calls for it." />}
+            empty={<EmptyState title="No pitches waiting" body="The next batch lands here when our plan calls for it." />}
             row={(p, selected, pick) => <PitchRow key={p.id} pitch={p} selected={selected} onSelect={pick} />}
             detail={(p) => <PitchDetail key={p.id} pitch={p} source={inbox.source} />}
           />
@@ -218,7 +218,7 @@ function Notes({ notes }: { notes: StrategistNote[] }) {
             <InfoCircle className="mt-0.5 size-4 shrink-0 text-fg-quaternary" aria-label="Note" />
           )}
           <span>
-            <span className="font-semibold text-primary">The Strategist: </span>
+            <span className="font-semibold text-primary">From us: </span>
             {n.message}
           </span>
         </li>
@@ -238,9 +238,9 @@ function FlagRow({ flag, selected, onSelect }: { flag: Flag; selected: boolean; 
       aside={flag.urgency === "high" ? <UrgentChip /> : undefined}
       extra={
         flag.status === "rejected" ? (
-          <Badge type="pill-color" color="error" size="sm">Guardian rejected</Badge>
+          <Badge type="pill-color" color="error" size="sm">We rejected</Badge>
         ) : flag.status === "contesting" ? (
-          <Badge type="pill-color" color="gray" size="sm">With the Guardian</Badge>
+          <Badge type="pill-color" color="gray" size="sm">With us</Badge>
         ) : flag.cantFix ? (
           <Badge type="pill-color" color="gray" size="sm">
             <Lock01 className="mr-1 size-3" /> Can't be fixed

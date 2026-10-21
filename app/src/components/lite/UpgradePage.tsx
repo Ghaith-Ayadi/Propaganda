@@ -17,7 +17,7 @@ const LITE = [
 
 const FULL = [
   "All eight agents: they plan the quarter, pitch, write and fact-check",
-  "A knowledge base of what your company actually believes, kept straight by the Guardian",
+  "A knowledge base of what your company actually believes, kept straight for you",
   "Blog, newsletter, social and sales collateral that agree with each other",
   "Granola, transcripts and Slack as sources",
   "Five goals, tracked daily",

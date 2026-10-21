@@ -66,7 +66,7 @@ export function FlagDetail({ flag, source }: { flag: Flag; source: InboxSource }
         {flag.status === "contesting" && (
           <div className="flex items-center gap-3 rounded-lg bg-secondary px-4 py-3 text-sm text-secondary">
             <Shield01 className="size-5 text-fg-quaternary" />
-            The Guardian is reading your argument. The flag stays open until it rules.
+            We're reading your argument. The flag stays open until we rule.
           </div>
         )}
 
@@ -74,7 +74,7 @@ export function FlagDetail({ flag, source }: { flag: Flag; source: InboxSource }
           <CardSection
             label={
               <span className="flex items-center gap-2">
-                The Guardian
+                Our ruling
                 <Badge type="pill-color" color="error" size="sm">
                   <XClose className="mr-1 size-3" /> Rejected
                 </Badge>
@@ -151,7 +151,7 @@ export function FlagDetail({ flag, source }: { flag: Flag; source: InboxSource }
         {mode === "contest" && (
           <CardSection label="Why both can be true">
             <p className="mb-3 text-sm text-tertiary">
-              One or two sentences: a date, a scope, a customer segment. The Guardian decides. A thin case is admitted as contested, which
+              One or two sentences: a date, a scope, a customer segment. We decide. A thin case is admitted as contested, which
               closes the flag and lowers the knowledge base grade.
             </p>
             <TextArea
@@ -172,7 +172,7 @@ export function FlagDetail({ flag, source }: { flag: Flag; source: InboxSource }
                   setArgument("");
                 }}
               >
-                Send to the Guardian
+                Send to us
               </Button>
               <Button size="sm" color="secondary" onClick={() => setMode("idle")}>
                 Cancel
@@ -184,7 +184,7 @@ export function FlagDetail({ flag, source }: { flag: Flag; source: InboxSource }
         {settled && (
           <CardSection label="Or close it">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <CloseOption title="It isn't inconsistent" body="Argue why both can be true. The Guardian decides." onPress={() => setMode("contest")} />
+              <CloseOption title="It isn't inconsistent" body="Argue why both can be true. We decide." onPress={() => setMode("contest")} />
               {flag.cantFix && flag.object.kind === "newsletter" ? (
                 <CloseOption title="Noted" body="Closes the task." onPress={() => void run(source.closeFlag(flag.id, "noted"))} />
               ) : flag.cantFix ? (
@@ -214,7 +214,7 @@ export function FlagDetail({ flag, source }: { flag: Flag; source: InboxSource }
           />
         </CardSection>
       </CardBody>
-      <CardFooter>Raised by the Checker on {flag.raised}.</CardFooter>
+      <CardFooter>Raised by us on {flag.raised}.</CardFooter>
     </Card>
   );
 }
