@@ -19,7 +19,7 @@ import { go, goPage } from "@/lib/route";
 import { usePipelineItemForPost } from "@/lib/pipeline/store";
 import { collectionDisplay } from "@/lib/collections";
 import { useTheme } from "@/lib/theme";
-import { countWords, formatWordCount } from "@/lib/format";
+import { countWords, formatWordCount, oneLine } from "@/lib/format";
 import { consumeTitleFocus } from "@/lib/postFocus";
 import { useEditorStyles } from "@/lib/editorStyles";
 import { setDrawer, toggleDrawer, useIsMobile } from "@/lib/mobile";
@@ -257,8 +257,10 @@ export function Editor({ post }: Props) {
           value={titleDraft}
           rows={1}
           onChange={(e) => {
-            setTitleDraft(e.target.value);
-            void updatePost(post.id, { title: e.target.value });
+            // A pasted title may carry line breaks; a title is one line.
+            const title = oneLine(e.target.value);
+            setTitleDraft(title);
+            void updatePost(post.id, { title });
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
