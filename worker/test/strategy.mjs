@@ -187,7 +187,13 @@ async function web(input, init) {
   }
   if (url.startsWith(WEB)) {
     if (url.includes("/dead")) return new Response("gone", { status: 404 });
-    return new Response(`<html><head><title>Kontra</title></head><body><p>Durable batch jobs. ${url}</p></body></html>`, { headers: { "content-type": "text/html" } });
+    const html = (t) => new Response(t, { headers: { "content-type": "text/html" } });
+    // Their own blog: an index of two posts and a tag page, which readSite skips and readBlog reads.
+    if (/\/blog\/?$/.test(url)) return html(`<html><head><title>Blog | Kontra</title></head><body><a href="/blog/retries-101">Retries 101</a><a href="/blog/tag/ops">ops</a><a href="/blog/why-cron-fails"><img alt=""></a><a href="/blog/retries-101/">again</a></body></html>`);
+    if (url.includes("/blog/retries-101")) return html(`<html><head><title>Retries 101 | Kontra</title></head><body><p>Every batch job fails sometimes. A retry with backoff is the first thing to add.</p></body></html>`);
+    if (url.includes("/blog/why-cron-fails")) return html(`<html><head><title>Why cron jobs fail silently - Kontra</title></head><body><p>Cron tells nobody when a job never ran.</p></body></html>`);
+    if (url.includes("/blog/")) return new Response("gone", { status: 404 });
+    return html(`<html><head><title>Kontra</title></head><body><nav><a href="/blog">Blog</a></nav><p>Durable batch jobs. ${url}</p></body></html>`);
   }
   return realFetch(input, init);
 }
@@ -345,6 +351,11 @@ try {
   check(t.siteSentences([SITE_TEXT, SITE_TEXT]).length === sentences.length, "repeated once however often the site repeats it");
   check(t.echoesSite("Writing the job is the easy part", sentences) && t.echoesSite("Writing the job is the easy part, knowing it ran is not", sentences), "a name or thesis that repeats a site sentence, trimmed or reworded, echoes it");
   check(!t.echoesSite("Scraping at scale", sentences) && !t.echoesSite("Scrapers fail on volume long before they fail on parsing", sentences), "a short label or a claim of its own does not");
+  check(t.restatesPost("Retries 101", "Retries 101") && t.restatesPost("Why your cron jobs fail silently", "Why cron jobs fail silently") && t.restatesPost("Menus that pass the 2027 limits", "The menus that pass the 2027 limits, explained"), "a topic named as one of their posts, reworded or cut, restates it");
+  check(!t.restatesPost("Reliability", "Reliability engineering for batch jobs at scale") && !t.restatesPost("Scaling scratch recipes", "One Pan First: Chef Sharon's Shortcut to a New Recipe") && !t.restatesPost("Menus that pass the 2027 limits", "A New Recipe for Success: USDA Shifts and the Ingredients for Innovation"), "a label of its own, or the same idea under other words, does not (that one is the prompt's rule)");
+  const theirs = t.validate(t.parseDraft({ ...GOOD, topics: [{ ...GOOD.topics[0], name: "Retries 101" }, GOOD.topics[1]], ranking: { ...GOOD.ranking, searches: GOOD.ranking.searches.map((x) => ({ ...x, topic: x.topic === "Reliability" ? "Retries 101" : x.topic })) }, watchedSites: GOOD.watchedSites.map((w) => ({ ...w, topic: w.topic === "Reliability" ? "Retries 101" : w.topic })) }), { ...rules, theirPosts: ["Retries 101", "Why cron jobs fail silently"] });
+  check(theirs.some((e) => /their post "Retries 101" retitled/.test(e)), `a topic that is one of their own posts goes back (${theirs.join(" | ")})`);
+  check(t.validate(t.parseDraft(GOOD), { ...rules, theirPosts: ["Retries 101", "Why cron jobs fail silently"] }).every((e) => !/retitled/.test(e)), "and topics of their own pass");
   check(t.sameClaim({ name: "Retries", thesis: "A job that retries on its own beats a faster one." }, { name: "Self-healing jobs", thesis: "Jobs that retry on their own beat faster jobs." }) && !t.sameClaim(GOOD.topics[0], GOOD.topics[1]), "two topics saying one thing are the same claim; two different ones are not");
   const claims = { ...rules, thesis: true, siteSentences: sentences };
   check(t.validate(draft, claims).length === 0, `a good proposal with theses passes (${t.validate(draft, claims).join(" | ")})`);
@@ -518,6 +529,7 @@ try {
   check(calls.filter((u) => u.includes("keyword_overview")).length === 2, `two overview calls (the job vocabulary, then the proposed search), and none for the fix draft since nothing new was proposed (${calls.filter((u) => u.includes("keyword_overview")).length})`);
   check(vocabPrompts.length === 1 && vocabPrompts[0].includes("Durable batch jobs") && prompts[0].includes("job queue backoff: 70/month") && prompts[0].includes("idempotent jobs: no data") && prompts[0].includes("batch job retries: 320/month, difficulty 12, page one averages 8 referring domains, 6-month trend +50%, peaks in Dec, intent informational, AI overview yes"), `the job vocabulary was asked once, priced wide (Ads for what Labs lacks, no data kept as no data) and put in the prompt with page one's links and the season (${prompts[0].split("\n").filter((l) => /job queue|idempotent|batch job retries: 320/.test(l)).join(" | ")})`);
   check(prompts[0].includes("Who ranks in Google's top 100 across the 3 biggest") && prompts[0].includes("youtube.com (video)") && prompts[0].includes("Never targets") && prompts[0].includes("kontra login"), "and who ranks across them, by kind, and the never-targets");
+  check(prompts[0].includes("Posts already on their own blog (2 of 2") && prompts[0].includes(`- "Retries 101": Every batch job fails sometimes.`) && prompts[0].includes(`- "Why cron jobs fail silently": Cron tells nobody`) && row.inputs?.theirPosts === 2, `their own blog's posts are in the prompt, titles without the site's name, the tag page and the repeat dropped (${row.inputs?.theirPosts} posts; ${prompts[0].split("\n").filter((l) => /Posts already|Retries 101|cron jobs fail/.test(l)).join(" | ")})`);
   check(p.ranking.searches.every((s) => s.bucket === "now") && p.ranking.searches.find((s) => s.query === "job queue backoff")?.volume === 70 && row.inputs?.jobSearches === 6 && row.inputs?.jobSearchesPriced === 3 && row.inputs?.whoRanks === 2, `the sent proposal carries each search's bucket and the inputs count the job searches (${JSON.stringify({ buckets: p.ranking.searches.map((s) => s.bucket), inputs: row.inputs })})`);
   check(p.profile === GOOD.profile && p.readersFind === GOOD.readersFind, "and the profile and readers-find paragraphs");
   if (process.env.STRATEGY_DUMP) (await import("node:fs")).writeFileSync(process.env.STRATEGY_DUMP, `${vocabPrompts[0]}\n\n=====\n\n${prompts[0]}`);

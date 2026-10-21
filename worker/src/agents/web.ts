@@ -306,6 +306,119 @@ export interface SiteRead {
   skipped: { url: string; reason: string }[];
 }
 
+/** A company's own blog: its index and the posts on it, newest first as the index lists them. */
+export interface BlogRead {
+  url: string;
+  posts: Page[];
+  /** Posts the index links to, read or not. */
+  total: number;
+}
+
+/** Where a site keeps its posts, when its home page links to one of these. */
+const BLOG_PATH = /^\/(blog|news|articles|insights|resources|stories|journal|learn|posts)$/i;
+/** A link under the index that is a listing, never a post. */
+const BLOG_LISTING = /^(page|category|categories|tag|tags|author|authors|topic|topics|archive|feed|rss)$/i;
+
+/** The blog index the home page links to most (same host, one segment), or null. */
+export function blogPath(homeHtml: string, base: URL): string | null {
+  const counts = new Map<string, number>();
+  for (const m of homeHtml.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#?]+)[^"']*["']/gi)) {
+    let u: URL;
+    try {
+      u = new URL(decode(m[1]), base);
+    } catch {
+      continue;
+    }
+    if (u.hostname.replace(/^www\./, "") !== base.hostname.replace(/^www\./, "")) continue;
+    const path = u.pathname.replace(/\/+$/, "");
+    if (BLOG_PATH.test(path)) counts.set(path.toLowerCase(), (counts.get(path.toLowerCase()) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+}
+
+/** The posts an index page links to, in page order: one segment under the index, listings dropped, each once. */
+export function postLinks(indexHtml: string, index: URL): { url: string; text: string }[] {
+  const prefix = `${index.pathname.replace(/\/+$/, "")}/`;
+  const seen = new Set<string>();
+  const out: { url: string; text: string }[] = [];
+  for (const m of indexHtml.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#?]+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let u: URL;
+    try {
+      u = new URL(decode(m[1]), index);
+    } catch {
+      continue;
+    }
+    if (u.hostname.replace(/^www\./, "") !== index.hostname.replace(/^www\./, "")) continue;
+    const path = u.pathname.replace(/\/+$/, "");
+    if (!path.toLowerCase().startsWith(prefix.toLowerCase())) continue;
+    const rest = path.slice(prefix.length);
+    if (!rest || rest.includes("/") || BLOG_LISTING.test(rest) || /\.(pdf|zip|xml|json|png|jpe?g|svg|webp)$/i.test(rest)) continue;
+    if (seen.has(path.toLowerCase())) continue;
+    seen.add(path.toLowerCase());
+    out.push({ url: `${index.origin}${path}`, text: decode(m[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim() });
+  }
+  return out;
+}
+
+/** A page title without the site's name hung on the end ("One pan first | Gaia", "Retries — Kontra | Nutrition Solutions"): the first part, when it is the longest. */
+function postTitle(title: string, fallback: string): string {
+  const parts = title.replace(/&mdash;|&#8212;/g, "\u2014").replace(/&ndash;|&#8211;/g, "\u2013").split(/\s+[|\u2014\u2013-]\s+/);
+  const t = (parts.length > 1 && parts.every((x) => x.length <= parts[0].length) ? parts[0] : title).trim();
+  return t || fallback;
+}
+
+/**
+ * Reads a company's blog the way the Strategist needs it: the index the home
+ * page links to (or /blog), then up to `limit` of the posts it lists, title
+ * and the first `chars` characters each, five at a time. Null when the site
+ * has no index or it lists no posts. readSite skips the blog on purpose (it
+ * is not what the company sells); this is what the company already wrote.
+ */
+export async function readBlog(website: string, opts: { limit?: number; chars?: number } = {}): Promise<BlogRead | null> {
+  const { limit = 30, chars = 600 } = opts;
+  const base = new URL(/^https?:\/\//.test(website) ? website : `https://${website}`);
+  let homeHtml: string;
+  try {
+    homeHtml = (await readPageWithHtml(base.toString(), 1)).html;
+  } catch {
+    return null;
+  }
+  const indexUrl = new URL(blogPath(homeHtml, base) ?? "/blog", base);
+  let html: string;
+  try {
+    html = (await readPageWithHtml(indexUrl.toString(), 1)).html;
+  } catch {
+    return null;
+  }
+  const links = postLinks(html, indexUrl);
+  if (!links.length) return null;
+  const posts: Page[] = [];
+  for (let i = 0; i < Math.min(links.length, limit); i += 5) {
+    const read = await Promise.all(
+      links.slice(i, Math.min(i + 5, limit)).map(async (l) => {
+        try {
+          const p = await readPage(l.url, chars);
+          const title = postTitle(p.title, l.text);
+          // The text opens with the page's own title, as a line or a heading; the title field has it.
+          let text = p.text.trimStart();
+          for (const head of [p.title, title]) {
+            const body = text.replace(/^#+\s*/, "");
+            if (head && body.startsWith(head)) {
+              text = body.slice(head.length).trim();
+              break;
+            }
+          }
+          return { url: p.url, title, text };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const p of read) if (p) posts.push(p);
+  }
+  return { url: indexUrl.toString(), posts, total: links.length };
+}
+
 /** Paths that are never about what the company sells or believes. */
 const SKIP_PATH = /^\/(blog|news|changelog|docs?|help|support|legal|privacy|terms|policies|security|careers|jobs|contact|login|log-in|signin|sign-in|signup|sign-up|register|download|status|press|events|cookies?|sitemap|search|app|admin|account|cdn-cgi)(\/|$)|\.(pdf|zip|xml|json|png|jpe?g|svg|webp)$/i;
 

@@ -22,7 +22,7 @@ import { DBOS } from "@dbos-inc/dbos-sdk";
 import { HOUSE_STYLE, TITLE_RULES } from "../agents/writing.js";
 import { appended, arr, askJson, MODELS, obj, str } from "../agents/model.js";
 import { sharedIdeas } from "../agents/motifs.js";
-import { assertPublicUrl, readPage, readSite, searchWeb, searchConfigured, type SiteClaim } from "../agents/web.js";
+import { assertPublicUrl, readPage, readSite, searchWeb, searchConfigured, type SiteClaim, readBlog } from "../agents/web.js";
 import { getSite, publishedPosts, tasteProfile } from "../agents/store.js";
 import {
   claimProposal,
@@ -128,6 +128,8 @@ interface Pack {
   pages: { url: string; title: string; text: string }[];
   /** The site's sentences with how often they repeat across the pages read (agents/web.ts readSite); absent on a run recorded before 2026-10-12. */
   siteClaims?: SiteClaim[];
+  /** What they already wrote: their own blog's posts (agents/web.ts readBlog); absent when the site has no blog, or on a run recorded before 2026-10-21. */
+  theirBlog?: { url: string; total: number; posts: { url: string; title: string; text: string }[] };
   history: {
     lastQuarter: string;
     publishedLastQuarter: number;
@@ -162,11 +164,17 @@ async function gather(site: string, request: string, now: Date, quarter = quarte
   // the pages its own menu points at, decoration dropped (agents/web.ts).
   let pages: Pack["pages"] = [];
   let siteClaims: SiteClaim[] = [];
+  let theirBlog: Pack["theirBlog"];
   if (website) {
     try {
       const read = await readSite(website, { homeChars: 8_000, pageChars: 3_000, limit: 6 });
       pages = read.pages;
       siteClaims = read.claims;
+      // Their own blog, which readSite skips: the posts they already have, so
+      // the plan builds on them instead of handing them back (Gaia's CEO saw
+      // two of four topics as her own posts retitled, 2026-10-20).
+      const blog = await readBlog(website, { limit: 30, chars: 600 }).catch(() => null);
+      if (blog) theirBlog = { url: blog.url, total: blog.total, posts: blog.posts.map((p) => ({ url: p.url, title: p.title, text: p.text })) };
     } catch {
       /* unreadable: the model plans from the answers */
     }
@@ -223,6 +231,7 @@ async function gather(site: string, request: string, now: Date, quarter = quarte
     plan: { text: [prof?.plan_text ?? "", ...planTexts].filter(Boolean).join("\n\n").slice(0, 30_000), files: (prof?.plan_files ?? []).map((f) => f.name) },
     pages,
     siteClaims,
+    ...(theirBlog ? { theirBlog } : {}),
     history: {
       lastQuarter: quarterLabelOf(last.start),
       publishedLastQuarter: lastPosts.length,
@@ -548,7 +557,7 @@ function keywordLine(k: Keyword): string {
   return `- ${k.keyword}: ${parts.join(", ")}`;
 }
 
-function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: string; covers: { from: string; to: string; weeks: number }; cap: number; hasHistory: boolean; launch: { target: number } | null; today: string; searchesFirst?: boolean }): string {
+function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: string; covers: { from: string; to: string; weeks: number }; cap: number; hasHistory: boolean; launch: { target: number } | null; today: string; searchesFirst?: boolean; theirBlog?: boolean }): string {
   const kw = (list: Keyword[], n: number) => list.slice(0, n).map(keywordLine).join("\n") || "(none)";
   const a = pack.answers;
   const notTargets = new Set(m.notTargets ?? []);
@@ -585,6 +594,11 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
       : "",
     siteIdeas(pack, a).length
       ? `\nIdeas their site returns to in different sentences (${siteIdeas(pack, a).join(", ")}): an example repeated across the copy is an example, not their strategy. None of them is the centre of more than one topic.`
+      : "",
+    o.theirBlog && pack.theirBlog?.posts.length
+      ? `\nPosts already on their own blog (${pack.theirBlog.posts.length} of ${pack.theirBlog.total}, as the index at ${pack.theirBlog.url} lists them). They have these: a topic is never one of them retitled, and a search one of them already answers is not a target for a new post. A topic that builds on them says in its thesis what the new posts add that these don't. The profile's last sentence says in plain words what their blog already covers.\n${pack.theirBlog.posts
+          .map((p) => `- "${p.title}": ${p.text.replace(/\s+/g, " ").slice(0, 200)}`)
+          .join("\n")}`
       : "",
     pack.history.recentTitles.length ? `\nRecent posts:\n${pack.history.recentTitles.map((t) => `- ${t}`).join("\n")}` : "\nNo posts yet.",
     pack.history.approved || pack.history.rejected
@@ -655,6 +669,8 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     // target searches, up to 8 topics, the cap is their number. A run
     // recorded before replays the old steps and the old rules.
     const searchesFirst = await DBOS.patch("strategist-searches-first");
+    // Their own blog in the prompt and the rules (2026-10-21): a run recorded before keeps its draft.
+    const theirBlog = await DBOS.patch("strategist-their-blog");
     let m: Market;
     if (await DBOS.patch("strategist-who-ranks-step")) {
       m = await DBOS.runStep(() => keywordData(site, pack), { name: "keyword data" });
@@ -690,6 +706,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       answered: pack.rounds.answered,
       previousTopics: pack.rounds.previous?.topics.map((t) => t.name) ?? [],
       requestAboutTopics: asksAboutTopics(pack.request),
+      theirPosts: theirBlog ? (pack.theirBlog?.posts.map((p) => p.title) ?? []) : [],
       // Title rules on topic names (2026-10-12): a run recorded before them keeps its draft.
       titleRules: await DBOS.patch("strategist-title-rules"),
       // The twenty rules' hard checks (2026-10-12): same reason.
@@ -713,7 +730,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       job: JOB,
       model: MODELS.strategist,
       system: SYSTEM,
-      prompt: promptFor(pack, m, { kind, quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now), searchesFirst }),
+      prompt: promptFor(pack, m, { kind, quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now), searchesFirst, theirBlog }),
       // 20 searches, up to 8 topics and two paragraphs since 2026-10-20: the old 6,000 cut a full proposal short.
       maxOutputTokens: searchesFirst ? 12_000 : 6_000,
       // Medium effort and a cached prompt (Ayadi, 2026-10-14): the fix calls and revisions read it at the cache price.
@@ -774,6 +791,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     const inputs = {
       website: pack.website,
       pages: pack.pages.map((p) => p.url),
+      theirPosts: pack.theirBlog?.posts.length ?? 0,
       perMonth: pack.perMonth,
       perMonthAnswered: pack.perMonthAnswered,
       thinAnswers: rules.thinAnswers,
@@ -828,7 +846,7 @@ export async function strategistInput(site: string, now = new Date()): Promise<{
   const launch = !hasHistory ? launchFor(now, window.join) : null;
   return {
     system: SYSTEM,
-    prompt: promptFor(pack, m, { kind: "onboarding", quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now), searchesFirst: true }),
+    prompt: promptFor(pack, m, { kind: "onboarding", quarter: window.quarter, covers: window.covers, cap, hasHistory, launch, today: dayOf(now), searchesFirst: true, theirBlog: true }),
     cap,
     thinAnswers: thinAnswers(pack.answers, pack.perMonthAnswered),
   };
