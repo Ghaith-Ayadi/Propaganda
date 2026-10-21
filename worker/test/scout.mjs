@@ -220,6 +220,9 @@ check(kit.newLinks(null, links).length === 0, "the first check is a baseline");
 process.env.SCOUT_ALLOW_PRIVATE_FETCH = "0";
 await assert.rejects(kit.fetchPage(`${urlOf(pages)}/news`), /not a public address/);
 check(true, "the worker won't fetch an internal address");
+await assert.rejects(kit.fetchPage("http://[::ffff:7f00:1]/news"), /not a public address/);
+await assert.rejects(kit.fetchPage("http://localhost/news"), /not a public address/);
+check(true, "nor its mapped-IPv6 or localhost spellings");
 process.env.SCOUT_ALLOW_PRIVATE_FETCH = "1";
 
 const ideas = kit.parseIdeas(
