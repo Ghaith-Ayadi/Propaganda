@@ -77,6 +77,12 @@ export function goPage(page: string, rest?: string | null) {
   go({ view: "page", page, rest: rest ?? null });
 }
 
+/** Like goPage, but the old address leaves no history entry (a renamed sub-page's redirect). */
+export function replacePage(page: string, rest?: string | null) {
+  const hash = toHash({ view: "page", page, rest: rest ?? null });
+  window.location.replace(`${window.location.pathname}${window.location.search}${hash}`);
+}
+
 /** The open page's sub-path: "abc" for #/inbox/abc, null for #/inbox. */
 export function usePageRest(): string | null {
   const [route] = useRoute();

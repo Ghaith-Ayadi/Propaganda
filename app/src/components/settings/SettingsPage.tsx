@@ -1,10 +1,11 @@
 // Settings (0.2): People, Content, Knowledge, Agents, Goals, plus the site and
 // editor settings that already worked (reused from SettingsDialog).
 
-import { goPage, usePageRest } from "@/lib/route";
+import { useEffect } from "react";
+import { goPage, replacePage, usePageRest } from "@/lib/route";
 import { Edit05 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
-import { AuthorTab, DesignSection, EditorTab, SiteTab, TemplatesTab } from "@/components/SettingsDialog";
+import { EditorTab, TemplatesTab } from "@/components/SettingsDialog";
 import { PageBody, PageHeader, PageTabs } from "@/components/shell/PageHeader";
 import { Card } from "./ui";
 import { AppearanceSection } from "./AppearanceSection";
@@ -20,15 +21,19 @@ const SECTIONS = [
   { id: "agents", label: "Agents" },
   { id: "goals", label: "Goals" },
   { id: "appearance", label: "Appearance" },
-  { id: "author", label: "Author" },
-  { id: "site", label: "Site" },
-  { id: "design", label: "Design" },
   { id: "editor", label: "Editor" },
   { id: "templates", label: "Templates" },
 ] as const;
 
+/** Author, Site and Design moved to the Site page; old links land there. */
+const MOVED: Record<string, string> = { author: "author", site: "details", design: "design" };
+
 export function SettingsPage() {
   const rest = usePageRest();
+  const moved = rest ? MOVED[rest] : undefined;
+  useEffect(() => {
+    if (moved) replacePage("site", moved);
+  }, [moved]);
   const selected = SECTIONS.some((s) => s.id === rest) ? rest! : "people";
   return (
     <>
@@ -44,9 +49,6 @@ export function SettingsPage() {
         {selected === "agents" && <AgentsSection />}
         {selected === "goals" && <GoalsLink />}
         {selected === "appearance" && <AppearanceSection />}
-        {selected === "author" && <Plain title="Author"><AuthorTab /></Plain>}
-        {selected === "site" && <Plain title="Site"><SiteTab /></Plain>}
-        {selected === "design" && <Plain title="Design"><DesignSection /></Plain>}
         {selected === "editor" && <Plain title="Editor"><EditorTab /></Plain>}
         {selected === "templates" && <Plain title="Templates"><TemplatesTab /></Plain>}
       </PageBody>
