@@ -28,6 +28,7 @@ import type { User } from "@supabase/supabase-js";
 import { OAUTH_CALLBACK_PATH, OAUTH_MESSAGE, type OAuthMessage } from "@/lib/oauthCallback";
 import { AppError, withCode } from "@/lib/errors";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, createClient, must, newId, type Client } from "@/lib/supabase";
+import { reportError } from "@/lib/telemetry";
 
 const ACCOUNTS_KEY = "propaganda:accounts";
 const sitesKey = (userId: string) => `propaganda:sites:${userId}`;
@@ -449,6 +450,15 @@ function siteRefOf(s: SiteRow, role: SiteRole): SiteRef {
 
 /** The account's sites from the server (and cache them). Throws when offline. */
 export async function fetchSites(account: Account): Promise<SiteRef[]> {
+  // An invite for this account's email becomes a membership here, so a person
+  // who was invited sees the site the first time they sign in. Failing is fine:
+  // the list below is still right, and the next load tries again.
+  await clientFor(account)
+    .rpc("accept_invites")
+    .then(
+      ({ error }) => error && reportError("accounts.accept_invites", error),
+      (err) => reportError("accounts.accept_invites", err),
+    );
   const rows = (await withCode(
     "SITES-FETCH",
     must(
