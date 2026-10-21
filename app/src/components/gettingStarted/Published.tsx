@@ -1,11 +1,12 @@
-// Step 7: the first article is live. Confetti once, its live link, a strip to
-// put the blog on the tenant's own domain (dismissed for good), and "What
-// happens next": what's waiting, where it lives, and two ways on.
+// Step 7: the first article is live. Confetti once, its live link, the "Connect
+// your domain" step (set up here, or skipped for good), and "What happens
+// next": what's waiting, where it lives, and two ways on.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ArrowRight, Check, CheckCircle, Columns03, Globe01, LinkExternal01, Rocket02, XClose } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
+import { DomainSetup } from "@/components/site/DomainSetup";
 import { useWorkspace } from "@/components/Workspace";
 import { db } from "@/lib/db";
 import { goPage } from "@/lib/route";
@@ -26,24 +27,41 @@ export function PublishedStep({ day, onNext }: { day: FirstDay; onNext: () => vo
 
   return (
     <div className="flex flex-col gap-8">
-      {!dismissed && !site.domain && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-secondary px-4 py-3">
-          <Globe01 className="size-5 text-fg-quaternary" />
-          <span className="flex-1 text-sm text-secondary">
-            Put your blog on your own domain instead of <span className="font-medium text-primary">{siteHost({ slug: site.slug, domain: "" })}</span>.
-          </span>
-          <Button size="sm" color="secondary" onClick={() => goPage("site")}>
-            Set up domain
-          </Button>
-          <button
-            type="button"
-            aria-label="Dismiss for good"
-            onClick={() => void setSetting("onboarding.domainStripDismissed", new Date().toISOString())}
-            className="rounded p-1 text-quaternary hover:bg-primary_hover hover:text-secondary"
-          >
-            <XClose className="size-4" />
-          </button>
-        </div>
+      {(!dismissed || !!site.domain) && (
+        <section className="rounded-xl bg-secondary p-5">
+          <div className="flex flex-wrap items-start gap-3">
+            <Globe01 className="mt-0.5 size-5 text-fg-quaternary" />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-medium text-primary">Connect your domain</h3>
+              <p className="mt-0.5 text-sm text-tertiary">
+                {site.domain ? (
+                  <>
+                    Your blog is on <span className="font-medium text-primary">{site.domain}</span>.
+                  </>
+                ) : (
+                  <>
+                    Put your blog on your own address instead of <span className="font-medium text-primary">{siteHost({ slug: site.slug, domain: "" })}</span>. We
+                    handle the certificate and renewals.
+                  </>
+                )}
+              </p>
+            </div>
+            {!site.domain && (
+              <button
+                type="button"
+                onClick={() => void setSetting("onboarding.domainStripDismissed", new Date().toISOString())}
+                className="rounded-md px-2 py-1 text-sm text-tertiary hover:bg-primary_hover hover:text-secondary"
+              >
+                Skip for now
+              </button>
+            )}
+          </div>
+          {!site.domain && (
+            <div className="mt-4 rounded-lg bg-primary p-4 ring-1 ring-secondary ring-inset">
+              <DomainSetup compact />
+            </div>
+          )}
+        </section>
       )}
 
       <section className="flex flex-col items-center gap-4 py-10 text-center">
