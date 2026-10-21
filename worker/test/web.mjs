@@ -3,7 +3,7 @@
 // fetch is a stub serving the fixtures.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { htmlToText, dropDecoration, sitePaths, siteClaims, readSite, setWebFetch, assertPublicUrl, guardedPageFetch } from "../dist/agents/testing.js";
+import { htmlToText, dropDecoration, sitePaths, siteClaims, readSite, setWebFetch, assertPublicUrl, guardedPageFetch, fetchPublic } from "../dist/agents/testing.js";
 
 let failures = 0;
 async function check(name, fn) {
@@ -129,6 +129,21 @@ await check("a name that resolves to a private address is refused at connect tim
   const mapped = guardedPageFetch(async () => ["::ffff:7f00:1"]);
   await assert.rejects(() => mapped("http://mapped.example/"), /fetch failed/);
 });
+
+await check("fetchPublic follows redirects but refuses one that leads to a private address", async () => {
+  const seen = [];
+  setWebFetch(async (url) => {
+    seen.push(String(url));
+    return new Response("", { status: 302, headers: { location: "http://[::ffff:7f00:1]/admin" } });
+  });
+  await assert.rejects(() => fetchPublic("https://93.184.215.14/plan.md", {}), /not a public address/);
+  assert.deepEqual(seen, ["https://93.184.215.14/plan.md"], "the private hop is never requested");
+  setWebFetch(async (url) => (String(url).endsWith("/plan.md") ? new Response("", { status: 301, headers: { location: "/final.md" } }) : new Response("# plan", { status: 200 })));
+  const { res, url } = await fetchPublic("https://93.184.215.14/plan.md", {});
+  assert.equal(url.pathname, "/final.md");
+  assert.equal(await res.text(), "# plan");
+});
+setWebFetch(fetch);
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL PASSED");
 process.exit(failures ? 1 : 0);
