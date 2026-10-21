@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { createServer } from "node:http";
 import pg from "pg";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV3 } from "./mock-model.mjs";
 
 const PGURL = process.env.PGURL ?? "postgres://postgres:postgres@localhost:5432";
 const APP = "worker_test_scout_app";
