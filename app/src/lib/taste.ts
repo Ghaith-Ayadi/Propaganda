@@ -27,7 +27,12 @@ export async function loadTaste(): Promise<TasteProfile> {
 
 export async function saveTasteNotes(notes: string): Promise<void> {
   try {
-    await must(sb.from("taste_profiles").upsert({ site: siteId(), notes: notes.trim().slice(0, 4000) }, { onConflict: "site" }));
+    // Members may update only `notes`, so an upsert (which also sets `site`) is refused
+    // once the row exists. Update first; insert when there was no row to update.
+    const site = siteId();
+    const clean = notes.trim().slice(0, 4000);
+    const updated = await must(sb.from("taste_profiles").update({ notes: clean }).eq("site", site).select("site"));
+    if ((updated as unknown[]).length === 0) await must(sb.from("taste_profiles").insert({ site, notes: clean }));
   } catch (err) {
     throw coded("TASTE-PROFILE", err, "Couldn't save your taste notes. Try again.");
   }
