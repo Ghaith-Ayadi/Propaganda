@@ -1,0 +1,14 @@
+{
+  "name": "propaganda",
+  "owner": { "name": "Propaganda", "url": "https://propaganda.pub" },
+  "metadata": { "description": "Propaganda's plugins for Claude: put posts on your blog from wherever you are working." },
+  "plugins": [
+    {
+      "name": "propaganda",
+      "source": "./plugin/propaganda",
+      "description": "Blog about this: hand what you are working on to your Propaganda tenant, where the Writer drafts it in your voice for review.",
+      "version": "0.1.0",
+      "category": "productivity"
+    }
+  ]
+}

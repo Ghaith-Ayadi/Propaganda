@@ -12,6 +12,7 @@ import { createPost } from "@/lib/posts";
 import { createCollection } from "@/lib/collections";
 import { db } from "@/lib/db";
 import { coded } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
 import { currentScope, siteId } from "@/lib/scope";
 import { authHeader, must, newId, sb } from "@/lib/supabase";
 import { runSync, scheduleSync, waitForSyncIdle } from "@/lib/sync";
@@ -274,6 +275,56 @@ export const live = {
   publishNow: (id: string, at: string) => patchBrief(id, { status: "done", scheduled_at: at }),
   schedule: (id: string, date: string, time: string) => patchBrief(id, { status: "scheduled", scheduled_at: new Date(`${date}T${time}:00`).toISOString() }),
   saveNotes: (id: string, notes: PitchNote[]) => patchBrief(id, { notes }),
+  /**
+   * Posts the person assigns (no pitching): one brief each, in writing, with
+   * its draft, and the Writer started on it. Resolves to the briefs made and,
+   * for each one the Writer didn't start, why.
+   */
+  async assign(posts: { title: string; brief: string }[], collection: string): Promise<{ made: number; notStarted: string[] }> {
+    const me = meOf().id;
+    const notStarted: string[] = [];
+    let made = 0;
+    for (const p of posts) {
+      const title = p.title.trim().slice(0, 300) || "Untitled";
+      // One failing post doesn't undo the ones before it: the toast says how
+      // many were made and which were not, so a retry is of those only.
+      const postId = await newDraft(collection, title).catch(() => null);
+      if (!postId) {
+        notStarted.push(`${title}: couldn't create its draft`);
+        continue;
+      }
+      const saved = await must(
+        sb.from("briefs").insert({
+          id: newId(),
+          site: siteId(),
+          title,
+          status: "in_progress",
+          collection_name: collection,
+          body: p.brief.trim().slice(0, 20000),
+          post: postId,
+          origin: "team",
+          writer: AGENT_ID,
+          reviewer: me,
+          planned_date: ymd(new Date(Date.now() + 14 * 86_400_000)),
+        }),
+      ).then(
+        () => true,
+        (err) => {
+          reportError("pipeline.assign", coded("PIPELINE-ASSIGN", err, "Couldn't save an assignment."));
+          return false;
+        },
+      );
+      if (!saved) {
+        notStarted.push(`${title}: couldn't save its brief (an empty draft was made)`);
+        continue;
+      }
+      made++;
+      const why = await startAgent({ agent: "writer", post: postId, task: title });
+      if (why) notStarted.push(`${title}: ${why}`);
+    }
+    scheduleSync();
+    return { made, notStarted };
+  },
   /** The + on a column: your own pitch (no draft), or a draft in writing or review. */
   async add(stage: Stage, title: string, collection: string | null): Promise<{ id: string; postId: string | null }> {
     const id = newId();

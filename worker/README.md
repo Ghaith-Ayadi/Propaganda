@@ -500,6 +500,29 @@ registerAgent("scout", (input) => startForDispatch("scout", scoutRun, input));
 registerAgent("checker", startCheckOnRequest);   // agents/dispatch.ts
 ```
 
+### The MCP server and assigned posts
+
+`src/mcp/`: how the Claude plugin (`plugin/propaganda`, [docs/plugin.md](../docs/plugin.md))
+and anything else outside the app reaches a tenant. Routes, checked before the
+superadmin gate:
+
+| Route | Credential | What |
+| --- | --- | --- |
+| `POST /mcp` | API token | The MCP server (`mcp/server.ts`): JSON-RPC in, JSON out, stateless. Tools: `list_collections`, `assign_post`. A tool is an entry in `TOOLS` |
+| `POST /assign` | API token | The same as `assign_post`, plain HTTP: `{ title, collection?, markdown, assets? }` → `202` with the post id and its URL |
+| `GET /me` | API token | `{ site, label, scopes }` |
+| `GET /tokens?site=`, `POST /tokens { site, label }`, `DELETE /tokens/:id?site=` | a member's Supabase token | The site's tokens; a new one comes back once |
+
+An API token (`ppk_…`, `private.api_tokens`, migration `*_api_tokens.sql`) is
+minted by a member in Settings > Connections > Claude, stored as a hash, and
+acts for that member on that one site within its scopes (`read`, `assign`).
+Assigning a post (`mcp/assign.ts`) makes the empty draft and a brief with
+`origin = 'assigned'`, the Markdown as its body (the Writer reads it as source
+material, `agents/writer-prompt.ts` `hasSourceMaterial`) and the attachments as
+its `sources`, each with a `kind` (`image`, `pdf`); image bytes go to the app's
+`/api/upload` with the dispatch secret. Then the Writer starts as from Chat.
+Test: `test/mcp.mjs` (no database).
+
 ## Running it
 
 ```

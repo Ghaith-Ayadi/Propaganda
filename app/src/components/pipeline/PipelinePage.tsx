@@ -11,6 +11,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useFlip } from "@/lib/motion/useFlip";
 import { Plus } from "@untitledui/icons";
+import { Button } from "@/components/base/buttons/button";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { toast } from "@/components/base/toast/toast";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -20,6 +21,7 @@ import { byFitThenDate } from "@/lib/pipeline/fit";
 import { shortDate } from "@/lib/pipeline/dates";
 import {
   addToColumn,
+  assignPosts,
   isReleased,
   personById,
   usePipeline,
@@ -33,6 +35,7 @@ import {
 import { reportError } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
 import { FitBadge, Handoff, NotesBadge, TopicBadge } from "./bits";
+import { AssignButton } from "./AssignPosts";
 import { BatchButton } from "./BatchPanel";
 import { CalendarPanel } from "./CalendarPanel";
 import { PitchDrawer } from "./PitchDrawer";
@@ -81,7 +84,12 @@ export function PipelinePage() {
     <div className="flex min-h-full flex-col xl:h-full">
       <PageHeader
         title="Content pipeline"
-        actions={<BatchButton />}
+        actions={
+          <div className="flex gap-2">
+            <AssignButton />
+            <BatchButton />
+          </div>
+        }
       />
 
       <div className="flex flex-col xl:min-h-0 xl:flex-1 xl:flex-row">
@@ -193,16 +201,25 @@ function Column({
 }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
+  // Writing only: material for the Writer. Everything the person has goes in
+  // here (notes, a draft, a transcript) and the Writer reads it as source material.
+  const [material, setMaterial] = useState("");
   const [busy, setBusy] = useState(false);
   const addable = ADDABLE.includes(stage);
+  const canAssign = stage === "writing";
+
+  const close = () => {
+    setAdding(false);
+    setTitle("");
+    setMaterial("");
+  };
 
   const submit = async () => {
     if (busy) return;
     setBusy(true);
     try {
       const item = await addToColumn(stage, title, getActiveCollection());
-      setAdding(false);
-      setTitle("");
+      close();
       if (!item) throw new Error("addToColumn returned nothing");
       if (item.stage === "pitched") goPage("pipeline", `pitch/${item.id}`);
       else if (item.postId) go({ view: "post", id: item.postId });
@@ -213,6 +230,27 @@ function Column({
         title: "Couldn't add it",
         description: "Try again in a moment.",
       });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** The Writer drafts it from the title and whatever was pasted, in the current collection. */
+  const assign = async () => {
+    if (busy || !title.trim()) return;
+    setBusy(true);
+    try {
+      const collection = getActiveCollection() || "";
+      const { made, notStarted } = await assignPosts([{ title: title.trim(), brief: material.trim() }], collection);
+      close();
+      toast.add({
+        type: notStarted.length ? "warning" : "success",
+        title: made ? "It's with the Writer." : "Couldn't hand it over",
+        description: notStarted[0] ?? "The draft shows up here when it's ready.",
+      });
+    } catch (err) {
+      reportError("pipeline.assignFromColumn", err);
+      toast.add({ type: "error", title: "Couldn't hand it to the Writer", description: "Try again in a moment." });
     } finally {
       setBusy(false);
     }
@@ -255,19 +293,39 @@ function Column({
             disabled={busy}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setAdding(false);
-                setTitle("");
-              }
+              if (e.key === "Escape") close();
             }}
-            onBlur={() => !title.trim() && !busy && setAdding(false)}
+            onBlur={() => !canAssign && !title.trim() && !busy && setAdding(false)}
             placeholder={ADD_PLACEHOLDER[stage]}
             aria-label={ADD_PLACEHOLDER[stage]}
             className="w-full bg-transparent px-1 py-1 text-sm text-primary outline-hidden placeholder:text-placeholder"
           />
-          <p className="px-1 text-xs text-quaternary">
-            Enter to add, Esc to cancel
-          </p>
+          {canAssign && (
+            <textarea
+              rows={4}
+              value={material}
+              disabled={busy}
+              onChange={(e) => setMaterial(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") close();
+              }}
+              placeholder="For the Writer: paste everything you have. Notes, a draft, a transcript, links."
+              aria-label="Material for the Writer"
+              className="w-full resize-y bg-transparent px-1 py-1 text-sm text-primary outline-hidden placeholder:text-placeholder"
+            />
+          )}
+          {canAssign ? (
+            <div className="flex items-center justify-between gap-2 px-1">
+              <p className="text-xs text-quaternary">Enter to write it yourself</p>
+              <Button size="sm" color="secondary" isDisabled={!title.trim()} isLoading={busy} onClick={() => void assign()}>
+                Writer drafts it
+              </Button>
+            </div>
+          ) : (
+            <p className="px-1 text-xs text-quaternary">
+              Enter to add, Esc to cancel
+            </p>
+          )}
         </form>
       )}
       {children}

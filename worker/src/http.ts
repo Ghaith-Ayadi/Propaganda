@@ -25,6 +25,7 @@
 //   POST /failures/:fp/file      { filed, noted, group }: file or note this group's ticket now
 //   POST /failures/:fp/ignore    { group }   body { ignored }: never file it (or undo)
 //   The Listener's routes (ingest URL, webhooks, OAuth, Connections): src/listener/routes.ts.
+//   The MCP server, /assign and API tokens: src/mcp/routes.ts.
 
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -38,6 +39,7 @@ import { dispatchAgent, isAgentName, startForTenant, type DispatchInput } from "
 import { demo } from "./workflows/demo.js";
 import { scout } from "./workflows/scout.js";
 import { listenerRoute } from "./listener/index.js";
+import { mcpRoute } from "./mcp/routes.js";
 import { listTenants, listTriggers, runTrigger } from "./triggers.js";
 import { getFailureGroup, listFailureGroups, processFailures, reportOf, setIgnored, sweepFailures, environmentOf, type FailureGroup } from "./failures.js";
 import { ticketSinks } from "./tickets.js";
@@ -144,6 +146,8 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
 
   // The Listener's ingest URL, webhooks, OAuth callbacks and Connections routes check their own credentials.
   if (await listenerRoute(db, req, res, url)) return;
+  // The MCP server and API tokens (src/mcp/routes.ts): a token, or a member for the token routes.
+  if (await mcpRoute(db, req, res, url)) return;
 
   const admin = await requireSuperadmin(db, req.headers.authorization, config.jwtSecret());
 
@@ -284,7 +288,11 @@ async function route(db: Pool, req: IncomingMessage, res: ServerResponse): Promi
 export function startServer(db: Pool, port: number) {
   const server = createServer((req, res) => {
     route(db, req, res).catch((err: unknown) => {
-      if (err instanceof HttpError) return send(res, err.status, { error: err.message });
+      if (err instanceof HttpError) {
+        const extra = (err as HttpError & { headers?: Record<string, string> }).headers;
+        if (extra) for (const [k, v] of Object.entries(extra)) res.setHeader(k, v);
+        return send(res, err.status, { error: err.message });
+      }
       // DBOS's own "no such workflow".
       if ((err as { name?: string }).name === "DBOSNonExistentWorkflowError") return send(res, 404, { error: "No such run" });
       console.error("runs api:", err);

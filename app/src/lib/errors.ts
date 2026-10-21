@@ -58,6 +58,9 @@
 //   PIPELINE-AGENT      the Writer or the Pitcher couldn't be started from the pipeline
 //   START-PUBLISH       publishing the first article from Getting started failed
 //   START-PROGRESS      the Strategist's progress couldn't be read for Getting started
+//   COLLECTION-RULES    a collection's rules for the agents couldn't be loaded or saved
+//   PIPELINE-ASSIGN     assigning posts to the Writer failed
+//   API-TOKENS          an API token for the Claude plugin could not be listed, made or revoked
 
 import { BackendError } from "@/lib/supabase";
 

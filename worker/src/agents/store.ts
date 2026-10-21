@@ -39,6 +39,8 @@ export interface CollectionRow {
   slug: string;
   description: string;
   is_hidden: boolean;
+  /** The members' private rules for the agents (collection_rules); "" when none. */
+  rules?: string;
 }
 
 export interface BriefRow {
@@ -53,7 +55,8 @@ export interface BriefRow {
   topics: string[] | null;
   fit: unknown;
   origin: string;
-  sources: { url: string; label: string }[] | null;
+  /** Pages the Pitcher chose; with a kind, an attachment an assigned post came with (mcp/assign.ts). */
+  sources: { url: string; label: string; kind?: "image" | "pdf" }[] | null;
   notes: { lineId: string | null; text: string; quote?: string; done?: boolean }[] | null;
   outline: { id: string; text: string }[] | null;
   angle: string;
@@ -115,7 +118,26 @@ export async function publishedPosts(site: string, limit: number, withBody = fal
 }
 
 export async function collections(site: string): Promise<CollectionRow[]> {
-  return select<CollectionRow>("collections", `site=eq.${enc(site)}&select=name,slug,description,is_hidden&order=position`);
+  const rows = await select<CollectionRow & { id: string }>(
+    "collections",
+    `site=eq.${enc(site)}&select=id,name,slug,description,is_hidden&order=position`,
+  );
+  // Rules are a newer table: a server without it gives every collection none.
+  const rules = await select<{ collection: string; rules: string }>(
+    "collection_rules",
+    `site=eq.${enc(site)}&select=collection,rules`,
+  ).catch((err) => {
+    if (isMissing(err)) return [];
+    throw err;
+  });
+  const byId = new Map(rules.map((r) => [r.collection, r.rules.trim()]));
+  return rows.map(({ id, ...c }) => ({ ...c, rules: byId.get(id) ?? "" }));
+}
+
+/** The rules for the agents of the collection named `name`, as a prompt block; "" when it has none. */
+export function collectionRulesBlock(cols: CollectionRow[], name: string): string {
+  const rules = cols.find((c) => c.name === name)?.rules?.trim();
+  return rules ? `Rules for posts in the ${name} collection (the tenant wrote them; follow them over any default):\n${rules}` : "";
 }
 
 const BRIEF_COLS =

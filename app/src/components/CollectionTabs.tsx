@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Copy04, DotsHorizontal, Eye, EyeOff, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
@@ -17,6 +17,9 @@ import { ConfirmTypeDialog } from "@/components/ConfirmTypeDialog";
 import { PostTable } from "@/components/PostTable";
 import type { Collection, Post } from "@/types";
 import { toast } from "@/components/base/toast/toast";
+import { loadCollectionRules, saveCollectionRules } from "@/lib/collectionRules";
+import { userMessage } from "@/lib/errors";
+import { reportError } from "@/lib/telemetry";
 
 /**
  * Home view. The tab bar lives in App so it's visible everywhere; this
@@ -202,6 +205,8 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
         className="mt-3 w-full resize-none bg-transparent text-base text-secondary outline-none placeholder:text-quaternary"
       />
 
+      <AgentRules key={collection.name} name={collection.name} />
+
       <div className="mt-8">
         <PostTable posts={posts} onAddPost={() => void addPost()} />
       </div>
@@ -231,5 +236,57 @@ function Kbd({ children }: { children: React.ReactNode }) {
     <kbd className="mx-1 inline-flex h-5 min-w-5 items-center justify-center rounded border border-secondary bg-secondary px-1 text-[11px] text-secondary">
       {children}
     </kbd>
+  );
+}
+
+/** The collection's private rules for the agents, saved on blur. */
+function AgentRules({ name }: { name: string }) {
+  const [rules, setRules] = useState<string | null>(null);
+  const saved = useRef("");
+
+  useEffect(() => {
+    let live = true;
+    loadCollectionRules(name)
+      .then((r) => {
+        if (!live) return;
+        saved.current = r;
+        setRules(r);
+      })
+      .catch((err) => {
+        reportError("collections.loadRules", err);
+        if (live) setRules("");
+      });
+    return () => {
+      live = false;
+    };
+  }, [name]);
+
+  const save = () => {
+    if (rules === null || rules.trim() === saved.current.trim()) return;
+    const next = rules;
+    saveCollectionRules(name, next)
+      .then(() => {
+        saved.current = next;
+      })
+      .catch((err) => {
+        reportError("collections.saveRules", err);
+        toast.add({ type: "error", title: userMessage(err) });
+      });
+  };
+
+  return (
+    <div className="mt-4 rounded-lg bg-secondary_subtle p-3 ring-1 ring-secondary ring-inset">
+      <div className="text-xs text-tertiary">Rules for the agents · private, never shown on the blog</div>
+      <textarea
+        aria-label="Rules for the agents"
+        value={rules ?? ""}
+        disabled={rules === null}
+        onChange={(e) => setRules(e.target.value)}
+        onBlur={save}
+        placeholder="How posts in this collection are written. For example: academic register; show the method, the results and what we learned; cite every number."
+        rows={3}
+        className="mt-1 w-full resize-y bg-transparent text-sm text-primary outline-none placeholder:text-quaternary"
+      />
+    </div>
   );
 }

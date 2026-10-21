@@ -1,0 +1,7 @@
+{
+  "propaganda": {
+    "type": "http",
+    "url": "https://app.propaganda.pub/worker/v1/mcp",
+    "headers": { "Authorization": "Bearer ${PROPAGANDA_TOKEN}" }
+  }
+}
