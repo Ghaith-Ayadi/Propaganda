@@ -45,6 +45,9 @@ for (let i = 0; i < 3; i++) {
 await ok(admin.from("app_settings").insert([
   { site: V, key: "bio", value: "I write." },
   { site: V, key: "flag", value: false },
+  // One public key, one members-only (20261010000170).
+  { site: V, key: "site.title", value: "Verbatim" },
+  { site: V, key: "blog.design.draft", value: { theme: "x" } },
 ]));
 const template = newId();
 await ok(admin.from("brief_templates").insert({ id: template, site: V, name: "T", body: "b", tenant: "verbatim" }));

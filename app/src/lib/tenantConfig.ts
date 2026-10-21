@@ -14,10 +14,12 @@
 //   3. The transcript URL and MCP URL are shaped like the real ones but the
 //      endpoints do not exist yet (and the transcript token is not minted).
 //
-// EVERY KEY HERE IS PUBLIC. The blog reads app_settings through the anonymous
-// client ("anyone reads settings", 20261002000003_access.sql), so anyone on the
-// internet can read these rows. Never put a secret, an email address or an
-// account id in one. Things that must not be public are held in memory only
+// ONLY A FEW app_settings KEYS ARE PUBLIC. The blog reads them through the
+// anonymous client (the allowlist in 20261010000170_public_settings_allowlist.sql:
+// site identity, author, blog.design, blog.themes); every other key is readable
+// by the site's members only. Still keep secrets, email addresses and account
+// ids out: a key added to that allowlist later would expose them. Things that
+// must not be stored here are held in memory only
 // (useMemoryState, "not saved yet" in the UI) until their server tables exist.
 
 import { useCallback, useEffect, useState } from "react";
