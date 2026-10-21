@@ -159,13 +159,15 @@ export function ReaderArticle({ post, collections, posts, site, author, onBack }
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
+              // An image without alt text gets the post's title: never an empty alt.
+              img: ({ src, alt }) => <img src={String(src ?? "")} alt={alt || post.title || ""} loading="lazy" />,
               a: ({ href, children, ...rest }) => {
                 if (!href) return <a {...rest}>{children}</a>;
                 // Legacy content stored uploaded images as `[name](url)` links.
                 // Render any standalone image-URL link as the actual image.
                 if (isImageUrl(href)) {
                   const alt = typeof children === "string" ? children : "";
-                  return <img src={href} alt={alt} loading="lazy" />;
+                  return <img src={href} alt={alt || post.title || ""} loading="lazy" />;
                 }
                 const external =
                   /^https?:\/\//i.test(href) && typeof window !== "undefined" && !href.includes(window.location.host);

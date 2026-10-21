@@ -84,14 +84,14 @@ export async function siteByDomain(api: Api, domain: string): Promise<BlogSite |
 /** Every setting of the site, as the browser's cache holds them. */
 /**
  * The settings a blog page is made of: the only keys the server reads, and
- * all of them public (a site's name, tagline, manifesto, favicon, author and
- * design). Nothing else is fetched, so a key that is private stays private
- * even if the API let it through.
+ * all of them public (a site's name, tagline, manifesto, favicon, author,
+ * design and its word on AI crawlers). Nothing else is fetched, so a key that
+ * is private stays private even if the API let it through.
  */
 export const PUBLIC_SETTING_KEYS = [
   "site.title", "site.tagline", "site.manifesto", "favicon.url",
   "author.name", "author.tagline", "author.location", "author.bio", "author.links", "author.avatar",
-  "blog.design", "blog.themes",
+  "blog.design", "blog.themes", "blog.ai_crawlers",
 ] as const;
 
 export async function settingsOf(api: Api, siteId: string): Promise<Map<string, unknown>> {

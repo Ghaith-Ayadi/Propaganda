@@ -11,7 +11,7 @@ export const VERBATIM_MANIFESTO =
 
 export interface OriginalSettings {
   manifesto: string;
-  author: { name: string; tagline: string; location: string };
+  author: { name: string; tagline: string; location: string; bio: string };
 }
 
 export function originalSettingsOf(get: (key: string) => unknown, site: Pick<BlogSite, "slug">): OriginalSettings {
@@ -23,6 +23,6 @@ export function originalSettingsOf(get: (key: string) => unknown, site: Pick<Blo
   const fallback = site.slug === "verbatim" ? VERBATIM_MANIFESTO : tagline;
   return {
     manifesto: str("site.manifesto") || fallback,
-    author: { name: str("author.name"), tagline, location: str("author.location") },
+    author: { name: str("author.name"), tagline, location: str("author.location"), bio: str("author.bio") },
   };
 }

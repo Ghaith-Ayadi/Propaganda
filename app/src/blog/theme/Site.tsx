@@ -632,7 +632,8 @@ function standaloneImages(node: HastElement | undefined): { src: string; alt: st
   return out;
 }
 
-function Prose({ md, wide, dropCap, ctx }: { md: string; wide: boolean; dropCap: boolean; ctx: Ctx }) {
+function Prose({ md, wide, dropCap, ctx, alt: fallbackAlt = "" }: { md: string; wide: boolean; dropCap: boolean; ctx: Ctx; alt?: string }) {
+  // An image without alt text gets the post's title: never an empty alt.
   const components: Components = {
     h1: ({ node: _n, ...p }) => <h2 dir="auto" {...p} />,
     h2: ({ node: _n, className, ...p }) => <h2 dir="auto" className={className === "sr-only" ? "pg-sr-only" : className} {...p} />,
@@ -646,12 +647,12 @@ function Prose({ md, wide, dropCap, ctx }: { md: string; wide: boolean; dropCap:
       return (
         <>
           {imgs.map((im, i) => (
-            <Figure key={i} src={im.src} alt={im.alt} caption={im.title} wide={wide} ctx={ctx} />
+            <Figure key={i} src={im.src} alt={im.alt || fallbackAlt} caption={im.title} wide={wide} ctx={ctx} />
           ))}
         </>
       );
     },
-    img: ({ src, alt }) => <InlineImg src={String(src ?? "")} alt={alt ?? ""} ctx={ctx} />,
+    img: ({ src, alt }) => <InlineImg src={String(src ?? "")} alt={alt || fallbackAlt} ctx={ctx} />,
     pre: ({ node: _n, ...p }) => <pre data-width={wide ? "wide" : undefined} {...p} />,
     table: ({ node: _n, ...p }) => (
       <div className="pg-table" tabIndex={0} role="region" aria-label="Table">
@@ -667,7 +668,7 @@ function Prose({ md, wide, dropCap, ctx }: { md: string; wide: boolean; dropCap:
           </a>
         );
       }
-      if (isImageHref(href)) return <InlineImg src={String(href)} alt={typeof children === "string" ? children : ""} ctx={ctx} />;
+      if (isImageHref(href)) return <InlineImg src={String(href)} alt={(typeof children === "string" && children) || fallbackAlt} ctx={ctx} />;
       const external = typeof href === "string" && /^https?:\/\//i.test(href) && typeof window !== "undefined" && !href.includes(window.location.host);
       return (
         <a href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer noopener" : undefined} {...p}>
@@ -814,7 +815,7 @@ function Post({ ctx, post }: { ctx: Ctx; post: VmPost | null }) {
             metaEl
           )}
         </header>
-        <Prose md={resolveWikilinks(post.content || post.dek || "", vm)} wide={o.body.images === "wide"} dropCap={!!o.body.dropCap} ctx={ctx} />
+        <Prose md={resolveWikilinks(post.content || post.dek || "", vm)} wide={o.body.images === "wide"} dropCap={!!o.body.dropCap} ctx={ctx} alt={post.title} />
         {after.length > 0 && (
           <div className="pg-after" data-part="after">
             {after}
