@@ -27,8 +27,15 @@
 //   sites/<host>/<collection>/index.html         a fragment
 //   sites/<host>/<collection>/<slug>/index.html  a fragment
 //   sites/<host>/author/index.html               a fragment (themed blogs)
-//   sites/<host>/sitemap.xml, feed.xml, rss.xml, robots.txt   whole files
-//   state.json                                   marks and the last sweep
+//   sites/<host>/<collection>/<slug>.md          the post as Markdown
+//   sites/<host>/sitemap.xml, feed.xml, rss.xml, robots.txt, llms.txt,
+//   llms-full.txt, <IndexNow key>.txt            whole files
+//   state.json                                   marks, keys and the last sweep
+//
+// IndexNow: when a site's files change, the addresses that changed are sent
+// to api.indexnow.org (Bing, Yandex, Naver, Seznam read it; Google does not),
+// with the site's key, served at /<key>.txt. BLOG_INDEXNOW=off turns it off
+// (the dev box).
 // <host> is the site's canonical host (its domain, else <slug>.<platform>);
 // the other host answers 301 from the function.
 //
@@ -36,10 +43,10 @@
 // SUPABASE_ANON_KEY or ANON_KEY, as the stack's .env names it),
 // BLOG_PLATFORM_DOMAIN and BLOG_APP_HOST (else the VITE_ names), BLOG_DIR,
 // BLOG_SHELL_URL (or BLOG_SHELL_FILE on the dev box), BLOG_POLL_SECONDS (10),
-// BLOG_SWEEP_HOURS (24), BLOG_PORT (3030, /health).
+// BLOG_SWEEP_HOURS (24), BLOG_PORT (3030, /health), BLOG_INDEXNOW (off).
 
 import { createServer } from "node:http";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -47,7 +54,7 @@ import { collectionSlugOf } from "@/lib/slug";
 import type { BlogRoute } from "../route";
 import type { BlogSite } from "../siteTypes";
 import { allSites, ApiError, dataOf, markOf, type Api, type Mark } from "./api";
-import { robots, rss, sitemap } from "./feeds";
+import { llmsFullTxt, llmsTxt, postMarkdown, robots, rss, sitemap } from "./feeds";
 import { FRAGMENT_SEPARATOR, fragmentOf, shellPieces } from "./fill";
 import { isThemed, renderParts, type SiteData } from "./page";
 import type { Hosts } from "./urls";
@@ -64,6 +71,7 @@ const env = {
   pollSeconds: Number(process.env.BLOG_POLL_SECONDS) || 10,
   sweepHours: Number(process.env.BLOG_SWEEP_HOURS) || 24,
   port: Number(process.env.BLOG_PORT) || 3030,
+  indexNow: (process.env.BLOG_INDEXNOW || "on").toLowerCase() !== "off",
 };
 
 const api: Api = { url: env.apiUrl, key: env.apiKey };
@@ -89,6 +97,8 @@ interface State {
   sweptAt: string | null;
   global: string;
   sites: Record<string, SiteState>;
+  /** IndexNow keys, one per host. */
+  keys?: Record<string, string>;
   /** The renderer that wrote the files (BUILD): a new one renders every site again. */
   build?: string;
 }
@@ -103,7 +113,7 @@ const BUILD = (() => {
   }
 })();
 
-let state: State = { sweptAt: null, global: "", sites: {} };
+let state: State = { sweptAt: null, global: "", sites: {}, keys: {} };
 let shellTag = "";
 let lastError = "";
 let ticking = false;
@@ -113,11 +123,15 @@ const now = () => new Date().toISOString();
 
 /* ------------------------------------------------------------------ files */
 
-async function writeAtomic(path: string, body: string): Promise<void> {
+/** Writes the file whole and renames it into place; false when it already held exactly this. */
+async function writeAtomic(path: string, body: string): Promise<boolean> {
   await mkdir(dirname(path), { recursive: true });
+  const old = await readFile(path, "utf8").catch(() => null);
+  if (old === body) return false;
   const tmp = `${path}.${process.pid}.tmp`;
   await writeFile(tmp, body, "utf8");
   await rename(tmp, path);
+  return true;
 }
 
 /** Every file under dir, relative to it. */
@@ -253,14 +267,18 @@ function safeFile(file: string): boolean {
   return parts.every((p) => p !== "" && p !== "." && p !== ".." && !/[\x00-\x1f\x7f]/.test(p) && Buffer.byteLength(p) <= 255);
 }
 
-async function renderSite(site: BlogSite): Promise<{ pages: number; removed: number }> {
+/** The address a site file answers at. */
+const urlOfFile = (host: string, file: string) => `https://${host}/${file.replace(/(^|\/)index\.html$/, "")}`;
+
+async function renderSite(site: BlogSite): Promise<{ pages: number; removed: number; changed: string[] }> {
   const data = await dataOf(api, site);
   const host = hostOf(site);
   const dir = join(env.dir, "sites", host);
   const written = new Set<string>();
+  const changed: string[] = [];
   const put = async (file: string, body: string) => {
     if (!safeFile(file)) throw new Error(`refusing to write ${file}`);
-    await writeAtomic(join(dir, file), body);
+    if (await writeAtomic(join(dir, file), body)) changed.push(urlOfFile(host, file));
     written.add(file);
   };
   let pages = 0;
@@ -271,14 +289,42 @@ async function renderSite(site: BlogSite): Promise<{ pages: number; removed: num
     if (fragment.split(FRAGMENT_SEPARATOR).length !== 4) throw new Error(`fragment of ${file} does not split in four`);
     await put(file, fragment);
     pages++;
+    if (route.view === "post") await put(file.replace(/\/index\.html$/, ".md"), postMarkdown(data.posts.find((p) => p.slug === route.slug && collectionSlugOf(p.type, data.collections) === route.collection)!, data, hosts));
   }
   await put("sitemap.xml", sitemap(data, hosts));
   const feed = rss(data, hosts);
   await put("feed.xml", feed);
   await put("rss.xml", feed);
   await put("robots.txt", robots(data, hosts));
+  await put("llms.txt", llmsTxt(data, hosts));
+  await put("llms-full.txt", llmsFullTxt(data, hosts));
+  const key = indexNowKey(host);
+  await writeAtomic(join(dir, `${key}.txt`), key);
+  written.add(`${key}.txt`);
   const removed = await prune(dir, written);
-  return { pages, removed };
+  return { pages, removed, changed };
+}
+
+/* --------------------------------------------------------------- IndexNow */
+
+function indexNowKey(host: string): string {
+  state.keys ??= {};
+  return (state.keys[host] ??= randomBytes(16).toString("hex"));
+}
+
+/** Tells IndexNow which of a site's addresses changed (at most 10,000 per call, as it allows). */
+async function pingIndexNow(host: string, urls: string[]): Promise<void> {
+  if (!env.indexNow || !urls.length) return;
+  const key = indexNowKey(host);
+  const body = { host, key, keyLocation: `https://${host}/${key}.txt`, urlList: urls.slice(0, 10_000) };
+  const res = await fetch("https://api.indexnow.org/indexnow", {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok && res.status !== 202) throw new Error(`IndexNow ${res.status}`);
+  log(`${host}: IndexNow told of ${urls.length} addresses (${res.status})`);
 }
 
 /** Removes the host directories of sites that no longer exist or moved host. */
@@ -334,9 +380,11 @@ async function tick(): Promise<void> {
       if (!due) continue;
       try {
         const t0 = Date.now();
-        const { pages, removed } = await renderSite(site);
+        const { pages, removed, changed } = await renderSite(site);
         state.sites[site.id] = { mark, host: hostOf(site), pages, renderedAt: now() };
-        log(`${hostOf(site)}: ${pages} pages, ${removed} removed, ${Date.now() - t0} ms${sweep ? " (sweep)" : ""}`);
+        log(`${hostOf(site)}: ${pages} pages, ${changed.length} changed, ${removed} removed, ${Date.now() - t0} ms${sweep ? " (sweep)" : ""}`);
+        // Not on the first render of a host (every file is new) and not on a sweep that changed nothing.
+        if (prev && !sweep) await pingIndexNow(hostOf(site), changed.filter((u) => !/\.(txt|xml)$/.test(u))).catch((err) => log(`${hostOf(site)}: ${(err as Error).message}`));
       } catch (err) {
         const failures = (prev?.failures ?? 0) + 1;
         const wait = Math.min(env.pollSeconds * 2 ** failures, 600) * 1000;

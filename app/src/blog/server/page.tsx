@@ -54,7 +54,9 @@ interface Head {
   modified?: number | null;
   /** Keep crawlers off a page that answers 404. */
   noindex?: boolean;
-  jsonLd?: Record<string, unknown> | null;
+  /** The post as Markdown (its address plus .md), for crawlers that prefer it. */
+  markdown?: string | null;
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[] | null;
 }
 
 export const esc = (s: string): string =>
@@ -102,6 +104,7 @@ function headTags(h: Head, data: SiteData, hosts: Hosts, siteTitle: string): str
   meta('name="twitter:description"', h.description);
   meta('name="twitter:image"', h.image);
   tags.push(`<link rel="alternate" type="application/rss+xml" title="${esc(siteTitle)}" href="${esc(absolute(data.site, hosts, "/feed.xml"))}">`);
+  if (h.markdown) tags.push(`<link rel="alternate" type="text/markdown" href="${esc(h.markdown)}">`);
   if (h.jsonLd) tags.push(`<script type="application/ld+json">${JSON.stringify(h.jsonLd).replace(/</g, "\\u003c")}</script>`);
   return tags.join("\n    ");
 }
@@ -160,6 +163,12 @@ function originalPage(route: BlogRoute, data: SiteData, hosts: Hosts): Rendered 
   const markup = renderToString(<ReaderArticle post={post} collections={collections} posts={posts} site={site} author={original.author} onBack={noop} />);
   const canonical = postUrl(site, hosts, route.collection, post.slug);
   const image = imageOf(post, site, hosts);
+  const who = publishingOf(data, hosts, original.author.name || siteTitle, siteTitle, false);
+  const crumbs = [
+    { name: siteTitle, url: siteUrl(site, hosts) },
+    { name: post.type, url: absolute(site, hosts, `/${encodeURIComponent(route.collection)}`) },
+    { name: post.title || "Untitled", url: canonical },
+  ];
   const head: Head = {
     title: `${post.title || "Untitled"} — ${site.name}`,
     description: dekOf(post),
@@ -168,13 +177,40 @@ function originalPage(route: BlogRoute, data: SiteData, hosts: Hosts): Rendered 
     image,
     published: post.publishedAt,
     modified: post.updatedAt,
-    jsonLd: postJsonLd(post, canonical, image, original.author.name || siteTitle, siteTitle),
+    markdown: `${canonical}.md`,
+    jsonLd: postJsonLd(post, canonical, image, who, crumbs),
   };
   return { status: 200, parts: parts({ head: headTags(head, data, hosts, siteTitle), css: [blogCss], markup, favicon }) };
 }
 
-function postJsonLd(post: BlogPost, url: string, image: string | null, author: string, publisher: string): Record<string, unknown> {
+/** Who wrote it and who publishes it, as JSON-LD wants them. */
+export interface Publishing {
+  author: { name: string; url: string; bio?: string | null };
+  publisher: { name: string; url: string; logo?: string | null };
+}
+
+function publishingOf(data: SiteData, hosts: Hosts, authorName: string, siteTitle: string, authorPage: boolean): Publishing {
+  const { site, settings } = data;
+  const home = siteUrl(site, hosts);
+  const bio = (settings.get("author.bio") as string) || null;
+  const favicon = (settings.get("favicon.url") as string) || null;
+  let logo: string | null = null;
+  if (favicon) {
+    try {
+      logo = new URL(favicon, home).href;
+    } catch {
+      logo = null;
+    }
+  }
   return {
+    author: { name: authorName, url: authorPage ? absolute(site, hosts, "/author") : home, bio },
+    publisher: { name: siteTitle, url: home, logo },
+  };
+}
+
+/** The post's BlogPosting and its BreadcrumbList (home, collection, post). */
+function postJsonLd(post: BlogPost, url: string, image: string | null, who: Publishing, crumbs: Array<{ name: string; url: string }>): Record<string, unknown>[] {
+  const posting = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: post.title || "Untitled",
@@ -184,10 +220,21 @@ function postJsonLd(post: BlogPost, url: string, image: string | null, author: s
     ...(image ? { image } : {}),
     ...(iso(post.publishedAt) ? { datePublished: iso(post.publishedAt) } : {}),
     ...(iso(post.updatedAt) ? { dateModified: iso(post.updatedAt) } : {}),
-    author: { "@type": "Person", name: author },
-    publisher: { "@type": "Organization", name: publisher },
+    author: { "@type": "Person", name: who.author.name, url: who.author.url, ...(who.author.bio ? { description: who.author.bio } : {}) },
+    publisher: {
+      "@type": "Organization",
+      name: who.publisher.name,
+      url: who.publisher.url,
+      ...(who.publisher.logo ? { logo: { "@type": "ImageObject", url: who.publisher.logo } } : {}),
+    },
     ...(post.wordCount ? { wordCount: post.wordCount } : {}),
   };
+  const breadcrumbs = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: crumbs.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c.name, item: c.url })),
+  };
+  return [posting, breadcrumbs];
 }
 
 /* ---------------------------------------------------------------- themed */
@@ -237,6 +284,12 @@ function themedPage(route: BlogRoute, data: SiteData, hosts: Hosts): Rendered {
       const raw = posts.find((p) => p.id === post.id)!;
       const canonical = postUrl(site, hosts, post.col.slug, post.slug);
       const image = imageOf(raw, site, hosts);
+      const who = publishingOf(data, hosts, vm.author.displayName, title, true);
+      const crumbs = [
+        { name: title, url: siteUrl(site, hosts) },
+        { name: post.col.name, url: absolute(site, hosts, post.col.href) },
+        { name: post.title, url: canonical },
+      ];
       head = {
         title: `${post.title} — ${title}`,
         description: post.dek || firstParagraph(post.content) || "",
@@ -245,7 +298,8 @@ function themedPage(route: BlogRoute, data: SiteData, hosts: Hosts): Rendered {
         image,
         published: raw.publishedAt,
         modified: raw.updatedAt,
-        jsonLd: postJsonLd(raw, canonical, image, vm.author.displayName, title),
+        markdown: `${canonical}.md`,
+        jsonLd: postJsonLd(raw, canonical, image, who, crumbs),
       };
     }
   } else if (pgRoute.tpl === "collection") {

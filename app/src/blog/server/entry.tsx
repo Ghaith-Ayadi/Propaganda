@@ -7,7 +7,8 @@
 //   /@<slug>/…            301 to the same path on that site's host (old addresses)
 //   <slug>.<platform>     301 to the site's custom domain when it has one
 //   no site for the host  404, "Site not found"
-//   /robots.txt, /sitemap.xml, /feed.xml (and /rss.xml)
+//   /robots.txt, /sitemap.xml, /feed.xml (and /rss.xml), /llms.txt, /llms-full.txt
+//   <a post's address>.md  the post as Markdown
 //   /p/<slug>             301 to the post's address (pre-collection links)
 //   an address that moved 301 to the current one (post_redirects)
 //   a page                200, or 404 with the page's own not-found markup
@@ -19,7 +20,7 @@ import { collectionSlugOf, postPath, slugify } from "@/lib/slug";
 import { routeOf, type BlogRoute } from "../route";
 import type { BlogSite } from "../siteTypes";
 import { ApiError, dataOf, postIdByCode, redirectTarget, siteByDomain, siteBySlug, type Api } from "./api";
-import { robots, rss, sitemap } from "./feeds";
+import { llmsFullTxt, llmsTxt, postMarkdown, robots, rss, sitemap } from "./feeds";
 import shell from "../../../dist/index.html?raw";
 import { fillShell } from "./fill";
 import { renderParts, siteNotFoundParts, type Rendered, type SiteData } from "./page";
@@ -111,6 +112,16 @@ export async function handle(request: Request, env: Env = {}): Promise<Response>
   if (path === "/robots.txt") return text(robots(data, hosts), "text/plain; charset=utf-8");
   if (path === "/sitemap.xml") return text(sitemap(data, hosts), "application/xml; charset=utf-8");
   if (path === "/feed.xml" || path === "/rss.xml") return text(rss(data, hosts), "application/rss+xml; charset=utf-8");
+  if (path === "/llms.txt") return text(llmsTxt(data, hosts), "text/plain; charset=utf-8");
+  if (path === "/llms-full.txt") return text(llmsFullTxt(data, hosts), "text/plain; charset=utf-8");
+  if (path.endsWith(".md")) {
+    // A post's Markdown copy: its address plus .md (only a published, public post has one).
+    const r = routeOf(path.slice(0, -3));
+    const hidden = new Set(data.collections.filter((c) => c.isHidden).map((c) => c.name));
+    const post = r.view === "post" ? data.posts.find((p) => p.slug === r.slug && collectionSlugOf(p.type, data.collections) === r.collection) : null;
+    if (!post || hidden.has(post.type)) return new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", ...CACHE } });
+    return text(postMarkdown(post, data, hosts), "text/markdown; charset=utf-8");
+  }
 
   const route = routeOf(path);
   const moved = await movedTo(route, data, api);

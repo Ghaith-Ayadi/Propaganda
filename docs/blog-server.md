@@ -103,6 +103,30 @@ reading the shell from the build Caddy serves. `/health` on port 3030 reports th
 Known limit: a site is rendered whole, so a site with thousands of posts fetches them all
 on every change; render single posts when one gets there.
 
+## For search engines and language models
+
+What every page and site carries, from both the function and the files:
+
+- Head: title, description, canonical, Open Graph, Twitter card, the RSS link, a
+  `text/markdown` alternate link on posts, and JSON-LD: `BlogPosting` (author `Person` with
+  url and bio, publisher `Organization` with url and logo, dates, wordCount) plus a
+  `BreadcrumbList` (home, collection, post); `Blog` on the home page; `noindex` on 404s.
+- Per site: `sitemap.xml` (lastmod), `feed.xml`/`rss.xml` (full content), `robots.txt`,
+  `llms.txt` (every post with a one-line summary, by collection; llmstxt.org) and
+  `llms-full.txt` (every post as Markdown), and each post as Markdown at its address plus
+  `.md` (front matter: title, description, author, site, collection, url, date, updated).
+- `robots.txt` names GPTBot, ClaudeBot, Claude-SearchBot, PerplexityBot and Google-Extended
+  (`AI_CRAWLERS` in `feeds.tsx`), allowed unless the site setting `blog.ai_crawlers` is
+  `"disallow"`. The setting is in `PUBLIC_SETTING_KEYS`.
+- IndexNow (`box.ts`): when a site's files change after its first render, the changed page
+  addresses go to api.indexnow.org with the site's key, served at `/<key>.txt` (kept in
+  `state.json`). Bing, Yandex, Naver and Seznam read it; Google does not, and neither takes
+  sitemap pings any more: a site owner submits the sitemap once in Search Console and Bing
+  Webmaster Tools. `BLOG_INDEXNOW=off` on the dev box.
+- An image without alt text gets the post's title (both renderers and the feed).
+- `dateModified` is the row's `updated`, which moves on any save; a content-only date needs
+  a `content_updated` column (a migration).
+
 ## Working on it
 
 - `npm run build:blog` in `app/` rebuilds only the bundle (after `vite build`, which the

@@ -44,7 +44,13 @@ export function sitemap(data: SiteData, hosts: Hosts): string {
 }
 
 function postHtml(post: BlogPost): string {
-  return renderToString(<ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>);
+  // An image without alt text gets the post's title, as the pages do.
+  const img = ({ src, alt }: { src?: unknown; alt?: string }) => <img src={String(src ?? "")} alt={alt || post.title || ""} />;
+  return renderToString(
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img }}>
+      {post.content}
+    </ReactMarkdown>,
+  );
 }
 
 export function rss(data: SiteData, hosts: Hosts): string {
@@ -91,6 +97,89 @@ export function rss(data: SiteData, hosts: Hosts): string {
     .join("\n");
 }
 
+/** The AI crawlers robots.txt names, so a site's word on them is explicit either way. */
+export const AI_CRAWLERS = ["GPTBot", "ClaudeBot", "Claude-SearchBot", "PerplexityBot", "Google-Extended"];
+
+/** Whether the site lets AI crawlers in: the `blog.ai_crawlers` setting, "disallow" to keep them out (default allow). */
+export function aiCrawlersAllowed(settings: Map<string, unknown>): boolean {
+  const v = settings.get("blog.ai_crawlers");
+  return !(v === "disallow" || v === false);
+}
+
 export function robots(data: SiteData, hosts: Hosts): string {
-  return ["User-agent: *", "Allow: /", "Disallow: /admin", "", `Sitemap: ${absolute(data.site, hosts, "/sitemap.xml")}`, ""].join("\n");
+  const allow = aiCrawlersAllowed(data.settings);
+  const lines = ["User-agent: *", "Allow: /", "Disallow: /admin", ""];
+  for (const bot of AI_CRAWLERS) lines.push(`User-agent: ${bot}`, allow ? "Allow: /" : "Disallow: /", "");
+  lines.push(`Sitemap: ${absolute(data.site, hosts, "/sitemap.xml")}`, "");
+  return lines.join("\n");
+}
+
+/* ------------------------------------------------- for language models */
+
+const siteTitleOf = (data: SiteData) => (data.settings.get("site.title") as string) || data.site.name;
+const siteDescriptionOf = (data: SiteData) =>
+  (data.settings.get("site.tagline") as string) || (data.settings.get("site.manifesto") as string) || "";
+const authorOf = (data: SiteData) => (data.settings.get("author.name") as string) || "";
+const dateOf = (ms: number | null) => (ms != null && Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : null);
+
+/** Markdown front matter and body of one post: its address plus .md, and the entries of llms-full.txt. */
+export function postMarkdown(post: BlogPost, data: SiteData, hosts: Hosts): string {
+  const url = postUrl(data.site, hosts, collectionSlugOf(post.type, data.collections), post.slug);
+  const author = authorOf(data);
+  const dek = dekOf(post);
+  const q = (v: string) => JSON.stringify(v);
+  const front = [
+    "---",
+    `title: ${q(post.title || "Untitled")}`,
+    ...(dek ? [`description: ${q(dek)}`] : []),
+    ...(author ? [`author: ${q(author)}`] : []),
+    `site: ${q(siteTitleOf(data))}`,
+    `collection: ${q(post.type)}`,
+    `url: ${q(url)}`,
+    ...(dateOf(post.publishedAt) ? [`date: ${dateOf(post.publishedAt)}`] : []),
+    ...(dateOf(post.updatedAt) ? [`updated: ${dateOf(post.updatedAt)}`] : []),
+    "---",
+    "",
+  ];
+  return `${front.join("\n")}# ${post.title || "Untitled"}\n\n${(post.content || "").trim()}\n`;
+}
+
+/** /llms.txt: the site in one page, every post as a link with a one-line summary (llmstxt.org). */
+export function llmsTxt(data: SiteData, hosts: Hosts): string {
+  const title = siteTitleOf(data);
+  const description = siteDescriptionOf(data);
+  const author = authorOf(data);
+  const posts = publicPosts(data, hosts);
+  const lines = [`# ${title}`, ""];
+  if (description) lines.push(`> ${description.replace(/\s+/g, " ").trim()}`, "");
+  const about = [
+    `${title} is published at ${siteUrl(data.site, hosts)}.`,
+    author ? `Written by ${author}.` : "",
+    `${posts.length} published posts. Every post is also available as Markdown at its address plus .md, and all of them in one file at ${absolute(data.site, hosts, "/llms-full.txt")}.`,
+  ].filter(Boolean);
+  lines.push(about.join(" "), "");
+  const byCollection = new Map<string, typeof posts>();
+  for (const p of posts) {
+    const list = byCollection.get(p.post.type) ?? [];
+    list.push(p);
+    byCollection.set(p.post.type, list);
+  }
+  for (const [name, list] of byCollection) {
+    lines.push(`## ${name}`, "");
+    for (const { post, url } of list) {
+      const dek = dekOf(post).replace(/\s+/g, " ").trim();
+      lines.push(`- [${post.title || "Untitled"}](${url}.md)${dek ? `: ${dek}` : ""}`);
+    }
+    lines.push("");
+  }
+  lines.push("## Feeds", "", `- [RSS](${absolute(data.site, hosts, "/feed.xml")})`, `- [Sitemap](${absolute(data.site, hosts, "/sitemap.xml")})`, "");
+  return lines.join("\n");
+}
+
+/** /llms-full.txt: every post, whole, as Markdown. */
+export function llmsFullTxt(data: SiteData, hosts: Hosts): string {
+  const posts = publicPosts(data, hosts);
+  const head = [`# ${siteTitleOf(data)}`, "", `Every published post of ${siteUrl(data.site, hosts)}, as Markdown. ${posts.length} posts.`, ""];
+  const bodies = posts.map(({ post }) => postMarkdown(post, data, hosts));
+  return `${head.join("\n")}\n${bodies.join("\n\n---\n\n")}`;
 }
