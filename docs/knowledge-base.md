@@ -31,6 +31,19 @@ Designed 2026-10-06 (Notion PPG-87, PPG-90); the Guardian's rule set is
 - Not taken from the grades doc: the goals tables and `briefs.coverage`/`topic`
   (they belong to the Goals and Pitcher work).
 
+## Styles (2026-10-21)
+
+The knowledge base is Facts and Styles (Ayadi, 2026-10-15). Facts are the claims
+above. Styles are how the tenant wants its writing to sound, one rule a row in
+`kb_styles` (`20261010000140_kb_styles.sql`), kept apart from the claims so a style
+rule never shows up in a fact check. Members add and retire them on the Styles tab
+of the knowledge base page (`app/src/lib/kbStyles.ts`); nothing is deleted. The
+Strategist, the Pitcher, the Writer (draft and revise) and Chat read the active
+ones after the twenty rules (`stylesBlock` in `api/_ai/houseStyle.ts`). A rule can
+add to the twenty or relax a judgement call; the rules code checks (zero em dashes)
+still hold. Not built yet: sorting a person's pushback from Chat or a comment into
+Facts or Styles, and the Guardian's ruling on a new style rule.
+
 ## The shape
 
 Fourteen tables (plus the agents' two), all prefixed `kb_`, all keyed on `site`. That's it: no pages, no graph database, no second store.

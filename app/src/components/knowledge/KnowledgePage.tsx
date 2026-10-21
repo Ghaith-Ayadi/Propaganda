@@ -4,6 +4,7 @@
 //   #/knowledge/flags[/<id>]     flags: content or claims that disagree with it
 //   #/knowledge/rechecks[/<id>]  one thread per changed claim, with bulk actions
 //   #/knowledge/grades           the two letter grades
+//   #/knowledge/styles           how the writing should sound (kb_styles)
 // Data comes through lib/knowledge (sample data until the schema is applied).
 
 import { useState } from "react";
@@ -20,12 +21,13 @@ import { FlagsView } from "./FlagsView";
 import { RechecksView } from "./RechecksView";
 import { GradesView } from "./GradesView";
 import { RememberDialog } from "./RememberDialog";
+import { StylesView } from "./StylesView";
 
-type Tab = "claims" | "flags" | "rechecks" | "grades";
+type Tab = "claims" | "styles" | "flags" | "rechecks" | "grades";
 
 function parseRest(rest: string | null): { tab: Tab; id: string | null } {
   const [head, id] = (rest ?? "").split("/");
-  if (head === "flags" || head === "rechecks" || head === "grades") return { tab: head, id: id ?? null };
+  if (head === "styles" || head === "flags" || head === "rechecks" || head === "grades") return { tab: head, id: id ?? null };
   return { tab: "claims", id: head === "claims" ? id ?? null : null };
 }
 
@@ -42,7 +44,7 @@ export function KnowledgePage() {
     <>
       <PageHeader
         title="Knowledge base"
-        description="What your tenant actually believes, claim by claim. The Guardian is the only thing that writes to it."
+        description="What your tenant believes, claim by claim, and the styles its writing follows."
         actions={
           <Button size="md" color="primary" iconLeading={Plus} onClick={() => setRemembering(true)}>
             Remember
@@ -55,6 +57,7 @@ export function KnowledgePage() {
             onChange={(k) => goPage("knowledge", k === "claims" ? null : k)}
             items={[
               { id: "claims", label: "Claims" },
+              { id: "styles", label: "Styles" },
               // An urgent flag is the only thing that turns the count red.
               urgent
                 ? { id: "flags", label: <span className="flex items-center gap-1.5">Flags<Badge size="sm" type="pill-color" color="error">{flagCount}</Badge></span> }
@@ -69,6 +72,7 @@ export function KnowledgePage() {
         {kb().sample && <SampleNotice />}
 
         {tab === "claims" && <ClaimsView selected={id} />}
+        {tab === "styles" && <StylesView />}
         {tab === "flags" && <FlagsView selected={id} />}
         {tab === "rechecks" && <RechecksView selected={id} />}
         {tab === "grades" && <GradesView />}

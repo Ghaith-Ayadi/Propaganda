@@ -16,7 +16,8 @@ import {
 } from "../_ai/gateway.js";
 import { report } from "../_telemetry.js";
 import { CitationStream, Sources } from "./citations.js";
-import { siteName } from "./lookups.js";
+import { stylesBlock } from "../_ai/houseStyle.js";
+import { siteName, siteStyles } from "./lookups.js";
 import { chatTools, historyMessages, systemPrompt } from "./toolkit.js";
 import type { AgentName, ChatEvent, ChatUIMessage, Citation, Handoff, QuickAction } from "./types.js";
 
@@ -101,10 +102,16 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
   const pending: QuickAction[] = [];
 
   let tenant = "this site";
+  let tenantStyles = "";
   try {
     tenant = await siteName(turn.token, turn.site);
   } catch {
     // The name only colours the prompt and the tool descriptions.
+  }
+  try {
+    tenantStyles = stylesBlock(await siteStyles(turn.token, turn.site));
+  } catch {
+    // Without its style rules Chat still answers, on the twenty rules alone.
   }
 
   const tools = chatTools({ ...turn, tenant, sources, pending });
@@ -136,7 +143,7 @@ export async function* runChat(turn: ChatTurn): AsyncGenerator<ChatEvent> {
       job: "chat",
       model: CHAT_MODEL,
       background: false, // the operator is waiting: the editor's budget rules
-      system: systemPrompt(tenant),
+      system: systemPrompt(tenant, tenantStyles),
       messages: [...historyMessages(turn.history), { role: "user", content: turn.text }],
       tools,
       maxSteps: 6,

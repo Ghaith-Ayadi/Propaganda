@@ -8,6 +8,7 @@
 // post a person wrote (CLAUDE.md, the highest-priority rule).
 
 import { BackendError, enc, insert, isMissing, patch, rest, select } from "./backend.js";
+import { stylesBlock, type StyleRow } from "../../../api/_ai/houseStyle";
 import { newId, stableId } from "./ids.js";
 import { isLiteById } from "./lite.js";
 
@@ -138,6 +139,19 @@ export async function collections(site: string): Promise<CollectionRow[]> {
 export function collectionRulesBlock(cols: CollectionRow[], name: string): string {
   const rules = cols.find((c) => c.name === name)?.rules?.trim();
   return rules ? `Rules for posts in the ${name} collection (the tenant wrote them; follow them over any default):\n${rules}` : "";
+}
+
+export type { StyleRow };
+export { stylesBlock };
+
+/** The tenant's active style rules (kb_styles), oldest first; none on a server without the table. */
+export async function styles(site: string): Promise<StyleRow[]> {
+  return select<StyleRow>("kb_styles", `site=eq.${enc(site)}&status=eq.active&select=rule,example&order=created.asc&limit=100`).catch(
+    (err) => {
+      if (isMissing(err)) return [];
+      throw err;
+    },
+  );
 }
 
 const BRIEF_COLS =

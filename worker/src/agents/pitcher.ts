@@ -27,6 +27,8 @@ import {
   quarterBriefs,
   saveBatch,
   sitesWithBatchWork,
+  styles,
+  stylesBlock,
   type BriefRow,
   type IdeaRow,
 } from "./store.js";
@@ -384,6 +386,10 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
     { name: "read goals and pipeline" },
   );
   const { goals } = ctx;
+  // The tenant's style rules (kb_styles). A run recorded before they were read has none.
+  const tenantStyles = (await DBOS.patch("pitcher-styles"))
+    ? stylesBlock(await DBOS.runStep(() => styles(site), { name: "read the tenant's styles" }))
+    : "";
 
   const collectionNames = ctx.cols.filter((c) => !c.is_hidden).map((c) => c.name);
   const collectionLines = ctx.cols
@@ -544,7 +550,7 @@ What's already ranking for it:
 ${hits.map((h) => `- ${h.title} <${h.url}>${citable.has(h.url) ? "" : " (not citable)"}: ${h.snippet}`).join("\n") || "(no search results)"}
 
 ${AUTHORITY_RULE}
-
+${tenantStyles ? `\n${tenantStyles}\n` : ""}
 Collections on this blog (pick the one whose description and rules fit):
 ${collectionLines || "(none)"}
 
