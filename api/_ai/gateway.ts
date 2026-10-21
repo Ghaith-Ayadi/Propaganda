@@ -453,6 +453,8 @@ async function run(base: Logged, route: Route, opts: CallOptions) {
         providerMetadata: await stream.providerMetadata,
       };
     } catch (err) {
+      // An abort ends the stream without an answer: say it was an abort.
+      if (opts.abortSignal?.aborted) throw opts.abortSignal.reason ?? err;
       throw streamError ?? err;
     }
     await tenantKeyWorked(opts.site, tenant);
