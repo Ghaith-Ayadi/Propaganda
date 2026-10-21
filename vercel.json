@@ -14,6 +14,16 @@
       "destination": "https://eu.i.posthog.com/:path"
     },
     {
+      "source": "/:path((?!api/).*)",
+      "has": [
+        {
+          "type": "header",
+          "key": "x-propaganda-host"
+        }
+      ],
+      "destination": "/api/blog"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

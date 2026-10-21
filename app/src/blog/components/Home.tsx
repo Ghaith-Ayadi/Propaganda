@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/types";
-import { blogAddress, type BlogPost } from "@/blog/data";
+import { blogAddress, type BlogPost } from "@/blog/model";
 import { navigateTo, postHref } from "@/blog/route";
 import { useActiveTab } from "@/blog/activeTab";
-import type { BlogSite } from "@/blog/site";
+import type { BlogSite } from "@/blog/siteTypes";
+import type { OriginalSettings } from "@/blog/original";
 import { readTime } from "@/lib/format";
 import { Topbar } from "./Topbar";
 import { Hero } from "./Hero";
@@ -15,6 +16,9 @@ interface Props {
   collections: Collection[];
   posts: BlogPost[];
   site: BlogSite;
+  settings: OriginalSettings;
+  /** The collection to open (a collection address rendered on the server); else the stored tab. */
+  initialTab?: string | null;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -24,8 +28,10 @@ function fmtDate(ms: number | null): string {
   return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-export function Home({ collections, posts, site }: Props) {
+export function Home({ collections, posts, site, settings, initialTab }: Props) {
   const [storedTab, setStoredTab] = useActiveTab();
+  // A tab clicked on this page wins over the address the page was opened at.
+  const [picked, setPicked] = useState<string | null>(null);
   const [sort, setSort] = useState<SortMode>("latest");
 
   // Hidden collections are invisible to the public: no tab, no post listings.
@@ -50,8 +56,8 @@ export function Home({ collections, posts, site }: Props) {
     return withPosts?.name ?? publicCollections[0]?.name ?? "";
   }, [publicCollections, publicPosts]);
 
-  const activeName =
-    storedTab && publicCollections.some((c) => c.name === storedTab) ? storedTab : fallbackName;
+  const wanted = picked ?? initialTab ?? storedTab;
+  const activeName = wanted && publicCollections.some((c) => c.name === wanted) ? wanted : fallbackName;
 
   // Keep document.title pinned to the brand on home (tabs don't change URL,
   // so they shouldn't change the page title either). BlogApp's site.title
@@ -81,8 +87,10 @@ export function Home({ collections, posts, site }: Props) {
 
   return (
     <div className="blog-app">
-      <Topbar />
+      <Topbar site={site} />
       <Hero
+        site={site}
+        manifesto={settings.manifesto}
         postCount={publicPosts.length}
         collectionCount={publicCollections.length}
         lastUpdate={lastUpdate}
@@ -99,7 +107,10 @@ export function Home({ collections, posts, site }: Props) {
                 role="tab"
                 aria-selected={c.name === activeName}
                 className="blog-tab"
-                onClick={() => setStoredTab(c.name)}
+                onClick={() => {
+                  setPicked(c.name);
+                  setStoredTab(c.name);
+                }}
               >
                 {display} <span className="count">{counts[c.name] ?? 0}</span>
               </button>
@@ -170,7 +181,7 @@ export function Home({ collections, posts, site }: Props) {
         </section>
       )}
 
-      <Colophon />
+      <Colophon site={site} />
     </div>
   );
 }

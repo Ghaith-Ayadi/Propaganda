@@ -12,3 +12,5 @@ dev-dist
 coverage
 .env*.local
 .env.vercel-pull
+# The blog's rendering bundle, built by app/vite.ssr.config.ts (api/blog.ts loads it)
+api/_blog/dist

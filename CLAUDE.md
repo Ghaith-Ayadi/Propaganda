@@ -83,6 +83,11 @@ PPG-82); its schema and hooks (`pb/`) are in git history.
   the browser. Public blogs: every site at the root of its own host, `<slug>.propaganda.pub`
   or its custom domain (Verbatim: `verbatim.ayadighaith.com`), with certificates issued on
   demand once `tls_check()` says the host is a site. Old `/@<slug>/` links forward.
+- **The blog is rendered on the server** ([docs/blog-server.md](docs/blog-server.md)): Caddy adds
+  `X-Propaganda-Host` to every blog host's request, `vercel.json` sends those to `api/blog.ts`,
+  which runs the bundle `app/vite.ssr.config.ts` builds from `app/src/blog/server/` (never
+  committed). Blog components take the site and settings as props and stay free of `window`
+  outside handlers, so the server and the browser render the same markup.
 - Blog themes: [docs/blog-themes.md](docs/blog-themes.md). A site's `blog.design` setting
   switches its public blog from the original renderer to the themed templates; writing it
   (or `blog.themes`) on a real site is the owner's call, like any other live data.

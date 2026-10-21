@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
 import { navigateTo, homeHref } from "@/blog/route";
-import { currentBlogSite } from "@/blog/site";
+import type { BlogSite } from "@/blog/siteTypes";
 import { Wordmark } from "./Wordmark";
 
 interface Props {
+  site: BlogSite;
   backLabel?: string | null;
   onBack?: () => void;
   right?: React.ReactNode;
@@ -19,7 +20,7 @@ interface Props {
  * indicator updates every animation frame instead of waiting for a
  * React state batch.
  */
-export function Topbar({ backLabel, onBack, right, showProgress }: Props) {
+export function Topbar({ site, backLabel, onBack, right, showProgress }: Props) {
   const progressRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -62,13 +63,13 @@ export function Topbar({ backLabel, onBack, right, showProgress }: Props) {
           navigateTo({ view: "home" });
         }}
         className="blog-topbar__brand"
-        aria-label={`${currentBlogSite()?.name ?? "Verbatim"} — home`}
+        aria-label={`${site.name} — home`}
       >
         {/* The drawn wordmark spells "Verbatim"; other sites set their name in the title face. */}
-        {currentBlogSite()?.slug === "verbatim" ? (
+        {site.slug === "verbatim" ? (
           <Wordmark height={18} />
         ) : (
-          <span className="font-title text-xl leading-none">{currentBlogSite()?.name}</span>
+          <span className="font-title text-xl leading-none">{site.name}</span>
         )}
       </a>
       <div className="blog-topbar__right">{right}</div>
