@@ -199,12 +199,12 @@ export function CheckList({ checks }: { checks: CheckLine[] }) {
   );
 }
 
-export function DecisionCard({ decision, title = "The Guardian" }: { decision: Decision; title?: string }) {
+export function DecisionCard({ decision, title = "Our ruling" }: { decision: Decision; title?: string }) {
   const v = VERDICT[decision.verdict];
   const who =
     decision.decidedBy.kind === "person"
       ? `Ruled by ${decision.decidedBy.person.name}`
-      : `Guardian${decision.decidedBy.policyVersion ? `, rules v${decision.decidedBy.policyVersion}` : ""}`;
+      : `Ruled by us${decision.decidedBy.policyVersion ? `, rules v${decision.decidedBy.policyVersion}` : ""}`;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">

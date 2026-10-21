@@ -59,9 +59,9 @@ function Body({ connector: c }: { connector: Connector }) {
 }
 
 const WHAT: Record<string, string[]> = {
-  granola: ["Every finished meeting arrives as a transcript.", "The Listener reads it for ideas and candidate facts, and quotes link back to the call."],
-  slack: ["The Listener reads the channels you pick.", "A weak answer in a thread is a content gap, never a fact."],
-  newsletter: ["Past issues count toward Volume.", "The Checker compares new posts against what you already sent."],
+  granola: ["Every finished meeting arrives as a transcript.", "We read it for ideas and candidate facts, and quotes link back to the call."],
+  slack: ["We read the channels you pick.", "A weak answer in a thread is a content gap, never a fact."],
+  newsletter: ["Past issues count toward Volume.", "We compare new posts against what you already sent."],
   framer: ["Reads your pages for audits.", "Publishes approved posts into your Framer site."],
   webflow: ["Reads a CMS collection.", "Publishes approved posts into it."],
   wordpress: ["Reads posts and pages.", "Publishes approved posts through the REST API."],
@@ -123,7 +123,7 @@ function WatchedSites() {
   const [topic, setTopic] = useState("");
   return (
     <>
-      <p className="text-sm text-secondary">Specific pages the Scout follows for ideas: a regulator's news page, a competitor's blog.</p>
+      <p className="text-sm text-secondary">Specific pages we follow for ideas: a regulator's news page, a competitor's blog.</p>
       {sites.length > 0 && (
         <ul className="divide-y divide-secondary rounded-lg border border-secondary">
           {sites.map((s) => (
@@ -160,7 +160,7 @@ const CAN = [
   "Search the knowledge base and read the claims behind an answer",
   "Read your posts, their versions and their flags",
   "Ask for a pitch or a draft, and see it land in the pipeline",
-  "Remember a fact, which goes through the Guardian like any other",
+  "Remember a fact, which we check like any other",
 ];
 
 /** The Claude plugin: an API token, the MCP server's address, and how to install it. */
@@ -208,7 +208,7 @@ function ClaudePlugin() {
   return (
     <>
       <p className="text-sm text-secondary">
-        With the Propaganda plugin, Claude puts posts on your blog from wherever you are working: say "blog about this" and the Writer takes it from there, in your voice, for your review.
+        With the Propaganda plugin, Claude puts posts on your blog from wherever you are working: say "blog about this" and we take it from there, in your voice, for your review.
       </p>
       <ol className="list-decimal space-y-1 pl-5 text-sm text-secondary">
         <li>

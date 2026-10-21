@@ -4,6 +4,7 @@
 import { beginWrite, db as activeDb } from "@/lib/db";
 import { dateToMs, msToDate, must, newId, sb as activeSb } from "@/lib/supabase";
 import { scheduleSync } from "@/lib/sync";
+import { oneLine } from "@/lib/format";
 import { dedupe, hasAddress, titleSlug } from "@/lib/slug";
 import { announcePublished } from "@/lib/publish";
 import { snapshotVersion } from "@/lib/versions";
@@ -71,12 +72,12 @@ export function fromRecord(r: PostRecord): Post {
  */
 export function toRecord(p: Post) {
   return {
-    title: p.title,
+    title: oneLine(p.title),
     slug: p.slug,
     post_id: p.postId ?? "",
     type: p.type,
     status: p.status ?? "",
-    subtitle: p.subtitle ?? "",
+    subtitle: oneLine(p.subtitle ?? ""),
     done_at: msToDate(p.doneAt),
     published_at: msToDate(p.publishedAt),
     excerpt: p.excerpt ?? "",
@@ -113,6 +114,9 @@ async function updatePostIn(
 ): Promise<void> {
   const existing = await db.posts.get(id);
   if (!existing) return;
+
+  if (patch.title !== undefined) patch = { ...patch, title: oneLine(patch.title) };
+  if (typeof patch.subtitle === "string") patch = { ...patch, subtitle: oneLine(patch.subtitle) };
 
   // Until a post has a public address, its slug is its title's: the address is
   // fixed when it's first published (setPostStatus), not before.
@@ -174,7 +178,7 @@ async function stageNewPost(
   const pid = postSlug(type, nextSeq);
 
   // The slug follows the title until the post is first published.
-  const title = fields.title ?? "";
+  const title = oneLine(fields.title ?? "");
   const slug = titleSlug(title);
 
   const now = Date.now();

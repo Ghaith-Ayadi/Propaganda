@@ -45,11 +45,11 @@ export function KnowledgeSection() {
         </ol>
       </Card>
 
-      <Card title="The Guardian" description="The only thing that writes to the knowledge base. It flags; it never turns away a Remember.">
+      <Card title="How we guard it" description="We are the only ones who write to the knowledge base. We flag; we never turn away a Remember.">
         <div className="space-y-3">
-          <div className="text-sm font-medium text-primary">How strict it is</div>
+          <div className="text-sm font-medium text-primary">How strict we are</div>
           <Segmented<GuardianStrictness>
-            label="Guardian strictness"
+            label="Strictness"
             value={strictness}
             onChange={setStrictness}
             options={[

@@ -109,3 +109,8 @@ export function formatExactDate(ms: number | null | undefined): string {
   const yy = String(d.getFullYear()).slice(-2);
   return `${mon} ${day}${ordinal(day)}, '${yy}`;
 }
+
+/** A title or short description is one line: line breaks (a paste, a model's answer) become single spaces. */
+export function oneLine(text: string): string {
+  return text.replace(/\s*[\r\n]+\s*/g, " ");
+}

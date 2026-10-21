@@ -235,7 +235,7 @@ function CloseOtherWays({ flag }: { flag: FlagDetail }) {
         {!conflict && !draftOpen && (
           <OptionCard
             title="It isn't inconsistent"
-            body="Argue why both can be true. The Guardian decides, not you."
+            body="Argue why both can be true. We decide, not you."
             active={mode === "contest"}
             onPress={() => setMode(mode === "contest" ? null : "contest")}
           />
@@ -365,7 +365,7 @@ function ContestResult({ flagId, contest, open }: { flagId: string; contest: Con
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
-    const out = await act("KB-CONTEST", "kb.submitContest", () => kb().submitContest(flagId), "Couldn't send it to the Guardian");
+    const out = await act("KB-CONTEST", "kb.submitContest", () => kb().submitContest(flagId), "Couldn't send it to us");
     setBusy(false);
     if (out?.decision) {
       track("kb_contest_ruled", { verdict: out.decision.verdict });
@@ -379,7 +379,7 @@ function ContestResult({ flagId, contest, open }: { flagId: string; contest: Con
               ? "In as contested. The flag is closed."
               : v === "escalate"
                 ? "Sent to the topic's owner."
-                : "The Guardian rejected it. The flag stays open.",
+                : "We rejected it. The flag stays open.",
       });
     }
   };
@@ -391,7 +391,7 @@ function ContestResult({ flagId, contest, open }: { flagId: string; contest: Con
       actions={
         contest.status === "draft" && (
           <Button size="sm" color="primary" isLoading={busy} isDisabled={!contest.changes.length} onClick={() => void submit()}>
-            Send to the Guardian
+            Send to us
           </Button>
         )
       }
@@ -420,12 +420,12 @@ function ContestResult({ flagId, contest, open }: { flagId: string; contest: Con
         contest.status === "draft" && <p className="mt-3 text-sm text-tertiary">The agent is drafting the change from your sentence.</p>
       )}
 
-      {contest.status === "open" && <p className="mt-3 text-sm text-tertiary">With the Guardian.</p>}
+      {contest.status === "open" && <p className="mt-3 text-sm text-tertiary">With us.</p>}
       {contest.decision && (
         <div className="mt-5">
           <DecisionCard decision={contest.decision} />
           {contest.decision.verdict === "reject" && open && (
-            <p className="mt-3 text-sm text-tertiary">Fix the post, or argue again below with what the Guardian asked for.</p>
+            <p className="mt-3 text-sm text-tertiary">Fix the post, or argue again below with what we asked for.</p>
           )}
         </div>
       )}

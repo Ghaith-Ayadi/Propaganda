@@ -203,6 +203,9 @@ export async function settleIdea(site: string, id: string, status: "pitched" | "
 /** Who pitched a brief (briefs.pitched_by's check constraint). The Strategist writes day one's; the Pitcher every batch after. */
 export type PitchedBy = "agent:pitcher" | "agent:strategist";
 
+/** A title or short description is one line: a model's line breaks become single spaces. */
+export const oneLine = (s: string): string => s.replace(/\s*[\r\n]+\s*/g, " ");
+
 /**
  * A new brief from an agent, status `pitched` unless `status` says otherwise
  * (the Strategist saves a pitch for a topic that left the plan as cancelled).
@@ -215,7 +218,7 @@ export async function insertPitch(
 ): Promise<void> {
   const [existing] = await select<{ id: string }>("briefs", `id=eq.${enc(row.id)}&select=id`);
   if (existing) return; // the step ran before the worker restarted
-  await insert("briefs", { ...row, status, pitched_by: pitchedBy });
+  await insert("briefs", { ...row, title: oneLine(row.title), status, pitched_by: pitchedBy });
 }
 
 /** Link the draft to an agent-made brief. Briefs a person made are never changed. */
@@ -236,7 +239,7 @@ export async function insertDraftPost(row: {
 }): Promise<void> {
   const [existing] = await select<{ id: string }>("posts", `id=eq.${enc(row.id)}&select=id`);
   if (existing) return;
-  await insert("posts", { ...row, status: "draft" });
+  await insert("posts", { ...row, title: oneLine(row.title), subtitle: oneLine(row.subtitle), status: "draft" });
 }
 
 export async function insertVersion(row: {
@@ -326,7 +329,7 @@ export async function setAgentBriefStatus(site: string, brief: string, status: s
  * check and the write one statement, so a person who started writing wins.
  */
 export async function fillEmptyPost(site: string, post: string, values: { title: string; subtitle: string; excerpt: string; content_md: string; word_count: number }): Promise<boolean> {
-  const rows = await patch("posts", `site=eq.${enc(site)}&id=eq.${enc(post)}&content_md=eq.&status=eq.draft`, values);
+  const rows = await patch("posts", `site=eq.${enc(site)}&id=eq.${enc(post)}&content_md=eq.&status=eq.draft`, { ...values, title: oneLine(values.title), subtitle: oneLine(values.subtitle) });
   return rows.length === 1;
 }
 
