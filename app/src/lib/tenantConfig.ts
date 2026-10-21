@@ -4,46 +4,27 @@
 // (lib/settings.ts): already per site, already synced, and adding a key never
 // touches a client's existing data. No schema change.
 //
-// PLACEHOLDER ADAPTERS: three things have no server table yet and are marked
+// PLACEHOLDER ADAPTERS: two things have no server table yet and are marked
 // below. When the real tables land, only this file changes; the pages call the
-// hooks and never see where the data comes from.
-//   1. People: the member list and invites (needs a read of site_members + an
-//      invite flow).
-//   2. Connection status: Granola, Slack, newsletter and CMS "connect" only
+// hooks and never see where the data comes from. (People and invites are real:
+// lib/people.ts.)
+//   1. Connection status: Granola, Slack, newsletter and CMS "connect" only
 //      records that the tenant asked; nothing reaches the outside service.
-//   3. The transcript URL and MCP URL are shaped like the real ones but the
+//   2. The transcript URL and MCP URL are shaped like the real ones but the
 //      endpoints do not exist yet (and the transcript token is not minted).
 //
 // EVERY KEY HERE IS PUBLIC. The blog reads app_settings through the anonymous
 // client ("anyone reads settings", 20261002000003_access.sql), so anyone on the
 // internet can read these rows. Never put a secret, an email address or an
-// account id in one. Things that must not be public are held in memory only
-// (useMemoryState, "not saved yet" in the UI) until their server tables exist.
+// account id in one. Anything that must not be public gets a server table.
 
-import { useCallback, useEffect, useState } from "react";
-import { must, sb } from "@/lib/supabase";
-import { onScopeReset, siteId } from "@/lib/scope";
+import { useCallback } from "react";
 import { setSetting, useSetting } from "@/lib/settings";
 
 /** A setting with a typed default, and a setter that stores the whole value. */
 function useConfig<T>(key: string, fallback: T): [T, (next: T) => void] {
   const value = useSetting<T>(key, fallback) ?? fallback;
   const set = useCallback((next: T) => void setSetting(key, next), [key]);
-  return [value, set];
-}
-
-const memory = new Map<string, unknown>();
-// One tenant's unsaved values must not show under the next.
-onScopeReset(() => memory.clear());
-
-/** Like useConfig but kept in this browser tab only: lost on reload. For anything not safe to publish. */
-function useMemoryState<T>(key: string, fallback: T): [T, (next: T) => void] {
-  const [, force] = useState(0);
-  const value = (memory.has(key) ? memory.get(key) : fallback) as T;
-  const set = useCallback((next: T) => {
-    memory.set(key, next);
-    force((n) => n + 1);
-  }, [key]);
   return [value, set];
 }
 
@@ -80,65 +61,6 @@ export const WRITER_RULE = {
   instead: "Say it as a comparison: “This is much more of a maintenance job than it is the ol' art of writing.”",
 };
 
-// ---- People ---------------------------------------------------------------
-
-export interface Person {
-  id: string;
-  name: string;
-  /** Empty for members whose email the browser cannot read (auth.users is server-side). */
-  email: string;
-  avatar: string;
-  role: string;
-  status: "active" | "invited";
-}
-
-interface Invite { email: string; at: string }
-
-/**
- * Members come from `site_members`, which a member can already read (own and
- * co-members policy). Names and emails of the others live in auth.users, so
- * they show as a role until a server read exposes them. PLACEHOLDER ADAPTER
- * (1/3) for the rest: invites are held in memory only (emails are personal data
- * and app_settings is public) and no invite email is sent.
- */
-export function usePeople(me: { authId: string; userId: string; email: string; name: string; avatar: string }) {
-  const [invites, setInvites] = useMemoryState<Invite[]>("people.invites", []);
-  const [members, setMembers] = useState<{ user_id: string; role: string }[] | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    void must(sb.from("site_members").select("user_id, role").eq("site", siteId()))
-      .then((rows) => live && setMembers(rows as { user_id: string; role: string }[]))
-      .catch(() => live && setMembers([]));
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  const mine: Person = { id: me.authId || me.userId, name: me.name || me.email, email: me.email, avatar: me.avatar, role: "", status: "active" };
-  const others: Person[] = (members ?? [])
-    .filter((m) => m.user_id !== me.authId)
-    .map((m) => ({ id: m.user_id, name: `Member ${m.user_id.slice(0, 6)}`, email: "", avatar: "", role: m.role, status: "active" as const }));
-  const people: Person[] = [
-    { ...mine, role: members?.find((m) => m.user_id === me.authId)?.role ?? "" },
-    ...others,
-    ...invites.map((i) => ({ id: `invite:${i.email}`, name: i.email, email: i.email, avatar: "", role: "", status: "invited" as const })),
-  ];
-  return {
-    people,
-    invite: (email: string) => {
-      const e = email.trim().toLowerCase();
-      if (!e || invites.some((i) => i.email === e)) return;
-      setInvites([...invites, { email: e, at: new Date().toISOString() }]);
-    },
-    removeInvite: (email: string) => setInvites(invites.filter((i) => i.email !== email)),
-  };
-}
-
-/** Topic owner per topic and the one top authority. Account ids are not public data: memory only until a server table holds them. */
-export const useTopicOwners = () => useMemoryState<Record<string, string>>("people.topicOwners", {});
-export const useTopAuthority = () => useMemoryState<string>("people.topAuthority", "");
-
 const rid = () => Math.random().toString(36).slice(2, 10);
 
 // ---- Connections ----------------------------------------------------------
@@ -150,7 +72,7 @@ export type ConnectionId =
 export type ConnectionStatus = "none" | "requested";
 
 /**
- * PLACEHOLDER ADAPTER (2/3). "Connect" records that the tenant asked and keeps
+ * PLACEHOLDER ADAPTER (1/2). "Connect" records that the tenant asked and keeps
  * its non-secret details (a workspace name, a feed URL). Nothing reaches the
  * outside service yet, and no credential is ever stored here.
  */
@@ -185,7 +107,7 @@ export function useWatchedSites() {
 }
 
 /**
- * PLACEHOLDER ADAPTER (3/3). The open URL anyone can POST a transcript to.
+ * PLACEHOLDER ADAPTER (2/2). The open URL anyone can POST a transcript to.
  * No token is minted here: app_settings is public, so a token stored there
  * would be a public secret. The server mints it (see the ingest_tokens draft in
  * the PR) and this shows only the shape of the address.
@@ -194,7 +116,7 @@ export function transcriptUrlShape(): string {
   return `${window.location.origin}/api/ingest/<token>`;
 }
 
-/** PLACEHOLDER (3/3): the MCP endpoint other AI tools connect to. */
+/** PLACEHOLDER (2/2): the MCP endpoint other AI tools connect to. */
 export function mcpUrl(): string {
   return `${window.location.origin}/mcp`;
 }
