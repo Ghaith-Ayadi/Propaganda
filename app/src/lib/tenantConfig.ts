@@ -47,11 +47,6 @@ function useMemoryState<T>(key: string, fallback: T): [T, (next: T) => void] {
   return [value, set];
 }
 
-// ---- Models ---------------------------------------------------------------
-
-/** Off by default. When on, background jobs only use Western model providers. */
-export const useWesternOnly = () => useConfig<boolean>("tenant.models.westernOnly", false);
-
 // ---- Agents ---------------------------------------------------------------
 
 export type AgentId =
@@ -76,29 +71,6 @@ export const AGENTS: AgentInfo[] = [
   { id: "chat", name: "Chat", job: "Talks with the operator and calls the others", internet: true },
 ];
 
-export type StageMode = "off" | "ask" | "auto";
-export type StageId = "suggest" | "flag" | "plan" | "write" | "review" | "publish";
-
-export const STAGES: { id: StageId; name: string; what: string }[] = [
-  { id: "suggest", name: "Suggest", what: "Find ideas and pitch the ones with a reason" },
-  { id: "flag", name: "Flag", what: "Raise consistency flags against the knowledge base" },
-  { id: "plan", name: "Plan", what: "Turn accepted pitches into briefs" },
-  { id: "write", name: "Write", what: "Draft from a brief" },
-  { id: "review", name: "Review", what: "Check drafts for veracity before a person sees them" },
-  { id: "publish", name: "Publish", what: "Push to the site" },
-];
-
-const STAGE_DEFAULTS: Record<StageId, StageMode> = {
-  suggest: "auto", flag: "auto", plan: "ask", write: "ask", review: "auto", publish: "off",
-};
-
-/** How far each stage goes on its own. Off means the stage does not run at all. */
-export function useStageModes(): [Record<StageId, StageMode>, (id: StageId, mode: StageMode) => void] {
-  const [modes, setModes] = useConfig<Partial<Record<StageId, StageMode>>>("tenant.agents.stages", {});
-  const merged = { ...STAGE_DEFAULTS, ...modes };
-  return [merged, (id, mode) => setModes({ ...modes, [id]: mode })];
-}
-
 /** The Writer's voice guide: short, editable. Empty means the default voice. */
 export const useVoiceGuide = () => useConfig<string>("tenant.voice.guide", "");
 
@@ -107,83 +79,6 @@ export const WRITER_RULE = {
   rule: "Never write “That's not X. It's Y.” unless there is truly no other way.",
   instead: "Say it as a comparison: “This is much more of a maintenance job than it is the ol' art of writing.”",
 };
-
-// ---- Taste and voice suggestions (placeholder until #43's tables are wired) ----
-// Both are memory-only: taste and edit patterns come from the writing, and
-// app_settings is public. Swap the bodies for taste_profiles / voice_guides.suggestion.
-
-export interface TasteProfile {
-  /** Written by the Pitcher each batch. Read-only for people. */
-  summary: string;
-  updatedAt: string | null;
-  /** The signed-in member's own notes. Each member edits only theirs. */
-  myNotes: string;
-}
-
-export function useTaste(): [TasteProfile, (notes: string) => void] {
-  const [profile, setProfile] = useMemoryState<TasteProfile>("taste.profile", { summary: "", updatedAt: null, myNotes: "" });
-  return [profile, (notes) => setProfile({ ...profile, myNotes: notes })];
-}
-
-export interface VoiceSuggestion {
-  /** What the Writer noticed in repeated reviewer edits. */
-  reason: string;
-  /** The line it would add to the guide. */
-  addition: string;
-  editCount: number;
-}
-
-/** Never changes the guide until applied. Dismiss clears it. */
-export function useVoiceSuggestion() {
-  const [suggestion, setSuggestion] = useMemoryState<VoiceSuggestion | null>("voice.suggestion", null);
-  const [guide, setGuide] = useVoiceGuide();
-  return {
-    suggestion,
-    apply: () => {
-      if (!suggestion) return;
-      setGuide(guide.trim() ? `${guide.trimEnd()}\n${suggestion.addition}` : suggestion.addition);
-      setSuggestion(null);
-    },
-    dismiss: () => setSuggestion(null),
-    /** Lets the empty state show what a suggestion looks like. Placeholder only. */
-    showExample: () =>
-      setSuggestion({
-        reason: "Reviewers shortened the opening sentence in 4 of the last 5 drafts.",
-        addition: "Open with the point in one short sentence; no warm-up.",
-        editCount: 4,
-      }),
-  };
-}
-
-// ---- Knowledge ------------------------------------------------------------
-
-export interface SourceTier { id: string; name: string; what: string }
-
-/** Strongest evidence first. The tenant can reorder; the ids never change. */
-export const DEFAULT_TIERS: SourceTier[] = [
-  { id: "signed", name: "Signed documents", what: "Contracts, pricing sheets, security reports" },
-  { id: "owner", name: "A topic owner's word", what: "Said on the record, in a call or a decision" },
-  { id: "internal", name: "Internal documents", what: "Decks, wikis, specs" },
-  { id: "calls", name: "Calls", what: "What anyone said in a transcript" },
-  { id: "published", name: "Published content", what: "Our own posts. The weakest evidence" },
-];
-
-export function useSourceTiers(): [SourceTier[], (order: string[]) => void] {
-  const [order, setOrder] = useConfig<string[]>("tenant.kb.tiers", DEFAULT_TIERS.map((t) => t.id));
-  // Tolerate a stored order that misses a tier (added later) or names one that is gone.
-  const known = new Map(DEFAULT_TIERS.map((t) => [t.id, t]));
-  const seen = order.filter((id) => known.has(id));
-  const tiers = [...seen, ...DEFAULT_TIERS.map((t) => t.id).filter((id) => !seen.includes(id))].map((id) => known.get(id)!);
-  return [tiers, setOrder];
-}
-
-export type GuardianStrictness = "relaxed" | "balanced" | "strict";
-
-/** How readily the Guardian contests a claim. It flags; it never rejects a person's Remember. */
-export const useGuardianStrictness = () => useConfig<GuardianStrictness>("tenant.kb.strictness", "balanced");
-
-/** Re-read every piece that relies on a claim when the claim changes. */
-export const useRecheckOnChange = () => useConfig<boolean>("tenant.kb.recheck", true);
 
 // ---- People ---------------------------------------------------------------
 
@@ -244,42 +139,7 @@ export function usePeople(me: { authId: string; userId: string; email: string; n
 export const useTopicOwners = () => useMemoryState<Record<string, string>>("people.topicOwners", {});
 export const useTopAuthority = () => useMemoryState<string>("people.topAuthority", "");
 
-// ---- Content types --------------------------------------------------------
-
-export type Platform = "linkedin" | "x" | "bluesky" | "threads" | "facebook" | "instagram";
-
-export const PLATFORMS: { id: Platform; name: string }[] = [
-  { id: "linkedin", name: "LinkedIn" },
-  { id: "x", name: "X" },
-  { id: "bluesky", name: "Bluesky" },
-  { id: "threads", name: "Threads" },
-  { id: "facebook", name: "Facebook" },
-  { id: "instagram", name: "Instagram" },
-];
-
-/** A channel is a platform plus a specific page or account; two LinkedIn pages is fine. */
-export interface SocialChannel { id: string; platform: Platform; page: string }
-export interface EmailThread { id: string; name: string; about: string }
-
 const rid = () => Math.random().toString(36).slice(2, 10);
-
-export function useSocialChannels() {
-  const [channels, set] = useConfig<SocialChannel[]>("tenant.content.channels", []);
-  return {
-    channels,
-    add: (platform: Platform, page: string) => set([...channels, { id: rid(), platform, page: page.trim() }]),
-    remove: (id: string) => set(channels.filter((c) => c.id !== id)),
-  };
-}
-
-export function useEmailThreads() {
-  const [threads, set] = useConfig<EmailThread[]>("tenant.content.emailThreads", []);
-  return {
-    threads,
-    add: (name: string, about: string) => set([...threads, { id: rid(), name: name.trim(), about: about.trim() }]),
-    remove: (id: string) => set(threads.filter((t) => t.id !== id)),
-  };
-}
 
 // ---- Connections ----------------------------------------------------------
 
