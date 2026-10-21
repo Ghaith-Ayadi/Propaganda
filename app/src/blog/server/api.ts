@@ -12,6 +12,7 @@ import {
 } from "@/blog/model";
 import type { BlogSite } from "@/blog/siteTypes";
 import type { Collection } from "@/types";
+import type { SiteData } from "./page";
 
 export interface Api {
   url: string;
@@ -127,4 +128,31 @@ export async function redirectTarget(api: Api, siteId: string, collection: strin
   const col = collection === null ? "" : `&collection=eq.${encodeURIComponent(collection)}`;
   const rows = await get<{ post: string }[]>(api, `post_redirects?select=post&site=eq.${siteId}${col}&slug=eq.${encodeURIComponent(slug)}&limit=1`);
   return rows[0]?.post ?? null;
+}
+
+/** A table's rows for a site (or all), as the box watches them: how many, and the newest `updated`. */
+export interface Mark {
+  count: number;
+  latest: string | null;
+}
+
+export async function markOf(api: Api, table: string, filter: string): Promise<Mark> {
+  const headers: Record<string, string> = { apikey: api.key, Authorization: `Bearer ${api.key}`, Accept: "application/json", Prefer: "count=exact" };
+  const path = `${table}?select=updated&${filter}&order=updated.desc&limit=1`;
+  const res = await fetch(`${api.url.replace(/\/$/, "")}/rest/v1/${path}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!res.ok && res.status !== 206) throw new ApiError(`${path}: ${res.status}`, res.status);
+  const rows = (await res.json()) as Array<{ updated: string }>;
+  const count = Number(res.headers.get("content-range")?.split("/")[1] ?? NaN);
+  return { count: Number.isFinite(count) ? count : rows.length, latest: rows[0]?.updated ?? null };
+}
+
+export async function allSites(api: Api): Promise<BlogSite[]> {
+  const rows = await all<SiteRecord>(api, `sites?select=${SITE_FIELDS}&order=id`);
+  return rows.map(fromSite);
+}
+
+/** A site's settings, collections and published posts, read together. */
+export async function dataOf(api: Api, site: BlogSite): Promise<SiteData> {
+  const [settings, collections, posts] = await Promise.all([settingsOf(api, site.id), collectionsOf(api, site.id), postsOf(api, site.id)]);
+  return { site, settings, collections, posts };
 }

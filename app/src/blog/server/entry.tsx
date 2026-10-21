@@ -18,9 +18,11 @@ import { parseLegacySitePath } from "@/lib/siteUrl";
 import { collectionSlugOf, postPath, slugify } from "@/lib/slug";
 import { routeOf, type BlogRoute } from "../route";
 import type { BlogSite } from "../siteTypes";
-import { ApiError, collectionsOf, postIdByCode, postsOf, redirectTarget, settingsOf, siteByDomain, siteBySlug, type Api } from "./api";
+import { ApiError, dataOf, postIdByCode, redirectTarget, siteByDomain, siteBySlug, type Api } from "./api";
 import { robots, rss, sitemap } from "./feeds";
-import { plainShell, renderPage, siteNotFoundPage, type SiteData } from "./page";
+import shell from "../../../dist/index.html?raw";
+import { fillShell } from "./fill";
+import { renderParts, siteNotFoundParts, type Rendered, type SiteData } from "./page";
 import { absolute, siteUrl, slugOfHost, type Hosts } from "./urls";
 
 export interface Env {
@@ -53,6 +55,23 @@ function redirect(to: string): Response {
 }
 function text(body: string, type: string): Response {
   return new Response(body, { status: 200, headers: { "Content-Type": type, ...CACHE } });
+}
+
+export interface Page {
+  status: number;
+  html: string;
+}
+
+/** A rendered page in this build's shell. */
+function toPage(r: Rendered): Page {
+  return { status: r.status, html: fillShell(shell, r.parts) };
+}
+export const renderPage = (route: BlogRoute, data: SiteData, hosts: Hosts): Page => toPage(renderParts(route, data, hosts));
+const siteNotFoundPage = (): Page => toPage(siteNotFoundParts());
+
+/** The shell as the browser gets it without a page in it. */
+export function plainShell(): string {
+  return shell;
 }
 
 /** The shell alone, when the page can't be rendered: the app in the browser still works. */
@@ -101,11 +120,6 @@ export async function handle(request: Request, env: Env = {}): Promise<Response>
   return html(page.html, page.status);
 }
 
-/** A site's settings, collections and published posts, read together. */
-export async function dataOf(api: Api, site: BlogSite): Promise<SiteData> {
-  const [settings, collections, posts] = await Promise.all([settingsOf(api, site.id), collectionsOf(api, site.id), postsOf(api, site.id)]);
-  return { site, settings, collections, posts };
-}
 
 /** Where an address that names no loaded post now points (site-relative), or null. */
 async function movedTo(route: BlogRoute, data: SiteData, api: Api): Promise<string | null> {
@@ -136,4 +150,4 @@ async function movedTo(route: BlogRoute, data: SiteData, api: Api): Promise<stri
 }
 
 // For tests and tools: the pieces behind handle().
-export { ApiError, renderPage, rss, sitemap, robots, siteBySlug, siteByDomain, type BlogSite, type SiteData };
+export { ApiError, dataOf, renderParts, rss, sitemap, robots, siteBySlug, siteByDomain, type BlogSite, type SiteData };

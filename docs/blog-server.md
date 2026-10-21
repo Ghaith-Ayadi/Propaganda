@@ -65,6 +65,44 @@ browser depends on the server's page.
 Settings: the server fetches only the keys it renders (`PUBLIC_SETTING_KEYS` in
 `app/src/blog/server/api.ts`); a private key is never read, whatever the API allows.
 
+## On the box: the pages as files
+
+The function above is the slow path: it fetches a site's rows on every uncached request
+(measured on Verbatim: 400 to 1100 ms of fetching for 1 to 11 ms of rendering). The fast
+path is `app/src/blog/server/box.ts`, one Node process on the box (`propaganda-blog` in
+Bedrock's `compose/propaganda-supabase`, bundled by `app/vite.box.config.ts`, `npm run
+build:box`), which writes every public page of every site as a file that Caddy serves.
+Four rules keep it out of cache trouble:
+
+1. **A page is stored as a fragment, not a page** (`fragmentOf` in `fill.ts`): the `<html>`
+   attributes, the favicon tag, the head with its styles, the markup. Nothing from the app
+   build is in it. Caddy wraps it in the app's current shell when a reader asks (Bedrock's
+   `compose/blog/wrap.html`, a Caddy template that only concatenates: `wrap()` in `fill.ts`
+   is the same join, and the test checks it against `fillShell`). The shell's pieces come
+   from the deployment itself (`BLOG_SHELL_URL`, refreshed every tick), so a deploy of the
+   app invalidates no file.
+2. **A site is rewritten when its rows change.** Every tick (10 s) compares a mark (row
+   count and newest `updated`) of posts, collections, settings and the site row, read
+   through PostgREST as the anonymous key, so only published rows are ever seen. A changed
+   site is rendered whole (Verbatim: 173 pages in 1.6 s), each file written and renamed
+   into place, then the paths the site no longer has are removed, and host directories of
+   sites that are gone or moved domain.
+3. **A missing file is never an error.** Caddy's `blog_files` snippet serves a page only
+   when its file exists (and not for `?pg-preview`); everything else goes to the function
+   as before. A sweep every 24 h rewrites every site regardless. A site whose render fails
+   keeps its old files and is retried with backoff.
+4. **The data decides, not the UI.** A publish from the editor, the plugin, a sync or an
+   import all move the marks the same way.
+
+Files under `/srv/blogs`: `shell/0.html` to `4.html` and `shell/favicon.html`;
+`sites/<host>/<path>/index.html` per page, `sites/<host>/{sitemap.xml,feed.xml,rss.xml,robots.txt}`
+whole; `state.json` (marks, last sweep). `<host>` is the site's canonical host; the other
+answers 301 from the function. The dev box runs the same (`dev/docker-compose.yml`, `blog`),
+reading the shell from the build Caddy serves. `/health` on port 3030 reports the state.
+
+Known limit: a site is rendered whole, so a site with thousands of posts fetches them all
+on every change; render single posts when one gets there.
+
 ## Working on it
 
 - `npm run build:blog` in `app/` rebuilds only the bundle (after `vite build`, which the
