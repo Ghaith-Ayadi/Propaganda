@@ -12,6 +12,7 @@ import {
   type Account,
   type PendingCode,
 } from "@/lib/accounts";
+import { PRIVACY_URL, TERMS_URL } from "@/lib/legal";
 import { userMessage } from "@/lib/errors";
 import { reportError } from "@/lib/telemetry";
 
@@ -203,6 +204,20 @@ export function SignIn({
           </div>
         )}
 
+        {!pending && (
+          <p className="mt-6 text-center text-xs text-quaternary">
+            By continuing you agree to the{" "}
+            <a href={TERMS_URL} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-tertiary">
+              Terms
+            </a>{" "}
+            and{" "}
+            <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-tertiary">
+              Privacy Policy
+            </a>
+            .
+          </p>
+        )}
+
         {onCancel ? (
           <div className="mt-8 border-t border-secondary pt-5 text-center">
             <Button size="sm" color="link-gray" onClick={onCancel}>
@@ -210,9 +225,7 @@ export function SignIn({
             </Button>
           </div>
         ) : (
-          !pending && (
-            <p className="mt-8 text-center text-xs text-quaternary">New here? Signing in creates your account.</p>
-          )
+          !pending && <p className="mt-2 text-center text-xs text-quaternary">New here? Signing in creates your account.</p>
         )}
       </div>
     </div>
