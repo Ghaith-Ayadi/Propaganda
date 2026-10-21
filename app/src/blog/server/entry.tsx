@@ -68,6 +68,8 @@ export async function handle(request: Request, env: Env = {}): Promise<Response>
   const url = new URL(request.url);
   const host = (request.headers.get(HOST_HEADER) || url.hostname).toLowerCase().replace(/:\d+$/, "");
   const path = url.pathname;
+  // Vercel's rewrite adds what it matched (the path, the header) to the query; readers never sent those.
+  for (const synthetic of ["path", HOST_HEADER]) url.searchParams.delete(synthetic);
 
   if (url.searchParams.has("pg-preview")) return fallback("preview");
 
