@@ -226,7 +226,7 @@ export function useReviewNotes(postId: string, item: PipelineItem | undefined) {
             return;
           }
           track("review_fix_applied", { section: "kb" });
-          if (live) resolve(id, "Fixed. The Checker confirms it on the next version.");
+          if (live) resolve(id, "Fixed. We confirm it on the next version.");
           else setStatus("fixed");
         },
       });
@@ -307,7 +307,7 @@ export function useReviewNotes(postId: string, item: PipelineItem | undefined) {
             await kb().remember({ text: r.text, topics: [], scope: {} });
             track("claim_remembered", { from: "review" });
             resolve(id, "Remembered");
-            h.toast("Remembered. The Guardian files it in the knowledge base.");
+            h.toast("Remembered. We file it in the knowledge base.");
           },
         },
         { label: "Not a fact", run: () => resolve(id, "Not a fact") },

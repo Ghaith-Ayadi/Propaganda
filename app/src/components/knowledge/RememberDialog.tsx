@@ -43,7 +43,7 @@ export function RememberDialog({ onClose, initialText = "" }: { onClose: () => v
       toast.add({
         type: "success",
         title: "Remembered",
-        description: "It's in. The Guardian is checking it against the rest and will flag anything it contradicts.",
+        description: "It's in. We're checking it against the rest and will flag anything it contradicts.",
       });
       changed();
       onClose();

@@ -107,7 +107,7 @@ function PitchBody({
   const mapThread = (id: string, f: (t: PitchThread) => PitchThread) => setThreads((all) => all.map((t) => (t.id === id ? f(t) : t)));
 
   const writerName = personById(people, writerId)?.name ?? "Unassigned";
-  const options = people.map((p) => ({ label: p.id === meId ? "You" : p.agent ? "Writer agent" : p.name, value: p.id }));
+  const options = people.map((p) => ({ label: p.id === meId ? "You" : p.agent ? "Us" : p.name, value: p.id }));
 
   const approve = async () => {
     setBusy(true);
@@ -210,7 +210,7 @@ function PitchBody({
             {item.reasons.length ? (
               <Fields rows={item.reasons.map((r, n) => [REASON_LABEL[r.kind], <Passage key={n} field={`reason:${n}`} text={r.text} />, !r.counts] as const)} />
             ) : (
-              <p className="text-sm text-tertiary">Your idea: no reasons from the Pitcher.</p>
+              <p className="text-sm text-tertiary">Your idea: no reasons from us.</p>
             )}
           </Block>
 
@@ -270,7 +270,7 @@ function PitchBody({
             />
             <CardBody className="flex flex-col gap-4">
               <div className="grid gap-4 sm:grid-cols-3">
-                <NativeSelect label="Writer" size="md" options={options} value={writerId} disabled={!decidable} onChange={(e) => setWriterId(e.target.value)} />
+                <NativeSelect label="Written by" size="md" options={options} value={writerId} disabled={!decidable} onChange={(e) => setWriterId(e.target.value)} />
                 <NativeSelect label="Reviewer" size="md" options={options} value={reviewerId} disabled={!decidable} onChange={(e) => setReviewerId(e.target.value)} />
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-secondary">Publish by</span>
@@ -293,7 +293,7 @@ function PitchBody({
         (rejecting ? (
           <footer className="flex flex-col gap-3 border-t border-secondary px-6 py-4 md:px-8">
             <label htmlFor="reject-reason" className="text-sm font-medium text-primary">
-              Why reject it? <span className="font-normal text-tertiary">The Pitcher learns from your reason.</span>
+              Why reject it? <span className="font-normal text-tertiary">We learn from your reason.</span>
             </label>
             <TextArea
               id="reject-reason"

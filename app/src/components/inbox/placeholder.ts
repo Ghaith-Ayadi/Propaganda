@@ -234,7 +234,7 @@ const knowledge: KnowledgeItem[] = [
     id: "kb-close-days",
     kind: "escalation",
     title: "How fast is the close?",
-    why: "The Guardian wants to supersede a claim Maya remembered. Only a topic owner can retire it.",
+    why: "We want to supersede a claim Maya remembered. Only a topic owner can retire it.",
     a: {
       text: "Customers close their books in 3 days on average.",
       topic: "Product",
@@ -309,7 +309,7 @@ export const placeholderInbox: InboxSource = {
   },
   async contest(id, argument) {
     updateFlag(id, { status: "contesting" });
-    nothingSaved("Sent to the Guardian.");
+    nothingSaved("Sent to us.");
     // The example Guardian answers a thin argument with a no, like the prototype.
     window.setTimeout(() => {
       const thin = argument.trim().split(/\s+/).length < 12;
@@ -322,10 +322,10 @@ export const placeholderInbox: InboxSource = {
               "The post is live and doesn't say when it was written. A reader today would take it as current, so it misleads now. Fix the content, or give a scope or date that makes both true.",
           },
         });
-        toast.add({ type: "error", title: "The Guardian rejected it. The flag stays open." });
+        toast.add({ type: "error", title: "We rejected it. The flag stays open." });
       } else {
         updateFlag(id, null);
-        toast.add({ type: "success", title: "The Guardian admitted it as contested.", description: "The flag is closed; the knowledge base grade takes the hit until someone settles it." });
+        toast.add({ type: "success", title: "We admitted it as contested.", description: "The flag is closed; the knowledge base grade takes the hit until someone settles it." });
       }
     }, 2200);
   },
@@ -339,7 +339,7 @@ export const placeholderInbox: InboxSource = {
       ...state,
       batch: { ...state.batch, pitches: state.batch.pitches.map((p) => (p.id === id ? { ...p, decision: { kind, note } } : p)) },
     });
-    nothingSaved(kind === "approved" ? "Approved. The Writer starts on it." : "Rejected. The Pitcher reads why before the next batch.");
+    nothingSaved(kind === "approved" ? "Approved. We start on it." : "Rejected. We read why before the next batch.");
   },
   async rule(id) {
     set({ ...state, knowledge: state.knowledge.filter((k) => k.id !== id) });

@@ -31,7 +31,7 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
         title={GOAL_COPY.volume.title}
         subtitle={GOAL_COPY.volume.question}
         className="lg:col-span-2"
-        footer="Pitched is how hard the Strategist is covering each topic. Rejected pitches don't count as done, so a topic you keep turning down shows here as a shortfall. A post in two topics counts in both, and once in the total."
+        footer="Pitched is how hard we're covering each topic. Rejected pitches don't count as done, so a topic you keep turning down shows here as a shortfall. A post in two topics counts in both, and once in the total."
       >
         <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
           <div>
@@ -111,7 +111,7 @@ export function GoalCards({ goals }: { goals: QuarterGoals }) {
           <Stat label="Pages a session" value={readership.pagesPerSession.toFixed(2)} target={t.readership.pagesPerSession?.toFixed(1) ?? null} />
           <Stat label="Time per post" value={fmtSeconds(readership.secondsPerPost)} target={t.readership.secondsPerPost != null ? fmtSeconds(t.readership.secondsPerPost) : null} />
         </dl>
-        {!t.readership.corpusMinutes && <p className="mt-3 text-xs text-quaternary">The Strategist proposes a target after 4 weeks of readers.</p>}
+        {!t.readership.corpusMinutes && <p className="mt-3 text-xs text-quaternary">We propose a target after 4 weeks of readers.</p>}
         <div className="mt-4">
           <LineChart label="Total minutes read" points={goals.scores.readership} target={t.readership.corpusMinutes} pace={!!t.readership.corpusMinutes} {...chart} format={fmtInt} minMax={10} height={130} />
         </div>
