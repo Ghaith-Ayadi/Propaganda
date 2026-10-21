@@ -16,6 +16,7 @@
 // browser. Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
 
 import {
+  createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
@@ -211,7 +212,21 @@ function defaultResolve(id: string): LanguageModel {
   if (id.startsWith("google/") && gemini) {
     return createGoogleGenerativeAI({ apiKey: gemini })(id.slice("google/".length));
   }
+  if (gatewayFetch) return (gatewayProvider ??= createGateway({ fetch: gatewayFetch }))(id);
   return id;
+}
+
+let gatewayFetch: typeof fetch | undefined;
+let gatewayProvider: ReturnType<typeof createGateway> | undefined;
+
+/**
+ * Where the gateway's requests go out, when the process needs other timeouts
+ * than Node's: the worker waits longer than five minutes for a slow model's
+ * first byte (worker/src/agents/model.ts). Unset (Vercel), nothing changes.
+ */
+export function setGatewayFetch(fn: typeof fetch | undefined): void {
+  gatewayFetch = fn;
+  gatewayProvider = undefined;
 }
 
 let resolveModel: (id: string) => LanguageModel = defaultResolve;
