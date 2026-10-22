@@ -1,11 +1,13 @@
-// A site's blog design, stored as site data in app_settings (per site, public
-// read, realtime):
+// A site's blog design, stored as site data in app_settings (per site, realtime;
+// blog.design and blog.themes are public, the draft is members-only,
+// 20261010000170_public_settings_allowlist.sql):
 //
 //   blog.design        the published design: { api, theme, overrides }. A site
 //                      without one keeps the original blog renderer; publishing
 //                      a design switches it to the themed templates.
 //   blog.design.draft  what the Design panel is editing. The blog shows it only
-//                      under ?pg-preview=draft (the panel's preview frame).
+//                      under ?pg-preview=draft (the panel's preview frame, which
+//                      gets it by message: an anonymous reader can't read this key).
 //   blog.themes        the site's custom themes: { [id]: ThemeSource }. Same
 //                      format as the built-in themes (Theme API v1), plus
 //                      `fonts.custom` and `brand.logo`. A design's `theme` names

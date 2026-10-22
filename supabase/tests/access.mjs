@@ -19,7 +19,12 @@ check("stranger can't list versions", (await ok(stranger.from("post_versions").s
 check("anon can't list versions", (await guest.from("post_versions").select("id")).error !== null);
 check("stranger can't list briefs", (await ok(stranger.from("briefs").select("id"))).length === 0);
 check("stranger can't list templates", (await ok(stranger.from("brief_templates").select("id"))).length === 0);
-check("anon can read settings", (await ok(guest.from("app_settings").select("*").eq("site", V))).length === 2);
+const guestSettings = await ok(guest.from("app_settings").select("key").eq("site", V));
+check("anon reads only the public settings", guestSettings.length === 1 && guestSettings[0].key === "site.title", JSON.stringify(guestSettings));
+const strangerSettings = await ok(stranger.from("app_settings").select("key").eq("site", V));
+check("a signed-in stranger reads only the public settings", strangerSettings.length === 1 && strangerSettings[0].key === "site.title", JSON.stringify(strangerSettings));
+check("a member reads every setting", (await ok(owner.from("app_settings").select("key").eq("site", V))).length === 4);
+check("anon can't read the design draft by key", (await ok(guest.from("app_settings").select("key").eq("key", "blog.design.draft"))).length === 0);
 check("a post without a site is rejected", (await stranger.from("posts").insert({ id: newId(), title: "x" })).error !== null);
 check("anon can't write", (await status(guest.from("posts").insert({ id: newId(), site: V, title: "x" }))) >= 400);
 
