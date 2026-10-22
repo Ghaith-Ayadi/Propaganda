@@ -59,6 +59,8 @@ export interface BriefRow {
   /** Pages the Pitcher chose; with a kind, an attachment an assigned post came with (mcp/assign.ts). */
   sources: { url: string; label: string; kind?: "image" | "pdf" }[] | null;
   notes: { lineId: string | null; text: string; quote?: string; done?: boolean }[] | null;
+  /** "agent" when the Writer owns it, else a person's id or empty. */
+  writer?: string;
   outline: { id: string; text: string }[] | null;
   angle: string;
   audience: string;
@@ -155,7 +157,7 @@ export async function styles(site: string): Promise<StyleRow[]> {
 }
 
 const BRIEF_COLS =
-  "id,site,title,status,planned_date,collection_name,body,post,topics,fit,origin,sources,notes,outline,angle,audience,length,batch,pitched_by,idea,expires_at";
+  "id,site,title,status,planned_date,collection_name,body,post,topics,fit,origin,sources,notes,outline,angle,audience,length,batch,pitched_by,writer,idea,expires_at";
 
 /** Briefs in the pipeline (not done, cancelled or rejected). */
 export async function pipelineBriefs(site: string): Promise<BriefRow[]> {
@@ -332,9 +334,24 @@ export async function noteResearchGap(site: string, brief: string, note: string)
   await patch("briefs", `site=eq.${enc(site)}&id=eq.${enc(brief)}&pitched_by=like.agent:*`, { fit: { ...fit, research: note } });
 }
 
-/** Mark an agent-made brief's stage. Briefs a person made are never changed. */
+/** Move a brief between stages whoever pitched it (the Writer picking up a Selected one, a revision going back to review). `from` makes it a no-op when a person moved it meanwhile. */
+export async function moveBrief(site: string, brief: string, status: string, from: string[]): Promise<void> {
+  await patch("briefs", `site=eq.${enc(site)}&id=eq.${enc(brief)}&status=in.(${from.join(",")})`, { status });
+}
+
+/** Selected briefs the Writer owns (writer = agent) and has not started: what the writing poll picks up, across tenants. */
+export async function selectedForWriter(limit = 20): Promise<BriefRow[]> {
+  return select<BriefRow>("briefs", `status=eq.todo&writer=eq.agent&select=${BRIEF_COLS}&order=updated&limit=${limit}`);
+}
+
+/** Briefs the Writer owns that have been Writing since before `before` (an ISO time): what the catch-all looks at. */
+export async function writingForWriter(before: string, limit = 50): Promise<BriefRow[]> {
+  return select<BriefRow>("briefs", `status=eq.in_progress&writer=eq.agent&updated=lt.${before}&select=${BRIEF_COLS}&order=updated&limit=${limit}`);
+}
+
+/** Mark an agent's brief's stage: one the Pitcher made, or one assigned to the Writer. Briefs a person made for themselves are never changed. */
 export async function setAgentBriefStatus(site: string, brief: string, status: string, from: string[]): Promise<void> {
-  await patch("briefs", `site=eq.${enc(site)}&id=eq.${enc(brief)}&pitched_by=like.agent:*&status=in.(${from.join(",")})`, { status });
+  await patch("briefs", `site=eq.${enc(site)}&id=eq.${enc(brief)}&or=(pitched_by.like.agent:*,writer.eq.agent)&status=in.(${from.join(",")})`, { status });
 }
 
 /**

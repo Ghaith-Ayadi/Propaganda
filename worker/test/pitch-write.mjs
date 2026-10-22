@@ -53,8 +53,11 @@ db.posts.push(
 
 function matches(row, key, cond) {
   if (key === "or") {
-    // reviewerFeedback: (status.eq.rejected,notes.not.is.null)
-    return row.status === "rejected" || (row.notes !== null && row.notes !== undefined);
+    // (status.eq.rejected,notes.not.is.null): any one of the comma-separated tests
+    return cond.slice(1, -1).split(",").some((part) => {
+      const [col, ...c] = part.split(".");
+      return matches(row, col, c.join("."));
+    });
   }
   const v = row[key];
   const [op, ...rest] = cond.split(".");
@@ -63,6 +66,7 @@ function matches(row, key, cond) {
   if (op === "neq") return String(v ?? "") !== arg;
   if (op === "is") return arg === "null" ? v === null || v === undefined : String(v) === arg;
   if (op === "like") return new RegExp(`^${arg.replace(/\*/g, ".*")}$`).test(String(v ?? ""));
+  if (op === "lt") return String(v) < arg;
   if (op === "lte") return String(v) <= arg;
   if (op === "gte") return String(v) >= arg;
   if (op === "gt") return String(v) > arg;
@@ -493,6 +497,36 @@ try {
   const sug = db.post_versions.find((x) => x.post === "emptypost000001" && x.version === rv.version);
   check(rv.status === "drafted" && sug?.attributes.suggestion === true && sug.content.includes("What to change tonight"), "the revision is a new suggested version");
   check(db.posts.find((x) => x.id === "emptypost000001").content_md === before, "and the post itself is unchanged");
+
+  console.log("the writing poll: Selected briefs, and a draft sent back");
+  db.posts.push({ id: "selectedpost0001", site: SITE, title: "", subtitle: "", type: "Test", status: "draft", excerpt: "", slug: "", tags: [], content_md: "", published_at: null, word_count: 0 });
+  db.briefs.push({ ...brief, id: "selectedbrief001", status: "todo", writer: "agent", post: "selectedpost0001" });
+  db.briefs.push({ ...brief, id: "personbrief0001", status: "todo", writer: "user-1", post: null });
+  const polled = await t.dispatchWriting();
+  check(polled.includes("write-selectedbrief001") && !polled.some((x) => x.includes("personbrief0001")), "starts the Writer on a Selected brief it owns, and leaves a person's alone");
+  await t.DBOS.retrieveWorkflow("write-selectedbrief001").getResult();
+  check(db.posts.find((x) => x.id === "selectedpost0001").content_md.length > 100 && db.briefs.find((b) => b.id === "selectedbrief001").status === "in_review", "Selected goes Writing, is written, and lands in review");
+  check((await t.dispatchWriting()).length === 0, "a brief that moved on is not started again");
+  Object.assign(db.briefs.find((b) => b.id === "selectedbrief001"), { status: "todo", notes: [{ lineId: null, text: "Cut the second section." }] });
+  const polled2 = await t.dispatchWriting();
+  check(polled2.includes("revise-selectedbrief001-1"), "a sent-back draft with notes gets a revision");
+  await t.DBOS.retrieveWorkflow("revise-selectedbrief001-1").getResult();
+  check(db.briefs.find((b) => b.id === "selectedbrief001").status === "in_review", "and goes back to review");
+  check(db.post_versions.some((x) => x.post === "selectedpost0001" && x.attributes?.suggestion === true), "as a suggested version");
+  console.log("the catch-all: Writing with no run behind it");
+  const empty = (id) => db.posts.push({ id, site: SITE, title: "", subtitle: "", type: "Test", status: "draft", excerpt: "", slug: "", tags: [], content_md: "", published_at: null, word_count: 0 });
+  empty("stuckpost0000001"); empty("youngpost0000001");
+  const threeHoursAgo = new Date(Date.now() - 3 * 3600_000).toISOString();
+  db.briefs.push({ ...brief, id: "stuckbrief00001", status: "in_progress", writer: "agent", post: "stuckpost0000001", updated: threeHoursAgo });
+  db.briefs.push({ ...brief, id: "youngbrief00001", status: "in_progress", writer: "agent", post: "youngpost0000001", updated: new Date().toISOString() });
+  const swept = await t.sweepStuckWriting();
+  check(swept.includes("stuckbrief00001") && !swept.includes("youngbrief00001"), "a brief Writing for hours with no run goes back to Selected; a fresh one is left alone");
+  const retry = await t.dispatchWriting();
+  check(retry.includes("write-stuckbrief00001") && !retry.some((x) => x.includes("youngbrief00001")), "and the next pass writes it");
+  await t.DBOS.retrieveWorkflow("write-stuckbrief00001").getResult();
+  check(db.briefs.find((b) => b.id === "stuckbrief00001").status === "in_review", "it lands in review");
+  // These briefs would count as approved in the batch arithmetic below.
+  db.briefs = db.briefs.filter((b) => !["selectedbrief001", "personbrief0001", "stuckbrief00001", "youngbrief00001"].includes(b.id));
 
   console.log("a search engine outage");
   const searchRowsBefore = db.model_calls.filter((c) => String(c.model).startsWith("dataforseo/")).length;

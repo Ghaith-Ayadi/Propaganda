@@ -16,7 +16,7 @@ import { reportError } from "@/lib/telemetry";
  */
 export async function openItem(item: PipelineItem) {
   if (item.stage === "pitched") return goPage("pipeline", `pitch/${item.id}`);
-  if (item.stage === "writing" || item.stage === "in_review") {
+  if (item.stage === "selected" || item.stage === "writing" || item.stage === "in_review") {
     try {
       const postId = await ensureDraft(item.id);
       if (postId) return go({ view: "post", id: postId });

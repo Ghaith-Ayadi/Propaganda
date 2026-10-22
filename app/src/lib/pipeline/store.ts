@@ -275,7 +275,7 @@ function logTaste(item: PipelineItem, fields: Pick<TasteEntry, "decision"> & Par
   commit({ tasteLog: [...current().tasteLog, entry] });
 }
 
-const BOARD = new Set<Stage>(["pitched", "writing", "in_review", "scheduled"]);
+const BOARD = new Set<Stage>(["pitched", "selected", "writing", "in_review", "scheduled"]);
 
 /** The nav badge: everything on the board (pitched to scheduled). */
 export function usePipelineCount(): number | null {
@@ -328,7 +328,7 @@ const markStarted = (postId: string, on: boolean) => {
 
 /** An item the Writer is waiting to write: the agent is its writer and the draft is still empty. */
 async function waitingForWriter(item: PipelineItem): Promise<boolean> {
-  if (item.stage !== "writing" || item.writerId !== AGENT_ID || !item.postId) return false;
+  if (item.stage !== "selected" || item.writerId !== AGENT_ID || !item.postId) return false;
   if (writerStarted.has(item.postId)) return false;
   const post = await db.posts.get(item.postId);
   return !!post && !post.content?.trim();
@@ -396,7 +396,7 @@ export function briefBody(item: PipelineItem, people: Person[]): string {
 }
 
 /**
- * Approve a pitch, with or without notes: it moves to Writing, and a draft post
+ * Approve a pitch, with or without notes: it is Selected (Writing once the Writer starts), and a draft post
  * plus its brief are created for the writer. Returns the new post's id.
  */
 export async function approvePitch(
@@ -405,16 +405,12 @@ export async function approvePitch(
 ): Promise<string | null> {
   const item = getItem(id);
   if (!item || item.stage !== "pitched") return null;
-  const approved: PipelineItem = { ...item, ...decision, stage: "writing" };
+  const approved: PipelineItem = { ...item, ...decision, stage: decision.writerId === AGENT_ID ? "selected" : "writing" };
 
   if (LIVE) {
-    const { postId, agentNote, drafted } = await live.approve(item, decision);
-    if (decision.writerId === AGENT_ID && !drafted && !agentNote) markStarted(postId, true);
-    updateItem(id, { ...decision, stage: drafted ? "in_review" : "writing", postId });
+    const { postId, drafted } = await live.approve(item, decision);
+    updateItem(id, { ...decision, stage: drafted ? "in_review" : approved.stage, postId });
     void refresh();
-    if (agentNote) {
-      toast.add({ title: "Writing didn't start", description: `${agentNote.charAt(0).toUpperCase()}${agentNote.slice(1)}. Write it yourself, or ask Chat to write it later.` });
-    }
     return postId;
   }
 
@@ -431,7 +427,7 @@ export async function approvePitch(
     body: briefBody(approved, current().people),
     postId: post.id,
   });
-  updateItem(id, { ...decision, stage: "writing", postId: post.id, briefId: brief.id });
+  updateItem(id, { ...decision, stage: approved.stage, postId: post.id, briefId: brief.id });
   logTaste(approved, {
     decision: decision.notes.length ? "approved_with_notes" : "approved",
     notes: decision.notes.length ? decision.notes : undefined,
@@ -466,7 +462,7 @@ export function sendBack(id: string, note: string) {
   const item = getItem(id);
   if (!item) return;
   if (LIVE) persist(live.sendBack(item, note.trim()));
-  updateItem(id, { stage: "writing", sentBackNote: note.trim() });
+  updateItem(id, { stage: item.writerId === AGENT_ID ? "selected" : "writing", sentBackNote: note.trim() });
   logTaste(item, { decision: "sent_back", objectKind: "draft", objectId: item.postId ?? item.id, reason: note.trim() });
 }
 

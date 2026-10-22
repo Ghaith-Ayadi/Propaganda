@@ -33,14 +33,14 @@ function draftState(p: PipelineItem, day: FirstDay, progress: StrategistProgress
 export function FirstPitches({ day, progress, continuing }: { day: FirstDay; progress: StrategistProgress | null; continuing: boolean }) {
   const pitches = day.firstPitches;
   const decided = (p: PipelineItem) => p.stage !== "pitched";
-  const approved = pitches.filter((p) => ["writing", "in_review", "scheduled", "published"].includes(p.stage)).length;
+  const approved = pitches.filter((p) => ["selected", "writing", "in_review", "scheduled", "published"].includes(p.stage)).length;
   const rejected = pitches.filter((p) => p.stage === "rejected").length;
   const waiting = pitches.filter((p) => !decided(p)).length;
   const published = pitches.filter((p) => p.stage === "published").length;
   const ready = pitches.find((p) => p.stage !== "rejected" && p.stage !== "published" && p.stage !== "not_now" && draftState(p, day, progress) === "ready");
   const [open, setOpen] = useState<string | null>(null);
   // Every pitch decided and no draft to open yet: say where things stand instead of leaving a finished list.
-  const inProgress = pitches.filter((p) => ["writing", "in_review", "scheduled"].includes(p.stage));
+  const inProgress = pitches.filter((p) => ["selected", "writing", "in_review", "scheduled"].includes(p.stage));
   const drafting = inProgress.filter((p) => draftState(p, day, progress) === "writing").length;
   const failedDrafts = inProgress.filter((p) => draftState(p, day, progress) === "failed").length;
   const allDecided = pitches.length > 0 && waiting === 0 && !ready && published === 0;
@@ -163,7 +163,7 @@ function PitchCard({ p, draft, open, onToggle }: { p: PipelineItem; draft: Retur
         </button>
         <div className="flex shrink-0 items-center gap-2">
           {p.stage === "published" && <Badge color="success" size="sm">Published</Badge>}
-          {["writing", "in_review", "scheduled"].includes(p.stage) && <Badge color="success" size="sm">Approved</Badge>}
+          {["selected", "writing", "in_review", "scheduled"].includes(p.stage) && <Badge color="success" size="sm">Approved</Badge>}
           {p.stage === "rejected" && <Badge color="gray" size="sm">Rejected</Badge>}
           {p.stage === "not_now" && <Badge color="gray" size="sm">Not now</Badge>}
           <button type="button" onClick={onToggle} aria-label={open ? "Collapse" : "Expand"}>
