@@ -641,6 +641,11 @@ try {
   check(row.inputs.competitors.includes("argo-workflows.io") && row.inputs.competitors.filter((d) => d === "prefect.io").length === 1 && calls.filter((u) => u.includes("ranked_keywords")).length >= 4, `a competitor the vocabulary call named and the hosts missed gets its rankings; one it named twice stays once (${row.inputs.competitors.join(", ")})`);
   check(Array.isArray(row.inputs.market?.priced) && row.inputs.answers?.offer === "Durable batch jobs for platform teams." && row.inputs.reusedData === false, "the first run's row carries its keyword data and the answers it was planned on");
   check(row4.inputs.reusedData === true && Array.isArray(row4.inputs.market?.priced), "the revision, on the same answers and site, reused it and carries it on");
+  const many = (n, prefix) => Array.from({ length: n }, (_, i) => ({ keyword: `${prefix} ${i}`, volume: 10, difficulty: 1, position: 12 }));
+  const wide = { keywords: many(100, "kw"), ours: many(500, "ours"), competitors: [], serps: [], gsc: { days: 90, clicks: 1, impressions: 2, seen: many(500, "seen"), striking: many(20, "s"), unanswered: many(20, "u") } };
+  const stored = t.storedMarket(wide);
+  check(stored && stored.ours.length === 100 && stored.gsc.seen.length === 0 && stored.gsc.striking.length === 20 && JSON.stringify(stored).length < 150_000, `the stored market drops gsc.seen and caps ours at 100 (${JSON.stringify(stored).length} chars)`);
+  check(t.storedMarket({ ...wide, keywords: many(1500, "a very long keyword phrase that takes room") }) === null, "and is left out when it would still be over 150,000 characters");
 
   console.log("a revision with the same answers reuses the data");
   db.strategy_proposals.push({ id: "proposal0000005", site: SITE, quarter: "2026-Q4", kind: "revision", status: "requested", request: "Make Scraping at scale smaller.", requested_by: "u1", proposal: null, edits: null, created: new Date().toISOString(), approved_at: null });

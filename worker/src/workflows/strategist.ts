@@ -488,6 +488,17 @@ async function readerSearches(site: string, pack: Pack, vocab: Vocabulary, m: Ma
   return out;
 }
 
+/**
+ * The market as the next round reads it, small enough for the proposal row
+ * (strategy_proposals.inputs allows 200,000 bytes): `ours` already carries
+ * the Search Console queries, so `gsc.seen` goes, and `ours` stops at 100.
+ * Still over 150,000 characters: nothing is stored and the next round pulls again.
+ */
+export function storedMarket(m: Market): Market | null {
+  const slim: Market = { ...m, ours: m.ours.slice(0, 100), ...(m.gsc ? { gsc: { ...m.gsc, seen: [] } } : {}) };
+  return JSON.stringify(slim).length > 150_000 ? null : slim;
+}
+
 /** Who ranks for the tenant's own searches (at most 5, so at most 5 paid searches). */
 async function whoRanks(site: string, pack: Pack): Promise<Market["serps"]> {
   const serps: Market["serps"] = [];
@@ -700,7 +711,8 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     const pack = await DBOS.runStep(() => gather(site, row.request, now, row.quarter), { name: "gather", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 });
     // A run started before rounds existed replays its recorded gather output after a restart: no rounds yet.
     pack.rounds ??= { answered: [], declined: [], previous: null, perMonthAnswer: "" };
-    pack.rounds.declined ??= [];
+    // Unanswered questions settled by silence (2026-10-22): a run recorded before keeps its draft and its questions.
+    pack.rounds.declined = (await DBOS.patch("strategist-declined")) ? (pack.rounds.declined ?? []) : [];
     const hasHistory = pack.history.publishedLastQuarter > 0;
     // Nothing to plan from: stop before spending a model call (and say what to answer).
     if (emptyBrief({ website: pack.website, answers: pack.answers, planText: pack.plan.text, planFiles: pack.plan.files.length, published: pack.history.publishedLastQuarter + pack.history.recentTitles.length })) {
@@ -892,7 +904,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       at: now.toISOString(),
       // For the next round: the same answers and site reuse this data.
       answers: pack.answers,
-      market: pricedRows.length ? { ...m, keywords: [...m.keywords, ...pricedRows] } : m,
+      market: storedMarket(pricedRows.length ? { ...m, keywords: [...m.keywords, ...pricedRows] } : m),
       reusedData: Boolean(reuse),
     };
     await DBOS.runStep(() => sendProposal(proposalId, site, proposal, inputs, MODELS.strategist), { name: "send" });
