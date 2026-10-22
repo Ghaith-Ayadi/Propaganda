@@ -36,14 +36,24 @@ const CODE_SECONDS = 300;
 /** The person has this long on the consent page. */
 const REQUEST_SECONDS = 1800;
 
-/** The public origin: the app host, which serves the app, the API and the worker. */
-export function origin(): string {
-  return (process.env.MCP_PUBLIC_URL ?? process.env.SUPABASE_URL ?? "https://app.propaganda.pub").replace(/\/+$/, "");
+/**
+ * The public origin: the app host the request came in on (Caddy keeps the Host
+ * and sends only the app host's paths here), which serves the app, the API and
+ * the worker. SUPABASE_URL can be an inside address (the dev box's), so it is
+ * only the fallback. MCP_PUBLIC_URL overrides both.
+ */
+export function originOf(req?: Pick<IncomingMessage, "headers">): string {
+  const set = process.env.MCP_PUBLIC_URL;
+  if (set) return set.replace(/\/+$/, "");
+  const host = req?.headers.host ?? "";
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(:\d+)?$/i.test(host)) {
+    const proto = String(req?.headers["x-forwarded-proto"] ?? "https").split(",")[0]!.trim() === "http" ? "http" : "https";
+    return `${proto}://${host.toLowerCase()}`;
+  }
+  return (process.env.SUPABASE_URL ?? "https://app.propaganda.pub").replace(/\/+$/, "");
 }
-const issuer = () => origin();
-const base = () => `${origin()}/worker/v1`;
-export const resourceUrl = () => `${base()}/mcp`;
-export const resourceMetadataUrl = () => `${origin()}/.well-known/oauth-protected-resource/worker/v1/mcp`;
+const base = (o: string) => `${o}/worker/v1`;
+export const resourceMetadataUrl = (o: string) => `${o}/.well-known/oauth-protected-resource/worker/v1/mcp`;
 
 // ---- signing ----
 
@@ -179,7 +189,7 @@ export interface ConsentRequest {
 }
 
 /** GET /mcp/authorize: check what Claude sent, and where to send the person. */
-export function authorize(params: URLSearchParams): string {
+export function authorize(params: URLSearchParams, origin: string): string {
   const client = clientOf(params.get("client_id"));
   if (!client) throw new OAuthError(400, "invalid_client", "Unknown client: register it first");
   const redirect = params.get("redirect_uri") ?? (client.r.length === 1 ? client.r[0]! : "");
@@ -193,7 +203,7 @@ export function authorize(params: URLSearchParams): string {
     return back("invalid_request", "PKCE with code_challenge_method=S256 is required");
   }
   const request = sign("consent", { c: params.get("client_id")!, n: client.n, r: redirect, ch: challenge, s: state, exp: now() + REQUEST_SECONDS } satisfies ConsentRequest);
-  return `${origin()}/connect/claude?request=${encodeURIComponent(request)}`;
+  return `${origin}/connect/claude?request=${encodeURIComponent(request)}`;
 }
 
 /** POST /mcp/approve: the member said yes (a code for the client) or no. Returns where the browser goes. */
@@ -257,22 +267,22 @@ function withParams(uri: string, params: Record<string, string | null>): string 
 
 // ---- metadata ----
 
-export function protectedResource(): Record<string, unknown> {
+export function protectedResource(o: string): Record<string, unknown> {
   return {
-    resource: resourceUrl(),
-    authorization_servers: [issuer()],
+    resource: `${base(o)}/mcp`,
+    authorization_servers: [o],
     bearer_methods_supported: ["header"],
     scopes_supported: ["read", "assign"],
     resource_name: "Propaganda",
   };
 }
 
-export function authorizationServer(): Record<string, unknown> {
+export function authorizationServer(o: string): Record<string, unknown> {
   return {
-    issuer: issuer(),
-    authorization_endpoint: `${base()}/mcp/authorize`,
-    token_endpoint: `${base()}/mcp/token`,
-    registration_endpoint: `${base()}/mcp/register`,
+    issuer: o,
+    authorization_endpoint: `${base(o)}/mcp/authorize`,
+    token_endpoint: `${base(o)}/mcp/token`,
+    registration_endpoint: `${base(o)}/mcp/register`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code"],
     code_challenge_methods_supported: ["S256"],
@@ -314,11 +324,11 @@ export async function oauthRoute(db: Pool, req: IncomingMessage, res: ServerResp
   const method = req.method ?? "GET";
   try {
     if (path.startsWith("/.well-known/oauth-protected-resource") && method === "GET") {
-      sendJson(res, 200, protectedResource());
+      sendJson(res, 200, protectedResource(originOf(req)));
       return true;
     }
     if ((path.startsWith("/.well-known/oauth-authorization-server") || path.startsWith("/.well-known/openid-configuration")) && method === "GET") {
-      sendJson(res, 200, authorizationServer());
+      sendJson(res, 200, authorizationServer(originOf(req)));
       return true;
     }
     if (path === "/mcp/register" && method === "POST") {
@@ -326,7 +336,7 @@ export async function oauthRoute(db: Pool, req: IncomingMessage, res: ServerResp
       return true;
     }
     if (path === "/mcp/authorize" && method === "GET") {
-      res.writeHead(302, { Location: authorize(url.searchParams), "Cache-Control": "no-store" });
+      res.writeHead(302, { Location: authorize(url.searchParams, originOf(req)), "Cache-Control": "no-store" });
       res.end();
       return true;
     }
