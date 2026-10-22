@@ -7,7 +7,7 @@
       "name": "propaganda",
       "source": "./plugin/propaganda",
       "description": "Blog about this: hand what you are working on to your Propaganda tenant, where the Writer drafts it in your voice for review.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "category": "productivity"
     }
   ]
