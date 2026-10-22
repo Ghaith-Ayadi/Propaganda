@@ -263,6 +263,12 @@ export interface KeywordRow {
   trend6?: number | null;
   /** The month (1 to 12) with the most searches over the last 12; null without the data. */
   peakMonth?: number | null;
+  /**
+   * The last twelve months' searches against the twelve before, as a percentage:
+   * the seasons cancel, so it is the growth figure. Null without 24 months of
+   * data, which Labs never has (12 months); Google Ads with history does.
+   */
+  yoy?: number | null;
   /** DataForSEO's main intent: informational, navigational, commercial, transactional. */
   intent?: string | null;
   /** Google shows an AI overview for this search (serp_info.serp_item_types); null when SERP info wasn't asked for. */
@@ -271,21 +277,31 @@ export interface KeywordRow {
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-/** The 6-month trend and the peak month from keyword_info.monthly_searches (newest first or not: sorted here). */
-function seasonOf(monthly: unknown): { trend6: number | null; peakMonth: number | null } {
-  if (!Array.isArray(monthly)) return { trend6: null, peakMonth: null };
+type Season = { trend6: number | null; peakMonth: number | null; yoy: number | null };
+
+/** The 6-month trend, the peak month and the year-over-year growth from monthly_searches (newest first or not: sorted here). */
+function seasonOf(monthly: unknown): Season {
+  const none: Season = { trend6: null, peakMonth: null, yoy: null };
+  if (!Array.isArray(monthly)) return none;
   const rows = (monthly as Record<string, unknown>[])
     .map((m) => ({ year: Number(m.year), month: Number(m.month), volume: Number(m.search_volume) }))
     .filter((m) => Number.isFinite(m.year) && Number.isFinite(m.month) && Number.isFinite(m.volume))
     .sort((a, b) => b.year - a.year || b.month - a.month);
   const last12 = rows.slice(0, 12);
-  if (last12.length < 12) return { trend6: null, peakMonth: null };
+  if (last12.length < 12) return none;
   const sum = (xs: typeof rows) => xs.reduce((n, m) => n + m.volume, 0);
-  const recent = sum(last12.slice(0, 6));
-  const before = sum(last12.slice(6, 12));
-  const trend6 = before > 0 ? Math.round(((recent - before) / before) * 100) : recent > 0 ? null : 0;
+  const growth = (recent: number, before: number) => (before > 0 ? Math.round(((recent - before) / before) * 100) : recent > 0 ? null : 0);
+  const trend6 = growth(sum(last12.slice(0, 6)), sum(last12.slice(6, 12)));
   const peak = last12.reduce((best, m) => (m.volume > best.volume ? m : best), last12[0]!);
-  return { trend6, peakMonth: peak.volume > 0 ? peak.month : null };
+  const yearBefore = rows.slice(12, 24);
+  const yoy = yearBefore.length === 12 ? growth(sum(last12), sum(yearBefore)) : null;
+  return { trend6, peakMonth: peak.volume > 0 ? peak.month : null, yoy };
+}
+
+/** The first day of the month `monthsAgo` months back, as DataForSEO's date_from (yyyy-mm-dd). */
+export function monthsBack(monthsAgo: number, today = new Date()): string {
+  const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - monthsAgo, 1));
+  return d.toISOString().slice(0, 10);
 }
 
 function keywordOf(i: Record<string, unknown>): KeywordRow {
@@ -387,13 +403,15 @@ export async function keywordOverview(w: Where, job: string, keywords: string[],
 /**
  * Google Ads' own monthly volume for exact `keywords` (at most 1000): the
  * fallback when Labs has no row for a phrase (its index is thinner than
- * Google's). A keyword Ads has no number for is left out.
+ * Google's), and with `history` the only source of two years of months, which
+ * is what the year-over-year growth needs (Labs gives twelve). A keyword Ads
+ * has no number for is left out.
  */
-export async function adsSearchVolume(w: Where, job: string, keywords: string[]): Promise<KeywordRow[]> {
+export async function adsSearchVolume(w: Where, job: string, keywords: string[], o: { history?: boolean } = {}): Promise<KeywordRow[]> {
   if (!keywords.length) return [];
   const result = await callPaidApi({ site: w.site, job, service: "dataforseo/ads-search-volume", background: true }, async () => {
     const body = await call("/v3/keywords_data/google_ads/search_volume/live", [
-      { keywords: keywords.slice(0, 1000), location_code: w.locationCode, language_code: w.languageCode },
+      { keywords: keywords.slice(0, 1000), location_code: w.locationCode, language_code: w.languageCode, ...(o.history ? { date_from: monthsBack(25) } : {}) },
     ]);
     const t = body.tasks?.[0];
     if (!t || t.status_code !== OK) throw new DataForSeoError(`DataForSEO task: ${t?.status_message ?? "no task"}`, t?.status_code);

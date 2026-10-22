@@ -189,6 +189,8 @@ export interface ProposedSearch {
   referringDomains?: number | null;
   trend6?: number | null;
   peakMonth?: number | null;
+  /** The last twelve months' searches against the twelve before, as a percentage. */
+  yoy?: number | null;
   aiOverview?: boolean | null;
 }
 
@@ -310,6 +312,8 @@ export interface Keyword {
   referringDomains?: number | null;
   trend6?: number | null;
   peakMonth?: number | null;
+  /** The last twelve months' searches against the twelve before, as a percentage (Google Ads history). */
+  yoy?: number | null;
   intent?: string | null;
   aiOverview?: boolean | null;
   /** From Search Console (their own blog, last 90 days): what the search did for them. */
@@ -1053,6 +1057,7 @@ export function finish(
         if (typeof k.referringDomains === "number") out.referringDomains = k.referringDomains;
         if (typeof k.trend6 === "number") out.trend6 = k.trend6;
         if (typeof k.peakMonth === "number") out.peakMonth = k.peakMonth;
+        if (typeof k.yoy === "number") out.yoy = k.yoy;
         if (typeof k.aiOverview === "boolean") out.aiOverview = k.aiOverview;
         if (o.searchesFirst) out.bucket = s.bucket ?? bucketOf(k, { newDomain: o.kind === "onboarding" }) ?? "now";
         return out;

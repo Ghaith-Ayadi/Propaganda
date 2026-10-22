@@ -143,7 +143,8 @@ const KEYWORDS = [
 const labsItem = (k) => ({ keyword: k.keyword, keyword_info: { search_volume: k.vol }, keyword_properties: { keyword_difficulty: k.kd } });
 /** The job vocabulary the stand-in model writes: two the ideas pull priced, one only Google Ads prices, one nobody does. */
 const VOCAB = ["batch job retries", "retry failed cron job", "job queue backoff", "idempotent jobs", "dead letter queue retries", "exponential backoff cron"];
-const months = (vol) => Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: 12 - i, search_volume: i < 6 ? vol * 1.5 : vol }));
+/** A year of months, peaking in December and up by half over the first six; with `years` 2, the year before at the flat rate (so the last twelve are +25% on it). */
+const months = (vol, years = 1) => Array.from({ length: 12 * years }, (_, i) => ({ year: 2026 - Math.floor(i / 12), month: 12 - (i % 12), search_volume: i < 6 ? vol * 1.5 : vol }));
 /** An overview row with SERP info: page one's links, the AI overview, the intent and a year of months (peaks in December, up by half). */
 const richItem = (k, links = 8) => ({
   ...labsItem(k),
@@ -153,6 +154,8 @@ const richItem = (k, links = 8) => ({
   search_intent_info: { main_intent: "informational" },
 });
 const calls = [];
+/** Every Google Ads search-volume task body, to check what was asked for. */
+const adsCalls = [];
 const gscCalls = [];
 const GSC_ROWS = [
   { keys: ["batch job retries"], clicks: 4, impressions: 120, position: 3.2 },
@@ -178,8 +181,11 @@ async function web(input, init) {
       return Response.json({ status_code: 20000, cost: 0.01, tasks: [{ status_code: 20000, result: [{ items: priced }] }] });
     }
     if (url.includes("google_ads/search_volume")) {
-      const asked = JSON.parse(init.body)[0].keywords;
-      const rows = asked.includes("job queue backoff") ? [{ keyword: "job queue backoff", search_volume: 70, monthly_searches: months(70) }] : [];
+      const task = JSON.parse(init.body)[0];
+      adsCalls.push(task);
+      const years = task.date_from ? 2 : 1;
+      const rows = KEYWORDS.filter((k) => task.keywords.includes(k.keyword)).map((k) => ({ keyword: k.keyword, search_volume: k.vol, monthly_searches: months(k.vol, years) }));
+      if (task.keywords.includes("job queue backoff")) rows.push({ keyword: "job queue backoff", search_volume: 70, monthly_searches: months(70, years) });
       return Response.json({ status_code: 20000, cost: 0.05, tasks: [{ status_code: 20000, result: rows }] });
     }
     if (url.includes("serp_competitors")) {
@@ -569,11 +575,12 @@ try {
   const p = row.proposal;
   check(p.quarter === "2026-Q4" && p.covers.from && p.kind === "onboarding" && p.launch?.target === 15, "with its window and the Launch");
   check(p.watchedSites.length === 3 && !p.watchedSites.some((w) => w.url.includes("dead")), "the watched site that didn't answer was dropped");
-  check(p.ranking.searches.find((s) => s.query === "batch job retries")?.volume === 320, "searches carry their volume");
+  check(p.ranking.searches.find((s) => s.query === "batch job retries")?.volume === 320 && p.ranking.searches.find((s) => s.query === "batch job retries")?.yoy === 25, `searches carry their volume and the growth against last year (${JSON.stringify(p.ranking.searches.find((s) => s.query === "batch job retries"))})`);
+  check(adsCalls.length >= 1 && adsCalls.every((c) => /^\d{4}-\d{2}-01$/.test(c.date_from)) && adsCalls[0].keywords.length === VOCAB.length, `Google Ads was asked for every job search with two years of history (${adsCalls.length} calls, date_from ${adsCalls[0]?.date_from}, ${adsCalls[0]?.keywords.length} keywords)`);
   // Two: "cron job alerting" (never in any pull) and "nightly etl failures" (dropped by the relevance filter, so looked up).
   check(row.inputs?.pricedSearches === 2, `the inputs count the priced searches (${JSON.stringify(row.inputs)})`);
   check(calls.filter((u) => u.includes("keyword_overview")).length === 2, `two overview calls (the job vocabulary, then the proposed search), and none for the fix draft since nothing new was proposed (${calls.filter((u) => u.includes("keyword_overview")).length})`);
-  check(vocabPrompts.length === 1 && vocabPrompts[0].includes("Durable batch jobs") && prompts[0].includes("job queue backoff: 70/month") && prompts[0].includes("idempotent jobs: no data") && prompts[0].includes("batch job retries: 320/month, difficulty 12, page one averages 8 referring domains, 6-month trend +50%, peaks in Dec, intent informational, AI overview yes"), `the job vocabulary was asked once, priced wide (Ads for what Labs lacks, no data kept as no data) and put in the prompt with page one's links and the season (${prompts[0].split("\n").filter((l) => /job queue|idempotent|batch job retries: 320/.test(l)).join(" | ")})`);
+  check(vocabPrompts.length === 1 && vocabPrompts[0].includes("Durable batch jobs") && prompts[0].includes("job queue backoff: 70/month") && prompts[0].includes("idempotent jobs: no data") && prompts[0].includes("batch job retries: 320/month, difficulty 12, page one averages 8 referring domains, 6-month trend +50%, vs last year +25%, peaks in Dec, intent informational, AI overview yes"), `the job vocabulary was asked once, priced wide (Ads for what Labs lacks, no data kept as no data) and put in the prompt with page one's links, the season and the growth against last year (${prompts[0].split("\n").filter((l) => /job queue|idempotent|batch job retries: 320/.test(l)).join(" | ")})`);
   check(prompts[0].includes("Who ranks in Google's top 100 across the 3 biggest") && prompts[0].includes("youtube.com (video)") && prompts[0].includes("Never targets") && prompts[0].includes("kontra login"), "and who ranks across them, by kind, and the never-targets");
   check(prompts[0].includes("Posts already on their own blog (2 of 2") && prompts[0].includes(`- "Retries 101": Every batch job fails sometimes.`) && prompts[0].includes(`- "Why cron jobs fail silently": Cron tells nobody`) && row.inputs?.theirPosts === 2, `their own blog's posts are in the prompt, titles without the site's name, the tag page and the repeat dropped (${row.inputs?.theirPosts} posts; ${prompts[0].split("\n").filter((l) => /Posts already|Retries 101|cron jobs fail/.test(l)).join(" | ")})`);
   check(p.ranking.searches.every((s) => s.bucket === "now") && p.ranking.searches.find((s) => s.query === "job queue backoff")?.volume === 70 && row.inputs?.jobSearches === 6 && row.inputs?.jobSearchesPriced === 3 && row.inputs?.whoRanks === 2, `the sent proposal carries each search's bucket and the inputs count the job searches (${JSON.stringify({ buckets: p.ranking.searches.map((s) => s.bucket), inputs: row.inputs })})`);
