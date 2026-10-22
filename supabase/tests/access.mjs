@@ -115,5 +115,11 @@ const taste = (await ok(stranger.from("taste_profiles").select("summary, notes")
 check("…notes change, the Pitcher's summary stays", taste?.notes === "second" && taste?.summary === "the Pitcher wrote this");
 check("an upsert on an existing row is refused (why the app doesn't use it)", (await stranger.from("taste_profiles").upsert({ site: site.id, notes: "x" }, { onConflict: "site" })).error !== null);
 check("owner of another site can't write these notes", (await ok(owner.from("taste_profiles").update({ notes: "pwn" }).eq("site", site.id).select("site"))).length === 0);
+// The column grants only narrow anything once the default table grant is revoked (20261010000200).
+check("a member can't write the Pitcher's taste summary", (await stranger.from("taste_profiles").update({ summary: "mine" }).eq("site", site.id)).error !== null);
+await ok(admin.from("content_batches").insert({ site: site.id, quarter: "2026-Q4", number: 1, quota: 3 }));
+check("a member can't change a batch's quota", (await stranger.from("content_batches").update({ quota: 99 }).eq("site", site.id)).error !== null);
+check("a member can close a batch", (await ok(stranger.from("content_batches").update({ state: "closed" }).eq("site", site.id).select("state")))[0]?.state === "closed");
+await ok(admin.from("content_batches").delete().eq("site", site.id));
 
 done("ACCESS");
