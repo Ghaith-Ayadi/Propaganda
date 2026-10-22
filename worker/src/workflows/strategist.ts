@@ -440,17 +440,15 @@ async function readerSearches(site: string, pack: Pack, vocab: Vocabulary, m: Ma
   } catch (err) {
     console.warn(`strategist keyword overview: ${(err as Error).message}`);
   }
-  // Labs has no row for many exact job phrases; Google Ads often does. Its number is kept as the volume, with no difficulty.
-  const unpriced = vocab.searches.filter((q) => (byQuery.get(q)?.volume ?? null) === null);
-  if (unpriced.length) {
-    try {
-      for (const k of await adsSearchVolume(w, JOB, unpriced)) {
-        const have = byQuery.get(k.keyword.toLowerCase());
-        byQuery.set(k.keyword.toLowerCase(), have ? { ...have, volume: k.volume, trend6: have.trend6 ?? k.trend6, peakMonth: have.peakMonth ?? k.peakMonth } : { ...k, position: null });
-      }
-    } catch (err) {
-      console.warn(`strategist ads volume: ${(err as Error).message}`);
-    }
+  // Google Ads, once for every search, with two years of months: it prices the
+  // exact job phrases Labs has no row for (its number is kept as the volume, with
+  // no difficulty) and it is the only source of the growth against last year.
+  // Labs' twelve months only give the 6-month trend, which reads as a decline
+  // for every spring-peaking search in the autumn (PPGD, 2026-10-22).
+  try {
+    for (const k of await adsSearchVolume(w, JOB, vocab.searches, { history: true })) mergeAds(byQuery, k);
+  } catch (err) {
+    console.warn(`strategist ads volume: ${(err as Error).message}`);
   }
   // Our own position on each, when we have one.
   for (const k of m.ours) {
@@ -550,15 +548,29 @@ function keywordMap(m: Market): Map<string, Keyword> {
   return map;
 }
 
-/** Volume, difficulty and page one's links for searches the model proposed that the pulls never covered. A failure prices nothing; the run goes on. */
+/** Google Ads' row folded into Labs' for the same search: Labs' volume and difficulty win, Ads fills the gaps and brings the growth against last year. */
+function mergeAds(byQuery: Map<string, Keyword>, k: KeywordRow): void {
+  const key = k.keyword.toLowerCase();
+  const have = byQuery.get(key);
+  byQuery.set(key, have ? { ...have, volume: have.volume ?? k.volume, trend6: have.trend6 ?? k.trend6, peakMonth: have.peakMonth ?? k.peakMonth, yoy: k.yoy ?? have.yoy ?? null } : { ...k, position: null });
+}
+
+/** Volume, difficulty, page one's links and the growth against last year for searches the model proposed that the pulls never covered. A failure prices nothing; the run goes on. */
 async function priceSearches(site: string, queries: string[], serpInfo = false): Promise<Keyword[]> {
   if (!dataForSeoConfigured() || !queries.length) return [];
+  const byQuery = new Map<string, Keyword>();
   try {
-    return (await keywordOverview({ site, ...LOCATION }, JOB, queries, { serpInfo })).map((k) => ({ ...k, position: null }));
+    for (const k of await keywordOverview({ site, ...LOCATION }, JOB, queries, { serpInfo })) byQuery.set(k.keyword.toLowerCase(), { ...k, position: null });
   } catch (err) {
     console.warn(`strategist keyword overview: ${(err as Error).message}`);
     return [];
   }
+  try {
+    for (const k of await adsSearchVolume({ site, ...LOCATION }, JOB, queries, { history: true })) mergeAds(byQuery, k);
+  } catch (err) {
+    console.warn(`strategist ads volume: ${(err as Error).message}`);
+  }
+  return [...byQuery.values()];
 }
 
 // ---- 2. the model call ----
@@ -570,7 +582,7 @@ The rules (code checks them; a proposal that breaks one is sent back):
 2. The searches describe the reader; the site and the answers describe the company. Work in this order: group the priced searches into the jobs the reader is doing (a rule to follow, a form to file, a calculation to get right, a deadline, a tool to use), then make a topic of each group that has enough demand and enough to say, then write the summary from the topics. 1 to ${TOPICS_MAX} topics, best first, each a range (low to high) sized to its searches. A topic has a name and a thesis. The name is a label of 2 to 6 words, at most 60 characters, a plain noun phrase or statement the founder would say in a meeting ("Knowing what's true before writing", "One message across three channels"): never a product category, never one of their searches pasted back, never "cluster" or "pillar", and never a whole sentence. No two-part names ("Thing: explanation"), no second half that starts with an -ing verb, no negation set up to be knocked down ("X isn't a Y problem"): the title rules below say how. The thesis is one plain sentence: a claim about how the reader's work goes right or wrong that a quarter of posts can show and the reader can check against their own week. The company's product belongs in a thesis when its design is the answer to that claim (a choice the company made and competitors did not), and then the topic says so plainly; a headline, a slogan or a feature list is not a thesis, and no more than three topics are about what the product does. A number or a customer result is proof and goes in a post, not in a topic. Each topic is a different thing they know: no two topics restate one claim, and no one idea (a price, a customer, an example from their site) runs through more than one topic. A thesis is never an argument with the pages that rank today or with a competitor's claim: what ranks is context for the posts, never their cast. The first topic is the one a buyer reads before they buy, and it gets the biggest range. The low ends add up to at most the volume. In a revision, keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away.
 3. Every topic gets pitched from every source; there is no internal/external split.
 4. 3 to 8 watched sites, taken first from who ranks on page one for the reader's searches (the data lists them: regulators, state agencies, trade bodies), then the competitors they named. Each is a source that keeps publishing (a site, a blog index, a news section: the root or one path segment), never one article, whitepaper or listicle. Each tied to one topic, each with a why. The competitors they named are always in. Use real sites you know or that appear in the data; full https addresses. A site earns its place by authority in this niche (a known company, a study, a regulator, the trade press these buyers read), never by ranking for a search today; the why says in a few words who they are.
-5. ${SEARCHES_MIN} to ${SEARCHES_MAX} target searches, each marked with its bucket. "now" (10 to ${NOW_MAX}): winnable this quarter, which means difficulty under 30 and page one averaging under ${WINNABLE_MAX_LINKS} referring domains, or a search where they already sit on page two, and under ${NEW_DOMAIN_MAX_VOLUME.toLocaleString("en-US")} searches a month while the domain ranks for nothing yet (a bigger one goes in "later"); the difficulty score alone is not enough, because government pages score easy and are not. "later" (${LATER_MIN} to ${LATER_MAX}, required when the data has them): the biggest searches the reader's job depends on, ${MUST_WIN_MIN_VOLUME} searches a month or more, with page one up to about ${MUST_WIN_MAX_LINKS} referring domains, or difficulty up to ${MUST_WIN_MAX_DIFFICULTY} as long as page one stays under ${MUST_WIN_HARD_LINKS}, each with a position goal in its why (into the top 30, then the top 20) rather than page one; leaving an 18,000-a-month search out because it is hard is the founder's decision, not yours. "nodata" (at most ${NODATA_MAX}): a search the data has no number for, kept because the intent is exact. Each names one of the topics and is a question a post in that topic would literally answer. Take the searches from the priced data first; a search you add that the data doesn't list gets its numbers looked up before your proposal is checked. Use the 6-month trend and the peak month: a seasonal search gets its posts written two to three months before its peak and judged after it, and the why says so, even when the peak falls outside the quarter. A search the company ranks for by its own name, or a page it hosts for a customer, is never a target. A search whose page one is lists of tools ("best X", "top X tools", "X software") stays eligible: the why says the post answers the buyer's question behind the search and never argues with the lists. A new domain targets at most 2 on page one by quarter end, counted among the "now" searches. The AI-mention target comes from the searches where Google shows an AI overview: propose how many of those should cite one of the posts by quarter end (a new domain: 1 to 3); when none of the target searches has an overview, set it to null and say why.
+5. ${SEARCHES_MIN} to ${SEARCHES_MAX} target searches, each marked with its bucket. "now" (10 to ${NOW_MAX}): winnable this quarter, which means difficulty under 30 and page one averaging under ${WINNABLE_MAX_LINKS} referring domains, or a search where they already sit on page two, and under ${NEW_DOMAIN_MAX_VOLUME.toLocaleString("en-US")} searches a month while the domain ranks for nothing yet (a bigger one goes in "later"); the difficulty score alone is not enough, because government pages score easy and are not. "later" (${LATER_MIN} to ${LATER_MAX}, required when the data has them): the biggest searches the reader's job depends on, ${MUST_WIN_MIN_VOLUME} searches a month or more, with page one up to about ${MUST_WIN_MAX_LINKS} referring domains, or difficulty up to ${MUST_WIN_MAX_DIFFICULTY} as long as page one stays under ${MUST_WIN_HARD_LINKS}, each with a position goal in its why (into the top 30, then the top 20) rather than page one; leaving an 18,000-a-month search out because it is hard is the founder's decision, not yours. "nodata" (at most ${NODATA_MAX}): a search the data has no number for, kept because the intent is exact. Each names one of the topics and is a question a post in that topic would literally answer. Take the searches from the priced data first; a search you add that the data doesn't list gets its numbers looked up before your proposal is checked. Growth is "vs last year" (the last twelve months against the twelve before, so the seasons cancel); the 6-month trend and the peak month say where in the year the search is: a seasonal search gets its posts written two to three months before its peak and judged after it, and the why says so, even when the peak falls outside the quarter. A 6-month fall on a search whose peak has just passed is the season, not a decline: when that holds for several searches, the basis says so once, and no why says it. A search the company ranks for by its own name, or a page it hosts for a customer, is never a target. A search whose page one is lists of tools ("best X", "top X tools", "X software") stays eligible: the why says the post answers the buyer's question behind the search and never argues with the lists. A new domain targets at most 2 on page one by quarter end, counted among the "now" searches. The AI-mention target comes from the searches where Google shows an AI overview: propose how many of those should cite one of the posts by quarter end (a new domain: 1 to 3); when none of the target searches has an overview, set it to null and say why.
 6. No Readership target without 4 weeks of reader data: value null, and say a target comes after 4 weeks of readers.
 7. Every number has a why (one sentence a person would say out loud, the point first, under about 25 words, adding something they didn't already know and never restating the number) and a basis (what it came from). A basis quotes only what they actually said, what their site says, or a number from the data: "your answer: 8 posts a month", "their site says: no link farms", "DataForSEO: 320 searches/month, difficulty 12". Their site is not them talking to you: it is marketing copy, so a sentence from it is "their site says", never "you said" or "your answer", and a sentence the site repeats is repeated by the layout (a header, a footer, a card on every page), not because it is what the company cares about most. Never put words in their mouth: a default is called a default ("review capacity not answered; assumed 8 a month"), and anything you had to assume becomes a question. What they asked for this round is cited as "your request" with its gist in your own words, never quoted word for word.
 8. At most 3 questions: only what you couldn't decide alone. When their answers are thin (a blank, a one-liner, capacity not answered), ask at least one. A blank "coming up" answer is a blank: a deadline that changes what the posts should be (a rule taking effect, a season) goes in the plan with its name, in the same sentence as the date; a launch, a beta or an event is never a reason for a post on a blog, so it gets no question and no post. When what they asked for answers your earlier questions, those questions are settled: decide with their answers, never ask one again, and ask something new only when an answer leaves a choice you truly can't make alone. Where an answer is still vague, pick the sensible reading and say so in the basis.
@@ -604,6 +616,7 @@ function keywordLine(k: Keyword): string {
   if (k.volume !== null || k.difficulty !== null) parts.push(`difficulty ${k.difficulty ?? "?"}`);
   if (typeof k.referringDomains === "number") parts.push(`page one averages ${k.referringDomains} referring domains`);
   if (typeof k.trend6 === "number") parts.push(`6-month trend ${k.trend6 >= 0 ? "+" : ""}${k.trend6}%`);
+  if (typeof k.yoy === "number") parts.push(`vs last year ${k.yoy >= 0 ? "+" : ""}${k.yoy}%`);
   if (typeof k.peakMonth === "number") parts.push(`peaks in ${MONTHS[k.peakMonth - 1]}`);
   if (k.intent) parts.push(`intent ${k.intent}`);
   if (typeof k.aiOverview === "boolean") parts.push(`AI overview ${k.aiOverview ? "yes" : "no"}`);
@@ -666,7 +679,7 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
       : "",
     pack.taste ? `\nWhat they like and dislike (from their decisions on pitches):\n${pack.taste}` : "",
     m.priced?.length
-      ? `\nDataForSEO, the searches the reader makes about the job (${m.job || "the people this company sells to, about their own work"}), priced, biggest first. "no data" means DataForSEO has no number, not zero. "Page one averages N referring domains" is how many distinct websites link to a page that ranks on page one today: under 10 is open ground for a good post, 10 to 30 takes a quarter with a few sites linking to the post, 30 to 80 takes a year, above that is beyond a blog post. The 6-month trend compares the last six months with the six before; the peak month says when the search is biggest. "AI overview yes" means Google answers this search with an AI overview that cites pages.\n${kw(m.priced, 100)}`
+      ? `\nDataForSEO, the searches the reader makes about the job (${m.job || "the people this company sells to, about their own work"}), priced, biggest first. "no data" means DataForSEO has no number, not zero. "Page one averages N referring domains" is how many distinct websites link to a page that ranks on page one today: under 10 is open ground for a good post, 10 to 30 takes a quarter with a few sites linking to the post, 30 to 80 takes a year, above that is beyond a blog post. "vs last year" is the growth figure: the last twelve months against the twelve before, so the seasons cancel. The 6-month trend compares the last six months with the six before, so a search that peaks in spring reads as falling every autumn; the peak month says when the search is biggest. "AI overview yes" means Google answers this search with an AI overview that cites pages.\n${kw(m.priced, 100)}`
       : "",
     m.whoRanks?.length
       ? `\nWho ranks in Google's top 100 across the ${m.rankedFor?.length ?? 0} biggest of those searches (${(m.rankedFor ?? []).join(", ")}). The kind in brackets is read from the address (a .gov is government, a .org may be a trade body or a tutorial site): say who each one is by name:\n${m.whoRanks.map((r) => `- ${r.domain} (${r.kind}): ranks for ${r.keywords} of the ${m.rankedFor?.length ?? 0}, average position ${r.avgPosition}`).join("\n")}`

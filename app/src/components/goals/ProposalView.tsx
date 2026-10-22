@@ -376,7 +376,7 @@ function SearchList({ searches, topics, readersFind, editable, onChange }: { sea
               <p className="text-xs text-tertiary">
                 {s.topic}
                 {s.volume != null && ` · ${fmtVolume(s.volume)} searches a month`}
-                {s.trend6 != null && ` · ${fmtTrend(s.trend6)} over 6 months`}
+                {s.yoy != null ? ` · ${fmtTrend(s.yoy)} vs last year` : s.trend6 != null && ` · ${fmtTrend(s.trend6)} over 6 months`}
                 {s.peakMonth != null && ` · peaks in ${MONTHS[s.peakMonth - 1]}`}
                 {s.difficulty != null && ` · difficulty ${s.difficulty}`}
                 {s.referringDomains != null && ` · page one averages ${s.referringDomains} linking sites`}
