@@ -65,6 +65,7 @@
 //   PEOPLE-LOAD         the people on a site couldn't be loaded
 //   PEOPLE-CHANGE       inviting, removing or changing the role of a person failed
 //   KB-STYLES           the knowledge base's style rules couldn't be listed, added or retired
+//   MCP-CONNECT         connecting Claude to a blog (the OAuth consent page) failed
 
 import { BackendError } from "@/lib/supabase";
 

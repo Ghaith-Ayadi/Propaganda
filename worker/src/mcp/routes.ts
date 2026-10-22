@@ -1,6 +1,9 @@
 // The MCP server's routes, under /worker/v1/ like the rest.
 //
-// With an API token (Authorization: Bearer ppk_...; Settings > Connections > Claude):
+// Signing in with OAuth (oauth.ts): /.well-known/oauth-*, /mcp/register,
+// /mcp/authorize, /mcp/approve, /mcp/token. What Claude uses to get a token.
+//
+// With an API token (Authorization: Bearer ppk_...; from OAuth or Settings > Connections > Claude):
 //   POST   /mcp                 the MCP server (server.ts): JSON-RPC in, JSON out
 //   POST   /assign              the same as the assign_post tool, plain HTTP: { title, collection?, markdown, assets? }
 //   GET    /me                  { site, label, scopes }: what the token is
@@ -15,6 +18,7 @@ import type { Pool } from "pg";
 import { HttpError, requireMember } from "../auth.js";
 import { config } from "../config.js";
 import { AssignError, assignPost, checkAssign } from "./assign.js";
+import { oauthRoute, resourceMetadataUrl } from "./oauth.js";
 import { handleBody, PROTOCOL } from "./server.js";
 import { listTokens, mintToken, revokeToken, tokenOf, touchToken, type ApiToken } from "./tokens.js";
 
@@ -57,8 +61,9 @@ async function requireToken(db: Pool, req: IncomingMessage): Promise<ApiToken> {
   const bearer = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
   const token = bearer ? await tokenOf(db, bearer) : null;
   if (!token) {
-    throw Object.assign(new HttpError(401, "Unauthorized: a Propaganda API token is needed (Settings > Connections > Claude)"), {
-      headers: { "WWW-Authenticate": 'Bearer realm="propaganda"' },
+    throw Object.assign(new HttpError(401, "Unauthorized: connect Claude to Propaganda (it signs you in), or send an API token from Settings > Connections > Claude"), {
+      // Where Claude finds how to sign in (RFC 9728).
+      headers: { "WWW-Authenticate": `Bearer realm="propaganda", resource_metadata="${resourceMetadataUrl()}"`, "Access-Control-Expose-Headers": "WWW-Authenticate" },
     });
   }
   void touchToken(token.id, token.site);
@@ -70,6 +75,8 @@ export async function mcpRoute(db: Pool, req: IncomingMessage, res: ServerRespon
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const method = req.method ?? "GET";
   let m: RegExpExecArray | null;
+
+  if (await oauthRoute(db, req, res, path, url)) return true;
 
   if (path === "/mcp") {
     // No server-to-client stream: the stateless transport answers each POST in JSON.

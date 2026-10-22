@@ -211,12 +211,12 @@ function ClaudePlugin() {
         With the Propaganda plugin, Claude puts posts on your blog from wherever you are working: say "blog about this" and we take it from there, in your voice, for your review.
       </p>
       <ol className="list-decimal space-y-1 pl-5 text-sm text-secondary">
-        <li>
-          In Claude, add the marketplace <code className="font-mono text-xs">Ghaith-Ayadi/Propaganda</code> and install the <code className="font-mono text-xs">propaganda</code> plugin.
-        </li>
-        <li>Make a token below and give it to the plugin as PROPAGANDA_TOKEN.</li>
+        <li>In Claude, open Settings, Connectors, and add a custom connector with the address below. With the Propaganda plugin installed, it is already listed: press Connect.</li>
+        <li>Claude opens Propaganda: pick this blog and press Allow. Claude is connected; it shows up in the list below.</li>
+        <li>In any chat, say "blog about this".</li>
       </ol>
       <CopyField label="MCP server URL" value={MCP_URL} />
+      <Note>For scripts and other tools that can't sign in, make a token below and send it as a Bearer header.</Note>
       {fresh && (
         <div className="flex flex-col gap-2 rounded-lg border border-secondary p-3">
           <CopyField label="Your new token" value={fresh.token} />

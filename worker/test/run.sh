@@ -19,6 +19,7 @@ node test/first-day.mjs
 node test/scout.mjs
 node test/listener.mjs
 node test/mcp.mjs
+node test/mcp-oauth.mjs
 node test/arena.mjs
 # Needs PostgREST (POSTGREST_BIN) and pgvector on the server; skips without PostgREST.
 node test/listener-e2e.mjs

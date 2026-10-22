@@ -12,7 +12,9 @@ that produced something worth a post) is offered once.
 - **The plugin**: `plugin/propaganda` (`.claude-plugin/plugin.json`, `.mcp.json`,
   `skills/blog/SKILL.md`). The repo root's `.claude-plugin/marketplace.json`
   makes this repository the marketplace: in Claude, add `Ghaith-Ayadi/Propaganda`
-  and install `propaganda`. The skill carries the rules: when to act, when to
+  and install `propaganda`, then Connect it in Settings > Connectors. Without
+  the plugin, the same server works as a custom connector (its address is on
+  the Connections page). The skill carries the rules: when to act, when to
   offer, how to prepare the material (one Markdown document, already in the
   tenant's voice when it can be, plus images and PDFs as assets), the plain-HTTP
   fallback. More tools and skills go in the same folder.
@@ -21,9 +23,13 @@ that produced something worth a post) is offered once.
   posts"). Tools today: `list_collections` (names, public descriptions and the
   tenant's rules for the agents) and `assign_post` (title, collection, markdown,
   assets). `POST /worker/v1/assign` is the same door without MCP.
-- **The token**: a member makes one in Settings > Connections > Claude; it is
-  shown once and the plugin reads it as `PROPAGANDA_TOKEN`. It acts as that
-  member on that site. Revoking it there stops it at once
+- **Signing in**: OAuth, so nobody pastes anything (Ayadi's first real test,
+  2026-10-22, found claude.ai has nowhere to put a token). Claude meets the
+  401, reads the server's metadata, registers, and opens the app's
+  `/connect/claude`: the person picks one of their blogs and presses Allow, and
+  Claude gets an API token for it (`worker/src/mcp/oauth.ts`). Scripts can
+  still use a token made by hand in Settings > Connections > Claude. Either
+  kind acts as that member on that site. Revoking it there stops it at once
   (`supabase/migrations/20261010000160_api_tokens.sql`).
 - **The post**: a regular post. Its brief has `origin = 'assigned'`, the material
   as its body and the attachments as its sources (with a `kind`). The Writer
@@ -34,6 +40,10 @@ that produced something worth a post) is offered once.
   material under the draft's Brief tab, with the attachments as links.
 
 ## On the box and on Vercel
+
+Bedrock's Caddy sends `app.propaganda.pub/.well-known/oauth-*` to the worker
+(Claude looks for the sign-in metadata at the host's root); without it,
+connecting fails at discovery.
 
 The worker stores an assigned post's images through the app's `/api/upload`
 with `WORKER_DISPATCH_SECRET`, the secret it already shares with Chat's
