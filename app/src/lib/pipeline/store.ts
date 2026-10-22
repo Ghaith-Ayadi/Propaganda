@@ -6,7 +6,7 @@
 // example data for a fictional tenant kept in this browser (adapter.ts).
 // Either way approving a pitch gives the writer a draft post with its brief.
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "@/components/base/toast/toast";
 import { db } from "@/lib/db";
 import { userMessage } from "@/lib/errors";
@@ -20,7 +20,7 @@ import { reportError } from "@/lib/telemetry";
 import { onServerChange } from "@/lib/serverChanges";
 import { placeholderAdapter, type PipelineAdapter } from "./adapter";
 import { addDays, shortDate, ymd } from "./dates";
-import { live, loadLive, meOf } from "./live";
+import { AGENT_ID, live, loadLive, meOf } from "./live";
 import type { Batch, PipelineItem, PipelineSnapshot, PitchNote, Person, Stage, TasteEntry } from "./types";
 
 const adapter: PipelineAdapter = placeholderAdapter;
@@ -295,6 +295,79 @@ export function personById(people: Person[], id: string): Person | undefined {
 export function updateItem(id: string, patch: Partial<PipelineItem>) {
   if (LIVE && patch.notes) persist(live.saveNotes(id, patch.notes));
   setItems(current().items.map((i) => (i.id === id ? { ...i, ...patch, updatedAt: Date.now() } : i)));
+}
+
+/** Change the date an item is planned for (the brief's planned date, shown as "by" on the card). */
+export function setPublishBy(id: string, date: string) {
+  if (LIVE) persist(live.setPlannedDate(id, date));
+  updateItem(id, { publishBy: date });
+}
+
+/** Posts the Writer was started on from here, until their text arrives (a second click must not start a second run). */
+const writerStarted = new Set<string>();
+const writerStartedListeners = new Set<() => void>();
+export const writerStartedNow = (postId: string) => writerStarted.has(postId);
+export function useWriterStarted(postId: string): boolean {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const l = () => bump((n) => n + 1);
+    writerStartedListeners.add(l);
+    return () => void writerStartedListeners.delete(l);
+  }, []);
+  return writerStarted.has(postId);
+}
+const markStarted = (postId: string, on: boolean) => {
+  if (on) writerStarted.add(postId);
+  else writerStarted.delete(postId);
+  writerStartedListeners.forEach((l) => l());
+};
+
+/** An item the Writer is waiting to write: the agent is its writer and the draft is still empty. */
+async function waitingForWriter(item: PipelineItem): Promise<boolean> {
+  if (item.stage !== "writing" || item.writerId !== AGENT_ID || !item.postId) return false;
+  if (writerStarted.has(item.postId)) return false;
+  const post = await db.posts.get(item.postId);
+  return !!post && !post.content?.trim();
+}
+
+/** Write one now. Resolves to why it didn't start, or null. */
+export async function writeNow(id: string): Promise<string | null> {
+  const item = getItem(id);
+  if (!item || !(await waitingForWriter(item))) return "it is not waiting for the Writer";
+  markStarted(item.postId!, true);
+  try {
+    const why = await live.writeNow(item.postId!, item.title);
+    if (why) markStarted(item.postId!, false);
+    return why;
+  } catch (err) {
+    markStarted(item.postId!, false);
+    throw err;
+  }
+}
+
+/** Items in Writing the Writer has not started on. */
+export async function waitingItems(items: PipelineItem[]): Promise<PipelineItem[]> {
+  const out: PipelineItem[] = [];
+  for (const i of items) if (await waitingForWriter(i)) out.push(i);
+  return out;
+}
+
+/** Write every waiting item in Writing now, one after another. */
+export async function writeAllNow(): Promise<{ started: number; notStarted: string[] }> {
+  const waiting = await waitingItems(current().items);
+  let started = 0;
+  const notStarted: string[] = [];
+  for (const item of waiting) {
+    try {
+      const why = await writeNow(item.id);
+      if (why) notStarted.push(`${item.title}: ${why}`);
+      else started++;
+    } catch (err) {
+      reportError("pipeline.writeAllNow", err);
+      notStarted.push(`${item.title}: couldn't reach the agents`);
+    }
+  }
+  return { started, notStarted };
 }
 
 /** The writing guidance a brief carries into the editor's Brief tab. */

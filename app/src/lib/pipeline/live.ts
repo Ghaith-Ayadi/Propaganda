@@ -254,6 +254,9 @@ export const live = {
     const agentNote = d.writerId === AGENT_ID && !drafted ? await startAgent({ agent: "writer", post: postId, task: item.title }) : null;
     return { postId, agentNote, drafted };
   },
+  /** Start the Writer on an approved brief's empty draft now. Resolves to why it didn't, or null. */
+  writeNow: (postId: string, title: string) => startAgent({ agent: "writer", post: postId, task: title }),
+  setPlannedDate: (id: string, date: string) => patchBrief(id, { planned_date: date }),
   reject: (id: string, reason: string) => patchBrief(id, { status: "rejected", reject_reason: reason }),
   notNow: (id: string, reason: string) => patchBrief(id, { status: "backlog", reject_reason: reason }),
   sendForReview: (id: string) => patchBrief(id, { status: "in_review" }),
