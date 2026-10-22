@@ -539,7 +539,7 @@ try {
   process.env.GSC_SERVICE_ACCOUNT_JSON = Buffer.from(JSON.stringify(saKey)).toString("base64");
   const read = await t.searchConsoleFor("kontra.propaganda.pub");
   const asked = gscCalls.find((c) => c.url.includes("searchAnalytics"));
-  check(read?.seen.length === 5 && asked.url.includes(encodeURIComponent("sc-domain:propaganda.pub")) && asked.auth === "Bearer gsc-token" && asked.body.dimensionFilterGroups[0].filters[0].expression === "https://kontra.propaganda.pub/", "a read asks the property for the blog's pages only");
+  check(read?.seen.length === 5 && asked.url.includes(encodeURIComponent("sc-domain:propaganda.pub")) && asked.auth === "Bearer gsc-token" && asked.body.dimensionFilterGroups[0].filters[0].operator === "includingRegex" && asked.body.dimensionFilterGroups[0].filters[0].expression === "^https://kontra\\.propaganda\\.pub/", "a read asks the property for the blog's pages only");
   check((await t.searchConsoleFor("verbatim.ayadighaith.com")) === null, "a custom domain is never asked");
   gscCalls.length = 0;
 

@@ -100,7 +100,7 @@ export async function blogQueries(host: string, today: Date = new Date()): Promi
       startDate: day(start),
       endDate: day(end),
       dimensions: ["query"],
-      dimensionFilterGroups: [{ groupType: "and", filters: [{ dimension: "page", operator: "contains", expression: `https://${host}/` }] }],
+      dimensionFilterGroups: [{ groupType: "and", filters: [{ dimension: "page", operator: "includingRegex", expression: `^https://${host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/` }] }],
       rowLimit: 500,
     }),
   });
