@@ -21,7 +21,7 @@ export { rate, fitGrade } from "./fit.js";
 export { standing, isoWeek } from "./goals.js";
 export { handOffIdeas } from "./ideas.js";
 export { pitcher, pitchFromRequest } from "./pitcher.js";
-export { writer, reviser, briefForTask, dispatchWriting } from "./writer.js";
+export { writer, reviser, briefForTask, dispatchWriting, sweepStuckWriting } from "./writer.js";
 export { voiceGuideWorkflow, DEFAULT_VOICE } from "./voice.js";
 export { saveVoiceGuide } from "./store.js";
 export { pitchBatch, dailyBatches, keepLearned, ATTRIBUTION_RULE } from "./pitcher.js";

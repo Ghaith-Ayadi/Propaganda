@@ -344,6 +344,11 @@ export async function selectedForWriter(limit = 20): Promise<BriefRow[]> {
   return select<BriefRow>("briefs", `status=eq.todo&writer=eq.agent&select=${BRIEF_COLS}&order=updated&limit=${limit}`);
 }
 
+/** Briefs the Writer owns that have been Writing since before `before` (an ISO time): what the catch-all looks at. */
+export async function writingForWriter(before: string, limit = 50): Promise<BriefRow[]> {
+  return select<BriefRow>("briefs", `status=eq.in_progress&writer=eq.agent&updated=lt.${before}&select=${BRIEF_COLS}&order=updated&limit=${limit}`);
+}
+
 /** Mark an agent's brief's stage: one the Pitcher made, or one assigned to the Writer. Briefs a person made for themselves are never changed. */
 export async function setAgentBriefStatus(site: string, brief: string, status: string, from: string[]): Promise<void> {
   await patch("briefs", `site=eq.${enc(site)}&id=eq.${enc(brief)}&or=(pitched_by.like.agent:*,writer.eq.agent)&status=in.(${from.join(",")})`, { status });

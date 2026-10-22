@@ -159,6 +159,10 @@ notes, and the same tick starts `writer:revise` for it (`revise-<brief>-<notes>`
 which saves a suggested version and puts the brief back In review. So nothing waits
 in Writing for longer than a run takes, and the app never has to ask the worker to
 start a draft (a blocked request used to leave an approved post unstarted).
+A catch-all runs on the same tick (`sweepStuckWriting`): a brief the Writer owns that
+has been in Writing for an hour with no live run behind it goes back to Selected and
+is tried again under a new run id (`write-<brief>-r1`...). After three failed tries at
+the same work it stays in Writing for a person to retry from Admin > Runs.
 - First job on a tenant with no voice guide: writes one (`writer:voice-guide`)
   from its published posts, or the default voice when it has fewer than two.
   `VOICE_FROM=<tenant>:<site>` takes a tenant's voice from another site's posts
