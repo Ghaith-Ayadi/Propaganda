@@ -45,7 +45,7 @@ const BRIEF_COLS =
 
 const STAGE_OF: Record<string, Stage> = {
   pitched: "pitched",
-  todo: "writing",
+  todo: "selected",
   in_progress: "writing",
   in_review: "in_review",
   scheduled: "scheduled",
@@ -261,22 +261,26 @@ async function startAgent(body: Row): Promise<string | null> {
 }
 
 export const live = {
-  /** Approve: the brief moves to writing with its draft; the Writer starts when it's the writer. */
-  async approve(item: PipelineItem, d: { writerId: string; reviewerId: string; publishBy: string; notes: PitchNote[] }): Promise<{ postId: string; agentNote: string | null; drafted: boolean }> {
+  /**
+   * Approve: the brief is Selected with its empty draft. When the Writer is the
+   * writer the worker picks it up on its next tick and moves it to Writing;
+   * nothing is asked of the Writer from here, so a blocked request can't leave
+   * an approved post waiting for a click.
+   */
+  async approve(item: PipelineItem, d: { writerId: string; reviewerId: string; publishBy: string; notes: PitchNote[] }): Promise<{ postId: string; drafted: boolean }> {
     const postId = item.postId ?? (await newDraft(item.collection, item.title));
     if (!postId) throw coded("PIPELINE-SAVE", new Error("no draft"), "Couldn't create the draft. Try again.");
     // Drafted before approval (a tenant's first day): the draft is written, so it goes to review.
     const drafted = !!item.postId && !!(await db.posts.get(item.postId))?.content?.trim();
     await patchBrief(item.id, {
-      status: drafted ? "in_review" : "in_progress",
+      status: drafted ? "in_review" : d.writerId === AGENT_ID ? "todo" : "in_progress",
       post: postId,
       writer: d.writerId,
       reviewer: d.reviewerId,
       planned_date: d.publishBy,
       notes: d.notes,
     });
-    const agentNote = d.writerId === AGENT_ID && !drafted ? await startAgent({ agent: "writer", post: postId, task: item.title }) : null;
-    return { postId, agentNote, drafted };
+    return { postId, drafted };
   },
   /** Start the Writer on an approved brief's empty draft now. Resolves to why it didn't, or null. */
   writeNow: (postId: string, title: string) => startAgent({ agent: "writer", post: postId, task: title }),
@@ -285,7 +289,8 @@ export const live = {
   notNow: (id: string, reason: string) => patchBrief(id, { status: "backlog", reject_reason: reason }),
   sendForReview: (id: string) => patchBrief(id, { status: "in_review" }),
   async sendBack(item: PipelineItem, note: string) {
-    await patchBrief(item.id, { status: "in_progress", notes: [...item.notes, { lineId: null, text: note }] });
+    // Selected again: the worker revises it from the notes on its next tick and sends it back to review.
+    await patchBrief(item.id, { status: item.writerId === AGENT_ID ? "todo" : "in_progress", notes: [...item.notes, { lineId: null, text: note }] });
     await must(
       sb.from("taste_log").insert({
         site: siteId(),
@@ -326,7 +331,7 @@ export const live = {
           id: newId(),
           site: siteId(),
           title,
-          status: "in_progress",
+          status: "todo",
           collection_name: collection,
           body: p.brief.trim().slice(0, 20000),
           post: postId,
@@ -358,7 +363,7 @@ export const live = {
   async add(stage: Stage, title: string, collection: string | null): Promise<{ id: string; postId: string | null }> {
     const id = newId();
     const postId = stage === "pitched" ? null : await newDraft(collection ?? "", title);
-    const status = stage === "pitched" ? "pitched" : stage === "in_review" ? "in_review" : "in_progress";
+    const status = stage === "pitched" ? "pitched" : stage === "in_review" ? "in_review" : stage === "selected" ? "todo" : "in_progress";
     const me = meOf().id;
     await must(
       sb.from("briefs").insert({

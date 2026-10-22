@@ -148,7 +148,17 @@ something material changed, and then the brief says what; one of a published
 post becomes an update suggestion. Each pitch carries one line of what it
 learned (`briefs.learned`).
 
-**The Writer** (`writer`) drafts an approved brief (`todo` or `in_progress`):
+**The Writer** (`writer`) drafts an approved brief (`todo` or `in_progress`).
+On the board `todo` is **Selected** (approved, waiting for the Writer) and
+`in_progress` is **Writing** (the Writer is at it, or a person is). The
+dispatcher's tick (`dispatchWriting`, every `WORKER_DISPATCH_SECONDS`) starts the
+Writer on every Selected brief whose writer is `agent`, under the run id
+`write-<brief>`; the run moves it to Writing and, when the draft is saved, to In
+review. A draft sent back for changes returns to Selected with the reviewer's
+notes, and the same tick starts `writer:revise` for it (`revise-<brief>-<notes>`),
+which saves a suggested version and puts the brief back In review. So nothing waits
+in Writing for longer than a run takes, and the app never has to ask the worker to
+start a draft (a blocked request used to leave an approved post unstarted).
 - First job on a tenant with no voice guide: writes one (`writer:voice-guide`)
   from its published posts, or the default voice when it has fewer than two.
   `VOICE_FROM=<tenant>:<site>` takes a tenant's voice from another site's posts

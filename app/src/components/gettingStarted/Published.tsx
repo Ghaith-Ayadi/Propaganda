@@ -199,7 +199,7 @@ function PipelineIllustration({ pitches }: { pitches: PipelineItem[] }) {
   const col = (stages: string[]) => pitches.filter((p) => stages.includes(p.stage));
   const cols = [
     { name: "Pitched", items: col(["pitched"]) },
-    { name: "Writing", items: col(["writing"]) },
+    { name: "Writing", items: col(["selected", "writing"]) },
     { name: "Review", items: col(["in_review"]) },
     { name: "Live", items: col(["scheduled", "published"]) },
   ];

@@ -27,6 +27,8 @@ import {
   insertVersion,
   linkDraft,
   noteResearchGap,
+  moveBrief,
+  selectedForWriter,
   setAgentBriefStatus,
   versionAuthors,
   voiceGuide,
@@ -37,7 +39,7 @@ import { claimsFor, renderClaims, type Claim } from "./kb.js";
 import { MODELS, askJson, askText, obj, str, strs } from "./model.js";
 import { voiceFor, voiceGuideWorkflow, voiceSourceFor } from "./voice.js";
 import { renderEdits, reviewerEdits } from "./edits.js";
-import { AGENT_QUEUE, dispatchAttributes, registerAgent, type DispatchInput } from "../workflows/agents.js";
+import { AGENT_QUEUE, dispatchAttributes, registerAgent, startOnceForTenant, type DispatchInput } from "../workflows/agents.js";
 import { readPage, type Page } from "./web.js";
 import { AUTHORITY_RULE, quotable } from "./authority.js";
 import { ownHostsOf, vetSources } from "./sources.js";
@@ -214,6 +216,10 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
   if (!brief) return { status: "skipped", reason: "no such brief" };
   const allowed = input.beforeApproval ? [...APPROVED, "pitched"] : APPROVED;
   if (!allowed.includes(brief.status)) return { status: "skipped", reason: `the brief is ${brief.status}` };
+  // Selected becomes Writing while the Writer is at it (runs recorded before this replay without).
+  if (brief.status === "todo" && (await DBOS.patch("writer-marks-writing"))) {
+    await DBOS.runStep(() => moveBrief(site, brief.id, "in_progress", ["todo"]), { name: "mark it Writing" });
+  }
 
   // The post to write into: the empty one the pipeline made on approval, or a new one.
   const target = await DBOS.runStep(
@@ -400,7 +406,8 @@ async function writeFromRequest(input: DispatchInput): Promise<string | null> {
     (input.post ? briefs.find((b) => b.post === input.post && APPROVED.includes(b.status))?.id : undefined) ??
     briefForTask(briefs, input.task);
   if (!briefId) return null;
-  const handle = await DBOS.startWorkflow(writer, { queueName: AGENT_QUEUE, workflowAttributes: dispatchAttributes("writer", input) })({
+  // The poll's id for this brief (dispatchWriting), so a button and a tick never write it twice.
+  const handle = await DBOS.startWorkflow(writer, { workflowID: `write-${briefId}`, queueName: AGENT_QUEUE, workflowAttributes: dispatchAttributes("writer", input) })({
     site: input.site,
     briefId,
   });
@@ -416,6 +423,8 @@ export interface ReviseInput {
   post: string;
   /** The reviewer's notes, in their words. */
   notes: string;
+  /** The brief that was sent back: it goes Writing while this runs and back to review after. */
+  brief?: string;
 }
 
 /**
@@ -430,6 +439,7 @@ async function reviseRun(input: ReviseInput): Promise<WriteResult> {
   });
   if (!current) return { status: "skipped", reason: "no such post" };
   if (current.status === "published") return { status: "skipped", reason: "the post is published" };
+  if (input.brief) await DBOS.runStep(() => moveBrief(site, input.brief!, "in_progress", ["todo"]), { name: "mark it Writing" });
   const voice = ownVoice || voiceFor(guide);
   const tenantStyles = (await DBOS.patch("writer-revise-styles"))
     ? stylesBlock(await DBOS.runStep(() => styles(site), { name: "read the tenant's styles" }))
@@ -471,7 +481,42 @@ ${current.content_md}`,
       }),
     { name: "save the suggestion" },
   );
+  if (input.brief) await DBOS.runStep(() => moveBrief(site, input.brief!, "in_review", ["in_progress", "todo"]), { name: "send back for review" });
   return { status: "drafted", post, version, words: wordCount(markdown) };
 }
 
 export const reviser = DBOS.registerWorkflow(reviseRun, { name: "writer:revise" });
+
+// ---- the writing poll: Selected briefs and sent-back drafts ----
+
+/** Notes on a brief that nobody has marked done, as the reviewer wrote them. */
+export function openNotes(b: Pick<BriefRow, "notes">): string {
+  return (b.notes ?? []).filter((n) => !n.done && n.text.trim()).map((n) => `- ${n.quote ? `"${n.quote}": ` : ""}${n.text.trim()}`).join("\n");
+}
+
+/**
+ * Selected briefs the Writer owns, started: an approved pitch gets its draft, a
+ * draft that was sent back gets a revision, each as soon as a tick sees it, so
+ * nothing waits in Selected for a person to ask. A run's id comes from its work
+ * (the brief, and for a revision how many notes it holds), so however many
+ * ticks see a brief it runs once. Returns the run ids asked for.
+ */
+export async function dispatchWriting(): Promise<string[]> {
+  const started: string[] = [];
+  for (const b of await selectedForWriter()) {
+    const post = b.post ? await getPost(b.site, b.post) : null;
+    const written = Boolean(post && post.content_md.trim());
+    if (!written) {
+      const id = `write-${b.id}`;
+      await startOnceForTenant(b.site, id, writer, { site: b.site, briefId: b.id });
+      started.push(id);
+      continue;
+    }
+    const notes = openNotes(b);
+    if (!notes || !b.post) continue; // a draft with words and no notes is waiting on a person, not on the Writer
+    const id = `revise-${b.id}-${(b.notes ?? []).length}`;
+    await startOnceForTenant(b.site, id, reviser, { site: b.site, post: b.post, notes, brief: b.id });
+    started.push(id);
+  }
+  return started;
+}

@@ -44,10 +44,11 @@ import { PitchDrawer } from "./PitchDrawer";
 import { openItem, usePostTitles } from "./shared";
 
 /** Columns that take a + (Scheduled fills from review, never by hand). */
-const ADDABLE: Stage[] = ["pitched", "writing", "in_review"];
+const ADDABLE: Stage[] = ["pitched", "selected", "writing", "in_review"];
 
 const ADD_PLACEHOLDER: Partial<Record<Stage, string>> = {
   pitched: "Your idea, as a title",
+  selected: "Title of what you want written",
   writing: "Title of what you'll write",
   in_review: "Title of the draft to review",
 };
@@ -62,6 +63,7 @@ export function PipelinePage() {
   const columns = useMemo(() => {
     const by: Record<Stage, PipelineItem[]> = {
       pitched: [],
+      selected: [],
       writing: [],
       in_review: [],
       scheduled: [],
@@ -146,12 +148,12 @@ export function PipelinePage() {
                         <>
                           <div className="flex flex-wrap gap-1.5">
                             <TopicBadge>{item.collection}</TopicBadge>
-                            {item.stage === "writing" && (
+                            {(item.stage === "selected" || item.stage === "writing") && (
                               <NotesBadge
                                 count={item.notes.filter((n) => !n.done).length}
                               />
                             )}
-                            {item.sentBackNote && item.stage === "writing" && (
+                            {item.sentBackNote && (item.stage === "selected" || item.stage === "writing") && (
                               <span className="text-xs font-medium text-error-primary">
                                 Sent back
                               </span>
@@ -208,7 +210,7 @@ function Column({
   const [material, setMaterial] = useState("");
   const [busy, setBusy] = useState(false);
   const addable = ADDABLE.includes(stage);
-  const canAssign = stage === "writing";
+  const canAssign = stage === "selected";
 
   /** Start the Writer on everything in this column it has not started on. */
   const writeAll = async () => {
@@ -283,10 +285,10 @@ function Column({
           </span>
         </span>
         <div className="flex items-center gap-1">
-        {stage === "writing" && (
+        {stage === "selected" && (
           <ActionMenu
             triggerClassName="flex size-6 items-center justify-center rounded-md text-quaternary outline-none transition hover:bg-primary_hover hover:text-secondary data-[pressed]:bg-primary_hover"
-            trigger={<DotsHorizontal className="size-4" data-icon aria-label="More for Writing" />}
+            trigger={<DotsHorizontal className="size-4" data-icon aria-label="More for Selected" />}
             items={[{ id: "write-all", label: "Write all now", icon: <Zap className="size-4" />, onAction: () => void writeAll() }]}
           />
         )}

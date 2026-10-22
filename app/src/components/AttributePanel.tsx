@@ -353,9 +353,9 @@ function WritingTask({ post }: { post: Post }) {
   const { people } = usePipeline();
   const started = useWriterStarted(post.id);
   const [busy, setBusy] = useState(false);
-  if (!item || item.stage !== "writing") return null;
+  if (!item || (item.stage !== "selected" && item.stage !== "writing")) return null;
   const writer = personById(people, item.writerId);
-  const waiting = !!writer?.agent && !post.content?.trim();
+  const waiting = item.stage === "selected" && !!writer?.agent && !post.content?.trim();
 
   const start = async () => {
     setBusy(true);
@@ -374,7 +374,7 @@ function WritingTask({ post }: { post: Post }) {
   };
 
   return (
-    <FieldStack label="Writing">
+    <FieldStack label={item.stage === "selected" ? "Selected" : "Writing"}>
       <div className="flex flex-col gap-3 rounded-lg border border-secondary bg-primary p-3">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-tertiary">Assignee</span>

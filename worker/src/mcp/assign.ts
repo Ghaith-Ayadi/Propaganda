@@ -160,7 +160,7 @@ export async function assignPost(db: Pool, input: AssignInput): Promise<AssignRe
     id: briefId,
     site: input.site,
     title: input.title,
-    status: "in_progress",
+    status: "todo",
     collection_name: col.name,
     body: input.markdown,
     sources: assets,

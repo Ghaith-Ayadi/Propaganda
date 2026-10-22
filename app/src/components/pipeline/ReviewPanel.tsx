@@ -335,7 +335,7 @@ function Decision({ postId, open }: { postId: string; open: number }) {
           </>
         ))}
 
-      {item.stage === "writing" && (
+      {(item.stage === "selected" || item.stage === "writing") && (
         <div className="mt-3">
           {item.sentBackNote && (
             <p className="mb-3 text-sm text-secondary">

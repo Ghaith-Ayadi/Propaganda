@@ -12,6 +12,7 @@ import { findPost, latestVersion, pendingWork, type Work } from "../kb/read.js";
 import { AGENT_QUEUE, dispatchAttributes, registerAgent, startOnceForTenant, type DispatchInput } from "../workflows/agents.js";
 import { checkPost, draftContest, recheckPost } from "./checker.js";
 import { guardian } from "./guardian.js";
+import { dispatchWriting } from "./writer.js";
 
 export function runId(w: Work): string {
   switch (w.kind) {
@@ -50,6 +51,8 @@ export async function dispatchOnce(site: string | null = null, settleSeconds = c
     }
     started.push(id);
   }
+  // Admin's Run now is for one tenant's checking work; the Writer's Selected briefs are looked at on every scheduled tick.
+  if (site === null) started.push(...(await dispatchWriting()));
   return started;
 }
 

@@ -9,12 +9,13 @@
 import type { PostFlag } from "@/lib/knowledge/types";
 
 /** Board stages. Ideas are not here: the agent triages them and nobody sees them. */
-export type Stage = "pitched" | "writing" | "in_review" | "scheduled" | "published" | "rejected" | "not_now";
+export type Stage = "pitched" | "selected" | "writing" | "in_review" | "scheduled" | "published" | "rejected" | "not_now";
 
-export const BOARD_STAGES: Stage[] = ["pitched", "writing", "in_review", "scheduled"];
+export const BOARD_STAGES: Stage[] = ["pitched", "selected", "writing", "in_review", "scheduled"];
 
 export const STAGE_LABEL: Record<Stage, string> = {
   pitched: "Pitched",
+  selected: "Selected",
   writing: "Writing",
   in_review: "In review",
   scheduled: "Scheduled",
