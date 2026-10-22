@@ -18,7 +18,7 @@ import type { Pool } from "pg";
 import { HttpError, requireMember } from "../auth.js";
 import { config } from "../config.js";
 import { AssignError, assignPost, checkAssign } from "./assign.js";
-import { oauthRoute, resourceMetadataUrl } from "./oauth.js";
+import { oauthRoute, originOf, resourceMetadataUrl } from "./oauth.js";
 import { handleBody, PROTOCOL } from "./server.js";
 import { listTokens, mintToken, revokeToken, tokenOf, touchToken, type ApiToken } from "./tokens.js";
 
@@ -63,7 +63,7 @@ async function requireToken(db: Pool, req: IncomingMessage): Promise<ApiToken> {
   if (!token) {
     throw Object.assign(new HttpError(401, "Unauthorized: connect Claude to Propaganda (it signs you in), or send an API token from Settings > Connections > Claude"), {
       // Where Claude finds how to sign in (RFC 9728).
-      headers: { "WWW-Authenticate": `Bearer realm="propaganda", resource_metadata="${resourceMetadataUrl()}"`, "Access-Control-Expose-Headers": "WWW-Authenticate" },
+      headers: { "WWW-Authenticate": `Bearer realm="propaganda", resource_metadata="${resourceMetadataUrl(originOf(req))}"`, "Access-Control-Expose-Headers": "WWW-Authenticate" },
     });
   }
   void touchToken(token.id, token.site);

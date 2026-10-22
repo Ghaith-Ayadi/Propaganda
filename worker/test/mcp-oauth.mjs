@@ -8,12 +8,18 @@ process.env.POSTGRES_PASSWORD ??= "unused";
 process.env.JWT_SECRET = "test-secret-test-secret-test-secret-00";
 process.env.SUPABASE_URL = "https://app.example.test";
 
-const { registerClient, authorize, exchange, protectedResource, authorizationServer, redirectAllowed, OAuthError } = await import("../dist/mcp/testing.js");
+const { registerClient, authorize, exchange, protectedResource, authorizationServer, originOf, redirectAllowed, OAuthError } = await import("../dist/mcp/testing.js");
+
+// the origin: the request's host (Caddy keeps it), else SUPABASE_URL (the dev box's is an inside address)
+assert.equal(originOf({ headers: { host: "dev.propaganda.pub", "x-forwarded-proto": "https" } }), "https://dev.propaganda.pub");
+assert.equal(originOf({ headers: { host: "gateway:8000" } }), "https://app.example.test");
+assert.equal(originOf(), "https://app.example.test");
+const O = originOf();
 
 // metadata
-assert.equal(protectedResource().resource, "https://app.example.test/worker/v1/mcp");
-assert.deepEqual(protectedResource().authorization_servers, ["https://app.example.test"]);
-const as = authorizationServer();
+assert.equal(protectedResource(O).resource, "https://app.example.test/worker/v1/mcp");
+assert.deepEqual(protectedResource(O).authorization_servers, ["https://app.example.test"]);
+const as = authorizationServer(O);
 assert.equal(as.issuer, "https://app.example.test");
 assert.equal(as.token_endpoint, "https://app.example.test/worker/v1/mcp/token");
 assert.deepEqual(as.code_challenge_methods_supported, ["S256"]);
@@ -47,15 +53,15 @@ const params = (extra = {}) =>
   });
 
 // authorize: to the consent page
-const consent = new URL(authorize(params()));
+const consent = new URL(authorize(params(), O));
 assert.equal(consent.origin + consent.pathname, "https://app.example.test/connect/claude");
 const request = consent.searchParams.get("request");
 assert.ok(request);
 // a forged client or a redirect it didn't register stops here, not at the client
-assert.throws(() => authorize(params({ client_id: "mcpc_forged.x" })), OAuthError);
-assert.throws(() => authorize(params({ redirect_uri: "https://evil.example/cb" })), OAuthError);
+assert.throws(() => authorize(params({ client_id: "mcpc_forged.x" }), O), OAuthError);
+assert.throws(() => authorize(params({ redirect_uri: "https://evil.example/cb" }), O), OAuthError);
 // no PKCE: back to the client with an error
-const noPkce = new URL(authorize(params({ code_challenge_method: "plain" })));
+const noPkce = new URL(authorize(params({ code_challenge_method: "plain" }), O));
 assert.equal(noPkce.searchParams.get("error"), "invalid_request");
 assert.equal(noPkce.searchParams.get("state"), "st8");
 
