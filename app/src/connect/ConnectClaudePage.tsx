@@ -88,8 +88,16 @@ export function ConnectClaudePage() {
 
   return (
     <div className="min-h-dvh bg-primary">
-      <Page title={`Connect ${asked.client} to your blog`} description="Claude will be able to read your collections and hand posts to your Writer. Nothing it sends is published until you review it.">
+      <Page title={`Connect ${asked.client} to your blog`} description="It will be able to read your collections and hand posts to us to draft. Nothing it sends is published until you review it.">
         <div className="flex max-w-lg flex-col gap-5">
+          <p className="text-sm text-secondary">
+            After you answer, you go back to <span className="font-medium text-primary">{asked.host}</span>.
+          </p>
+          {!asked.known && (
+            <p className="rounded-lg border border-secondary p-3 text-sm text-primary">
+              This is not Claude. Allow it only if you set up {asked.host} yourself: it will be able to post to the blog you pick.
+            </p>
+          )}
           {list.length > 0 ? (
             <fieldset className="flex flex-col divide-y divide-secondary rounded-lg border border-secondary">
               <legend className="mb-2 type-eyebrow text-quaternary">Which blog</legend>

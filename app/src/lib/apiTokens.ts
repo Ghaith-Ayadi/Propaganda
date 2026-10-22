@@ -80,11 +80,15 @@ export async function answerConnection(request: string, answer: { account: Accou
 }
 
 /** What Claude asked for, read from the signed request (the worker checks it again). */
-export function connectionRequest(request: string): { client: string; redirect: string } | null {
+export function connectionRequest(request: string): { client: string; host: string; known: boolean } | null {
   try {
     const body = request.slice(0, request.lastIndexOf("."));
     const p = JSON.parse(atob(body.replace(/-/g, "+").replace(/_/g, "/"))) as { n?: string; r?: string };
-    return { client: p.n || "Claude", redirect: p.r ?? "" };
+    const host = new URL(p.r ?? "").host;
+    // The worker lets only these call themselves Claude (worker/src/mcp/oauth.ts knownRedirect).
+    const h = host.replace(/:\d+$/, "");
+    const known = ["claude.ai", "claude.com", "localhost", "127.0.0.1", "[::1]"].includes(h) || h.endsWith(".claude.ai") || h.endsWith(".claude.com");
+    return { client: p.n || "Claude", host, known };
   } catch {
     return null;
   }

@@ -98,12 +98,27 @@ export function redirectAllowed(uri: string): boolean {
   return u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]");
 }
 
+/** Claude's own callbacks: claude.ai, claude.com, and loopback for Claude Code. */
+export function knownRedirect(uri: string): boolean {
+  try {
+    const h = new URL(uri).hostname;
+    return ["claude.ai", "claude.com", "localhost", "127.0.0.1", "[::1]"].includes(h) || h.endsWith(".claude.ai") || h.endsWith(".claude.com");
+  } catch {
+    return false;
+  }
+}
+
 export function registerClient(body: Record<string, unknown>): Record<string, unknown> {
   const uris = Array.isArray(body.redirect_uris) ? body.redirect_uris.filter((u): u is string => typeof u === "string") : [];
   if (!uris.length || uris.length > 10 || !uris.every(redirectAllowed)) {
     throw new OAuthError(400, "invalid_redirect_uri", "redirect_uris: one to ten https URLs, or http on localhost");
   }
-  const name = (typeof body.client_name === "string" ? body.client_name.trim() : "").slice(0, 100) || "Claude";
+  const known = uris.every(knownRedirect);
+  const name = (typeof body.client_name === "string" ? body.client_name.trim() : "").slice(0, 100) || (known ? "Claude" : "An app");
+  // Only Claude's own callbacks may call themselves Claude on the consent page.
+  if (!known && /claude|anthropic/i.test(name)) {
+    throw new OAuthError(400, "invalid_client_metadata", "That name is reserved for Claude's own redirect URIs");
+  }
   const clientId = `mcpc_${sign("client", { r: uris, n: name } satisfies Client)}`;
   return {
     client_id: clientId,
@@ -223,7 +238,7 @@ export async function exchange(
   const code = unsign<Code>("code", form.get("code"));
   if (!code) throw new OAuthError(400, "invalid_grant", "The code is wrong or has expired");
   const clientId = form.get("client_id");
-  if (clientId && clientId !== code.c) throw new OAuthError(400, "invalid_grant", "The code was issued to another client");
+  if (clientId !== code.c) throw new OAuthError(400, "invalid_grant", "The code was issued to another client");
   const redirect = form.get("redirect_uri");
   if (redirect && redirect !== code.r) throw new OAuthError(400, "invalid_grant", "redirect_uri doesn't match");
   const verifier = form.get("code_verifier") ?? "";

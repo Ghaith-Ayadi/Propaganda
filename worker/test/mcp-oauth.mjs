@@ -24,6 +24,10 @@ assert.ok(redirectAllowed("http://localhost:53123/callback"));
 assert.ok(!redirectAllowed("http://evil.example/callback"));
 assert.ok(!redirectAllowed("javascript:alert(1)"));
 assert.throws(() => registerClient({ redirect_uris: ["http://evil.example/cb"] }), OAuthError);
+// another https host may register, but never under Claude's name
+assert.throws(() => registerClient({ redirect_uris: ["https://evil.example/cb"], client_name: "Claude" }), (e) => e.code === "invalid_client_metadata");
+assert.equal(registerClient({ redirect_uris: ["https://tool.example/cb"] }).client_name, "An app");
+assert.equal(registerClient({ redirect_uris: ["http://127.0.0.1:4000/cb"], client_name: "Claude Code" }).client_name, "Claude Code");
 
 // register
 const claudeAi = registerClient({ redirect_uris: ["https://claude.ai/api/mcp/auth_callback"], client_name: "Claude" });
@@ -82,6 +86,9 @@ const mint = async (site, user, label) => (minted.push({ site, user, label }), {
 const form = (extra = {}) =>
   new URLSearchParams({ grant_type: "authorization_code", code, client_id: claudeAi.client_id, redirect_uri: "https://claude.ai/api/mcp/auth_callback", code_verifier: verifier, ...extra });
 await assert.rejects(exchange(form({ code_verifier: "nope" }), mint), (e) => e.code === "invalid_grant");
+const noClient = form();
+noClient.delete("client_id");
+await assert.rejects(exchange(noClient, mint), (e) => e.code === "invalid_grant");
 const tok = await exchange(form(), mint);
 assert.equal(tok.access_token, "ppk_test");
 assert.equal(tok.token_type, "Bearer");
