@@ -283,9 +283,10 @@ export const live = {
    * its draft, and the Writer started on it. Resolves to the briefs made and,
    * for each one the Writer didn't start, why.
    */
-  async assign(posts: { title: string; brief: string }[], collection: string): Promise<{ made: number; notStarted: string[] }> {
+  async assign(posts: { title: string; brief: string }[], collection: string): Promise<{ made: number; notStarted: string[]; started: string[] }> {
     const me = meOf().id;
     const notStarted: string[] = [];
+    const started: string[] = [];
     let made = 0;
     for (const p of posts) {
       const title = p.title.trim().slice(0, 300) || "Untitled";
@@ -324,9 +325,10 @@ export const live = {
       made++;
       const why = await startAgent({ agent: "writer", post: postId, task: title });
       if (why) notStarted.push(`${title}: ${why}`);
+      else started.push(postId);
     }
     scheduleSync();
-    return { made, notStarted };
+    return { made, notStarted, started };
   },
   /** The + on a column: your own pitch (no draft), or a draft in writing or review. */
   async add(stage: Stage, title: string, collection: string | null): Promise<{ id: string; postId: string | null }> {

@@ -409,6 +409,7 @@ export async function approvePitch(
 
   if (LIVE) {
     const { postId, agentNote, drafted } = await live.approve(item, decision);
+    if (decision.writerId === AGENT_ID && !drafted && !agentNote) markStarted(postId, true);
     updateItem(id, { ...decision, stage: drafted ? "in_review" : "writing", postId });
     void refresh();
     if (agentNote) {
@@ -568,9 +569,10 @@ export async function addToColumn(stage: Stage, title: string, collection: strin
 /** Assigned posts go straight to the Writer, skipping the Pitcher (live data only). */
 export async function assignPosts(posts: { title: string; brief: string }[], collection: string): Promise<{ made: number; notStarted: string[] }> {
   if (!LIVE) return { made: 0, notStarted: posts.map((p) => `${p.title}: not in the preview`) };
-  const out = await live.assign(posts, collection);
+  const { made, notStarted, started } = await live.assign(posts, collection);
+  started.forEach((postId) => markStarted(postId, true));
   void refresh();
-  return out;
+  return { made, notStarted };
 }
 
 /** The draft as markdown, from the paragraphs the review step read (markers dropped). */
