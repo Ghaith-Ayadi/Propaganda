@@ -312,6 +312,9 @@ export interface Keyword {
   peakMonth?: number | null;
   intent?: string | null;
   aiOverview?: boolean | null;
+  /** From Search Console (their own blog, last 90 days): what the search did for them. */
+  clicks?: number;
+  impressions?: number;
 }
 
 export interface Rules {

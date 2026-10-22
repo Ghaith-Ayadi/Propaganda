@@ -43,3 +43,4 @@ export { pendingWork, setAppDb } from "../kb/read.js";
 export { sharedIdeas, overusedIdeas, mentions, root as ideaRoot } from "./motifs.js";
 export { authority, quotable } from "./authority.js";
 export { needsVetting, authorityQuery } from "./authority.js";
+export { blogQueries, gscHost, insights, searchConsoleFor, tokenAssertion } from "./gsc.js";
