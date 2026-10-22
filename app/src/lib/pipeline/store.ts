@@ -304,6 +304,7 @@ export function setPublishBy(id: string, date: string) {
 }
 
 /** Posts the Writer was started on from here, until their text arrives (a second click must not start a second run). */
+const WRITER_STARTED_MS = 5 * 60_000;
 const writerStarted = new Set<string>();
 const writerStartedListeners = new Set<() => void>();
 export const writerStartedNow = (postId: string) => writerStarted.has(postId);
@@ -317,8 +318,11 @@ export function useWriterStarted(postId: string): boolean {
   return writerStarted.has(postId);
 }
 const markStarted = (postId: string, on: boolean) => {
-  if (on) writerStarted.add(postId);
-  else writerStarted.delete(postId);
+  if (on) {
+    writerStarted.add(postId);
+    // A run that starts and then fails leaves no signal here: let the post be started again after a while.
+    setTimeout(() => markStarted(postId, false), WRITER_STARTED_MS);
+  } else writerStarted.delete(postId);
   writerStartedListeners.forEach((l) => l());
 };
 
@@ -333,7 +337,7 @@ async function waitingForWriter(item: PipelineItem): Promise<boolean> {
 /** Write one now. Resolves to why it didn't start, or null. */
 export async function writeNow(id: string): Promise<string | null> {
   const item = getItem(id);
-  if (!item || !(await waitingForWriter(item))) return "it is not waiting for the Writer";
+  if (!item || !(await waitingForWriter(item))) return "it is not waiting to be written";
   markStarted(item.postId!, true);
   try {
     const why = await live.writeNow(item.postId!, item.title);

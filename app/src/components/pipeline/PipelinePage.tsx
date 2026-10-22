@@ -216,12 +216,12 @@ function Column({
       const { started, notStarted } = await writeAllNow();
       toast.add({
         type: notStarted.length ? "warning" : "success",
-        title: started ? `Writing ${started} now` : "Nothing waiting for the Writer",
+        title: started ? `Writing ${started} now` : "Nothing waiting to be written",
         description: notStarted[0] ?? (started ? "Each draft shows up here when it's ready." : "Every post in Writing is being written or has text."),
       });
     } catch (err) {
       reportError("pipeline.writeAllNow", err);
-      toast.add({ type: "error", title: "Couldn't start the Writer", description: "Try again in a moment." });
+      toast.add({ type: "error", title: "Couldn't start writing", description: "Try again in a moment." });
     }
   };
 

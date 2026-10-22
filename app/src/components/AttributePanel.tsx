@@ -364,10 +364,10 @@ function WritingTask({ post }: { post: Post }) {
       toast.add(
         why
           ? { type: "error", title: "Writing didn't start", description: `${why.charAt(0).toUpperCase()}${why.slice(1)}.` }
-          : { type: "success", title: "The Writer is on it", description: "The text shows up here when it's ready." },
+          : { type: "success", title: "We're on it", description: "The text shows up here when it's ready." },
       );
     } catch {
-      toast.add({ type: "error", title: "Couldn't start the Writer", description: "Try again in a moment." });
+      toast.add({ type: "error", title: "Couldn't start writing", description: "Try again in a moment." });
     } finally {
       setBusy(false);
     }
