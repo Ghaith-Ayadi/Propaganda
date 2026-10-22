@@ -85,6 +85,8 @@ import {
   MUST_WIN_HARD_LINKS,
   MUST_WIN_MAX_DIFFICULTY,
   MUST_WIN_MAX_LINKS,
+  MUST_WIN_MIN_VOLUME,
+  NEW_DOMAIN_MAX_VOLUME,
   NODATA_MAX,
   NOW_MAX,
   SEARCHES_MAX,
@@ -145,7 +147,15 @@ interface Pack {
   /** This quarter's earlier rounds: what was asked and answered, and the last proposal's topics. */
   rounds: {
     answered: Answered[];
-    previous: { summary: string; topics: { name: string; low: number; high: number }[]; questions: string[] } | null;
+    /** Questions earlier rounds asked that got no answer: the person moved on, so they are settled by silence. */
+    declined: string[];
+    previous: {
+      summary: string;
+      topics: { name: string; low: number; high: number }[];
+      questions: string[];
+      /** The previous round's keyword data, when the answers and the site are unchanged: a revision reuses it instead of paying for the pull again. */
+      market?: Market | null;
+    } | null;
     /** Review capacity came from an answer in a round ("8", "2 a week"), not from Settings. */
     perMonthAnswer: string;
   };
@@ -214,9 +224,14 @@ async function gather(site: string, request: string, now: Date, quarter = quarte
     const next = earlier[i + 1]?.request ?? request;
     for (const a of parseAnswers(next)) if (!answered.some((x) => x.question === a.question)) answered.push(a);
   }
-  const lastProposal = [...earlier].reverse().find((r) => r.proposal)?.proposal ?? null;
+  const declined = [...asked].filter((q) => !answered.some((a) => a.question === q));
+  const lastRow = [...earlier].reverse().find((r) => r.proposal);
+  const lastProposal = lastRow?.proposal ?? null;
+  // The previous round's data travels with its row (inputs.market, 2026-10-22); the same answers and site mean the same data.
+  const lastInputs = (lastRow?.inputs ?? null) as { market?: Market; website?: string; answers?: Record<string, string> } | null;
+  const sameInputs = Boolean(lastInputs?.market && lastInputs.website === website && JSON.stringify(lastInputs.answers ?? null) === JSON.stringify(prof?.answers ?? {}));
   const previous = lastProposal
-    ? { summary: lastProposal.summary, topics: lastProposal.topics.map((t) => ({ name: t.name, low: t.low, high: t.high })), questions: lastProposal.questions }
+    ? { summary: lastProposal.summary, topics: lastProposal.topics.map((t) => ({ name: t.name, low: t.low, high: t.high })), questions: lastProposal.questions, market: sameInputs ? lastInputs!.market! : null }
     : null;
   const settingPerMonth = parseInt(String(set["strategist.reviewPerMonth"] ?? ""), 10);
   const fromAnswer = Number.isFinite(settingPerMonth) ? null : perMonthFromAnswers(answered);
@@ -243,7 +258,7 @@ async function gather(site: string, request: string, now: Date, quarter = quarte
     lastEdits: approved?.edits ?? [],
     taste: taste?.summary ?? "",
     request,
-    rounds: { answered, previous, perMonthAnswer },
+    rounds: { answered, declined, previous, perMonthAnswer },
   };
 }
 
@@ -268,7 +283,7 @@ export interface Ranker {
 interface Market {
   keywords: Keyword[];
   ours: Keyword[];
-  competitors: { domain: string; keywords: Keyword[] }[];
+  competitors: { domain: string; keywords: Keyword[]; named?: string }[];
   serps: { query: string; top: { position: number; url: string; title: string }[] }[];
   /** The reader's job vocabulary, priced (searches first, 2026-10-20): biggest first. Absent on a run recorded before. */
   priced?: Keyword[];
@@ -309,7 +324,7 @@ async function keywordData(site: string, pack: Pack): Promise<Market> {
   }
   if (ourDomain) tries.push(rankedKeywords(w, JOB, ourDomain, 50).then((k) => void (out.ours = k)));
   for (const d of competitorDomains) {
-    tries.push(rankedKeywords(w, JOB, d, 30).then((k) => void out.competitors.push({ domain: d, keywords: k })));
+    tries.push(rankedKeywords(w, JOB, d.domain, 30).then((k) => void out.competitors.push({ domain: d.domain, keywords: k, named: d.named })));
   }
   const settled = await Promise.allSettled(tries);
   for (const r of settled) if (r.status === "rejected") console.warn(`strategist keyword data: ${(r.reason as Error).message}`);
@@ -334,12 +349,16 @@ Think about the reader, not the company: the rules they follow, the forms they f
 
 Also pick, from the searches the company already ranks for, the ones that are never a target for its blog: its own name and product names, and pages it hosts for its customers (a customer's menu, portal, login or listing). Copy those exactly.
 
-Answer with JSON only: {"job": "one line: who the reader is and what job the searches come from", "searches": ["...", "..."], "notTargets": ["...", "..."]}`;
+Also give the website of each competitor they named, as you know the company: its own domain ("jasper.ai"), the right company even when they misspelled the name, and an empty domain when you don't know it.
+
+Answer with JSON only: {"job": "one line: who the reader is and what job the searches come from", "searches": ["...", "..."], "notTargets": ["...", "..."], "competitors": [{"name": "the name as they typed it", "domain": "example.com"}]}`;
 
 interface Vocabulary {
   job: string;
   searches: string[];
   notTargets: string[];
+  /** The competitors they named, resolved to the company's site by the model (a misspelled name's web search lands anywhere). */
+  competitors: { name: string; domain: string }[];
 }
 
 function parseVocabulary(value: unknown): Vocabulary {
@@ -351,6 +370,12 @@ function parseVocabulary(value: unknown): Vocabulary {
     job: str(o.job, "job", { optional: true, max: 300 }).trim(),
     searches: searches.slice(0, 80),
     notTargets: [...new Set(arr(o.notTargets, "notTargets", { optional: true }).map((s, i) => phrase(str(s, `notTargets[${i}]`, { max: 200 }))).filter(Boolean))],
+    competitors: arr(o.competitors, "competitors", { optional: true })
+      .map((c, i) => {
+        const x = obj(c, `competitors[${i}]`);
+        return { name: str(x.name, `competitors[${i}].name`, { optional: true, max: 100 }).trim(), domain: siteOf(hostOf(str(x.domain, `competitors[${i}].domain`, { optional: true, max: 200 }).trim())) };
+      })
+      .filter((c) => c.name && c.domain.includes(".")),
   };
 }
 
@@ -405,9 +430,9 @@ function rankerKind(domain: string, competitors: string[]): RankerKind {
 }
 
 /** Price the job's vocabulary wide, then ask who ranks across the biggest of it. One DBOS step; each call that fails is logged and skipped. */
-async function readerSearches(site: string, pack: Pack, vocab: Vocabulary, m: Market): Promise<Pick<Market, "priced" | "whoRanks" | "rankedFor">> {
+async function readerSearches(site: string, pack: Pack, vocab: Vocabulary, m: Market): Promise<Pick<Market, "priced" | "whoRanks" | "rankedFor" | "competitors">> {
   const w = { site, ...LOCATION };
-  const out: Pick<Market, "priced" | "whoRanks" | "rankedFor"> = { priced: [], whoRanks: [], rankedFor: [] };
+  const out: Pick<Market, "priced" | "whoRanks" | "rankedFor" | "competitors"> = { priced: [], whoRanks: [], rankedFor: [], competitors: m.competitors };
   if (!dataForSeoConfigured() || !vocab.searches.length) return out;
   const byQuery = new Map<string, Keyword>();
   try {
@@ -434,11 +459,26 @@ async function readerSearches(site: string, pack: Pack, vocab: Vocabulary, m: Ma
   }
   const priced = vocab.searches.map((q) => byQuery.get(q) ?? { keyword: q, volume: null, difficulty: null, position: null }).sort((a, b) => (b.volume ?? -1) - (a.volume ?? -1));
   out.priced = priced;
+  // The competitors they named, as the model knows them: a bare name's web
+  // search lands anywhere ("jesper" went to a fantasy fan site, 2026-10-22),
+  // so the model's domain replaces that guess and gets its own rankings.
+  const ourSite = siteOf(hostOf(pack.website));
+  for (const c of vocab.competitors) {
+    if (c.domain === ourSite || out.competitors.some((x) => siteOf(x.domain) === c.domain)) continue;
+    const wrong = out.competitors.find((x) => x.named && x.named.toLowerCase() === c.name.toLowerCase());
+    if (!wrong && out.competitors.length >= 3) continue;
+    try {
+      const keywords = await rankedKeywords(w, JOB, c.domain, 30);
+      out.competitors = [...out.competitors.filter((x) => x !== wrong), { domain: c.domain, keywords, named: c.name }];
+    } catch (err) {
+      console.warn(`strategist competitor ${c.domain}: ${(err as Error).message}`);
+    }
+  }
   // Who ranks across the ten biggest priced searches: the reader's page one today.
   const seeds = priced.filter((k) => k.volume !== null && k.volume >= 50).slice(0, 10).map((k) => k.keyword);
   if (seeds.length >= 3) {
     try {
-      const competitors = m.competitors.map((c) => c.domain);
+      const competitors = out.competitors.map((c) => c.domain);
       out.whoRanks = (await serpCompetitors(w, JOB, seeds, 25)).map((c) => ({ ...c, kind: rankerKind(c.domain, competitors) }));
       out.rankedFor = seeds;
     } catch (err) {
@@ -446,6 +486,17 @@ async function readerSearches(site: string, pack: Pack, vocab: Vocabulary, m: Ma
     }
   }
   return out;
+}
+
+/**
+ * The market as the next round reads it, small enough for the proposal row
+ * (strategy_proposals.inputs allows 200,000 bytes): `ours` already carries
+ * the Search Console queries, so `gsc.seen` goes, and `ours` stops at 100.
+ * Still over 150,000 characters: nothing is stored and the next round pulls again.
+ */
+export function storedMarket(m: Market): Market | null {
+  const slim: Market = { ...m, ours: m.ours.slice(0, 100), ...(m.gsc ? { gsc: { ...m.gsc, seen: [] } } : {}) };
+  return JSON.stringify(slim).length > 150_000 ? null : slim;
 }
 
 /** Who ranks for the tenant's own searches (at most 5, so at most 5 paid searches). */
@@ -468,8 +519,8 @@ async function whoRanks(site: string, pack: Pack): Promise<Market["serps"]> {
  * ("AirOps") is looked up with one web search and pickHost() chooses among
  * the results, so a tenant who types names still gets competitor keyword data.
  */
-async function competitorHosts(site: string, watch: string[], ourDomain: string): Promise<string[]> {
-  const hosts: string[] = [];
+async function competitorHosts(site: string, watch: string[], ourDomain: string): Promise<{ domain: string; named: string }[]> {
+  const hosts: { domain: string; named: string }[] = [];
   for (const line of watch) {
     if (hosts.length >= 2) break;
     let host = hostOf(line);
@@ -482,7 +533,7 @@ async function competitorHosts(site: string, watch: string[], ourDomain: string)
         host = "";
       }
     }
-    if (host && host.includes(".") && host !== ourDomain && !hosts.includes(host)) hosts.push(host);
+    if (host && host.includes(".") && host !== ourDomain && !hosts.some((h) => h.domain === host)) hosts.push({ domain: host, named: line.trim() });
   }
   return hosts;
 }
@@ -519,9 +570,9 @@ The rules (code checks them; a proposal that breaks one is sent back):
 2. The searches describe the reader; the site and the answers describe the company. Work in this order: group the priced searches into the jobs the reader is doing (a rule to follow, a form to file, a calculation to get right, a deadline, a tool to use), then make a topic of each group that has enough demand and enough to say, then write the summary from the topics. 1 to ${TOPICS_MAX} topics, best first, each a range (low to high) sized to its searches. A topic has a name and a thesis. The name is a label of 2 to 6 words, at most 60 characters, a plain noun phrase or statement the founder would say in a meeting ("Knowing what's true before writing", "One message across three channels"): never a product category, never one of their searches pasted back, never "cluster" or "pillar", and never a whole sentence. No two-part names ("Thing: explanation"), no second half that starts with an -ing verb, no negation set up to be knocked down ("X isn't a Y problem"): the title rules below say how. The thesis is one plain sentence: a claim about how the reader's work goes right or wrong that a quarter of posts can show and the reader can check against their own week. The company's product belongs in a thesis when its design is the answer to that claim (a choice the company made and competitors did not), and then the topic says so plainly; a headline, a slogan or a feature list is not a thesis, and no more than three topics are about what the product does. A number or a customer result is proof and goes in a post, not in a topic. Each topic is a different thing they know: no two topics restate one claim, and no one idea (a price, a customer, an example from their site) runs through more than one topic. A thesis is never an argument with the pages that rank today or with a competitor's claim: what ranks is context for the posts, never their cast. The first topic is the one a buyer reads before they buy, and it gets the biggest range. The low ends add up to at most the volume. In a revision, keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away.
 3. Every topic gets pitched from every source; there is no internal/external split.
 4. 3 to 8 watched sites, taken first from who ranks on page one for the reader's searches (the data lists them: regulators, state agencies, trade bodies), then the competitors they named. Each is a source that keeps publishing (a site, a blog index, a news section: the root or one path segment), never one article, whitepaper or listicle. Each tied to one topic, each with a why. The competitors they named are always in. Use real sites you know or that appear in the data; full https addresses. A site earns its place by authority in this niche (a known company, a study, a regulator, the trade press these buyers read), never by ranking for a search today; the why says in a few words who they are.
-5. ${SEARCHES_MIN} to ${SEARCHES_MAX} target searches, each marked with its bucket. "now" (10 to ${NOW_MAX}): winnable this quarter, which means difficulty under 30 and page one averaging under ${WINNABLE_MAX_LINKS} referring domains, or a search where they already sit on page two; the difficulty score alone is not enough, because government pages score easy and are not. "later" (${LATER_MIN} to ${LATER_MAX}, required when the data has them): the biggest searches the reader's job depends on, with page one up to about ${MUST_WIN_MAX_LINKS} referring domains, or difficulty up to ${MUST_WIN_MAX_DIFFICULTY} as long as page one stays under ${MUST_WIN_HARD_LINKS}, each with a position goal in its why (into the top 30, then the top 20) rather than page one; leaving an 18,000-a-month search out because it is hard is the founder's decision, not yours. "nodata" (at most ${NODATA_MAX}): a search the data has no number for, kept because the intent is exact. Each names one of the topics and is a question a post in that topic would literally answer. Take the searches from the priced data first; a search you add that the data doesn't list gets its numbers looked up before your proposal is checked. Use the 6-month trend and the peak month: a seasonal search gets its posts written two to three months before its peak and judged after it, and the why says so, even when the peak falls outside the quarter. A search the company ranks for by its own name, or a page it hosts for a customer, is never a target. A search whose page one is lists of tools ("best X", "top X tools", "X software") stays eligible: the why says the post answers the buyer's question behind the search and never argues with the lists. A new domain targets at most 2 on page one by quarter end, counted among the "now" searches. The AI-mention target comes from the searches where Google shows an AI overview: propose how many of those should cite one of the posts by quarter end (a new domain: 1 to 3); when none of the target searches has an overview, set it to null and say why.
+5. ${SEARCHES_MIN} to ${SEARCHES_MAX} target searches, each marked with its bucket. "now" (10 to ${NOW_MAX}): winnable this quarter, which means difficulty under 30 and page one averaging under ${WINNABLE_MAX_LINKS} referring domains, or a search where they already sit on page two, and under ${NEW_DOMAIN_MAX_VOLUME.toLocaleString("en-US")} searches a month while the domain ranks for nothing yet (a bigger one goes in "later"); the difficulty score alone is not enough, because government pages score easy and are not. "later" (${LATER_MIN} to ${LATER_MAX}, required when the data has them): the biggest searches the reader's job depends on, ${MUST_WIN_MIN_VOLUME} searches a month or more, with page one up to about ${MUST_WIN_MAX_LINKS} referring domains, or difficulty up to ${MUST_WIN_MAX_DIFFICULTY} as long as page one stays under ${MUST_WIN_HARD_LINKS}, each with a position goal in its why (into the top 30, then the top 20) rather than page one; leaving an 18,000-a-month search out because it is hard is the founder's decision, not yours. "nodata" (at most ${NODATA_MAX}): a search the data has no number for, kept because the intent is exact. Each names one of the topics and is a question a post in that topic would literally answer. Take the searches from the priced data first; a search you add that the data doesn't list gets its numbers looked up before your proposal is checked. Use the 6-month trend and the peak month: a seasonal search gets its posts written two to three months before its peak and judged after it, and the why says so, even when the peak falls outside the quarter. A search the company ranks for by its own name, or a page it hosts for a customer, is never a target. A search whose page one is lists of tools ("best X", "top X tools", "X software") stays eligible: the why says the post answers the buyer's question behind the search and never argues with the lists. A new domain targets at most 2 on page one by quarter end, counted among the "now" searches. The AI-mention target comes from the searches where Google shows an AI overview: propose how many of those should cite one of the posts by quarter end (a new domain: 1 to 3); when none of the target searches has an overview, set it to null and say why.
 6. No Readership target without 4 weeks of reader data: value null, and say a target comes after 4 weeks of readers.
-7. Every number has a why (one sentence a person would say out loud, the point first, under about 25 words, adding something they didn't already know and never restating the number) and a basis (what it came from). A basis quotes only what they actually said, what their site says, or a number from the data: "your answer: 8 posts a month", "their site says: no link farms", "DataForSEO: 320 searches/month, difficulty 12". Their site is not them talking to you: it is marketing copy, so a sentence from it is "their site says", never "you said" or "your answer", and a sentence the site repeats is repeated by the layout (a header, a footer, a card on every page), not because it is what the company cares about most. Never put words in their mouth: a default is called a default ("review capacity not answered; assumed 8 a month"), and anything you had to assume becomes a question.
+7. Every number has a why (one sentence a person would say out loud, the point first, under about 25 words, adding something they didn't already know and never restating the number) and a basis (what it came from). A basis quotes only what they actually said, what their site says, or a number from the data: "your answer: 8 posts a month", "their site says: no link farms", "DataForSEO: 320 searches/month, difficulty 12". Their site is not them talking to you: it is marketing copy, so a sentence from it is "their site says", never "you said" or "your answer", and a sentence the site repeats is repeated by the layout (a header, a footer, a card on every page), not because it is what the company cares about most. Never put words in their mouth: a default is called a default ("review capacity not answered; assumed 8 a month"), and anything you had to assume becomes a question. What they asked for this round is cited as "your request" with its gist in your own words, never quoted word for word.
 8. At most 3 questions: only what you couldn't decide alone. When their answers are thin (a blank, a one-liner, capacity not answered), ask at least one. A blank "coming up" answer is a blank: a deadline that changes what the posts should be (a rule taking effect, a season) goes in the plan with its name, in the same sentence as the date; a launch, a beta or an event is never a reason for a post on a blog, so it gets no question and no post. When what they asked for answers your earlier questions, those questions are settled: decide with their answers, never ask one again, and ask something new only when an answer leaves a choice you truly can't make alone. Where an answer is still vague, pick the sensible reading and say so in the basis.
 9. The summary is the strategy in one sentence the founder would say about the next three months, not a list of the numbers.
 10. Everything you write is read by one person at the company. Propaganda is "we"; never name an agent (no "the Strategist", "the Writer", "the Scout"), never "the tenant", never "your plan says" (it is "the plan"), and never a note about what we lack (an empty knowledge base, missing data) unless it is a question they can answer.
@@ -577,10 +628,13 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
     }).`,
     o.launch ? `They're new: a ${o.launch.target}-post Launch runs first and counts toward the volume.` : "",
     pack.rounds.previous
-      ? `\nYour previous proposal this quarter (this is a revision of it). Keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away. Summary: ${pack.rounds.previous.summary}\nTopics:\n${pack.rounds.previous.topics.map((t) => `- "${t.name}" (${t.low} to ${t.high})`).join("\n")}`
+      ? `\nYour previous proposal this quarter (this is a revision of it). Keep each topic's exact name unless they asked for that topic to change: their pitches hang on the names, and a reworded name throws the pitches away. A kept topic also keeps its target searches, unless they asked about the searches or the data no longer carries one; the searches of a dropped topic move to the topics that stay or to its replacement, so a request about one topic changes one topic. Summary: ${pack.rounds.previous.summary}\nTopics:\n${pack.rounds.previous.topics.map((t) => `- "${t.name}" (${t.low} to ${t.high})`).join("\n")}`
       : "",
     pack.rounds.answered.length
       ? `\nQuestions you asked in earlier rounds and their answers (settled: decide with them, never ask again):\n${pack.rounds.answered.map((a) => `- Q: ${a.question}\n  A: ${a.answer}`).join("\n")}`
+      : "",
+    pack.rounds.declined?.length
+      ? `\nQuestions you asked in earlier rounds that they left unanswered (their silence settles them: decide, say what you assumed in the basis, and never ask them again):\n${pack.rounds.declined.map((q) => `- ${q}`).join("\n")}`
       : "",
     pack.request ? `\nWhat they asked for:\n${pack.request}` : "",
     `\nTheir onboarding answers:\n- What they sell, who buys: ${a.offer || "(blank)"}\n- Searches they want to be found by: ${a.searches || "(blank)"}\n- Competitors and sites to watch: ${a.watch || "(blank)"}\n- Coming up in the next three months: ${a.upcoming || "(blank)"}`,
@@ -656,7 +710,9 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     const now = new Date(await DBOS.runStep(async () => new Date().toISOString(), { name: "now" }));
     const pack = await DBOS.runStep(() => gather(site, row.request, now, row.quarter), { name: "gather", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10 });
     // A run started before rounds existed replays its recorded gather output after a restart: no rounds yet.
-    pack.rounds ??= { answered: [], previous: null, perMonthAnswer: "" };
+    pack.rounds ??= { answered: [], declined: [], previous: null, perMonthAnswer: "" };
+    // Unanswered questions settled by silence (2026-10-22): a run recorded before keeps its draft and its questions.
+    pack.rounds.declined = (await DBOS.patch("strategist-declined")) ? (pack.rounds.declined ?? []) : [];
     const hasHistory = pack.history.publishedLastQuarter > 0;
     // Nothing to plan from: stop before spending a model call (and say what to answer).
     if (emptyBrief({ website: pack.website, answers: pack.answers, planText: pack.plan.text, planFiles: pack.plan.files.length, published: pack.history.publishedLastQuarter + pack.history.recentTitles.length })) {
@@ -677,8 +733,14 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     const searchesFirst = await DBOS.patch("strategist-searches-first");
     // Their own blog in the prompt and the rules (2026-10-21): a run recorded before keeps its draft.
     const theirBlog = await DBOS.patch("strategist-their-blog");
+    // A revision with the same answers and site reuses the previous round's
+    // data (2026-10-22: three rounds on one tenant paid the whole pull three
+    // times). A run recorded before pulls again.
+    const reuse = (await DBOS.patch("strategist-reuse-market")) ? (pack.rounds.previous?.market ?? null) : null;
     let m: Market;
-    if (await DBOS.patch("strategist-who-ranks-step")) {
+    if (reuse) {
+      m = reuse;
+    } else if (await DBOS.patch("strategist-who-ranks-step")) {
       m = await DBOS.runStep(() => keywordData(site, pack), { name: "keyword data" });
       // Their blog's real queries (2026-10-22): a run recorded before has none. A failed read never fails the plan.
       if (await DBOS.patch("strategist-search-console")) {
@@ -728,6 +790,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       seedSearches: lines(pack.answers.searches),
       thinAnswers: thinAnswers(pack.answers, pack.perMonthAnswered),
       answered: pack.rounds.answered,
+      declined: pack.rounds.declined,
       previousTopics: pack.rounds.previous?.topics.map((t) => t.name) ?? [],
       requestAboutTopics: asksAboutTopics(pack.request),
       theirPosts: theirBlog ? (pack.theirBlog?.posts.map((p) => p.title) ?? []) : [],
@@ -768,6 +831,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     // Searches the model proposed that the data never priced get their numbers
     // now, so the winnable check sees them and the proposal carries them.
     let priced = 0;
+    const pricedRows: Keyword[] = [];
     // A search DataForSEO has no row for is asked once: the fix draft doesn't
     // pay for it again (2026-10-12; a run recorded before asks twice, as it did).
     const priceOnce = await DBOS.patch("strategist-price-once");
@@ -778,6 +842,7 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       for (const q of missing) asked.add(q);
       const rows = await DBOS.runStep(() => priceSearches(site, missing, searchesFirst), { name: "price proposed searches" });
       for (const k of rows) keywords.set(k.keyword.toLowerCase(), k);
+      pricedRows.push(...rows);
       priced += rows.length;
     };
     let draft: Draft = keepTopicNames(await askJson("propose", ask, parseDraft), previousTopics);
@@ -837,6 +902,10 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
       planRead: Boolean(pack.plan.text || pack.plan.files.length),
       droppedSites: draft.watchedSites.length - readable.length,
       at: now.toISOString(),
+      // For the next round: the same answers and site reuse this data.
+      answers: pack.answers,
+      market: storedMarket(pricedRows.length ? { ...m, keywords: [...m.keywords, ...pricedRows] } : m),
+      reusedData: Boolean(reuse),
     };
     await DBOS.runStep(() => sendProposal(proposalId, site, proposal, inputs, MODELS.strategist), { name: "send" });
     // Day one: the first pitches, written while the person reads the plan
