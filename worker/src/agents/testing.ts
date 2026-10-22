@@ -30,8 +30,8 @@ export { similarity, nearest } from "./taste.js";
 export { voiceSuggest, diffDraft } from "./edits.js";
 // The Strategist.
 export { MAX_PLAN_ROUNDS, ROUND_LIMIT_ERROR } from "./strategy.js";
-export { windowFor, launchFor, volumeCap, validate, parseDraft, finish, weeklyNotes, winnable, batchCount, looksLikeSource, thinAnswers, pickHost, emptyBrief, effectiveKind, parseAnswers, sameQuestion, perMonthFromAnswers, keepTopicNames, asksAboutTopics, siteSentences, echoesSite, sameClaim, searchSeeds, relevantKeywords, bucketOf, mustWin, bucketNamed, restatesPost, TOPIC_NAME_MAX, TOPICS_MAX, SEARCHES_MIN, SEARCHES_MAX } from "./strategy.js";
-export { strategist, dispatchStrategist, settleStrategist, STOPPED_ERROR, strategistWeeklyCheck, strategistInput } from "../workflows/strategist.js";
+export { windowFor, launchFor, volumeCap, validate, parseDraft, finish, weeklyNotes, winnable, batchCount, looksLikeSource, thinAnswers, pickHost, emptyBrief, effectiveKind, parseAnswers, sameQuestion, sharedQuote, perMonthFromAnswers, keepTopicNames, asksAboutTopics, siteSentences, echoesSite, sameClaim, searchSeeds, relevantKeywords, bucketOf, mustWin, bucketNamed, restatesPost, TOPIC_NAME_MAX, TOPICS_MAX, SEARCHES_MIN, SEARCHES_MAX } from "./strategy.js";
+export { strategist, dispatchStrategist, settleStrategist, STOPPED_ERROR, strategistWeeklyCheck, strategistInput, storedMarket } from "../workflows/strategist.js";
 export { readGoals } from "./goals.js";
 // Day one (test/first-day.mjs).
 export { splitPitches, topicChanges, strongest, planSteps, dayOneQuota, isLiteById, replacementLearned, searchesFor, goalsFromProposal, parseTopicPitches, PLAN_STEPS } from "./first-day.js";

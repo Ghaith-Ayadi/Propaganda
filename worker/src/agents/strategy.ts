@@ -331,6 +331,8 @@ export interface Rules {
   thinAnswers?: boolean;
   /** Questions earlier rounds asked that the person answered: settled, never asked again. */
   answered?: Answered[];
+  /** Questions earlier rounds asked that got no answer: the person moved on, so they are settled too. */
+  declined?: string[];
   /** The previous proposal's topic names (a revision): kept unless the request is about the topics. */
   previousTopics?: string[];
   /** The revision's request talks about the topics, so renaming them is what was asked. */
@@ -578,6 +580,13 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 /** The two questions ask the same thing (half their meaningful words in common). */
 export function sameQuestion(a: string, b: string): boolean {
   return jaccard(contentWords(a), contentWords(b)) >= 0.5;
+}
+
+/** Two questions about the same quoted thing (a search, a name): "'one pager template' brings 12,100..." and "\"one pager template\" gets 12,100...". */
+export function sharedQuote(a: string, b: string): boolean {
+  const quotes = (s: string) => new Set([...s.matchAll(/["'\u201c\u201d\u2018\u2019]([^"'\u201c\u201d\u2018\u2019]{3,80})["'\u201c\u201d\u2018\u2019]/g)].map((m) => m[1]!.trim().toLowerCase()));
+  const qa = quotes(a);
+  return [...quotes(b)].some((q) => qa.has(q));
 }
 
 const CAPACITY = /\b(review|reviewer|posts? (a|per) month|a month|per month|capacity|how many posts)\b/i;
@@ -1009,6 +1018,11 @@ export function validate(d: Draft, r: Rules): string[] {
     const earlier = (r.answered ?? []).find((a) => sameQuestion(a.question, q));
     if (earlier) {
       errors.push(`You already asked "${earlier.question}" and they answered: "${earlier.answer}". That is settled: decide with their answer and drop the question (rule 8).`);
+      continue;
+    }
+    const declined = (r.declined ?? []).find((p) => sameQuestion(p, q) || sharedQuote(p, q));
+    if (declined) {
+      errors.push(`You asked "${declined}" in an earlier round and they moved on without answering. Their silence settles it: decide, say what you assumed in the basis, and drop the question (rule 8).`);
     }
   }
   const previous = r.previousTopics ?? [];
