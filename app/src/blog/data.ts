@@ -23,8 +23,9 @@ export { blogAddress, type BlogPost };
 
 // A site's published posts. Undated ones sort as PocketBase sorted its "":
 // last when newest first, first when oldest first.
-const publishedPosts = (siteId: string, fields = postFields) =>
-  publicSb.from("posts").select(fields).eq("site", siteId).eq("status", "published");
+const publishedPosts = (siteId: string, fields: string = postFields) =>
+  // Typed as the full list: the legacy list is the same minus one optional column.
+  publicSb.from("posts").select(fields as typeof PUBLIC_FIELDS).eq("site", siteId).eq("status", "published");
 // The app can run ahead of the schema (the box follows the release tag): a server from
 // before migration 20261010000190 rejects `content_updated`, so read without it from then on.
 let postFields: string = PUBLIC_FIELDS;
