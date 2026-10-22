@@ -10,9 +10,12 @@
 import type { ReactNode } from "react";
 import { cx } from "@/utils/cx";
 
+// The edge is a real border, not an inset ring: an inset ring is a shadow
+// painted under the children, so a row with its own background (a selected or
+// hovered list item) covered it and the card's corner looked cut.
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cx("overflow-hidden rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", className)}>
+    <section className={cx("overflow-hidden rounded-xl border border-secondary bg-primary shadow-xs", className)}>
       {children}
     </section>
   );
