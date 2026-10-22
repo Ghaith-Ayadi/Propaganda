@@ -190,8 +190,17 @@ const web = async (input, init) => {
     const html = `<html><head><title>Temporal study</title><script>evil()</script></head><body><nav>menu</nav><article><h1>Study</h1><p>${"Batch jobs fail 37% more often at night, according to the 2026 survey of 400 teams. ".repeat(8)}</p></article></body></html>`;
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
   }
+  if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "gsc-token", expires_in: 3600 });
+  if (url.startsWith("https://www.googleapis.com/webmasters/v3/sites/")) {
+    gscAsked.push(JSON.parse(init.body));
+    return Response.json({ rows: [
+      { keys: ["silent cron failures"], clicks: 0, impressions: 90, position: 14.6 },
+      { keys: ["retry storm"], clicks: 0, impressions: 60, position: 41 },
+    ] });
+  }
   throw new Error(`stand-in web: unexpected fetch ${url}`);
 };
+const gscAsked = [];
 
 // ---- a stand-in model ----
 
@@ -621,12 +630,21 @@ try {
     { id: "taste0000000001", site: SITE, at: "2026-10-08T15:00:00.000Z", actor: "u1", object_kind: "pitch", object_id: p1.id, decision: "approved", reason: "", notes: null, title: p1.title, topic: "", angle: "", origin: "plan" },
     { id: "taste0000000002", site: SITE, at: "2026-10-08T15:01:00.000Z", actor: "u1", object_kind: "pitch", object_id: p2.id, decision: "rejected", reason: "No listicles, ever.", notes: null, title: p2.title, topic: "", angle: "", origin: "plan" },
   );
+  const { generateKeyPairSync } = await import("node:crypto");
+  const gscKey = { client_email: "gsc@example.iam.gserviceaccount.com", private_key: generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }) };
+  process.env.GSC_SERVICE_ACCOUNT_JSON = Buffer.from(JSON.stringify(gscKey)).toString("base64");
+  // Search Console is read with the global fetch, not the web module's.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => (/googleapis\.com/.test(String(input)) ? web(input, init) : realFetch(input, init));
   const q2 = await runBatch("asked", "2026-10-08", g4);
+  globalThis.fetch = realFetch;
+  delete process.env.GSC_SERVICE_ACCOUNT_JSON;
   check(q2.closed.includes(q1.released), "a batch that reached its quota closes");
   check(q2.released === q1.released + 1, `"next batch" sends one now (batch ${q2.released})`);
   check(db.taste_profiles[0]?.summary.includes("Rejects listicles") && db.taste_profiles[0].summary_through === "2026-10-08T15:01:00.000Z", "the Pitcher rewrote the taste summary from the new decisions");
   const pitchPrompt = prompts.filter((x) => x.includes("Write the pitch")).pop();
   check(pitchPrompt.includes("No listicles, ever.") && pitchPrompt.includes("Rejects listicles"), "and read the decisions and the summary before pitching");
+  check(pitchPrompt.includes("Search Console, this blog's real numbers") && pitchPrompt.includes('- "silent cron failures": position 15, 90 impressions') && pitchPrompt.includes('- "retry storm": position 41') && gscAsked.length === 1 && gscAsked[0].dimensionFilterGroups[0].filters[0].expression === "^https://kontra\\.propaganda\\.pub/", "the pitch sees the blog's real queries, read once for the batch");
   const learnedBrief = db.briefs.find((b) => b.id === q2.pitched[0]?.brief);
   check(learnedBrief?.learned === "Written after your note: no listicles." && learnedBrief.body.includes("_Written after your note"), "each pitch says what it learned");
   // Batch 2: both rejected. The next morning tops it up, the same week sends no new batch.

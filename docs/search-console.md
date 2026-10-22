@@ -17,5 +17,7 @@ The Strategist reads how a tenant's own blog does in Google (`worker/src/agents/
   off page one (position 11 to 30) and searches seen often but barely ranked (past 30). A row seen
   fewer than 10 times counts for neither. A failed read is logged and the plan goes on without it.
 - **Cost.** The API is free, so nothing is written to `model_calls`.
-- **Not yet.** A weekly snapshot table (trends need one; it is a migration), the weekly Pitcher
-  reading the same data, and custom-domain OAuth.
+- **The Pitcher** reads the same two lists once per batch (step `search console`, behind
+  `DBOS.patch("pitcher-search-console")`) and puts them in each pitch prompt, so a pitch can aim at a
+  search just off page one or at a question no post answers. A failed read leaves the prompt as it was.
+- **Not yet.** A weekly snapshot table (trends need one; it is a migration) and custom-domain OAuth.
