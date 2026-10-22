@@ -91,7 +91,7 @@ export function FirstPitches({ day, progress, continuing }: { day: FirstDay; pro
                 ? "You didn't approve any post. A rejection with a reason gets a replacement here; everything else waits in the Pipeline."
                 : failedDrafts > 0 && drafting === 0
                   ? `You approved ${approved} ${approved === 1 ? "post" : "posts"}, but we couldn't finish writing ${failedDrafts === 1 ? "one" : "them"}. Nothing is lost: your approved posts are in the Pipeline.`
-                  : `You approved ${approved} ${approved === 1 ? "post" : "posts"}. Give the writer a few moments before you can review your first ${approved === 1 ? "post" : "posts"}.`}
+                  : `You approved ${approved} ${approved === 1 ? "post" : "posts"}. Give us a few moments before you can review your first ${approved === 1 ? "post" : "posts"}.`}
             </p>
           </div>
           {(approved === 0 || (failedDrafts > 0 && drafting === 0)) && (
