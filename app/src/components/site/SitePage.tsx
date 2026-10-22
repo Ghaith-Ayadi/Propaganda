@@ -276,7 +276,7 @@ function AddressRow({ label, note, live }: { label: string; note: string; live?:
 /** Headless tenants: the pitch for hosting with us. */
 function PitchCard({ where }: { where: string }) {
   return (
-    <Card className="ring-2 ring-primary">
+    <Card className="ring-2 ring-inset ring-primary">
       <CardHeader title={`Move it off ${where}`} description="Your blog is hosted elsewhere, so this card is our pitch." />
       <CardBody>
         <ul className="space-y-2 text-sm text-secondary">
