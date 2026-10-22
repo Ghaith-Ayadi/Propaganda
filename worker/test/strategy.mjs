@@ -153,6 +153,14 @@ const richItem = (k, links = 8) => ({
   search_intent_info: { main_intent: "informational" },
 });
 const calls = [];
+const gscCalls = [];
+const GSC_ROWS = [
+  { keys: ["batch job retries"], clicks: 4, impressions: 120, position: 3.2 },
+  { keys: ["silent cron failures"], clicks: 0, impressions: 90, position: 14.6 },
+  { keys: ["retry storm"], clicks: 0, impressions: 60, position: 41 },
+  { keys: ["kontra login"], clicks: 9, impressions: 12, position: 1 },
+  { keys: ["rare query"], clicks: 0, impressions: 3, position: 22 },
+];
 const realFetch = globalThis.fetch;
 async function web(input, init) {
   const url = String(input);
@@ -184,6 +192,15 @@ async function web(input, init) {
     if (url.includes("serp/google/organic")) {
       return Response.json({ cost: 0.002, tasks: [{ status_code: 20000, result: [{ items: [{ type: "organic", url: "https://prefect.io/blog/retries", title: "Retries", rank_absolute: 1 }] }] }] });
     }
+  }
+  if (url === "https://oauth2.googleapis.com/token") {
+    gscCalls.push({ url, body: String(init.body) });
+    return Response.json({ access_token: "gsc-token", expires_in: 3600 });
+  }
+  if (url.startsWith("https://www.googleapis.com/webmasters/v3/sites/")) {
+    const body = JSON.parse(init.body);
+    gscCalls.push({ url, body, auth: init.headers.authorization });
+    return Response.json({ rows: GSC_ROWS });
   }
   if (url.startsWith(WEB)) {
     if (url.includes("/dead")) return new Response("gone", { status: 404 });
@@ -505,6 +522,27 @@ try {
   check(late.some((n) => n.goal === "ranking") && late.length <= 3, "page one going down two weeks running; at most 3 notes");
   check(t.weeklyNotes(targets, { now: new Date("2026-11-02T06:00:00Z"), from, to, published: 7, publishedByTopic: { Reliability: 4, "Scraping at scale": 3 }, pageOneTrend: [] }).length === 0, "on track: nothing");
 
+  console.log("search console");
+  const { generateKeyPairSync, createVerify } = await import("node:crypto");
+  const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const saKey = { client_email: "propaganda-gsc@propaganda-seo.iam.gserviceaccount.com", private_key: pair.privateKey.export({ type: "pkcs8", format: "pem" }) };
+  check(t.gscHost("kontra.propaganda.pub") === "kontra.propaganda.pub" && t.gscHost("https://Kontra.Propaganda.pub/") === "kontra.propaganda.pub", "a hosted blog is read under its host");
+  check(t.gscHost("verbatim.ayadighaith.com") === null && t.gscHost("propaganda.pub") === null && t.gscHost("") === null, "a custom domain, the bare property and nothing are not ours to read");
+  check((await t.searchConsoleFor("kontra.propaganda.pub")) === null && gscCalls.length === 0, "without the key it reads nothing and asks nobody");
+  const jwt = t.tokenAssertion(saKey, 1_800_000_000).split(".");
+  const jwtClaims = JSON.parse(Buffer.from(jwt[1], "base64url"));
+  check(JSON.parse(Buffer.from(jwt[0], "base64url")).alg === "RS256" && jwtClaims.iss === saKey.client_email && jwtClaims.scope.endsWith("/webmasters.readonly") && jwtClaims.exp - jwtClaims.iat === 3600, "the sign-in request names the account and a read-only scope");
+  check(createVerify("RSA-SHA256").update(`${jwt[0]}.${jwt[1]}`).verify(pair.publicKey, Buffer.from(jwt[2], "base64url")), "and is signed with the account's key");
+  const seen = t.insights(GSC_ROWS.map((r) => ({ query: r.keys[0], clicks: r.clicks, impressions: r.impressions, position: r.position })));
+  check(seen.seen.length === 5 && seen.seen[0].keyword === "batch job retries" && seen.seen[0].position === 3 && seen.impressions === 285 && seen.clicks === 13, `every query becomes a keyword with its real position (${seen.seen.map((k) => `${k.keyword}#${k.position}`).join(", ")})`);
+  check(seen.striking.map((k) => k.keyword).join() === "silent cron failures" && seen.unanswered.map((k) => k.keyword).join() === "retry storm", "page two is striking distance, past 30 is unanswered, and a row seen under 10 times counts for neither");
+  process.env.GSC_SERVICE_ACCOUNT_JSON = Buffer.from(JSON.stringify(saKey)).toString("base64");
+  const read = await t.searchConsoleFor("kontra.propaganda.pub");
+  const asked = gscCalls.find((c) => c.url.includes("searchAnalytics"));
+  check(read?.seen.length === 5 && asked.url.includes(encodeURIComponent("sc-domain:propaganda.pub")) && asked.auth === "Bearer gsc-token" && asked.body.dimensionFilterGroups[0].filters[0].operator === "includingRegex" && asked.body.dimensionFilterGroups[0].filters[0].expression === "^https://kontra\\.propaganda\\.pub/", "a read asks the property for the blog's pages only");
+  check((await t.searchConsoleFor("verbatim.ayadighaith.com")) === null, "a custom domain is never asked");
+  gscCalls.length = 0;
+
   console.log("a run, end to end");
   db.strategy_proposals.push({ id: "proposal0000001", site: SITE, quarter: "2026-Q4", kind: "onboarding", status: "requested", request: "", requested_by: "u1", proposal: null, edits: null, created: new Date().toISOString(), approved_at: null });
   answers = [{ ...GOOD, volume: r(40) }, GOOD];
@@ -516,6 +554,8 @@ try {
   check(res.status === "sent" && row.status === "sent" && row.sent_at, `sent (${JSON.stringify(res)}, ${row.error ?? ""})`);
   check(prompts.length === 2 && prompts[1].includes("most allowed is"), "a draft over the cap went back once with the error");
   check(prompts[0].includes("Durable batch jobs for platform teams") && prompts[0].includes("Focus on reliability first") && prompts[0].includes("Rejects listicles"), "the prompt carries the answers, the plan and the taste summary");
+  check(prompts[0].includes("Search Console, their own blog's real numbers") && prompts[0].includes("- silent cron failures: 90 impressions, 0 clicks in 90 days, we rank #15") && prompts[0].includes("- retry storm: 60 impressions, 0 clicks in 90 days, we rank #41"), "the prompt carries the blog's real queries: striking distance and unanswered");
+  check(gscCalls.filter((c) => c.url.includes("searchAnalytics")).length === 1, "and Search Console is read once for the run");
   // The cap follows the weeks left in the quarter, so it depends on today's date.
   const weeks = Number(/\((\d+) weeks\)/.exec(prompts[0])?.[1]);
   const cap = t.volumeCap({ weeks, perMonth: 8, lastQuarterPublished: null });

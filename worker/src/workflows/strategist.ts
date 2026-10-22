@@ -92,6 +92,7 @@ import {
   TOPICS_MAX,
   WINNABLE_MAX_LINKS,
 } from "../agents/strategy.js";
+import { type SearchConsole, searchConsoleFor } from "../agents/gsc.js";
 import { batchCadence } from "../agents/store.js";
 import { adsSearchVolume, dataForSeoConfigured, type KeywordRow, keywordOverview, keywordSuggestions, rankedKeywords, relatedKeywords, serpCompetitors } from "../scout/dataforseo.js";
 import { AGENT_QUEUE, registerAgent, startOnceForTenant, type DispatchInput } from "./agents.js";
@@ -278,6 +279,8 @@ interface Market {
   rankedFor?: string[];
   /** Lower-cased queries that are never a target: the company's names and the pages it hosts for customers. */
   notTargets?: string[];
+  /** Their own blog's real queries (Search Console, 2026-10-22). Absent when not connected or on a run recorded before. */
+  gsc?: SearchConsole;
 }
 
 async function market(site: string, pack: Pack): Promise<Market> {
@@ -545,7 +548,8 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 /** One keyword as a line of the prompt: the number first, then what else the data says. */
 function keywordLine(k: Keyword): string {
-  const parts = [k.volume === null ? "no data" : `${k.volume}/month`];
+  const parts = k.volume === null && typeof k.impressions === "number" ? [] : [k.volume === null ? "no data" : `${k.volume}/month`];
+  if (typeof k.impressions === "number") parts.push(`${k.impressions} impressions, ${k.clicks ?? 0} clicks in 90 days`);
   if (k.volume !== null || k.difficulty !== null) parts.push(`difficulty ${k.difficulty ?? "?"}`);
   if (typeof k.referringDomains === "number") parts.push(`page one averages ${k.referringDomains} referring domains`);
   if (typeof k.trend6 === "number") parts.push(`6-month trend ${k.trend6 >= 0 ? "+" : ""}${k.trend6}%`);
@@ -615,6 +619,9 @@ function promptFor(pack: Pack, m: Market, o: { kind: ProposalKind; quarter: stri
       : "",
     `\nDataForSEO, searches that contain theirs or sit next to them (relevant first, then by volume):\n${kw(m.keywords, 60)}`,
     `\nSearches they already rank for:\n${kw(ours, 25)}`,
+    m.gsc
+      ? `\nSearch Console, their own blog's real numbers for the last ${m.gsc.days} days (${m.gsc.impressions} impressions, ${m.gsc.clicks} clicks). It is what the posts really do, so it outranks the estimates above wherever they differ.\nSearches just off page one (average position 11 to 30), the cheapest wins; a post that answers one better belongs ahead of a new search:\n${kw(m.gsc.striking, 15)}\nSearches people ran that their posts barely appear for (past position 30), questions the blog does not answer yet:\n${kw(m.gsc.unanswered, 15)}`
+      : "",
     o.searchesFirst && notTargets.size
       ? `\nNever targets (the company's own name, and pages it hosts for customers; context only): ${[...notTargets].slice(0, 30).join("; ")}`
       : "",
@@ -673,6 +680,24 @@ async function strategistRun(proposalId: string): Promise<{ status: "sent" | "fa
     let m: Market;
     if (await DBOS.patch("strategist-who-ranks-step")) {
       m = await DBOS.runStep(() => keywordData(site, pack), { name: "keyword data" });
+      // Their blog's real queries (2026-10-22): a run recorded before has none. A failed read never fails the plan.
+      if (await DBOS.patch("strategist-search-console")) {
+        const gsc = await DBOS.runStep(
+          async () => {
+            try {
+              return await searchConsoleFor(pack.site.blog);
+            } catch (err) {
+              console.warn(`strategist search console: ${(err as Error).message}`);
+              return null;
+            }
+          },
+          { name: "search console" },
+        );
+        if (gsc) {
+          const seen = new Set(gsc.seen.map((k) => k.keyword.toLowerCase()));
+          m = { ...m, gsc, ours: [...gsc.seen, ...m.ours.filter((k) => !seen.has(k.keyword.toLowerCase()))] };
+        }
+      }
       if (searchesFirst) {
         let vocab: Vocabulary | null = null;
         try {
