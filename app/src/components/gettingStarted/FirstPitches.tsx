@@ -13,6 +13,7 @@ import { approvePitch, notNowPitch, rejectPitch, usePipeline } from "@/lib/pipel
 import { FIT_LABEL, fitGrade } from "@/lib/pipeline/fit";
 import type { PipelineItem } from "@/lib/pipeline/types";
 import { userMessage } from "@/lib/errors";
+import { goPage } from "@/lib/route";
 import { reportError, track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
 import { Field, Spinner, StepTitle } from "./bits";
@@ -38,6 +39,11 @@ export function FirstPitches({ day, progress, continuing }: { day: FirstDay; pro
   const published = pitches.filter((p) => p.stage === "published").length;
   const ready = pitches.find((p) => p.stage !== "rejected" && p.stage !== "published" && p.stage !== "not_now" && draftState(p, day, progress) === "ready");
   const [open, setOpen] = useState<string | null>(null);
+  // Every pitch decided and no draft to open yet: say where things stand instead of leaving a finished list.
+  const inProgress = pitches.filter((p) => ["writing", "in_review", "scheduled"].includes(p.stage));
+  const drafting = inProgress.filter((p) => draftState(p, day, progress) === "writing").length;
+  const failedDrafts = inProgress.filter((p) => draftState(p, day, progress) === "failed").length;
+  const allDecided = pitches.length > 0 && waiting === 0 && !ready && published === 0;
   // The plan's pitching is over (or never started) and nothing came: say so instead of spinning.
   const pp = progress?.proposalId === day.proposal?.id ? progress?.pitches : undefined;
   const pitchingEnded = pp === null || (!!pp && (!!pp.failed || (pp.topics > 0 && pp.topicsDone >= pp.topics)));
@@ -70,6 +76,29 @@ export function FirstPitches({ day, progress, continuing }: { day: FirstDay; pro
           <Button size="sm" iconTrailing={ArrowRight} onClick={() => openFromStart(ready.postId!)}>
             Open the draft
           </Button>
+        </div>
+      )}
+
+      {allDecided && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-secondary px-4 py-3">
+          {drafting > 0 && <Spinner />}
+          <div className="min-w-0 flex-1 text-sm text-primary">
+            <p className="font-medium">
+              {pitches.length}/{pitches.length} reviewed 🥳
+            </p>
+            <p className="mt-0.5 text-secondary">
+              {approved === 0
+                ? "You didn't approve any post. A rejection with a reason gets a replacement here; everything else waits in the Pipeline."
+                : failedDrafts > 0 && drafting === 0
+                  ? `You approved ${approved} ${approved === 1 ? "post" : "posts"}, but we couldn't finish writing ${failedDrafts === 1 ? "one" : "them"}. Nothing is lost: your approved posts are in the Pipeline.`
+                  : `You approved ${approved} ${approved === 1 ? "post" : "posts"}. Give the writer a few moments before you can review your first ${approved === 1 ? "post" : "posts"}.`}
+            </p>
+          </div>
+          {(approved === 0 || (failedDrafts > 0 && drafting === 0)) && (
+            <Button size="sm" color="secondary" iconTrailing={ArrowRight} onClick={() => goPage("pipeline")}>
+              Open the Pipeline
+            </Button>
+          )}
         </div>
       )}
 
