@@ -33,7 +33,9 @@ import { ATTRIBUTES_WIDTH, clampWidth, useLayout } from "@/lib/layout";
 import { ReviewPanel } from "@/components/pipeline/ReviewPanel";
 import { CommentsPanel, useOpenCommentCount } from "@/components/CommentsPanel";
 import { useCommentFocus } from "@/lib/comments/focus";
-import { usePipelineItemForPost } from "@/lib/pipeline/store";
+import { personById, setPublishBy, usePipeline, usePipelineItemForPost, useWriterStarted, writeNow } from "@/lib/pipeline/store";
+import { ordinalDay } from "@/lib/pipeline/dates";
+import { toast } from "@/components/base/toast/toast";
 import { useReviewState } from "@/lib/review/store";
 
 interface Props {
@@ -182,6 +184,8 @@ export function AttributePanel({ post }: Props) {
         </Tabs.Panel>
 
         <Tabs.Panel id="details" className="flex flex-col gap-5">
+      <WritingTask post={post} />
+
       <FieldStack label="Status">
         <StatusGroup
           value={status}
@@ -340,6 +344,60 @@ function FieldStack({ label, children }: { label: string; children: React.ReactN
       <div className="mb-1.5 text-sm font-medium text-secondary">{label}</div>
       {children}
     </div>
+  );
+}
+
+/** A post in Writing reads as a task: who writes it, the date it is planned for, and a way to start it now. */
+function WritingTask({ post }: { post: Post }) {
+  const item = usePipelineItemForPost(post.id);
+  const { people } = usePipeline();
+  const started = useWriterStarted(post.id);
+  const [busy, setBusy] = useState(false);
+  if (!item || item.stage !== "writing") return null;
+  const writer = personById(people, item.writerId);
+  const waiting = !!writer?.agent && !post.content?.trim();
+
+  const start = async () => {
+    setBusy(true);
+    try {
+      const why = await writeNow(item.id);
+      toast.add(
+        why
+          ? { type: "error", title: "Writing didn't start", description: `${why.charAt(0).toUpperCase()}${why.slice(1)}.` }
+          : { type: "success", title: "We're on it", description: "The text shows up here when it's ready." },
+      );
+    } catch {
+      toast.add({ type: "error", title: "Couldn't start writing", description: "Try again in a moment." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <FieldStack label="Writing">
+      <div className="flex flex-col gap-3 rounded-lg border border-secondary bg-primary p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-tertiary">Assignee</span>
+          <span className="text-sm text-primary">{writer?.name ?? "No one yet"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-tertiary">Planned for</span>
+          <span className="text-sm text-primary">{ordinalDay(item.publishBy)}</span>
+        </div>
+        <input
+          type="date"
+          aria-label="Planned date"
+          value={item.publishBy}
+          onChange={(e) => e.target.value && setPublishBy(item.id, e.target.value)}
+          className="rounded-lg bg-primary px-3 py-1.5 text-sm text-primary shadow-xs ring-1 ring-primary outline-hidden ring-inset focus:ring-2 focus:ring-brand"
+        />
+        {waiting && (
+          <Button size="sm" color="primary" isDisabled={started} isLoading={busy} onClick={() => void start()}>
+            {started ? "Writing…" : "Write now"}
+          </Button>
+        )}
+      </div>
+    </FieldStack>
   );
 }
 

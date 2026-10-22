@@ -44,3 +44,13 @@ export function weekLabel(start: Date): string {
   const a = `${MONTH.format(start)} ${start.getDate()}`;
   return start.getMonth() === end.getMonth() ? `${a} to ${end.getDate()}` : `${a} to ${MONTH.format(end)} ${end.getDate()}`;
 }
+
+const LONG_WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "long" });
+
+/** "Monday 9th" */
+export function ordinalDay(s: string): string {
+  const d = parseYmd(s);
+  const n = d.getDate();
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${LONG_WEEKDAY.format(d)} ${n}${suffix}`;
+}

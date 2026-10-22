@@ -10,7 +10,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useFlip } from "@/lib/motion/useFlip";
-import { Plus } from "@untitledui/icons";
+import { DotsHorizontal, Plus, Zap } from "@untitledui/icons";
+import { ActionMenu } from "@/components/Menu";
 import { Button } from "@/components/base/buttons/button";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { toast } from "@/components/base/toast/toast";
@@ -25,6 +26,7 @@ import {
   isReleased,
   personById,
   usePipeline,
+  writeAllNow,
 } from "@/lib/pipeline/store";
 import {
   BOARD_STAGES,
@@ -208,6 +210,21 @@ function Column({
   const addable = ADDABLE.includes(stage);
   const canAssign = stage === "writing";
 
+  /** Start the Writer on everything in this column it has not started on. */
+  const writeAll = async () => {
+    try {
+      const { started, notStarted } = await writeAllNow();
+      toast.add({
+        type: notStarted.length ? "warning" : "success",
+        title: started ? `Writing ${started} now` : "Nothing waiting to be written",
+        description: notStarted[0] ?? (started ? "Each draft shows up here when it's ready." : "Every post in Writing is being written or has text."),
+      });
+    } catch (err) {
+      reportError("pipeline.writeAllNow", err);
+      toast.add({ type: "error", title: "Couldn't start writing", description: "Try again in a moment." });
+    }
+  };
+
   const close = () => {
     setAdding(false);
     setTitle("");
@@ -265,6 +282,14 @@ function Column({
             {items.length}
           </span>
         </span>
+        <div className="flex items-center gap-1">
+        {stage === "writing" && (
+          <ActionMenu
+            triggerClassName="flex size-6 items-center justify-center rounded-md text-quaternary outline-none transition hover:bg-primary_hover hover:text-secondary data-[pressed]:bg-primary_hover"
+            trigger={<DotsHorizontal className="size-4" data-icon aria-label="More for Writing" />}
+            items={[{ id: "write-all", label: "Write all now", icon: <Zap className="size-4" />, onAction: () => void writeAll() }]}
+          />
+        )}
         {addable && (
           <ButtonUtility
             size="xs"
@@ -278,6 +303,7 @@ function Column({
             onClick={() => setAdding(true)}
           />
         )}
+        </div>
       </div>
       {adding && (
         <form
