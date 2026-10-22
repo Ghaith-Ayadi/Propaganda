@@ -36,19 +36,26 @@ const CODE_SECONDS = 300;
 /** The person has this long on the consent page. */
 const REQUEST_SECONDS = 1800;
 
+function allowedHosts(): string[] {
+  const extra = (process.env.MCP_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+  return ["app.propaganda.pub", "dev.propaganda.pub", ...extra];
+}
+
 /**
  * The public origin: the app host the request came in on (Caddy keeps the Host
  * and sends only the app host's paths here), which serves the app, the API and
  * the worker. SUPABASE_URL can be an inside address (the dev box's), so it is
- * only the fallback. MCP_PUBLIC_URL overrides both.
+ * only the fallback. MCP_PUBLIC_URL overrides both. Only the platform's app
+ * hosts (and MCP_ALLOWED_HOSTS, comma-separated) are taken from the request,
+ * in case the worker's port is ever reached by something other than Caddy.
  */
 export function originOf(req?: Pick<IncomingMessage, "headers">): string {
   const set = process.env.MCP_PUBLIC_URL;
   if (set) return set.replace(/\/+$/, "");
-  const host = req?.headers.host ?? "";
-  if (/^[a-z0-9.-]+\.[a-z]{2,}(:\d+)?$/i.test(host)) {
+  const host = (req?.headers.host ?? "").toLowerCase();
+  if (allowedHosts().includes(host)) {
     const proto = String(req?.headers["x-forwarded-proto"] ?? "https").split(",")[0]!.trim() === "http" ? "http" : "https";
-    return `${proto}://${host.toLowerCase()}`;
+    return `${proto}://${host}`;
   }
   return (process.env.SUPABASE_URL ?? "https://app.propaganda.pub").replace(/\/+$/, "");
 }

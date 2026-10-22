@@ -13,6 +13,10 @@ const { registerClient, authorize, exchange, protectedResource, authorizationSer
 // the origin: the request's host (Caddy keeps it), else SUPABASE_URL (the dev box's is an inside address)
 assert.equal(originOf({ headers: { host: "dev.propaganda.pub", "x-forwarded-proto": "https" } }), "https://dev.propaganda.pub");
 assert.equal(originOf({ headers: { host: "gateway:8000" } }), "https://app.example.test");
+assert.equal(originOf({ headers: { host: "evil.example" } }), "https://app.example.test");
+process.env.MCP_ALLOWED_HOSTS = "box.example.test";
+assert.equal(originOf({ headers: { host: "box.example.test" } }), "https://box.example.test");
+delete process.env.MCP_ALLOWED_HOSTS;
 assert.equal(originOf(), "https://app.example.test");
 const O = originOf();
 
