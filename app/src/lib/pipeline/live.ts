@@ -220,17 +220,41 @@ async function newDraft(collection: string, title: string): Promise<string | nul
   return post.id;
 }
 
+/** Waits before a second and a third try when the host's security check answers instead of the function. */
+const BLOCKED_RETRY_MS = [3000, 8000];
+
+/**
+ * A refusal from in front of the function: Vercel's security checkpoint is an
+ * HTML 403 that carries `x-vercel-mitigated`, and the function never ran. The
+ * function's own answers are JSON, or a plain-text 401/403/502 from api/_auth.ts.
+ */
+function blockedBeforeTheFunction(res: Response): boolean {
+  if (res.headers.get("x-vercel-mitigated")) return true;
+  return [403, 429, 503].includes(res.status) && (res.headers.get("content-type") ?? "").includes("text/html");
+}
+
 /** Ask the worker to start an agent (api/agents.ts). Resolves to why it didn't, or null when it started. */
 async function startAgent(body: Row): Promise<string | null> {
   try {
-    const res = await fetch("/api/agents", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: await authHeader() },
-      body: JSON.stringify({ site: siteId(), ...body }),
-    });
-    if (res.status === 202) return null;
-    const out = (await res.json().catch(() => ({}))) as { reason?: string; error?: string };
-    return out.reason ?? out.error ?? `the server answered ${res.status}`;
+    const payload = JSON.stringify({ site: siteId(), ...body });
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: await authHeader() },
+        body: payload,
+      });
+      if (res.status === 202) return null;
+      if (blockedBeforeTheFunction(res)) {
+        if (attempt < BLOCKED_RETRY_MS.length) {
+          await new Promise((resolve) => setTimeout(resolve, BLOCKED_RETRY_MS[attempt]));
+          continue;
+        }
+        reportError("pipeline.agent-blocked", coded("PIPELINE-AGENT", new Error(`blocked before the function: ${res.status}`), "Couldn't reach the agents."));
+        return "the host's security check held the request back before it reached the worker";
+      }
+      const out = (await res.json().catch(() => ({}))) as { reason?: string; error?: string };
+      return out.reason ?? out.error ?? `the server answered ${res.status}`;
+    }
   } catch (err) {
     throw coded("PIPELINE-AGENT", err, "Couldn't reach the agents. Try again.");
   }
