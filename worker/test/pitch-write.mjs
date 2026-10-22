@@ -84,11 +84,19 @@ function filterRows(table, params) {
   }
   const order = params.get("order");
   if (order) {
-    const [col, dir] = order.split(".");
-    rows = [...rows].sort((a, b) => (String(a[col] ?? "") < String(b[col] ?? "") ? -1 : String(a[col] ?? "") > String(b[col] ?? "") ? 1 : 0) * (dir === "desc" ? -1 : 1));
+    // "updated,id" or "created.desc": each comma-separated column sorts in turn.
+    const keys = order.split(",").map((k) => k.split("."));
+    rows = [...rows].sort((a, b) => {
+      for (const [col, dir] of keys) {
+        const x = String(a[col] ?? ""), y = String(b[col] ?? "");
+        if (x !== y) return (x < y ? -1 : 1) * (dir === "desc" ? -1 : 1);
+      }
+      return 0;
+    });
   }
+  const offset = Number(params.get("offset") ?? 0);
   const limit = Number(params.get("limit") ?? 1000);
-  return rows.slice(0, limit);
+  return rows.slice(offset, offset + limit);
 }
 
 const rpcs = {
@@ -525,8 +533,24 @@ try {
   check(retry.includes("write-stuckbrief00001") && !retry.some((x) => x.includes("youngbrief00001")), "and the next pass writes it");
   await t.DBOS.retrieveWorkflow("write-stuckbrief00001").getResult();
   check(db.briefs.find((b) => b.id === "stuckbrief00001").status === "in_review", "it lands in review");
+  console.log("Write now after a failed first run, and exhausted briefs");
+  empty("retrypost0000001");
+  db.briefs.push({ ...brief, id: "retrybrief00001", status: "todo", writer: "agent", post: "retrypost0000001" });
+  // The step retries three times, so the gateway stays down for all of them.
+  const gatewayDown = () => {
+    onModelCall = gatewayDown;
+    throw new Error("the model gateway is down");
+  };
+  onModelCall = gatewayDown;
+  const dead = await t.DBOS.startWorkflow(t.writer, { workflowID: "write-retrybrief00001" })({ site: SITE, briefId: "retrybrief00001" });
+  await dead.getResult().catch(() => undefined);
+  onModelCall = null;
+  const retried = await t.dispatchAgent("writer", { site: SITE, task: "Write the post: retry", requestedBy: "11111111-1111-1111-1111-111111111111", conversation: "conv1", post: "retrypost0000001" });
+  check(retried && retried !== "write-retrybrief00001", `Write now after a dead run starts a new one (${retried})`);
+  await t.DBOS.retrieveWorkflow(retried).getResult();
+  check(db.briefs.find((b) => b.id === "retrybrief00001").status === "in_review", "and it writes the post");
   // These briefs would count as approved in the batch arithmetic below.
-  db.briefs = db.briefs.filter((b) => !["selectedbrief001", "personbrief0001", "stuckbrief00001", "youngbrief00001"].includes(b.id));
+  db.briefs = db.briefs.filter((b) => !["selectedbrief001", "personbrief0001", "stuckbrief00001", "youngbrief00001", "retrybrief00001"].includes(b.id));
 
   console.log("a search engine outage");
   const searchRowsBefore = db.model_calls.filter((c) => String(c.model).startsWith("dataforseo/")).length;

@@ -408,7 +408,13 @@ async function writeFromRequest(input: DispatchInput): Promise<string | null> {
     briefForTask(briefs, input.task);
   if (!briefId) return null;
   // The poll's id for this brief (dispatchWriting), so a button and a tick never write it twice.
-  const handle = await DBOS.startWorkflow(writer, { workflowID: `write-${briefId}`, queueName: AGENT_QUEUE, workflowAttributes: dispatchAttributes("writer", input) })({
+  // A run already going is the answer; one that ended (a failed first try) is
+  // tried again under the next id, whatever the poll's own try limit says: a
+  // person asked.
+  const key = `write-${briefId}`;
+  const runs = await runsOf(key);
+  if (runs.live) return runs.liveId ?? key;
+  const handle = await DBOS.startWorkflow(writer, { workflowID: tryId(key, runs.total), queueName: AGENT_QUEUE, workflowAttributes: dispatchAttributes("writer", input) })({
     site: input.site,
     briefId,
   });
@@ -503,11 +509,12 @@ const MAX_TRIES = 3;
 const STUCK_MS = 60 * 60_000;
 
 /** The runs under one key (the first try, then `<key>-r1`, `<key>-r2`...): are any live, and how many ended badly. */
-async function runsOf(key: string): Promise<{ live: boolean; total: number; failed: number }> {
+async function runsOf(key: string): Promise<{ live: boolean; liveId?: string; total: number; failed: number }> {
   const rows = (await DBOS.listWorkflows({ workflow_id_prefix: key, loadInput: false, loadOutput: false })).filter(
     (w) => w.workflowID === key || w.workflowID.startsWith(`${key}-r`),
   );
-  return { live: rows.some((w) => LIVE.includes(w.status)), total: rows.length, failed: rows.filter((w) => FAILED.includes(w.status)).length };
+  const live = rows.find((w) => LIVE.includes(w.status));
+  return { live: Boolean(live), liveId: live?.workflowID, total: rows.length, failed: rows.filter((w) => FAILED.includes(w.status)).length };
 }
 
 /** The id for the next try under `key`: the key itself first, then `-r1`, `-r2`. */
@@ -538,6 +545,20 @@ export async function sweepStuckWriting(now = Date.now(), stuckMs = STUCK_MS): P
 }
 
 /**
+ * Every Selected brief the Writer owns, a page at a time, oldest first: briefs
+ * that ran out of tries stay Selected and would fill a single page for good.
+ */
+async function selectedBriefs(): Promise<BriefRow[]> {
+  const all: BriefRow[] = [];
+  for (let offset = 0; offset < 200; offset += 50) {
+    const page = await selectedForWriter(50, offset);
+    all.push(...page);
+    if (page.length < 50) break;
+  }
+  return all;
+}
+
+/**
  * Selected briefs the Writer owns, started: an approved pitch gets its draft, a
  * draft that was sent back gets a revision, each as soon as a tick sees it, so
  * nothing waits in Selected for a person to ask. A run's id comes from its work
@@ -548,7 +569,7 @@ export async function sweepStuckWriting(now = Date.now(), stuckMs = STUCK_MS): P
 export async function dispatchWriting(now = Date.now(), stuckMs = STUCK_MS): Promise<string[]> {
   await sweepStuckWriting(now, stuckMs);
   const started: string[] = [];
-  for (const b of await selectedForWriter()) {
+  for (const b of await selectedBriefs()) {
     const post = b.post ? await getPost(b.site, b.post) : null;
     const written = Boolean(post && post.content_md.trim());
     if (!written) {

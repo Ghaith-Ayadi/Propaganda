@@ -340,8 +340,8 @@ export async function moveBrief(site: string, brief: string, status: string, fro
 }
 
 /** Selected briefs the Writer owns (writer = agent) and has not started: what the writing poll picks up, across tenants. */
-export async function selectedForWriter(limit = 20): Promise<BriefRow[]> {
-  return select<BriefRow>("briefs", `status=eq.todo&writer=eq.agent&select=${BRIEF_COLS}&order=updated&limit=${limit}`);
+export async function selectedForWriter(limit = 50, offset = 0): Promise<BriefRow[]> {
+  return select<BriefRow>("briefs", `status=eq.todo&writer=eq.agent&select=${BRIEF_COLS}&order=updated,id&limit=${limit}&offset=${offset}`);
 }
 
 /** Briefs the Writer owns that have been Writing since before `before` (an ISO time): what the catch-all looks at. */
