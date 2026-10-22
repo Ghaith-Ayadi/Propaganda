@@ -295,11 +295,27 @@ Answer with JSON only: {"title": "...", "subtitle": "the short description", "ma
   const offSource = offSourceLinks(markdown, pages.map((p) => p.url));
   const words = wordCount(markdown);
 
-  const postId = target.post ?? (await DBOS.runStep(() => Promise.resolve(newId()), { name: "mint the post" }));
+  // Approved while it was being written (day one drafts start before approval):
+  // approving gave the brief an empty post meanwhile, and that is the one to fill.
+  // A new step (2026-10-22): runs recorded before it replay without it.
+  let late: string | null = null;
+  if (!target.post && (await DBOS.patch("writer-approved-meanwhile"))) {
+    late = await DBOS.runStep(
+      async () => {
+        const now = await getBrief(site, brief.id);
+        if (!now?.post) return null;
+        const [post, authors] = await Promise.all([getPost(site, now.post), versionAuthors(site, now.post)]);
+        return post && post.status === "draft" && !post.content_md.trim() && authors.length === 0 ? now.post : null;
+      },
+      { name: "check the brief for a post made meanwhile" },
+    );
+  }
+  const into = target.post ?? late;
+  const postId = into ?? (await DBOS.runStep(() => Promise.resolve(newId()), { name: "mint the post" }));
   const fields = { title: titled.title, subtitle: titled.subtitle, excerpt, content_md: markdown, word_count: words };
   const wrote = await DBOS.runStep(
     async () => {
-      if (target.post) return fillEmptyPost(site, target.post, fields);
+      if (into) return fillEmptyPost(site, into, fields);
       const collection = brief.collection_name || cols.find((c) => !c.is_hidden)?.name || "";
       await insertDraftPost({ id: postId, site, type: collection, ...fields });
       return true;
@@ -341,10 +357,10 @@ Answer with JSON only: {"title": "...", "subtitle": "the short description", "ma
 
   await DBOS.runStep(
     async () => {
-      if (!target.post) await linkDraft(site, brief.id, postId);
+      if (!into) await linkDraft(site, brief.id, postId);
       // Drafted before approval (launch day one): the brief stays pitched and
-      // the reviewer sees the draft with it. Otherwise it goes to review.
-      if (!input.beforeApproval || brief.status !== "pitched") await setAgentBriefStatus(site, brief.id, "in_review", APPROVED);
+      // the reviewer sees the draft with it. Otherwise (approved meanwhile too) it goes to review.
+      if (!input.beforeApproval || brief.status !== "pitched" || late) await setAgentBriefStatus(site, brief.id, "in_review", APPROVED);
     },
     { name: "send for review" },
   );

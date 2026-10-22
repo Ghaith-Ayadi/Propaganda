@@ -160,6 +160,8 @@ let searchOutage = 0;
 // How many searches in a row DataForSEO refuses outright (a 40000 task status, seen on 2026-10-11).
 let searchRefused = 0;
 let hideVoiceOnce = false;
+// Runs once at the next model call: a person acting while a run is mid-way.
+let onModelCall = null;
 const web = async (input, init) => {
   const url = String(input);
   fetched.push(url);
@@ -256,6 +258,11 @@ const model = new MockLanguageModelV3({
   doGenerate: async ({ prompt }) => {
     const text = prompt.map((m) => (typeof m.content === "string" ? m.content : m.content.map((c) => c.text ?? "").join(""))).join("\n");
     prompts.push(text);
+    if (onModelCall) {
+      const f = onModelCall;
+      onModelCall = null;
+      f(text);
+    }
     return { content: [{ type: "text", text: answer(text) }], finishReason: { unified: "stop", raw: "stop" }, usage, warnings: [] };
   },
 });
@@ -437,6 +444,18 @@ try {
   const w2 = await (await t.DBOS.startWorkflow(t.writer)({ site: SITE, briefId: "approvedbrief01" })).getResult();
   check(w2.status === "drafted" && db.posts.find((x) => x.id === "emptypost000001").content_md.length > 100, "fills the empty post");
   check(db.briefs.find((b) => b.id === "approvedbrief01").status === "in_review", "and sends it for review");
+
+  console.log("writer (day one draft, approved while it was being written)");
+  db.briefs.push({ ...brief, id: "meanwhilebrief1", status: "pitched", post: null });
+  onModelCall = () => {
+    // Approving makes an empty post and points the brief at it, as the pipeline does.
+    db.posts.push({ id: "meanwhilepost01", site: SITE, title: "", subtitle: "", type: "Test", status: "draft", excerpt: "", slug: "", tags: [], content_md: "", published_at: null, word_count: 0 });
+    Object.assign(db.briefs.find((b) => b.id === "meanwhilebrief1"), { status: "in_progress", post: "meanwhilepost01" });
+  };
+  const postsBefore = db.posts.length;
+  const wm = await (await t.DBOS.startWorkflow(t.writer)({ site: SITE, briefId: "meanwhilebrief1", beforeApproval: true })).getResult();
+  check(wm.status === "drafted" && wm.post === "meanwhilepost01" && db.posts.length === postsBefore + 1, `fills the post approval made, no second post (${wm.post})`);
+  check(db.posts.find((x) => x.id === "meanwhilepost01").content_md.length > 100 && db.briefs.find((b) => b.id === "meanwhilebrief1").status === "in_review", "and sends it for review");
 
   console.log("writer never touches a person's writing");
   db.posts.push({ id: "humanpost000001", site: SITE, title: "Mine", subtitle: "", type: "Test", status: "draft", excerpt: "", slug: "", tags: [], content_md: "My own words.", published_at: null, word_count: 3 });
