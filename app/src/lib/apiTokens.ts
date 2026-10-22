@@ -2,6 +2,7 @@
 // app) reaches a tenant, through the worker's MCP server (worker/src/mcp/).
 // Minted by a member, shown once; the worker keeps only a hash.
 
+import { clientFor, type Account } from "@/lib/accounts";
 import { authHeader, SUPABASE_URL } from "@/lib/supabase";
 import { coded } from "@/lib/errors";
 import { siteId } from "@/lib/scope";
@@ -52,4 +53,39 @@ export async function createApiToken(label: string): Promise<{ id: string; token
 
 export async function revokeApiToken(id: string): Promise<void> {
   await call(`/tokens/${encodeURIComponent(id)}?site=${encodeURIComponent(siteId())}`, { method: "DELETE" });
+}
+
+/**
+ * The consent page's answer when Claude connects (worker/src/mcp/oauth.ts):
+ * allow on a site, as this account, or deny. Returns where the browser goes
+ * next, back to Claude.
+ */
+export async function answerConnection(request: string, answer: { account: Account; site: string } | "deny"): Promise<string> {
+  const allow = answer !== "deny";
+  let res: Response;
+  try {
+    res = await fetch(`${WORKER_URL}/mcp/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(allow ? { Authorization: await authHeader(clientFor(answer.account)) } : {}) },
+      body: JSON.stringify(allow ? { request, site: answer.site } : { request, deny: true }),
+    });
+  } catch (err) {
+    throw coded("MCP-CONNECT", err, "Couldn't reach the server. Try again.");
+  }
+  const body = (await res.json().catch(() => ({}))) as { redirect?: string; error?: string };
+  if (!res.ok || !body.redirect) {
+    throw coded("MCP-CONNECT", new Error(`worker answered ${res.status}: ${body.error ?? ""}`), body.error || "The server refused. Try again.");
+  }
+  return body.redirect;
+}
+
+/** What Claude asked for, read from the signed request (the worker checks it again). */
+export function connectionRequest(request: string): { client: string; redirect: string } | null {
+  try {
+    const body = request.slice(0, request.lastIndexOf("."));
+    const p = JSON.parse(atob(body.replace(/-/g, "+").replace(/_/g, "/"))) as { n?: string; r?: string };
+    return { client: p.n || "Claude", redirect: p.r ?? "" };
+  } catch {
+    return null;
+  }
 }

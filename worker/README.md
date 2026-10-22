@@ -512,20 +512,26 @@ superadmin gate:
 
 | Route | Credential | What |
 | --- | --- | --- |
+| `GET /.well-known/oauth-protected-resource…`, `/.well-known/oauth-authorization-server…` | none | How Claude finds the sign-in (`mcp/oauth.ts`); Caddy sends the app host's `/.well-known/oauth-*` here unstripped |
+| `POST /mcp/register`, `GET /mcp/authorize`, `POST /mcp/token` | none (signed client id, PKCE) | OAuth for Claude: register, off to the app's `/connect/claude`, the code for an API token |
+| `POST /mcp/approve { request, site }` or `{ request, deny: true }` | a member's Supabase token | The consent page's answer: where the browser goes back to Claude |
 | `POST /mcp` | API token | The MCP server (`mcp/server.ts`): JSON-RPC in, JSON out, stateless. Tools: `list_collections`, `assign_post`. A tool is an entry in `TOOLS` |
 | `POST /assign` | API token | The same as `assign_post`, plain HTTP: `{ title, collection?, markdown, assets? }` → `202` with the post id and its URL |
 | `GET /me` | API token | `{ site, label, scopes }` |
 | `GET /tokens?site=`, `POST /tokens { site, label }`, `DELETE /tokens/:id?site=` | a member's Supabase token | The site's tokens; a new one comes back once |
 
 An API token (`ppk_…`, `private.api_tokens`, migration `*_api_tokens.sql`) is
-minted by a member in Settings > Connections > Claude, stored as a hash, and
+minted when a member connects Claude (OAuth: the token is the access token,
+labelled "<client> (connected)") or by hand in Settings > Connections > Claude, stored as a hash, and
 acts for that member on that one site within its scopes (`read`, `assign`).
 Assigning a post (`mcp/assign.ts`) makes the empty draft and a brief with
 `origin = 'assigned'`, the Markdown as its body (the Writer reads it as source
 material, `agents/writer-prompt.ts` `hasSourceMaterial`) and the attachments as
 its `sources`, each with a `kind` (`image`, `pdf`); image bytes go to the app's
 `/api/upload` with the dispatch secret. Then the Writer starts as from Chat.
-Test: `test/mcp.mjs` (no database).
+OAuth stores nothing but that token: client ids, the consent request and the
+code are signed with a key derived from `JWT_SECRET`; a code lives five
+minutes and is spent once (in memory). Test: `test/mcp.mjs`, `test/mcp-oauth.mjs` (no database).
 
 ## Running it
 

@@ -3,6 +3,7 @@
 //   /release-notes → every release's notes (release-notes/*.md), on the app host only:
 //                    on a blog's host that path belongs to its posts
 //   /*       → Blog   (the public reader)
+//   /connect/claude → where Claude asks to connect to a blog (OAuth consent), app host only
 //   /_pg/harness → the blog themes' test page (dev and harness builds only)
 //
 // We pick once at mount; SPA navigation between the two zones is a full reload.
@@ -13,6 +14,7 @@ import { appOrigin } from "./lib/siteUrl";
 const EditorApp = lazy(() => import("./EditorApp").then((m) => ({ default: m.EditorApp })));
 const BlogApp = lazy(() => import("./blog/BlogApp").then((m) => ({ default: m.BlogApp })));
 const ReleaseNotesPage = lazy(() => import("./releaseNotes/ReleaseNotesPage").then((m) => ({ default: m.ReleaseNotesPage })));
+const ConnectClaudePage = lazy(() => import("./connect/ConnectClaudePage").then((m) => ({ default: m.ConnectClaudePage })));
 const CardGallery = lazy(() => import("./shareable/CardGallery").then((m) => ({ default: m.CardGallery })));
 // The blog themes' conformance harness (app/scripts/pg-harness.mjs): dev builds and VITE_PG_HARNESS builds only.
 const HARNESS = import.meta.env.DEV || !!import.meta.env.VITE_PG_HARNESS;
@@ -32,6 +34,13 @@ export default function App() {
     return (
       <Suspense fallback={null}>
         <ReleaseNotesPage />
+      </Suspense>
+    );
+  }
+  if (path.replace(/\/+$/, "") === "/connect/claude" && window.location.origin === appOrigin()) {
+    return (
+      <Suspense fallback={null}>
+        <ConnectClaudePage />
       </Suspense>
     );
   }
