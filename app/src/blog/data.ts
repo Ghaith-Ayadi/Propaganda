@@ -12,6 +12,8 @@ import {
   fromBlogRecord,
   fromCollectionRecord,
   PUBLIC_POST_FIELDS as PUBLIC_FIELDS,
+  PUBLIC_POST_FIELDS_BEFORE_0190,
+  missingContentUpdated,
   type BlogPost,
   type BlogPostRecord,
   type CollectionRecord,
@@ -21,8 +23,21 @@ export { blogAddress, type BlogPost };
 
 // A site's published posts. Undated ones sort as PocketBase sorted its "":
 // last when newest first, first when oldest first.
-const publishedPosts = (siteId: string) =>
-  publicSb.from("posts").select(PUBLIC_FIELDS).eq("site", siteId).eq("status", "published");
+const publishedPosts = (siteId: string, fields: string = postFields) =>
+  // Typed as the full list: the legacy list is the same minus one optional column.
+  publicSb.from("posts").select(fields as typeof PUBLIC_FIELDS).eq("site", siteId).eq("status", "published");
+// The app can run ahead of the schema (the box follows the release tag): a server from
+// before migration 20261010000190 rejects `content_updated`, so read without it from then on.
+let postFields: string = PUBLIC_FIELDS;
+type PostsResult<T> = { data: T; error: { message: string; code?: string } | null; status: number };
+async function posts<T>(run: (fields: string) => PromiseLike<PostsResult<T>>): Promise<PostsResult<T>> {
+  const r = await run(postFields);
+  if (r.error && postFields === PUBLIC_FIELDS && missingContentUpdated(r.error)) {
+    postFields = PUBLIC_POST_FIELDS_BEFORE_0190;
+    return run(postFields);
+  }
+  return r;
+}
 const one = async <T,>(query: PromiseLike<{ data: unknown; error: { message: string } | null; status: number }>): Promise<T | null> =>
   ((await must(query).catch(() => null)) as T | null) ?? null;
 const firstOf = async <T,>(query: PromiseLike<{ data: unknown; error: { message: string } | null; status: number }>): Promise<T | null> =>
@@ -48,10 +63,12 @@ export function useBlogData(siteId: string): {
             publicSb.from("collections").select("*").eq("site", siteId).order("position").order("id").range(from, to),
           ),
           fetchAll<BlogPostRecord>((from, to) =>
-            publishedPosts(siteId)
-              .order("published_at", { ascending: false, nullsFirst: false })
-              .order("id")
-              .range(from, to),
+            posts((f) =>
+              publishedPosts(siteId, f)
+                .order("published_at", { ascending: false, nullsFirst: false })
+                .order("id")
+                .range(from, to),
+            ),
           ),
         ]);
         if (cancelled) return;
@@ -100,7 +117,7 @@ async function addressOf(siteId: string, record: BlogPostRecord): Promise<Reader
 }
 
 async function publishedById(siteId: string, id: string): Promise<BlogPostRecord | null> {
-  return one<BlogPostRecord>(publishedPosts(siteId).eq("id", id).maybeSingle());
+  return one<BlogPostRecord>(posts((f) => publishedPosts(siteId, f).eq("id", id).maybeSingle()));
 }
 
 /** A post by its address, /<collection slug>/<post slug>, or where that address now points. */
@@ -110,10 +127,10 @@ export async function fetchPostAt(siteId: string, collection: string, slug: stri
   );
   let record: BlogPostRecord | null = null;
   if (col) {
-    record = await firstOf<BlogPostRecord>(publishedPosts(siteId).eq("type", col.name).eq("slug", slug).order("id").limit(1));
+    record = await firstOf<BlogPostRecord>(posts((f) => publishedPosts(siteId, f).eq("type", col.name).eq("slug", slug).order("id").limit(1)));
   } else {
     // Posts whose collection has no record live under their type, slugified.
-    const bySlug = (await must(publishedPosts(siteId).eq("slug", slug).order("id")).catch(() => [])) as BlogPostRecord[];
+    const bySlug = (await must(posts((f) => publishedPosts(siteId, f).eq("slug", slug).order("id"))).catch(() => [])) as BlogPostRecord[];
     record = bySlug.find((r) => slugify(r.type) === collection) ?? null;
   }
   if (record) {
@@ -133,10 +150,10 @@ export async function fetchPostAt(siteId: string, collection: string, slug: stri
  */
 export async function fetchLegacyPost(siteId: string, slug: string): Promise<ReaderFetch> {
   const bySlug = await firstOf<BlogPostRecord>(
-    publishedPosts(siteId).eq("slug", slug).order("published_at", { ascending: true, nullsFirst: true }).order("id").limit(1),
+    posts((f) => publishedPosts(siteId, f).eq("slug", slug).order("published_at", { ascending: true, nullsFirst: true }).order("id").limit(1)),
   );
   if (bySlug) return addressOf(siteId, bySlug);
-  const byCode = await firstOf<BlogPostRecord>(publishedPosts(siteId).eq("post_id", slug).order("id").limit(1));
+  const byCode = await firstOf<BlogPostRecord>(posts((f) => publishedPosts(siteId, f).eq("post_id", slug).order("id").limit(1)));
   if (byCode) return addressOf(siteId, byCode);
   const r = await firstOf<RedirectRecord>(redirectAt(siteId).eq("slug", slug).limit(1));
   const moved = r ? await publishedById(siteId, r.post) : null;

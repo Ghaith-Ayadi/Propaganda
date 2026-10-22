@@ -6,6 +6,7 @@ import {
   fromBlogRecord,
   fromCollectionRecord,
   PUBLIC_POST_FIELDS,
+  PUBLIC_POST_FIELDS_BEFORE_0190,
   type BlogPost,
   type BlogPostRecord,
   type CollectionRecord,
@@ -105,12 +106,27 @@ export async function collectionsOf(api: Api, siteId: string): Promise<Collectio
   return rows.map(fromCollectionRecord);
 }
 
+/** The columns postsOf reads: without `content_updated` once a server has said it has none. */
+let postFields: string = PUBLIC_POST_FIELDS;
+
 /** The site's published posts, newest first, undated last (blog/data.ts orders the same). */
 export async function postsOf(api: Api, siteId: string): Promise<BlogPost[]> {
-  const rows = await all<BlogPostRecord>(
-    api,
-    `posts?select=${PUBLIC_POST_FIELDS}&site=eq.${siteId}&status=eq.published&order=published_at.desc.nullslast,id`,
-  );
+  const read = (fields: string) =>
+    all<BlogPostRecord>(api, `posts?select=${fields}&site=eq.${siteId}&status=eq.published&order=published_at.desc.nullslast,id`);
+  let rows: BlogPostRecord[];
+  if (postFields === PUBLIC_POST_FIELDS) {
+    try {
+      rows = await read(postFields);
+    } catch (err) {
+      // The app can run ahead of the schema (the box follows the release tag): a
+      // server from before migration 20261010000190 rejects the column; read without it.
+      if (!(err instanceof ApiError && err.status === 400)) throw err;
+      postFields = PUBLIC_POST_FIELDS_BEFORE_0190;
+      rows = await read(postFields);
+    }
+  } else {
+    rows = await read(postFields);
+  }
   return rows.map(fromBlogRecord);
 }
 

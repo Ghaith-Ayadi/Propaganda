@@ -124,8 +124,11 @@ What every page and site carries, from both the function and the files:
   sitemap pings any more: a site owner submits the sitemap once in Search Console and Bing
   Webmaster Tools. `BLOG_INDEXNOW=off` on the dev box.
 - An image without alt text gets the post's title (both renderers and the feed).
-- `dateModified` is the row's `updated`, which moves on any save; a content-only date needs
-  a `content_updated` column (a migration).
+- `dateModified`, the sitemap's `lastmod`, the feed's and the Markdown copy's "updated" are
+  `posts.content_updated` (migration `20261010000190`): it moves only when the title, subtitle,
+  excerpt or body changes, never on a publish, a favourite or a sync. Both readers fall back
+  to the row's `updated` on a server from before that migration (the app can run ahead of the
+  box's schema for a while after a release).
 
 ## Working on it
 
