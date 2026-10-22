@@ -406,7 +406,7 @@ type Logged = Record<string, unknown>;
 
 /** What callModel sends, as Labs replays it. */
 function requestOf(model: string, opts: CallOptions) {
-  return { model, system: opts.system ?? null, prompt: opts.prompt, maxOutputTokens: opts.maxOutputTokens ?? null, reasoning: opts.reasoning ?? null };
+  return { model, system: opts.system ?? null, prompt: opts.prompt, ...(opts.suffix ? { suffix: opts.suffix } : {}), maxOutputTokens: opts.maxOutputTokens ?? null, reasoning: opts.reasoning ?? null };
 }
 
 /** The call itself, on our account or the tenant's key. A failure is logged before it is thrown. */

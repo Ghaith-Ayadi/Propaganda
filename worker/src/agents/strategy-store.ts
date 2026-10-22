@@ -17,6 +17,8 @@ export interface ProposalRow {
   requested_by: string;
   proposal: StoredProposal | null;
   edits: { field: string; from: string; to: string; reason?: string }[] | null;
+  /** What the run read, as it reported it (counts, and since 2026-10-22 the answers and the keyword data for the next round). */
+  inputs: Record<string, unknown> | null;
   created: string;
   approved_at: string | null;
 }
@@ -177,10 +179,10 @@ export async function sitesWithGoals(quarter: string): Promise<string[]> {
 }
 
 /** This quarter's earlier proposals for the site (oldest first): what each asked, and the request that answered it. */
-export async function earlierProposals(site: string, quarter: string): Promise<Pick<ProposalRow, "id" | "kind" | "status" | "request" | "proposal" | "created">[]> {
+export async function earlierProposals(site: string, quarter: string): Promise<Pick<ProposalRow, "id" | "kind" | "status" | "request" | "proposal" | "inputs" | "created">[]> {
   return select(
     "strategy_proposals",
-    `site=eq.${enc(site)}&quarter=eq.${enc(quarter)}&status=in.(sent,superseded,approved)&select=id,kind,status,request,proposal,created&order=created.asc&limit=20`,
+    `site=eq.${enc(site)}&quarter=eq.${enc(quarter)}&status=in.(sent,superseded,approved)&select=id,kind,status,request,proposal,inputs,created&order=created.asc&limit=20`,
   );
 }
 

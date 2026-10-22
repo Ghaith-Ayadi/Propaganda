@@ -256,7 +256,7 @@ const model = new MockLanguageModelV3({
     const text = prompt.map((m) => (typeof m.content === "string" ? m.content : m.content.map((c) => c.text ?? "").join(""))).join("\n");
     if (/never a target for its blog/.test(text)) {
       vocabPrompts.push(text);
-      const vocab = { job: "platform engineers keeping batch jobs running", searches: VOCAB, notTargets: ["kontra login"] };
+      const vocab = { job: "platform engineers keeping batch jobs running", searches: VOCAB, notTargets: ["kontra login"], competitors: [{ name: "Argo", domain: "https://www.argo-workflows.io/" }, { name: "Prefect", domain: "prefect.io" }] };
       return { content: [{ type: "text", text: JSON.stringify(vocab) }], finishReason: { unified: "stop", raw: "stop" }, usage, warnings: [] };
     }
     prompts.push(text);
@@ -462,6 +462,12 @@ try {
   check(t.validate(headDraft, { ...rules, keywords: kw([...KEYWORDS, head]) }).some((e) => e.includes("is a head term")), "catches a head term on a new domain");
   const rich = Array.from({ length: 20 }, (_, i) => ({ keyword: `long tail ${i}`, vol: 100 + i, kd: 10 }));
   check(t.validate(draft, { ...rules, keywords: kw([...KEYWORDS, ...rich]) }).some((e) => e.includes("at least 8 target searches")), "rich data wants 8 searches, 6 from the data");
+  const asked1 = "'One pager template' brings 12,100 searches a month, and many of those readers are sales reps. Do you want those readers on the blog?";
+  const asked3 = '"one pager template" gets 12,100 searches a month at difficulty 1. Do you want a post for it now, or should it wait?';
+  check(t.sharedQuote(asked1, asked3) && !t.sharedQuote("Do you want a topic for 'headless cms'?", asked3), "two questions about one quoted search are the same question");
+  const declinedDraft = t.parseDraft({ ...GOOD, questions: [asked3] });
+  check(t.validate(declinedDraft, { ...rules, declined: [asked1] }).some((e) => e.includes("moved on without answering")), "a question they left unanswered last round and moved on from is settled: asking again is an error");
+  check(t.validate(declinedDraft, { ...rules, declined: ["Should v2 get its own topic?"] }).length === 0, "an unrelated earlier question is not");
 
   console.log("searches first (2026-10-20)");
   const JOB = [
@@ -632,6 +638,22 @@ try {
   check(row4.proposal.topics.map((x) => x.name).join("|") === "Reliability|Scraping at scale", `the sent proposal keeps the previous topic names (${row4.proposal.topics.map((x) => x.name).join("|")})`);
   check(row4.proposal.ranking.searches.every((s) => ["Reliability", "Scraping at scale"].includes(s.topic)) && row4.proposal.watchedSites.every((w) => ["Reliability", "Scraping at scale"].includes(w.topic)), "with its searches and watched sites on those names");
   check(row4.proposal.questions.length === 0 && db.strategy_proposals[0].status === "superseded", "no question left, and the earlier proposal is superseded");
+  check(row.inputs.competitors.includes("argo-workflows.io") && row.inputs.competitors.filter((d) => d === "prefect.io").length === 1 && calls.filter((u) => u.includes("ranked_keywords")).length >= 4, `a competitor the vocabulary call named and the hosts missed gets its rankings; one it named twice stays once (${row.inputs.competitors.join(", ")})`);
+  check(Array.isArray(row.inputs.market?.priced) && row.inputs.answers?.offer === "Durable batch jobs for platform teams." && row.inputs.reusedData === false, "the first run's row carries its keyword data and the answers it was planned on");
+  check(row4.inputs.reusedData === true && Array.isArray(row4.inputs.market?.priced), "the revision, on the same answers and site, reused it and carries it on");
+
+  console.log("a revision with the same answers reuses the data");
+  db.strategy_proposals.push({ id: "proposal0000005", site: SITE, quarter: "2026-Q4", kind: "revision", status: "requested", request: "Make Scraping at scale smaller.", requested_by: "u1", proposal: null, edits: null, created: new Date().toISOString(), approved_at: null });
+  answers = [{ ...reworded, questions: [] }];
+  const before5 = prompts.length;
+  const dataCalls5 = calls.length;
+  const [id5] = await t.dispatchStrategist();
+  const res5 = await t.DBOS.retrieveWorkflow(id5).getResult();
+  const row5 = db.strategy_proposals.find((x) => x.id === "proposal0000005");
+  check(res5.status === "sent" && row5.status === "sent", `sent (${JSON.stringify(res5)}, ${row5.error ?? ""})`);
+  check(calls.length === dataCalls5 && vocabPrompts.length === 1, `no DataForSEO call and no vocabulary call: the previous round's data was reused (${calls.length - dataCalls5} calls)`);
+  check(prompts[before5]?.includes("batch job retries: 320/month, difficulty 12") && prompts[before5]?.includes("Who ranks in Google's top 100"), "and the prompt still carries the keyword data and who ranks");
+  check(prompts[before5]?.includes("A kept topic also keeps its target searches") && row5.inputs.reusedData === true, "the revision rule keeps a kept topic's searches, and the row says the data was reused");
 
   console.log("the revision limit");
   const LIMITED = "limitedsite0000";
