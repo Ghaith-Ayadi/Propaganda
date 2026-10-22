@@ -40,6 +40,7 @@ import { overusedIdeas, overusedLine } from "./motifs.js";
 import { nearest, readTaste, renderTaste, seenLine, type Seen, type Taste } from "./taste.js";
 import { MODELS, arr, askJson, obj, str, strs } from "./model.js";
 import { newId } from "./ids.js";
+import { searchConsoleBlock, searchConsoleFor } from "./gsc.js";
 import { HOUSE_STYLE, RULE_NAMES, TITLE_RULES, houseTitleHits, noDashes, titleHits, type PolishStats } from "./writing.js";
 import { polishTexts } from "./polish.js";
 import { type SearchHit } from "./web.js";
@@ -419,6 +420,24 @@ async function pitchRun(input: PitchInput): Promise<PitchResult> {
       )
     : [];
 
+  // Their blog's real queries (2026-10-22): pitches aim at searches just off page one and at questions no post
+  // answers yet. A run recorded before has none; a failed read never fails the batch.
+  const consoleBlock = (await DBOS.patch("pitcher-search-console"))
+    ? await DBOS.runStep(
+        async () => {
+          try {
+            const blog = ctx.tenant ? ctx.tenant.domain || `${ctx.tenant.slug}.propaganda.pub` : "";
+            const gsc = blog ? await searchConsoleFor(blog) : null;
+            return gsc ? searchConsoleBlock(gsc) : "";
+          } catch (err) {
+            console.warn(`pitcher search console: ${(err as Error).message}`);
+            return "";
+          }
+        },
+        { name: "search console" },
+      )
+    : "";
+
   // 1. Judge every idea in one call: topics, timeliness, gaps, overlaps.
   const existing = [
     ...ctx.published.map((p) => `published: ${p.title}`),
@@ -550,7 +569,7 @@ What's already ranking for it:
 ${hits.map((h) => `- ${h.title} <${h.url}>${citable.has(h.url) ? "" : " (not citable)"}: ${h.snippet}`).join("\n") || "(no search results)"}
 
 ${AUTHORITY_RULE}
-${tenantStyles ? `\n${tenantStyles}\n` : ""}
+${tenantStyles ? `\n${tenantStyles}\n` : ""}${consoleBlock ? `\n${consoleBlock}\n` : ""}
 Collections on this blog (pick the one whose description and rules fit):
 ${collectionLines || "(none)"}
 

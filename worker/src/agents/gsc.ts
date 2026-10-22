@@ -148,3 +148,14 @@ export async function searchConsoleFor(blog: string): Promise<SearchConsole | nu
   const rows = await blogQueries(host);
   return rows && rows.length ? insights(rows) : null;
 }
+
+/** The prompt block for an agent that pitches: what their blog already shows for, and where a post would win. */
+export function searchConsoleBlock(g: SearchConsole, n = 10): string {
+  const line = (k: Keyword) => `- "${k.keyword}": position ${k.position}, ${k.impressions} impressions, ${k.clicks ?? 0} clicks`;
+  const list = (ks: Keyword[]) => ks.slice(0, n).map(line).join("\n") || "(none)";
+  return `Search Console, this blog's real numbers for the last ${g.days} days. It outranks any estimate where they differ. Aim a pitch at one of these when the idea fits it; never invent a reason the idea does not have.
+Searches just off page one (position 11 to 30), where a better post wins fastest:
+${list(g.striking)}
+Searches people ran that the posts barely appear for (past position 30), questions no post answers yet:
+${list(g.unanswered)}`;
+}
