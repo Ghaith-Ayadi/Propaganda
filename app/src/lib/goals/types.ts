@@ -50,6 +50,8 @@ export interface RankingSearch {
   trend6?: number | null;
   /** The month (1 to 12) the search peaks in. */
   peakMonth?: number | null;
+  /** The last twelve months' searches against the twelve before, as a percentage: growth with the seasons cancelled. */
+  yoy?: number | null;
   /** Google shows an AI overview for it. */
   aiOverview?: boolean | null;
 }

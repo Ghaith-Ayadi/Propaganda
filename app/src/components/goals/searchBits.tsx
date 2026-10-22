@@ -25,7 +25,7 @@ export const fmtTrend = (n: number) => `${n > 0 ? "+" : ""}${n}%`;
 
 export const COLUMNS: { key: string; label: string; why: string }[] = [
   { key: "volume", label: "Volume", why: "How many times a month people in the US search it (DataForSEO; Google Ads where DataForSEO has no row). A dash means no number, not zero." },
-  { key: "trend6", label: "6 months", why: "The last six months' searches against the six before. Rising searches are worth posts before they peak." },
+  { key: "yoy", label: "vs last year", why: "The last twelve months' searches against the twelve before, so the seasons cancel. Rising searches are worth posts before they peak. A dash means Google Ads has less than two years for it." },
   { key: "peak", label: "Peak", why: "The month the search is biggest. A seasonal search gets its posts two to three months before, and is judged after." },
   { key: "difficulty", label: "Difficulty", why: "DataForSEO's 0 to 100. Under 30 is winnable for a new blog; 30 to 50 is contested; above that belongs to the big sites. Government pages score easy and are not, so read it with the links." },
   { key: "links", label: "Page-one links", why: "How many distinct websites link to an average page-one result today. Under 10 is open ground; 10 to 30 takes a quarter; 30 to 80 a year; more is beyond a post." },
@@ -66,7 +66,7 @@ export function SearchCells({ s, mono = false }: { s: RankingSearch; mono?: bool
   return (
     <>
       {cell(s.volume != null ? fmtVolume(s.volume) : "–")}
-      {cell(s.trend6 != null ? fmtTrend(s.trend6) : "–", s.trend6 != null && s.trend6 > 0 ? "text-success-primary" : "text-secondary")}
+      {cell(s.yoy != null ? fmtTrend(s.yoy) : "–", s.yoy != null && s.yoy > 0 ? "text-success-primary" : "text-secondary")}
       {cell(s.peakMonth != null ? MONTHS[s.peakMonth - 1] : "–")}
       {cell(s.difficulty != null ? s.difficulty : "–")}
       {cell(s.referringDomains != null ? s.referringDomains : "–")}
