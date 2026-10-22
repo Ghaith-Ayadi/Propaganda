@@ -68,6 +68,8 @@ export interface BlogPostRecord {
   content_md: string;
   published_at: string | null;
   updated: string;
+  /** When the title, subtitle, excerpt or body last changed (migration 20261010000190); absent on a server from before it. */
+  content_updated?: string | null;
   word_count: number;
   collection_seq: number;
   number: number;
@@ -76,7 +78,12 @@ export interface BlogPostRecord {
 
 /** The columns a public read of `posts` selects. */
 export const PUBLIC_POST_FIELDS =
-  "id,slug,title,type,subtitle,excerpt,content_md,published_at,updated,word_count,collection_seq,number,status";
+  "id,slug,title,type,subtitle,excerpt,content_md,published_at,updated,content_updated,word_count,collection_seq,number,status";
+/** The same before migration 20261010000190: a server that predates it answers 400 for `content_updated`. */
+export const PUBLIC_POST_FIELDS_BEFORE_0190 = PUBLIC_POST_FIELDS.replace(",content_updated", "");
+/** Whether an error is that server saying it has no `content_updated` column. */
+export const missingContentUpdated = (err: unknown): boolean =>
+  /content_updated/.test(String((err as { message?: unknown })?.message ?? "")) || (err as { code?: unknown })?.code === "42703";
 
 export function fromBlogRecord(r: BlogPostRecord): BlogPost {
   return {
@@ -88,7 +95,8 @@ export function fromBlogRecord(r: BlogPostRecord): BlogPost {
     excerpt: r.excerpt || null,
     content: r.content_md ?? "",
     publishedAt: dateToMs(r.published_at),
-    updatedAt: dateToMs(r.updated) ?? Date.now(),
+    // What readers see as "updated": the content's date, or the row's where the server has no other.
+    updatedAt: dateToMs(r.content_updated ?? r.updated) ?? Date.now(),
     wordCount: r.word_count || null,
     collectionSeq: r.collection_seq || null,
     number: r.number || null,
