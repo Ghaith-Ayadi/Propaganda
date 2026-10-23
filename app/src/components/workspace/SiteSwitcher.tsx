@@ -11,6 +11,7 @@ import {
 } from "react-aria-components";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { useWorkspace } from "@/components/Workspace";
+import { PRIVACY_URL, TERMS_URL } from "@/lib/legal";
 import { usePlan } from "@/lib/tenantPlan";
 import { loadSiteIcon, useSiteIcon } from "@/lib/siteIcons";
 import { useEffect } from "react";
@@ -108,6 +109,24 @@ export function SiteSwitcher() {
           >
             <UserPlus01 className="size-3.5 shrink-0 text-quaternary" />
             <span>Add another account</span>
+          </AriaMenuItem>
+          <AriaMenuItem
+            id="terms"
+            href={TERMS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-secondary outline-none hover:bg-tertiary hover:text-primary focus:bg-tertiary focus:text-primary"
+          >
+            <span>Terms</span>
+          </AriaMenuItem>
+          <AriaMenuItem
+            id="privacy"
+            href={PRIVACY_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-secondary outline-none hover:bg-tertiary hover:text-primary focus:bg-tertiary focus:text-primary"
+          >
+            <span>Privacy Policy</span>
           </AriaMenuItem>
           <AriaMenuItem
             id="sign-out"
