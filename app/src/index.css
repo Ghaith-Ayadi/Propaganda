@@ -207,26 +207,8 @@ a {
 
 /* Phones (below md). The editor's shell lives in EditorApp + lib/mobile.ts. */
 @media (max-width: 767px) {
-  /* Posts table: keep Title, Status and the row menu; ID, length, hits and
-     dates don't fit. Column order is PostTable's. */
-  .post-table :is(th, td):is(:nth-child(1), :nth-child(4), :nth-child(5), :nth-child(6), :nth-child(7)) {
-    display: none;
-  }
-  /* The matching <col>s too: in a fixed layout a hidden column's width is
-     still reserved, which squeezed the title to "On …". Status and the row
-     menu get room for the badge and the button. */
-  .post-table col:is(:nth-child(1), :nth-child(4), :nth-child(5), :nth-child(6), :nth-child(7)) {
-    display: none;
-  }
-  .post-table col:nth-child(3) {
-    width: 8.5rem !important;
-  }
-  .post-table col:nth-child(8) {
-    width: 3rem !important;
-  }
-  .post-table :is(th, td)[colspan] {
-    display: table-cell;
-  }
+  /* Posts table: PostTable drops every column but Title and Status on a
+     phone (ID, length, hits and dates don't fit). */
   .post-table :is(th, td) {
     padding-left: 0.75rem;
     padding-right: 0.75rem;

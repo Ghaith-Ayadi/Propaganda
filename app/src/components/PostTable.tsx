@@ -17,6 +17,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import { Checkbox } from "@/components/base/checkbox/checkbox";
 import { POST_COLUMNS, usePostColumns, type PostColumnId } from "@/lib/postColumns";
+import { useIsMobile } from "@/lib/mobile";
 
 type StatusFilter = "all" | "draft" | "done" | "published";
 type SortKey = "updated" | "created";
@@ -81,7 +82,10 @@ export function PostTable({ posts, onAddPost }: Props) {
   }, [posts]);
 
   const cols = usePostColumns();
-  const colCount = cols.visible.length + 1;
+  // A phone has room for the title and its status; the rest sit behind Display on a wider screen.
+  const mobile = useIsMobile();
+  const shown = mobile ? POST_COLUMNS.filter((c) => c.id === "title" || c.id === "status") : cols.visible;
+  const colCount = shown.length + 1;
 
   function cell(p: Post, id: PostColumnId) {
     switch (id) {
@@ -153,15 +157,16 @@ export function PostTable({ posts, onAddPost }: Props) {
       />
       <table className="post-table w-full table-fixed border-separate border-spacing-0 text-sm">
         <colgroup>
-          {cols.visible.map((c) => {
-            const w = cols.widthOf(c.id);
+          {shown.map((c) => {
+            // On a phone the status badge needs room beside the row menu.
+            const w = mobile ? (c.id === "status" ? 136 : null) : cols.widthOf(c.id);
             return <col key={c.id} style={w ? { width: w } : undefined} />;
           })}
-          <col style={{ width: 40 }} />
+          <col style={{ width: mobile ? 48 : 40 }} />
         </colgroup>
         <thead className="z-20 md:sticky md:top-[57px]">
           <tr>
-            {cols.visible.map((c) => head(c.id, c.label))}
+            {shown.map((c) => head(c.id, c.label))}
             <Th className="w-10" />
           </tr>
         </thead>
@@ -198,7 +203,7 @@ export function PostTable({ posts, onAddPost }: Props) {
               }}
               className="group cursor-pointer text-secondary outline-none transition hover:bg-secondary focus:bg-secondary"
             >
-              {cols.visible.map((c) => cell(p, c.id))}
+              {shown.map((c) => cell(p, c.id))}
               <Td
                 className="text-right"
                 onClick={(e) => e.stopPropagation()}
