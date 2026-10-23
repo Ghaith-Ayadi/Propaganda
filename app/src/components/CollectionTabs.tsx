@@ -269,6 +269,8 @@ function RulesDialog({ name, onClose }: { name: string; onClose: () => void }) {
   const [rules, setRules] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const saved = useRef("");
+  const box = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -287,16 +289,13 @@ function RulesDialog({ name, onClose }: { name: string; onClose: () => void }) {
     };
   }, [name]);
 
+  // The field takes focus once the rules have loaded.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    if (rules !== null) field.current?.focus();
+  }, [rules === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
-    if (rules === null) return;
+    if (rules === null || saving) return;
     if (rules.trim() === saved.current.trim()) return onClose();
     setSaving(true);
     saveCollectionRules(name, rules)
@@ -308,17 +307,44 @@ function RulesDialog({ name, onClose }: { name: string; onClose: () => void }) {
       });
   };
 
+  // Escape and a tap outside keep what was typed, like the old card did on blur;
+  // only Cancel throws it away. Tab stays inside the dialog.
+  const keepAndClose = () => (rules === null ? onClose() : save());
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      keepAndClose();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const items = Array.from(box.current?.querySelectorAll<HTMLElement>("textarea, button:not([disabled])") ?? []);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-sm" onClick={keepAndClose}>
       <div
+        ref={box}
         role="dialog"
+        aria-modal="true"
         aria-label="Rules for the agents"
+        onKeyDown={onKeyDown}
         onClick={(e) => e.stopPropagation()}
         className="w-[520px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary"
       >
         <h2 className="type-heading text-primary">Rules for the agents</h2>
         <p className="mt-1 text-sm text-tertiary">Private to this collection, never shown on the blog.</p>
         <textarea
+          ref={field}
           aria-label="Rules for the agents"
           value={rules ?? ""}
           disabled={rules === null}
