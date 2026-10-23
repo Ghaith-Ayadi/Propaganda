@@ -289,10 +289,12 @@ function RulesDialog({ name, onClose }: { name: string; onClose: () => void }) {
     };
   }, [name]);
 
-  // The field takes focus once the rules have loaded.
+  // Focus lands in the dialog at once (Escape needs it there) and moves to the
+  // field when the rules have loaded.
+  const loaded = rules !== null;
   useEffect(() => {
-    if (rules !== null) field.current?.focus();
-  }, [rules === null]); // eslint-disable-line react-hooks/exhaustive-deps
+    (loaded ? field.current : box.current)?.focus();
+  }, [loaded]);
 
   const save = () => {
     if (rules === null || saving) return;
@@ -334,12 +336,13 @@ function RulesDialog({ name, onClose }: { name: string; onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-sm" onClick={keepAndClose}>
       <div
         ref={box}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Rules for the agents"
         onKeyDown={onKeyDown}
         onClick={(e) => e.stopPropagation()}
-        className="w-[520px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary"
+        className="w-[520px] max-w-[92vw] rounded-xl outline-none border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary"
       >
         <h2 className="type-heading text-primary">Rules for the agents</h2>
         <p className="mt-1 text-sm text-tertiary">Private to this collection, never shown on the blog.</p>
