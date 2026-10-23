@@ -448,17 +448,54 @@ function siteRefOf(s: SiteRow, role: SiteRole): SiteRef {
   };
 }
 
-/** The account's sites from the server (and cache them). Throws when offline. */
+/** How long a sites request gets before it counts as stalled (a phone waking on a bad connection). */
+const SITES_TIMEOUT_MS = 10_000;
+
+function within<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new AppError("SITES-FETCH", `${what} took too long.`)), ms);
+    work.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+/**
+ * The account's sites from the server (and cache them). Throws when offline.
+ * A request that never answers is cut off and tried once more: the screens
+ * waiting on this are blank until it settles, and a stalled one meant closing
+ * and reopening the app.
+ */
 export async function fetchSites(account: Account): Promise<SiteRef[]> {
+  try {
+    return await within(loadSites(account), SITES_TIMEOUT_MS, "Loading your sites");
+  } catch (err) {
+    if (!(err instanceof AppError) || !navigator.onLine) throw err;
+    return within(loadSites(account), SITES_TIMEOUT_MS, "Loading your sites");
+  }
+}
+
+async function loadSites(account: Account): Promise<SiteRef[]> {
   // An invite for this account's email becomes a membership here, so a person
   // who was invited sees the site the first time they sign in. Failing is fine:
-  // the list below is still right, and the next load tries again.
-  await clientFor(account)
-    .rpc("accept_invites")
-    .then(
-      ({ error }) => error && reportError("accounts.accept_invites", error),
-      (err) => reportError("accounts.accept_invites", err),
-    );
+  // the list below is still right, and the next load tries again. It only gets
+  // a few seconds, so a slow answer can't hold the sites back.
+  await Promise.race([
+    clientFor(account)
+      .rpc("accept_invites")
+      .then(
+        ({ error }) => error && reportError("accounts.accept_invites", error),
+        (err) => reportError("accounts.accept_invites", err),
+      ),
+    new Promise((resolve) => setTimeout(resolve, 4000)),
+  ]);
   const rows = (await withCode(
     "SITES-FETCH",
     must(
