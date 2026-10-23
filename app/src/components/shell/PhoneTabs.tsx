@@ -33,7 +33,7 @@ export function PhoneTabs() {
       >
         <Menu01 className="size-5" />
       </button>
-      <nav aria-label="Pages" ref={row} className="flex min-w-0 flex-1 gap-1 overflow-x-auto px-1 py-2 [scrollbar-width:none]">
+      <nav aria-label="Pages" ref={row} className="flex min-w-0 flex-1 gap-1 overflow-x-auto px-1 py-2 [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] [scrollbar-width:none]">
         {pages.map((p) => (
           <Tab key={hookKey(p)} page={p} active={active === p.id} />
         ))}

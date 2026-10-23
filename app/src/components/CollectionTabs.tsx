@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Copy04, DotsHorizontal, Eye, EyeOff, Trash01 } from "@untitledui/icons";
+import { Copy04, DotsHorizontal, Eye, EyeOff, Plus, Sliders04, Trash01 } from "@untitledui/icons";
 import { db } from "@/lib/db";
 import { go } from "@/lib/route";
 import {
@@ -15,6 +15,8 @@ import { createPost } from "@/lib/posts";
 import { ActionMenu } from "@/components/Menu";
 import { ConfirmTypeDialog } from "@/components/ConfirmTypeDialog";
 import { PostTable } from "@/components/PostTable";
+import { Button } from "@/components/base/buttons/button";
+import { usePlan } from "@/lib/tenantPlan";
 import type { Collection, Post } from "@/types";
 import { toast } from "@/components/base/toast/toast";
 import { loadCollectionRules, saveCollectionRules } from "@/lib/collectionRules";
@@ -85,6 +87,9 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
   const [nameDraft, setNameDraft] = useState(collection.name);
   const [descDraft, setDescDraft] = useState(collection.description ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  // Rules steer the agents; Lite has none.
+  const lite = usePlan() === "lite";
   const [, setActive] = useActiveCollection();
 
   useEffect(() => {
@@ -142,6 +147,16 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
         <ActionMenu
           trigger={<DotsHorizontal className="size-4" data-icon />}
           items={[
+            ...(lite
+              ? []
+              : [
+                  {
+                    id: "rules",
+                    label: "Rules for the agents…",
+                    icon: <Sliders04 className="size-4" />,
+                    onAction: () => setRulesOpen(true),
+                  },
+                ]),
             {
               id: "duplicate",
               label: "Duplicate",
@@ -205,11 +220,21 @@ function CollectionView({ collection, posts }: { collection: Collection; posts: 
         className="mt-3 w-full resize-none bg-transparent text-base text-secondary outline-none placeholder:text-quaternary"
       />
 
-      <AgentRules key={collection.name} name={collection.name} />
-
       <div className="mt-8">
         <PostTable posts={posts} onAddPost={() => void addPost()} />
       </div>
+
+      {/* Phones: the "+ New post" row scrolls away with the list, so a button stays in reach. */}
+      <button
+        type="button"
+        aria-label="New post"
+        onClick={() => void addPost()}
+        className="fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 flex size-14 items-center justify-center rounded-full bg-brand-solid text-white shadow-lg transition active:scale-95 md:hidden"
+      >
+        <Plus className="size-6" />
+      </button>
+
+      {rulesOpen && <RulesDialog name={collection.name} onClose={() => setRulesOpen(false)} />}
 
       {confirmDelete && (
         <ConfirmTypeDialog
@@ -239,9 +264,10 @@ function Kbd({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** The collection's private rules for the agents, saved on blur. */
-function AgentRules({ name }: { name: string }) {
+/** The collection's private rules for the agents (collection menu > Rules for the agents). */
+function RulesDialog({ name, onClose }: { name: string; onClose: () => void }) {
   const [rules, setRules] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const saved = useRef("");
 
   useEffect(() => {
@@ -261,32 +287,55 @@ function AgentRules({ name }: { name: string }) {
     };
   }, [name]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const save = () => {
-    if (rules === null || rules.trim() === saved.current.trim()) return;
-    const next = rules;
-    saveCollectionRules(name, next)
-      .then(() => {
-        saved.current = next;
-      })
+    if (rules === null) return;
+    if (rules.trim() === saved.current.trim()) return onClose();
+    setSaving(true);
+    saveCollectionRules(name, rules)
+      .then(onClose)
       .catch((err) => {
         reportError("collections.saveRules", err);
         toast.add({ type: "error", title: userMessage(err) });
+        setSaving(false);
       });
   };
 
   return (
-    <div className="mt-4 rounded-lg bg-secondary_subtle p-3 ring-1 ring-secondary ring-inset">
-      <div className="text-xs text-tertiary">Rules for the agents · private, never shown on the blog</div>
-      <textarea
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        role="dialog"
         aria-label="Rules for the agents"
-        value={rules ?? ""}
-        disabled={rules === null}
-        onChange={(e) => setRules(e.target.value)}
-        onBlur={save}
-        placeholder="How posts in this collection are written. For example: academic register; show the method, the results and what we learned; cite every number."
-        rows={3}
-        className="mt-1 w-full resize-y bg-transparent text-sm text-primary outline-none placeholder:text-quaternary"
-      />
+        onClick={(e) => e.stopPropagation()}
+        className="w-[520px] max-w-[92vw] rounded-xl border border-secondary bg-secondary p-6 shadow-2xl ring-1 ring-primary"
+      >
+        <h2 className="type-heading text-primary">Rules for the agents</h2>
+        <p className="mt-1 text-sm text-tertiary">Private to this collection, never shown on the blog.</p>
+        <textarea
+          aria-label="Rules for the agents"
+          value={rules ?? ""}
+          disabled={rules === null}
+          onChange={(e) => setRules(e.target.value)}
+          placeholder="How posts in this collection are written. For example: academic register; show the method, the results and what we learned; cite every number."
+          rows={6}
+          className="mt-4 w-full resize-y rounded-lg bg-primary px-3 py-2 text-sm text-primary shadow-xs ring-1 ring-primary outline-none ring-inset placeholder:text-quaternary focus:ring-2 focus:ring-brand"
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button size="sm" color="tertiary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" color="primary" isDisabled={rules === null || saving} onClick={save}>
+            Save
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
