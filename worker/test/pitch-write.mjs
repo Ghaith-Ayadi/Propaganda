@@ -271,6 +271,13 @@ function answer(prompt) {
     return JSON.stringify({ ideas: [{ title: "Retries that don't page anyone", summary: "Durable steps." }, { title: "The cost of a 3am page", summary: "On-call math." }] });
   }
   if (prompt.includes("A reviewer left these notes")) return DRAFT_BODY.replace("## What to do about it", "## What to change tonight");
+  if (prompt.includes("These paragraphs of the draft read as a machine wrote them")) {
+    // The drumbeat paragraph (DRAFT_BODY's forty identical sentences): join a few, so the lengths swing.
+    const paragraph = prompt.split('"""\n')[1]?.split('\n"""')[0] ?? "";
+    let joins = 0;
+    const rewrite = paragraph.replace(/\. Kontra runs/g, (m) => (joins++ < 3 ? ", and Kontra runs" : m));
+    return JSON.stringify({ paragraphs: [{ n: 1, rewrite }] });
+  }
   if (prompt.includes("Write the new summary.")) return "Rejects listicles. Approves customer stories.";
   if (prompt.includes("Propose changes to the guide")) return JSON.stringify({ changes: [{ change: "End on the next step, never a summary.", from: ["Edited one", "Edited two"] }] });
   throw new Error(`stand-in model: no answer for ${prompt.slice(0, 80)}`);
@@ -479,6 +486,7 @@ try {
   const ver = db.post_versions.find((x) => x.post === w.post);
   check(ver?.created_by === "agent:writer" && ver.version === 1, "the draft is version 1, by the Writer");
   check(ver?.attributes.lint.unsourced.length >= 1 && w.left.unsourced >= 1, "an unsourced number is noted for the reviewer");
+  check(ver?.attributes.lint.rhythm?.flagged === 1 && ver.attributes.lint.rhythm.rewritten === 1 && ver.attributes.lint.prose?.sd > ver.attributes.lint.rhythm.before.sd && post.content_md.includes(", and Kontra runs"), `the drumbeat paragraph was rewritten once and the numbers are in the lint (${JSON.stringify(ver?.attributes.lint.rhythm)})`);
   check(ver?.attributes.claims.includes("claim0000000001") && ver.attributes.missingFacts.includes("Kontra's pricing"), "knowledge base claims and missing facts are recorded");
   check(brief.post === w.post && brief.status === "pitched", "the brief links the draft and stays pitched until approved");
   check(prompts.some((x) => x.includes("Edited by a person")), "the Writer wrote in the tenant's voice guide");
