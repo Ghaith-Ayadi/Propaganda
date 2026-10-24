@@ -7,9 +7,9 @@ import { createServer } from "node:http";
 import { roundTrip } from "./chat-roundtrip.mjs";
 
 /** A chat API in memory; `htmlFor` makes one path answer with the app's HTML (the rewrite bug). */
-function stub({ htmlFor } = {}) {
+function stub({ htmlFor, failSend } = {}) {
   const convs = new Map();
-  return createServer((req, res) => {
+  const server = createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
@@ -32,6 +32,7 @@ function stub({ htmlFor } = {}) {
       if (url.pathname === "/api/chat/conversations") return send(200, [...convs.keys()].map((id) => ({ id })));
       if (m && m[2]) return send(200, convs.get(m[1]) ?? []);
       if (m && req.method === "DELETE") return convs.delete(m[1]) ? send(200, { ok: true }) : send(404, {});
+      if (url.pathname === "/api/chat" && failSend) return send(500, { error: "boom" });
       if (url.pathname === "/api/chat") {
         const b = JSON.parse(body);
         convs.get(b.id).push({ role: "user" }, { role: "assistant" });
@@ -41,6 +42,8 @@ function stub({ htmlFor } = {}) {
       send(404, {});
     });
   });
+  server.convs = convs;
+  return server;
 }
 
 async function run(server, opts = {}) {
@@ -69,4 +72,11 @@ test("a function that does not answer fails the first step and stops", async () 
   const results = await run(stub({ htmlFor: "/conversations" }));
   assert.equal(results.length, 1);
   assert.equal(results[0].ok, false);
+});
+
+test("a failed send still deletes the conversation it made", async () => {
+  const server = stub({ failSend: true });
+  const results = await run(server, { send: true });
+  assert.equal(results.find((r) => !r.ok)?.step, "send a message");
+  assert.equal(server.convs.size, 0);
 });

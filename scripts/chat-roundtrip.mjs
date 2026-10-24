@@ -7,7 +7,7 @@
 //     node scripts/chat-roundtrip.mjs [--base https://dev.propaganda.pub] [--send]
 //
 // Without --send it never calls a model (create, list, read back, delete). With --send it also
-// sends one short message (a few cents on the dev box's DeepSeek) and waits for the reply to be
+// sends one short message (on the dev box that is a few cents of DeepSeek; on any other server it uses that server's Chat model and bills the tenant) and waits for the reply to be
 // stored. Exit 0 = every step passed, 1 = a step failed, 2 = it could not run (no token or site).
 import { fileURLToPath } from "node:url";
 
@@ -45,40 +45,43 @@ export async function roundTrip({ base, token, site, send = false, replyWaitMs =
   const created = await call("/api/chat/conversations", { method: "POST", body: JSON.stringify({ site, id: conv }) });
   if (!note("create a conversation", json(created, 201), why(created))) return results;
 
-  const listed = await call(`/api/chat/conversations?${q}`);
-  note("the list holds it", json(listed, 200) && Array.isArray(listed.json) && listed.json.some((c) => c.id === conv), why(listed));
+  // A failed step still deletes the conversation: a stray "Say hello" chat in a real member's list is not a result.
+  try {
+    const listed = await call(`/api/chat/conversations?${q}`);
+    note("the list holds it", json(listed, 200) && Array.isArray(listed.json) && listed.json.some((c) => c.id === conv), why(listed));
 
-  const empty = await call(`/api/chat/conversations/${conv}/messages?${q}`);
-  note("read its messages (what a refresh does)", json(empty, 200) && Array.isArray(empty.json), why(empty));
+    const empty = await call(`/api/chat/conversations/${conv}/messages?${q}`);
+    note("read its messages (what a refresh does)", json(empty, 200) && Array.isArray(empty.json), why(empty));
 
-  if (send) {
-    const sent = await call("/api/chat", {
-      method: "POST",
-      body: JSON.stringify({
-        site,
-        id: conv,
-        trigger: "submit-message",
-        messageId: id(),
-        message: { id: id(), role: "user", parts: [{ type: "text", text: "Say hello in one word." }] },
-      }),
-    });
-    if (!note("send a message", sent.status === 200, why(sent))) return results;
-    // The reply is stored when the stream ends; the stream was read to its end above.
-    const end = Date.now() + replyWaitMs;
-    let back;
-    do {
-      back = await call(`/api/chat/conversations/${conv}/messages?${q}`);
-      if (json(back, 200) && back.json.some((m) => m.role === "assistant")) break;
-      await sleep(2000);
-    } while (Date.now() < end);
-    const roles = json(back, 200) && Array.isArray(back.json) ? back.json.map((m) => m.role).join(",") : why(back);
-    note("the question and the reply are there after a refresh", roles === "user,assistant", roles);
+    if (send) {
+      const sent = await call("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          site,
+          id: conv,
+          trigger: "submit-message",
+          messageId: id(),
+          message: { id: id(), role: "user", parts: [{ type: "text", text: "Say hello in one word." }] },
+        }),
+      });
+      if (!note("send a message", sent.status === 200, why(sent))) return results;
+      // The reply is stored when the stream ends; the stream was read to its end above.
+      const end = Date.now() + replyWaitMs;
+      let back;
+      do {
+        back = await call(`/api/chat/conversations/${conv}/messages?${q}`);
+        if (json(back, 200) && back.json.some((m) => m.role === "assistant")) break;
+        await sleep(2000);
+      } while (Date.now() < end);
+      const roles = json(back, 200) && Array.isArray(back.json) ? back.json.map((m) => m.role).join(",") : why(back);
+      note("the question and the reply are there after a refresh", roles === "user,assistant", roles);
+    }
+  } finally {
+    const gone = await call(`/api/chat/conversations/${conv}?${q}`, { method: "DELETE" });
+    note("delete it", gone.status >= 200 && gone.status < 300 && (gone.json !== undefined || gone.text === ""), why(gone));
+    const after = await call(`/api/chat/conversations?${q}`);
+    note("the list no longer holds it", json(after, 200) && Array.isArray(after.json) && !after.json.some((c) => c.id === conv), why(after));
   }
-
-  const gone = await call(`/api/chat/conversations/${conv}?${q}`, { method: "DELETE" });
-  note("delete it", gone.status >= 200 && gone.status < 300 && (gone.json !== undefined || gone.text === ""), why(gone));
-  const after = await call(`/api/chat/conversations?${q}`);
-  note("the list no longer holds it", json(after, 200) && Array.isArray(after.json) && !after.json.some((c) => c.id === conv), why(after));
   return results;
 }
 
