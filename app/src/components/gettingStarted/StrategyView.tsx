@@ -27,7 +27,7 @@ import { reportError, track } from "@/lib/telemetry";
 import { cx } from "@/utils/cx";
 import { activeSite } from "@/lib/scope";
 import { SectionTitle, Spinner } from "./bits";
-import { BUCKETS, bucketOf, COLUMNS, ColumnHeader, SearchCells } from "@/components/goals/searchBits";
+import { SearchTable } from "@/components/goals/searchBits";
 import type { StrategistProgress } from "./progress";
 import { MAX_ROUNDS } from "./state";
 
@@ -41,8 +41,6 @@ function Reveal({ i, children, className }: { i: number; children: React.ReactNo
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US");
-
-const BUCKET_DOT: Record<"success" | "blue" | "gray", string> = { success: "bg-success-primary", blue: "bg-brand-solid", gray: "bg-quaternary" };
 
 /** A topic card shows its thesis; the why and the basis sit behind "Read more" (Ayadi, 2026-10-20: reading seven full topics is a job). */
 function TopicReason({ thesis, why, basis }: { thesis?: string; why: string; basis: string }) {
@@ -232,47 +230,7 @@ export function StrategyView({
             </div>
           )}
           <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-secondary text-left text-xs text-tertiary">
-                  <tr>
-                    <th className="px-5 py-2.5 font-medium">Target search term</th>
-                    {COLUMNS.map((c) => (
-                      <ColumnHeader key={c.key} label={c.label} why={c.why} className="px-3 py-2.5" />
-                    ))}
-                    <th className="px-5 py-2.5 font-medium">Why this one</th>
-                  </tr>
-                </thead>
-                {(buckets ? BUCKETS : [null]).map((b) => {
-                  const rows = b ? proposal.ranking.searches.filter((s) => bucketOf(s) === b.key) : proposal.ranking.searches;
-                  if (!rows.length) return null;
-                  return (
-                    <tbody key={b?.key ?? "all"} className="divide-y divide-secondary border-b border-secondary last:border-b-0">
-                      {b && (
-                        <tr className="bg-secondary">
-                          <td colSpan={COLUMNS.length + 2} className="px-5 py-2">
-                            <span className="inline-flex items-center gap-2 text-xs font-medium text-primary">
-                              <span className={cx("inline-block size-2 rounded-full", BUCKET_DOT[b.color])} aria-hidden />
-                              {b.label}
-                              <span className="font-normal text-tertiary">· {b.why}</span>
-                            </span>
-                          </td>
-                        </tr>
-                      )}
-                      {rows.map((s) => (
-                        <tr key={s.query}>
-                          <td className="px-5 py-2.5">
-                            <code className="rounded bg-brand-primary px-1.5 py-0.5 font-mono text-[13px] text-brand-secondary">{s.query}</code>
-                          </td>
-                          <SearchCells s={s} />
-                          <td className="px-5 py-2.5 text-tertiary">{s.why}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  );
-                })}
-              </table>
-            </div>
+            <SearchTable searches={proposal.ranking.searches} quarterEnd={proposal.covers?.to} />
             <CardFooter>Volumes, links and rankings from DataForSEO, this week. Hover a column's name for what it means.</CardFooter>
           </Card>
         </Reveal>

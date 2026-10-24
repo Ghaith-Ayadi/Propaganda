@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build && vite build -c vite.ssr.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
+    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "check:weights": "node scripts/check-font-weights.mjs",
     "build:blog": "vite build -c vite.ssr.config.ts",
     "build:box": "vite build -c vite.box.config.ts"
