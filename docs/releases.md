@@ -45,6 +45,22 @@ tag (v0.2.4 from 2026-10-14), so a box deploy ships released code only. Moving t
 release is a one-line Bedrock PR (`SCHEMA_REF=vX.Y.Z`) that deploys on merge: make it after every
 release, and merge it right after the release's app deploy.
 
+## Chat round trip
+
+`scripts/chat-roundtrip.mjs` runs Chat's path against a deployed server: start a conversation,
+read it back the way a refresh does, send one message (`--send`, a few cents on DeepSeek), check
+the question and reply are stored, delete it. Every answer must be JSON from our functions, which
+catches a function that crashes on load and a rewrite that answers an API call with the app's
+HTML. Before any release or hotfix that touches `api/`, `vercel.json` or the Chat page, run it
+against the dev site after the deploy and again against prod after the release:
+
+```
+CHAT_CHECK_TOKEN=<a member's access token> CHAT_CHECK_SITE=<site id> \
+  node scripts/chat-roundtrip.mjs --base https://dev.propaganda.pub --send
+```
+
+Exit 0 passes, 1 names the failing step, 2 means no token or site (not a pass).
+
 ## Hotfix
 
 A fix that must reach production before the next full release. A normal release ships all of
