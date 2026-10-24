@@ -197,7 +197,7 @@ const kit = await import("../dist/testkit.js");
 const { DBOS } = await import("@dbos-inc/dbos-sdk");
 kit.setModelResolver(() => model);
 kit.setWorkflowContext(() => ({ workflowId: DBOS.workflowID ?? null, stepId: DBOS.stepID ?? null }));
-DBOS.setConfig({ name: "propaganda-scout-test", systemDatabaseUrl: `${PGURL}/${SYS}`, applicationVersion: "test" });
+DBOS.setConfig({ name: "propaganda-scout-test", systemDatabaseUrl: `${PGURL}/${SYS}`, applicationVersion: "test", enablePatching: true });
 await DBOS.launch();
 await kit.registerQueues();
 
