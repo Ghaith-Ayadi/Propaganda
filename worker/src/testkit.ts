@@ -10,7 +10,7 @@ export { extractLinks, newLinks, privateAddress } from "./scout/pages.js";
 export { checkSearch, sameQuestion } from "./scout/ranking.js";
 export { domainsOf, isOurs, quarterOf } from "./scout/store.js";
 export { parseIdeas } from "./scout/triage.js";
-export { scoutDb } from "./scout/store.js";
+export { saveSearchConsole, scoutDb } from "./scout/store.js";
 export { fetchPage } from "./scout/pages.js";
 export { runRound, worstCase, checkModels, ARENA_DEFAULT_MODELS } from "./arena.js";
 export { judgePrompt } from "./agents/pitcher.js";
