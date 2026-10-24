@@ -19,10 +19,12 @@ import { callModel } from "../../../api/_ai/gateway";
 import { modelStep } from "../limits.js";
 import { collectSearches, dataForSeoConfigured, llmMentions, queueSearches, type SerpItem, type SerpRequest } from "../scout/dataforseo.js";
 import { extractLinks, fetchPage, newLinks, type PageLink } from "../scout/pages.js";
+import { searchConsoleFor } from "../agents/gsc.js";
 import { checkAi, checkSearch, type AiCheck, type SearchCheck } from "../scout/ranking.js";
 import {
   readPlan,
   saveDay,
+  saveSearchConsole,
   tenantsToScout,
   unseen,
   type Finding,
@@ -265,6 +267,23 @@ async function scoutRun(input: ScoutInput | DispatchInput): Promise<ScoutSummary
   const ideaIds = await DBOS.runStep(() => handOffIdeas(site, ideas), { name: "hand ideas to the Pitcher" });
 
   await DBOS.runStep(() => saveDay({ site, day, facts, snapshots, seen: toRead.map((c) => c.url) }), { name: "save" });
+
+  // The blog's own Search Console queries, kept week by week (2026-10-24). A run recorded before has none;
+  // a failed read never fails the Scout.
+  if (await DBOS.patch("scout-search-console")) {
+    await DBOS.runStep(
+      async () => {
+        try {
+          // A site with its own domain is a separate property, read with the owner's own sign-in (docs/search-console.md).
+          const gsc = plan.domains.length === 1 ? await searchConsoleFor(plan.domains[0]!) : null;
+          if (gsc) await saveSearchConsole(site, day, gsc.seen.map((k) => ({ query: k.keyword, clicks: k.clicks ?? 0, impressions: k.impressions ?? 0, position: k.position ?? 0 })));
+        } catch (err) {
+          console.warn(`scout search console: ${(err as Error).message}`);
+        }
+      },
+      { name: "search console snapshot" },
+    );
+  }
 
   return {
     searches: checks.length,

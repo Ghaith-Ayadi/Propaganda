@@ -207,3 +207,23 @@ export async function saveDay(w: DayWrite): Promise<void> {
     c.release();
   }
 }
+
+export interface QueryRow {
+  query: string;
+  clicks: number;
+  impressions: number;
+  position: number;
+}
+
+/** One day's Search Console read of a blog, kept so a later read has something to compare with. A second read on the same day replaces the first. */
+export async function saveSearchConsole(site: string, day: string, rows: QueryRow[]): Promise<number> {
+  const kept = rows.filter((r) => r.query.length >= 1 && r.query.length <= 500);
+  if (!kept.length) return 0;
+  await scoutDb().query(
+    `insert into public.search_console_snapshots (site, day, query, clicks, impressions, position)
+     select $1, $2, q, c, i, p from unnest($3::text[], $4::int[], $5::int[], $6::numeric[]) as t(q, c, i, p)
+     on conflict (site, day, query) do update set clicks = excluded.clicks, impressions = excluded.impressions, position = excluded.position`,
+    [site, day, kept.map((r) => r.query), kept.map((r) => r.clicks), kept.map((r) => r.impressions), kept.map((r) => Math.round(r.position * 100) / 100)],
+  );
+  return kept.length;
+}

@@ -20,4 +20,8 @@ The Strategist reads how a tenant's own blog does in Google (`worker/src/agents/
 - **The Pitcher** reads the same two lists once per batch (step `search console`, behind
   `DBOS.patch("pitcher-search-console")`) and puts them in each pitch prompt, so a pitch can aim at a
   search just off page one or at a question no post answers. A failed read leaves the prompt as it was.
-- **Not yet.** A weekly snapshot table (trends need one; it is a migration) and custom-domain OAuth.
+- **Snapshots.** The weekly Scout keeps each read in `search_console_snapshots` (site, day, query, clicks,
+  impressions, position; `20261010000210_search_console_snapshots.sql`), behind
+  `DBOS.patch("scout-search-console")`, so a trend has something to compare. A site on its own domain is skipped.
+  Nothing reads the table yet.
+- **Not yet.** Reading the snapshots as a trend, and custom-domain OAuth.

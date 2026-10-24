@@ -197,7 +197,7 @@ const kit = await import("../dist/testkit.js");
 const { DBOS } = await import("@dbos-inc/dbos-sdk");
 kit.setModelResolver(() => model);
 kit.setWorkflowContext(() => ({ workflowId: DBOS.workflowID ?? null, stepId: DBOS.stepID ?? null }));
-DBOS.setConfig({ name: "propaganda-scout-test", systemDatabaseUrl: `${PGURL}/${SYS}`, applicationVersion: "test" });
+DBOS.setConfig({ name: "propaganda-scout-test", systemDatabaseUrl: `${PGURL}/${SYS}`, applicationVersion: "test", enablePatching: true });
 await DBOS.launch();
 await kit.registerQueues();
 
@@ -337,6 +337,19 @@ const s4 = await (await DBOS.startWorkflow(kit.scout)({ site: SITE, task: "anyth
 check(s4.aiMentioned === 1 && seo.slice(seoChat).some((r) => r.path.includes("llm_mentions")), "a run from Chat checks the AI answers too");
 const today = new Date().toISOString().slice(0, 10);
 check((await app.query("select 1 from public.daily_facts where site = $1 and day = $2", [SITE, today])).rowCount === 2, "and writes today's facts");
+
+// ---- the week's Search Console read is kept ----
+
+console.log("search console snapshots");
+const gscWeek = (n) => [{ query: "durable crawling", clicks: 1, impressions: 40, position: 31.256 }, { query: "fleet scraping framework", clicks: 5, impressions: 90, position: 4 }, { query: "", clicks: 0, impressions: 1, position: 1 }].slice(0, n);
+check(await kit.saveSearchConsole(SITE, "2026-10-19", gscWeek(3)) === 2, "a week's read is saved, a row with no query dropped");
+await kit.saveSearchConsole(SITE, "2026-10-19", [{ query: "durable crawling", clicks: 2, impressions: 50, position: 29 }]);
+const snap = (await app.query("select query, clicks, position::float from public.search_console_snapshots where site = $1 and day = '2026-10-19' order by query", [SITE])).rows;
+check(snap.length === 2 && snap[0].clicks === 2 && snap[0].position === 29, "reading the same day twice replaces, never doubles");
+await kit.saveSearchConsole(SITE, "2026-10-26", [{ query: "durable crawling", clicks: 3, impressions: 60, position: 14.2 }]);
+check((await app.query("select 1 from public.search_console_snapshots where site = $1 and query = 'durable crawling'", [SITE])).rowCount === 2, "a later week keeps the earlier one for the trend");
+await assert.rejects(kit.saveSearchConsole("nosuchsite00000", "2026-10-26", gscWeek(1)), /foreign key|violates/);
+check((await app.query("select input_per_mtok::float i, cache_write_per_mtok::float w from public.model_prices where model = 'anthropic/claude-opus-5.5'")).rows[0]?.i === 4, "the Opus 5.5 price row is there");
 
 // ---- the Scout's database role can't touch content ----
 
