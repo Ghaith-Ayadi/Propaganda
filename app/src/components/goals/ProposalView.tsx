@@ -13,7 +13,7 @@ import { Button } from "@/components/base/buttons/button";
 import { toast } from "@/components/base/toast/toast";
 import { reportError } from "@/lib/telemetry";
 import { Card, Reason } from "./bits";
-import { BucketBadge, fmtTrend, fmtVolume, MONTHS } from "./searchBits";
+import { SearchTable } from "./searchBits";
 import { cx } from "@/utils/cx";
 
 const STATUS: Record<Proposal["status"], { label: string; color: "gray" | "brand" | "warning" | "success" }> = {
@@ -188,7 +188,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
             <Reason {...draft.ranking.aiMentionTarget} />
           </div>
         </div>
-        <SearchList searches={draft.ranking.searches} topics={draft.topics.map((t) => t.name)} readersFind={proposal.readersFind} editable={editable} onChange={(searches) => set({ ranking: { ...draft.ranking, searches } })} />
+        <SearchList searches={draft.ranking.searches} topics={draft.topics.map((t) => t.name)} readersFind={proposal.readersFind} quarterEnd={proposal.covers?.to} editable={editable} onChange={(searches) => set({ ranking: { ...draft.ranking, searches } })} />
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -359,35 +359,13 @@ function Collapsed({ lead, why, basis, origin }: { lead: string; why: string; ba
   );
 }
 
-function SearchList({ searches, topics, readersFind, editable, onChange }: { searches: ProposedSearch[]; topics: string[]; readersFind?: string; editable: boolean; onChange: (s: ProposedSearch[]) => void }) {
+function SearchList({ searches, topics, readersFind, quarterEnd, editable, onChange }: { searches: ProposedSearch[]; topics: string[]; readersFind?: string; quarterEnd?: string; editable: boolean; onChange: (s: ProposedSearch[]) => void }) {
   const [q, setQ] = useState("");
   return (
     <div className="mt-5 border-t border-secondary pt-4">
       <p className="mb-2 text-sm font-medium text-secondary">The {searches.length} searches</p>
       {readersFind && <p className="mb-3 text-sm text-secondary">{readersFind}</p>}
-      <ul className="divide-y divide-secondary">
-        {searches.map((s, i) => (
-          <li key={s.query} className="flex items-start gap-3 py-2.5">
-            <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-2 text-sm text-primary">
-                {s.query}
-                {s.bucket && <BucketBadge bucket={s.bucket} />}
-              </p>
-              <p className="text-xs text-tertiary">
-                {s.topic}
-                {s.volume != null && ` · ${fmtVolume(s.volume)} searches a month`}
-                {s.yoy != null ? ` · ${fmtTrend(s.yoy)} vs last year` : s.trend6 != null && ` · ${fmtTrend(s.trend6)} over 6 months`}
-                {s.peakMonth != null && ` · peaks in ${MONTHS[s.peakMonth - 1]}`}
-                {s.difficulty != null && ` · difficulty ${s.difficulty}`}
-                {s.referringDomains != null && ` · page one averages ${s.referringDomains} linking sites`}
-                {s.aiOverview && " · AI overview"}
-              </p>
-              <p className="text-xs text-quaternary">{s.why}</p>
-            </div>
-            {editable && <Button size="sm" color="tertiary" iconLeading={Trash01} aria-label={`Remove ${s.query}`} onClick={() => onChange(searches.filter((_, k) => k !== i))} />}
-          </li>
-        ))}
-      </ul>
+      <SearchTable searches={searches} quarterEnd={quarterEnd} onRemove={editable ? (i) => onChange(searches.filter((_, k) => k !== i)) : undefined} />
       {editable && searches.length < 20 && (
         <AddRow
           placeholder="Add a search"
