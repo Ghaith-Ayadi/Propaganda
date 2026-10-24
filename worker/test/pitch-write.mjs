@@ -387,6 +387,30 @@ try {
     const h = t.applyPolish([md], [{ n: 1, sentence: "Why does this matter?", must: false, why: ["\"x\": rule 14, a drumroll"] }], [{ n: 1, rewrite: "" }]);
     check(h.texts[0] === "Intro.\n\nBody.", `applyPolish: a deleted heading leaves no bare "## " (desk review) (${JSON.stringify(h.texts[0])})`);
   }
+  // Rhythm (2026-10-24): second person and sentence monotony, on the shape of a real PPGD draft (Qwen).
+  {
+    const drum = "ChatGPT writes a sentence about your pricing. The price is wrong. You search the web to verify it. The search returns nothing because your page is not indexed. The engine just guesses. Models [hallucinate facts](https://arxiv.org/html/2502.12769v2) when they lack a reference. Your records are the only reference that matters. You read the guess and accept it. You publish a post with a false price. Your prospects see it. They leave.";
+    const human = "Prices change and products change. The blog, the emails and the sales deck stop agreeing, and nobody catches it on the day it happens, because the person who changed the price was not the person who wrote the deck. The March invoice to Bauer went out eleven days late. It was paid in June.";
+    const n = t.proseNumbers(drum);
+    check(n.you === 7 && n.youPer100 > t.YOU_PER_100 && n.sd < t.MONOTONE_SD, `proseNumbers counts "you" and the swing of sentence lengths (${JSON.stringify(n)})`);
+    check(t.proseNumbers(human).you === 0 && t.proseNumbers(human).sd > t.MONOTONE_SD, "a paragraph with long and short sentences swings");
+    check(t.rhythmFlags(`## Heading\n\n${human}\n\n- you, you, you, you\n\n${drum}`).map((f) => f.rules.join("+")).join(",") === "second-person+monotone", "rhythmFlags: the drumbeat paragraph is flagged for both, the human one and the list for neither");
+    check(t.rhythmFlags(human).length === 0 && t.rhythmFlags(`${drum}\n\n${human}\n\n${human}\n\n${human}`).every((f) => !f.rules.includes("second-person")), "rhythmFlags: a post under the \"you\" line is never flagged for it, whatever one paragraph does");
+    check(t.contrastHits("CNET retracted articles. The prose was fine. The facts were not.").length === 1, "rule 2: \"The prose was fine. The facts were not.\" is the contrast");
+    const flags = t.rhythmFlags(drum);
+    check(t.rhythmPrompt(flags).includes('"you" 7 times') && !/\u2014/.test(t.rhythmPrompt(flags)), "the rhythm prompt carries the numbers and no em dash");
+    const good = "ChatGPT writes a sentence about the pricing, and the price is wrong, because the pricing page was never indexed and the engine guessed. Models [hallucinate facts](https://arxiv.org/html/2502.12769v2) when they lack a reference, and the company's own records are the only reference that matters. The guess reads well enough to publish. Prospects see the false price and leave.";
+    const kept = t.applyRhythm(drum, flags, t.parseRhythm({ paragraphs: [{ n: 1, rewrite: good }] }));
+    check(kept.stats.rewritten === 1 && kept.markdown === good && kept.stats.after.you < kept.stats.before.you, `applyRhythm keeps a rewrite that reads better by the numbers (${JSON.stringify(kept.stats)})`);
+    const noLink = good.replace("[hallucinate facts](https://arxiv.org/html/2502.12769v2)", "hallucinate facts");
+    check(t.applyRhythm(drum, flags, [{ n: 1, rewrite: noLink }]).stats.refused === 1, "applyRhythm refuses a rewrite that lost a link");
+    check(t.applyRhythm(drum, flags, [{ n: 1, rewrite: good.replace("and the price is wrong,", "and the price is wrong \u2014") }]).stats.refused === 1, "applyRhythm refuses a rewrite with an em dash");
+    check(t.applyRhythm(drum, flags, [{ n: 1, rewrite: drum.replace("ChatGPT", "A model") }]).stats.refused === 1, "applyRhythm refuses a rewrite whose numbers did not move");
+    check(t.applyRhythm(drum, flags, []).stats.refused === 1 && t.applyRhythm(drum, flags, []).markdown === drum, "an unanswered paragraph stays as it was");
+    check(t.voiceFor(null, "Bold and provocative. Satire.").startsWith("# The tenant's voice\n\n**In the tenant's own words:** Bold and provocative. Satire.") && t.voiceFor(null, "Bold.").includes("Vary the paragraphs"), "a person's onboarding voice goes over the craft, never instead of it");
+    check(t.voiceFor(null) === t.DEFAULT_VOICE && t.voiceFor({ body: "# Mine", samples: [], source: "content" }) === "# Mine", "no words from the person: the guide, else the default");
+    check(t.HOUSE_RULES.includes("not a drumbeat") && t.HOUSE_RULES.includes("are ours"), "the house rules cap \"you\" and keep their examples to themselves");
+  }
   check(t.noDashes(t.HOUSE_STYLE) === t.HOUSE_STYLE && !/\u2014/.test(t.HOUSE_RULES + t.TITLE_RULES + t.PITCHER_SYSTEM), "the rules themselves carry no em dash");
   // Who said what (2026-10-20): the plan or the site is never "you said", and a learned line with no note or decision behind it goes.
   check(t.PITCHER_SYSTEM.includes(t.ATTRIBUTION_RULE) && t.ATTRIBUTION_RULE.includes('"the plan says"'), "the Pitcher is told who said what");

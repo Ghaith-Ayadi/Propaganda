@@ -45,8 +45,8 @@ import { readPage, type Page } from "./web.js";
 import { AUTHORITY_RULE, quotable } from "./authority.js";
 import { ownHostsOf, vetSources } from "./sources.js";
 import { SearchSession, searchDurably } from "./search.js";
-import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, hardHits, houseTitleHits, noDashes, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit, type PolishStats } from "./writing.js";
-import { polishTexts } from "./polish.js";
+import { HOUSE_RULES, RULE_NAMES, TITLE_RULES, contrastHits, hardHits, houseTitleHits, noDashes, proseNumbers, styleHits, titleHits, unsourcedNumbers, wordCount, type Hit, type PolishStats, type RhythmStats } from "./writing.js";
+import { polishRhythm, polishTexts } from "./polish.js";
 import { briefBlock, parseDraft, writerSystem } from "./writer-prompt.js";
 
 export interface WriteInput {
@@ -244,7 +244,8 @@ async function writeRun(input: WriteInput): Promise<WriteResult> {
     await voiceGuideWorkflow({ site, sourceSite: voiceSourceFor(site) });
     guide = await DBOS.runStep(() => voiceGuide(site), { name: "read the new voice guide" });
   }
-  const voice = ownVoice || voiceFor(guide);
+  // The person's words go over the craft (2026-10-24); runs recorded before replay the old join.
+  const voice = (await DBOS.patch("writer-voice-craft")) ? voiceFor(guide, ownVoice) : ownVoice || voiceFor(guide);
   // The collection's own rules (collection_rules). A run recorded before they were read has none.
   const rulesBlock = collectionRulesBlock(cols ?? [], brief.collection_name || cols?.find((c) => !c.is_hidden)?.name || "");
   // The tenant's style rules (kb_styles). A run recorded before they were read has none.
@@ -293,6 +294,12 @@ Answer with JSON only: {"title": "...", "subtitle": "the short description", "ma
     ({ markdown, excerpt } = p);
     titled = { title: p.title, subtitle: p.subtitle };
     polish = p.stats;
+  }
+  // Second person and sentence monotony (2026-10-24): one rewrite of the paragraphs over the line.
+  // A new step: runs recorded before it replay without it.
+  let rhythm: RhythmStats | null = null;
+  if (await DBOS.patch("writer-rhythm")) {
+    ({ markdown, stats: rhythm } = await polishRhythm("fix the rhythm", { site, job: "writer:rules", model: MODELS.writer, system: writerSystem(voice) }, markdown));
   }
   // One short description, kept in both places that show it: the subtitle (editor, reader) and the excerpt (listings, meta).
   // A new step (2026-10-15): runs recorded before it replay without it.
@@ -353,6 +360,8 @@ Answer with JSON only: {"title": "...", "subtitle": "the short description", "ma
             unsourced: unsourced.map((h) => h.sentence),
             offSourceLinks: offSource,
             ...(polish ? { polish } : {}),
+            ...(rhythm ? { rhythm } : {}),
+            prose: proseNumbers(markdown),
           },
         },
       }),
@@ -447,7 +456,7 @@ async function reviseRun(input: ReviseInput): Promise<WriteResult> {
   if (!current) return { status: "skipped", reason: "no such post" };
   if (current.status === "published") return { status: "skipped", reason: "the post is published" };
   if (input.brief) await DBOS.runStep(() => moveBrief(site, input.brief!, "in_progress", ["todo"]), { name: "mark it Writing" });
-  const voice = ownVoice || voiceFor(guide);
+  const voice = (await DBOS.patch("writer-revise-voice-craft")) ? voiceFor(guide, ownVoice) : ownVoice || voiceFor(guide);
   const tenantStyles = (await DBOS.patch("writer-revise-styles"))
     ? stylesBlock(await DBOS.runStep(() => styles(site), { name: "read the tenant's styles" }))
     : "";
@@ -469,6 +478,10 @@ ${current.content_md}`,
   // The twenty rules (2026-10-12); runs recorded before them replay without.
   const styled = await DBOS.patch("writer-revise-house-style");
   if (styled) markdown = (await polishTexts("polish the prose", { site, job: "writer:rules", model: MODELS.base, system: writerSystem(voice) }, [markdown])).texts[0];
+  let rhythm: RhythmStats | null = null;
+  if (await DBOS.patch("writer-revise-rhythm")) {
+    ({ markdown, stats: rhythm } = await polishRhythm("fix the rhythm", { site, job: "writer:rules", model: MODELS.writer, system: writerSystem(voice) }, markdown));
+  }
 
   const versionId = await DBOS.runStep(() => Promise.resolve(newId()), { name: "mint the version" });
   const version = await DBOS.runStep(
@@ -483,7 +496,12 @@ ${current.content_md}`,
           agent: "writer",
           suggestion: true,
           notes: input.notes.slice(0, 4000),
-          lint: { contrast: leftHits(markdown, styled).map((h) => h.sentence), unsourced: unsourcedNumbers(markdown).map((h) => h.sentence) },
+          lint: {
+            contrast: leftHits(markdown, styled).map((h) => h.sentence),
+            unsourced: unsourcedNumbers(markdown).map((h) => h.sentence),
+            ...(rhythm ? { rhythm } : {}),
+            prose: proseNumbers(markdown),
+          },
         },
       }),
     { name: "save the suggestion" },

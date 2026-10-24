@@ -233,7 +233,7 @@ async function writerTask(site: string, briefId: string | undefined): Promise<Ta
     personVoice(site),
     claimsFor(site, [brief.title, brief.angle, ...(brief.outline ?? []).map((l) => l.text)].filter(Boolean), 8),
   ]);
-  const voice = own || voiceFor(guide);
+  const voice = voiceFor(guide, own);
   return {
     task: `Write: ${brief.title}`,
     ideas: [],

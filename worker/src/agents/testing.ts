@@ -12,7 +12,7 @@ export { newId, stableId } from "./ids.js";
 export { passages, links, numbersMatch } from "./text.js";
 export { cleanChecks, decide, severityOf } from "./verdict.js";
 // The Pitcher and the Writer.
-export { contrastHits, proseHits, styleHits, titleHits, unsourcedNumbers, HOUSE_RULES, TITLE_RULES, HOUSE_STYLE, hardHits, houseTitleHits, noDashes, softHits, polishItems, polishPrompt, parsePolish, applyPolish } from "./writing.js";
+export { contrastHits, proseHits, styleHits, titleHits, unsourcedNumbers, HOUSE_RULES, TITLE_RULES, HOUSE_STYLE, hardHits, houseTitleHits, noDashes, softHits, polishItems, polishPrompt, parsePolish, applyPolish, proseNumbers, rhythmFlags, rhythmPrompt, parseRhythm, applyRhythm, YOU_PER_100, MONOTONE_SD } from "./writing.js";
 export { polishTexts } from "./polish.js";
 export { proposalWithoutDashes } from "./strategy.js";
 export { callModel } from "../../../api/_ai/gateway";
@@ -22,7 +22,7 @@ export { standing, isoWeek } from "./goals.js";
 export { handOffIdeas } from "./ideas.js";
 export { pitcher, pitchFromRequest } from "./pitcher.js";
 export { writer, reviser, briefForTask, dispatchWriting, sweepStuckWriting } from "./writer.js";
-export { voiceGuideWorkflow, DEFAULT_VOICE } from "./voice.js";
+export { voiceGuideWorkflow, DEFAULT_VOICE, VOICE_CRAFT, voiceFor } from "./voice.js";
 export { saveVoiceGuide } from "./store.js";
 export { pitchBatch, dailyBatches, keepLearned, ATTRIBUTION_RULE } from "./pitcher.js";
 export { nextQuota, approvalRate, pitchesFor, unassigned } from "./batches.js";
