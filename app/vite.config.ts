@@ -299,8 +299,10 @@ export default defineConfig(({ mode }) => {
           // it retires, PocketBase), so page loads there must reach the
           // network. Otherwise the worker answers Google's callback
           // (/auth/v1/callback) with the app shell, the code never reaches the
-          // auth server and sign-in hangs.
-          navigateFallbackDenylist: [/^\/auth\/v1\//, /^\/rest\/v1\//, /^\/realtime\/v1\//, /^\/api\//, /^\/_\//],
+          // auth server and sign-in hangs. The worker (/worker/v1: Claude's
+          // sign-in, connector callbacks) and /.well-known (Claude's sign-in
+          // metadata) are the same: the shell there showed "Site not found".
+          navigateFallbackDenylist: [/^\/auth\/v1\//, /^\/rest\/v1\//, /^\/realtime\/v1\//, /^\/worker\/v1\//, /^\/\.well-known\//, /^\/api\//, /^\/_\//],
           globPatterns: ["**/*.{js,css,html,svg,ico,woff2}"],
           // A new release's worker takes over open tabs at once; EditorApp's
           // watchForNewVersion() then reloads them or offers a reload.
