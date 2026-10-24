@@ -24,7 +24,7 @@
       "destination": "/api/blog"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
