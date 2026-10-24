@@ -19,7 +19,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SharePanel } from "@/components/SharePanel";
 import { SlugField } from "@/components/SlugField";
 import { useWorkspace } from "@/components/Workspace";
-import { postPublicUrl } from "@/lib/siteUrl";
+import { postPreviewUrl, postPublicUrl } from "@/lib/siteUrl";
 import { collectionSlugOf } from "@/lib/slug";
 import { TagSelect } from "@/components/TagSelect";
 import { Input } from "@/components/base/input/input";
@@ -82,7 +82,10 @@ export function AttributePanel({ post }: Props) {
   }, [comments.draft, comments.seq, comments.from]);
 
   const { site } = useWorkspace();
-  const publicUrl = postPublicUrl(site, collectionSlugOf(post.type, collectionRows), post.slug);
+  const collectionSlug = collectionSlugOf(post.type, collectionRows);
+  const publicUrl = postPublicUrl(site, collectionSlug, post.slug);
+  // A post that isn't published yet has no public page: it opens on its preview address.
+  const previewUrl = post.status === "published" ? publicUrl : postPreviewUrl(site.slug, collectionSlug, post.slug || post.id);
 
   async function onDuplicate() {
     const dup = await duplicatePost(post);
@@ -156,7 +159,7 @@ export function AttributePanel({ post }: Props) {
             color="tertiary"
             tooltip="Preview"
             icon={LinkExternal01}
-            onClick={() => window.open(publicUrl, "_blank")}
+            onClick={() => window.open(previewUrl, "_blank")}
           />
         </div>
       </div>

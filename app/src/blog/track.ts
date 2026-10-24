@@ -6,6 +6,7 @@
 // Worker derives country (request.cf) and device (UA) server-side; the client
 // only sends what it alone knows: which post, how long, how far scrolled.
 
+import { isPostPreview } from "@/blog/preview";
 import { currentBlogSite } from "@/blog/site";
 
 const BASE = (import.meta.env.VITE_ANALYTICS_URL as string | undefined)?.replace(/\/$/, "");
@@ -23,6 +24,8 @@ export interface TrackOpts {
  */
 export function installPageTracker(opts: TrackOpts): () => void {
   if (!BASE || typeof window === "undefined" || !("sendBeacon" in navigator)) return () => {};
+  // A members' preview of an unpublished post isn't a reader.
+  if (isPostPreview()) return () => {};
   const host = window.location.hostname;
   // Dev blogs live at <slug>.localhost too (VITE_PLATFORM_DOMAIN=localhost).
   if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1" || host === "") return () => {};

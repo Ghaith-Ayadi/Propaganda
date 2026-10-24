@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import "./styles.css";
 import { useBlogData } from "./data";
-import { useBlogRoute } from "./route";
+import { setBasePath, useBlogRoute } from "./route";
+import { isPostPreview, previewBase } from "./preview";
 import { Home } from "./components/Home";
 import { Reader } from "./components/Reader";
 import { AdminStrip } from "./components/AdminStrip";
@@ -55,6 +56,38 @@ function Loading() {
   );
 }
 
+// A members' preview (blog/preview.ts): kept out of search, and marked as a preview.
+if (isPostPreview() && typeof document !== "undefined") {
+  const robots = document.createElement("meta");
+  robots.name = "robots";
+  robots.content = "noindex, nofollow";
+  document.head.appendChild(robots);
+}
+
+/** The corner pill: "Preview" with a way back to the editor on a preview, else the admin shortcut. */
+function Strip() {
+  if (!isPostPreview()) return <AdminStrip />;
+  return (
+    <a href="/admin" className="blog-admin-fab" aria-label="Preview, not published. Back to the editor">
+      Preview · not published
+    </a>
+  );
+}
+
+function PreviewSignIn() {
+  return (
+    <div className="blog-app">
+      <article className="blog-article">
+        <h1>Sign in to see this preview.</h1>
+        <p className="dek">
+          Posts that aren't published yet are only shown to the site's members. <a href="/admin">Sign in to Propaganda</a>, then open the
+          preview again.
+        </p>
+      </article>
+    </div>
+  );
+}
+
 export function BlogApp() {
   // undefined = resolving, null = no site matched this host/path.
   const [site, setSite] = useState<BlogSite | null | undefined>(undefined);
@@ -75,11 +108,13 @@ export function BlogApp() {
       }
       // Must happen before anything reads settings or navigates.
       if (s) bindPublicSettings(publicSb, s.id);
+      if (isPostPreview()) setBasePath(previewBase());
       setSite(s);
     })();
   }, []);
 
   if (site === undefined) return <Loading />;
+  if (site === null && isPostPreview()) return <PreviewSignIn />;
   if (site === null)
     return (
       <>
@@ -126,7 +161,7 @@ function BlogAppInner({ site }: { site: BlogSite }) {
     return (
       <div className="blog-app">
         <TakeOver />
-        <AdminStrip />
+        <Strip />
         <div className="blog-article">
           <h1>Something broke.</h1>
           <p className="dek">{error}</p>
@@ -141,7 +176,7 @@ function BlogAppInner({ site }: { site: BlogSite }) {
     return (
       <>
         <TakeOver />
-        <AdminStrip />
+        <Strip />
         <Themed site={site} design={design} route={route} collections={collections} posts={posts} previewTheme={previewTheme} />
       </>
     );
@@ -151,7 +186,7 @@ function BlogAppInner({ site }: { site: BlogSite }) {
   return (
     <>
       <TakeOver />
-      <AdminStrip />
+      <Strip />
       {route.view === "post" || route.view === "legacy" ? (
         <Reader route={route} site={site} settings={original} />
       ) : (

@@ -16,6 +16,7 @@
 import { must, publicSb } from "@/lib/supabase";
 import { parseLegacySitePath, platformSlugOf, sitePublicUrl } from "@/lib/siteUrl";
 
+import { isPostPreview, resolvePreviewSite } from "./preview";
 import type { BlogSite } from "./siteTypes";
 
 export type { BlogSite };
@@ -74,6 +75,8 @@ async function byDomain(domain: string): Promise<BlogSite | null> {
 
 async function resolve(): Promise<BlogSite | null> {
   if (typeof window === "undefined") return null;
+  // A members' preview on the app host (blog/preview.ts): the site its address names.
+  if (isPostPreview()) return resolvePreviewSite();
   const host = window.location.hostname;
 
   const slug = platformSlugOf(host);
