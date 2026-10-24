@@ -13,11 +13,19 @@ import { MODELS, askJson, arr, obj, str } from "./model.js";
  * The default voice, for a tenant with nothing published (Kontra). A first
  * draft for Ayadi to rewrite: agents.md says it is written with him.
  */
-export const DEFAULT_VOICE = `# Default voice
+const DEFAULT_PERSONA = `# Default voice
 
 **In one line:** a sharp practitioner explaining something to a smart friend over a drink. Alive, specific, a bit cheeky; never a brochure.
 
-**Do**
+`;
+
+/**
+ * The craft under any voice: how paragraphs, sentences and address work. A
+ * tenant's own words say who is talking (voiceFor); this says how the prose
+ * moves, and goes under them, because three lines typed at onboarding ("bold,
+ * satire, the founder's style") describe a person, not a paragraph.
+ */
+export const VOICE_CRAFT = `**Do**
 1. Open on the point, in the first paragraph: what the reader gets and why it matters. Evidence comes later, where the argument needs it.
 2. Be concrete: a real example, a named tool, a before and after, a number when the argument turns on it. One good example beats three adjectives. Spread sources through the post, one where each claim stands; never stack several in the opening paragraphs.
 3. Have an opinion and say why. Admit the trade-off out loud.
@@ -26,7 +34,7 @@ export const DEFAULT_VOICE = `# Default voice
    Give sentences substance. Prefer a sentence that carries a reason, a condition or a consequence over a run of short declaratives; keep it clear, then let a short one land now and then.
 5. Write for an educated adult reader, a notch above conversational: precise, varied vocabulary and syntax, an occasional uncommon word where it is exactly right. Never academic, never jargon for its own sake, never explained to the reader as if they were five.
 6. Humour is welcome when it's earned: a jab at the industry's habits, never at the reader.
-7. Talk to the reader as "you". The tenant is "we" only when it speaks about its own work.
+7. Talk to the reader as "you", a few times a post, where the reader acts. The tenant is "we" only when it speaks about its own work. Most sentences have the thing that did something as their subject; a post that says "you" in every sentence is a lecture, not a conversation.
 
 **Don't**
 1. Corporate filler: "leverage", "unlock", "in today's fast-paced world", "seamless", "robust", "game-changer".
@@ -42,6 +50,9 @@ export const DEFAULT_VOICE = `# Default voice
 - 900 to 1,600 words unless the brief says otherwise.
 - Subheads every 200 to 300 words, written as claims, not labels.
 `;
+
+/** The default voice: the persona line over the craft. */
+export const DEFAULT_VOICE = `${DEFAULT_PERSONA}${VOICE_CRAFT}`;
 
 export interface VoiceInput {
   site: string;
@@ -166,8 +177,14 @@ export function voiceSourceFor(site: string): string | undefined {
 
 export const voiceGuideWorkflow = DBOS.registerWorkflow(voiceGuideRun, { name: "writer:voice-guide" });
 
-/** The guide the Writer follows: the tenant's, else the default. */
-export function voiceFor(row: VoiceGuideRow | null): string {
+/**
+ * The guide the Writer follows. The tenant's own words (Getting started,
+ * Settings: "bold and provocative, satire, the founder's style") say who is
+ * talking and go first, over the craft; a guide written from the tenant's posts
+ * is used as it is; a tenant with neither gets the default voice.
+ */
+export function voiceFor(row: VoiceGuideRow | null, own = ""): string {
+  if (own.trim()) return `# The tenant's voice\n\n**In the tenant's own words:** ${own.trim()}\n\n${VOICE_CRAFT}`;
   // A default saved earlier is the default of its day: always read today's, until a person or the content writes the guide.
   if (!row?.body.trim() || row.source === "default") return DEFAULT_VOICE;
   const samples = (row.samples ?? []).map((s) => `> ${s.passage.replace(/\n/g, "\n> ")}\n> (from "${s.title}")`).join("\n\n");

@@ -14,6 +14,9 @@ export const HOUSE_RULES = `House rules (these override any voice guide):
 1. Every number, statistic and quote links its source inline, as a Markdown link on the words it supports. No source, no number.
 2. Facts about the tenant (product, prices, customers, plans, people) come only from the knowledge base claims you were given. If a fact you need isn't there, write around it and list it under "Missing facts" in your notes. Never invent one.
 3. A contested claim is never stated as settled.
+4. The examples inside the rules below (the wrong price, the sales deck, the March invoice, Gusto, the eight posts) are ours, there to show the rule. Never reuse one as the post's example: a post's examples come from the brief, the sources and the knowledge base.
+5. "You" is a pronoun, not a drumbeat. The reader is in the post, not in every sentence: most sentences have as their subject the thing that did something (the model, the page, the invoice, the competitor), and "you" comes in where the reader acts or is told something. More than about one sentence in four addressed to "you" reads as a lecture.
+6. Sentences vary in length on purpose. A sentence that carries a reason, a condition or a consequence ("The search returns nothing, because the pricing page was never indexed") beats two short ones that split it; a short sentence lands only after longer ones. A paragraph of eight sentences that are all six to ten words long reads as a machine, whatever it says.
 
 ${HOUSE_STYLE}`;
 
@@ -66,6 +69,9 @@ const NEGATED = /\b(?:that|it|this|they|we|you)(?:'|’)?(?:s| is| are|re)?\s*(?
 const RESTATE = /^\s*(?:(?:but\s+)?(?:it|that|this|they)(?:['’]s| is| are|['’]re)\b|it['’]s about\b)/i;
 const SAME_SENTENCE = /\b(?:is|['’]s|are)(?:\s+not|n['’]t)\s+(?:about\s+)?[^,;—–]{1,60}[,;—–]\s*(?:but\s+)?(?:it|that|this|they)(?:['’]s| is| are)\b/i;
 const TERSE = /^\s*not\s+[^.]{1,40}\.\s*$/i;
+// "The prose was fine. The facts were not." (seen on Qwen): a short sentence
+// followed by one that ends on a bare negated verb.
+const FINE_NOT = /^[^.!?]{2,50}\b(?:is|are|was|were|do|does|did|will|can|could|would|should|has|have|had)\s+not\s*[.!?]?\s*$/i;
 
 export function contrastHits(markdown: string): Hit[] {
   const out: Hit[] = [];
@@ -78,6 +84,7 @@ export function contrastHits(markdown: string): Hit[] {
       if (SAME_SENTENCE.test(s)) out.push({ sentence: s.trim(), rule: "not-x-its-y" });
       else if (NEGATED.test(s) && RESTATE.test(next) && s.length < 160) out.push({ sentence: `${s.trim()} ${next.trim()}`, rule: "not-x-its-y" });
       else if (TERSE.test(s) && next) out.push({ sentence: `${s.trim()} ${next.trim()}`, rule: "not-x-its-y" });
+      else if (next && words(s) <= 10 && FINE_NOT.test(next)) out.push({ sentence: `${s.trim()} ${next.trim()}`, rule: "not-x-its-y" });
     }
   }
   return out;
@@ -404,4 +411,176 @@ export function applyPolish(texts: string[], items: PolishItem[], answers: Polis
     else stats.refused++;
   }
   return { texts: out, stats };
+}
+
+// ---- rhythm (2026-10-24): second person and sentence monotony ----
+
+// Ayadi, 2026-10-24: a draft with 136 "you" in 1,300 words and one-clause
+// sentences throughout. Words are checked above; this measures the two things
+// no word check sees. The lines come from his own published posts: 0 to 4 "you"
+// per hundred words (the drafts: 5 to 9), and sentence lengths that swing
+// (deviation 4 to 11 over a post; the drafts 3 to 5).
+
+/** "You" per hundred words above which a text reads as a lecture. */
+export const YOU_PER_100 = 5;
+/** A paragraph of this many sentences whose lengths barely move (deviation under MONOTONE_SD) is a drumbeat. */
+export const MONOTONE_SENTENCES = 6;
+export const MONOTONE_SD = 3;
+/** ... unless one sentence in it runs long: then the rhythm is a choice. */
+export const MONOTONE_LONGEST = 16;
+
+const YOU = /\byou(?:r|rs|rself)?\b/gi;
+const WORD = /[A-Za-z0-9'\u2019]+/g;
+
+/** The numbers of a text: words, "you" per hundred words, and the swing of its sentence lengths. */
+export interface ProseNumbers {
+  words: number;
+  you: number;
+  youPer100: number;
+  sentences: number;
+  /** Population standard deviation of sentence length, in words. */
+  sd: number;
+}
+
+function lengths(text: string): number[] {
+  return allSentences(text)
+    .map((s) => (s.match(WORD) ?? []).length)
+    .filter((n) => n > 0);
+}
+
+function deviation(ns: number[]): number {
+  if (ns.length === 0) return 0;
+  const mean = ns.reduce((a, b) => a + b, 0) / ns.length;
+  return Math.sqrt(ns.reduce((a, b) => a + (b - mean) ** 2, 0) / ns.length);
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+export function proseNumbers(text: string): ProseNumbers {
+  const clean = prose(text).replace(/\]\([^)]*\)/g, "]");
+  const words = (clean.match(WORD) ?? []).length;
+  const you = (clean.match(YOU) ?? []).length;
+  const ns = lengths(clean);
+  return { words, you, youPer100: words ? round1((100 * you) / words) : 0, sentences: ns.length, sd: round1(deviation(ns)) };
+}
+
+export type RhythmRule = "second-person" | "monotone";
+
+/** One paragraph that breaks the rhythm, with why, as the model is told it. */
+export interface RhythmFlag {
+  n: number;
+  paragraph: string;
+  rules: RhythmRule[];
+  why: string;
+}
+
+/** Prose paragraphs only: no heading, list, quote, table or code. */
+function proseParagraphs(markdown: string): string[] {
+  return prose(markdown)
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p && !/^(?:#|>|\||[-*+]\s|\d+[.)]\s|!\[)/.test(p));
+}
+
+/**
+ * The paragraphs to rewrite: a drumbeat of same-length sentences, or, when the
+ * whole text is over the "you" line, the paragraphs that put it there (three
+ * "you" or more and over the line themselves). Empty on a text that reads right.
+ */
+export function rhythmFlags(markdown: string): RhythmFlag[] {
+  const whole = proseNumbers(markdown);
+  const out: RhythmFlag[] = [];
+  for (const paragraph of proseParagraphs(markdown)) {
+    const n = proseNumbers(paragraph);
+    const ns = lengths(paragraph.replace(/\]\([^)]*\)/g, "]"));
+    const rules: RhythmRule[] = [];
+    const why: string[] = [];
+    if (whole.youPer100 > YOU_PER_100 && n.you >= 3 && n.youPer100 > YOU_PER_100) {
+      rules.push("second-person");
+      why.push(`"you" ${n.you} times in ${n.words} words (the line is ${YOU_PER_100} per hundred; the whole post is at ${whole.youPer100})`);
+    }
+    if (ns.length >= MONOTONE_SENTENCES && deviation(ns) < MONOTONE_SD && Math.max(...ns) <= MONOTONE_LONGEST) {
+      rules.push("monotone");
+      why.push(`${ns.length} sentences of ${Math.min(...ns)} to ${Math.max(...ns)} words, none longer: a drumbeat`);
+    }
+    if (rules.length) out.push({ n: out.length + 1, paragraph, rules, why: why.join("; ") });
+  }
+  return out;
+}
+
+/** The one call: rewrite the flagged paragraphs for rhythm and address, nothing else. */
+export function rhythmPrompt(flags: RhythmFlag[]): string {
+  return `These paragraphs of the draft read as a machine wrote them: the reader is addressed in nearly every sentence, or every sentence is the same short length, or both. Code measured it; you fix it.
+
+${flags.map((f) => `${f.n}. ${f.why}\n"""\n${f.paragraph}\n"""`).join("\n\n")}
+
+Rewrite each one, keeping every fact, every link (the same Markdown links on the same words) and the voice:
+- Give the sentences their subjects back: the thing that did something (the model, the page, the invoice, the competitor) is the subject; "you" stays where the reader acts or is told something, about one sentence in four at most.
+- Join sentences that share a thought with the reason, the condition or the consequence that connects them, let one or two run long, and keep a short one to land. Do not pad; the paragraph may end a little shorter.
+- Say a thing once: a sentence that repeats the one before it goes.
+- No em dash, no "not X but Y", nothing from the twenty rules.
+
+Answer with JSON only: {"paragraphs": [{"n": 1, "rewrite": "..."}]}`;
+}
+
+export interface RhythmAnswer {
+  n: number;
+  rewrite: string;
+}
+
+export function parseRhythm(v: unknown): RhythmAnswer[] {
+  const list = (v && typeof v === "object" && Array.isArray((v as { paragraphs?: unknown }).paragraphs) ? (v as { paragraphs: unknown[] }).paragraphs : []) as unknown[];
+  return list
+    .filter((r): r is { n: unknown; rewrite: unknown } => Boolean(r) && typeof r === "object")
+    .map((r) => ({ n: Number(r.n), rewrite: typeof r.rewrite === "string" ? r.rewrite.trim() : "" }))
+    .filter((r) => Number.isInteger(r.n) && r.n > 0 && r.rewrite);
+}
+
+/** What the rhythm pass did, for the version's lint and the A/B. */
+export interface RhythmStats {
+  flagged: number;
+  rewritten: number;
+  /** Rewrites refused by code: a rule broke, a link went missing, or the numbers got no better. */
+  refused: number;
+  before: ProseNumbers;
+  after: ProseNumbers;
+}
+
+const LINKS = /\]\((https?:\/\/[^)\s]+)\)/g;
+
+/**
+ * Applies the rewrites. One is kept only when it breaks no hard rule, keeps
+ * every link of the paragraph, stays within reason of its length, and reads
+ * better by the numbers: fewer "you" where that was the flag, a wider swing of
+ * sentence lengths where the drumbeat was.
+ */
+export function applyRhythm(markdown: string, flags: RhythmFlag[], answers: RhythmAnswer[]): { markdown: string; stats: RhythmStats } {
+  const before = proseNumbers(markdown);
+  const answered = new Map(answers.map((a) => [a.n, a.rewrite]));
+  let out = markdown;
+  let rewritten = 0;
+  let refused = 0;
+  for (const flag of flags) {
+    const rewrite = answered.get(flag.n);
+    if (rewrite === undefined) {
+      refused++;
+      continue;
+    }
+    const was = proseNumbers(flag.paragraph);
+    const now = proseNumbers(rewrite);
+    const links = [...flag.paragraph.matchAll(LINKS)].map((m) => m[1]);
+    const ok =
+      hardHits(rewrite).length + styleHits(rewrite).length === 0 &&
+      links.every((u) => rewrite.includes(`](${u})`)) &&
+      now.words >= was.words * 0.6 &&
+      now.words <= was.words * 1.4 &&
+      (!flag.rules.includes("second-person") || now.you < was.you) &&
+      (!flag.rules.includes("monotone") || now.sd > was.sd || Math.max(...lengths(rewrite), 0) > MONOTONE_LONGEST) &&
+      out.includes(flag.paragraph);
+    if (ok) {
+      out = out.replace(flag.paragraph, () => rewrite);
+      rewritten++;
+    } else refused++;
+  }
+  return { markdown: out, stats: { flagged: flags.length, rewritten, refused, before, after: proseNumbers(out) } };
 }
