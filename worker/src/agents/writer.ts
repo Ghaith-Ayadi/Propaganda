@@ -151,6 +151,22 @@ async function polishDraft(site: string, step: string, voice: string, d: { markd
   return { markdown, title: titled(title, d.title), subtitle: d.subtitle ? titled(subtitle, d.subtitle) : "", excerpt, stats };
 }
 
+/**
+ * Second person and sentence monotony (2026-10-24): one rewrite of the
+ * paragraphs over the line (polish.ts). A pass for style only, on a draft that
+ * is already good: a call that fails leaves the draft as it was and no
+ * rhythm numbers (desk review of #261). A step that threw replays as a throw.
+ */
+async function fixRhythm(site: string, voice: string, markdown: string): Promise<{ markdown: string; rhythm: RhythmStats | null }> {
+  try {
+    const r = await polishRhythm("fix the rhythm", { site, job: "writer:rules", model: MODELS.writer, system: writerSystem(voice) }, markdown);
+    return { markdown: r.markdown, rhythm: r.stats };
+  } catch (err) {
+    DBOS.logger.warn(`writer rhythm: the rewrite call failed, draft kept as it was: ${(err as Error).message}`);
+    return { markdown, rhythm: null };
+  }
+}
+
 /** Every house-rule problem left in a draft, for the reviewer. */
 const leftHits = (markdown: string, styled: boolean) => (styled ? [...styleHits(markdown), ...hardHits(markdown)] : styleHits(markdown));
 
@@ -298,9 +314,7 @@ Answer with JSON only: {"title": "...", "subtitle": "the short description", "ma
   // Second person and sentence monotony (2026-10-24): one rewrite of the paragraphs over the line.
   // A new step: runs recorded before it replay without it.
   let rhythm: RhythmStats | null = null;
-  if (await DBOS.patch("writer-rhythm")) {
-    ({ markdown, stats: rhythm } = await polishRhythm("fix the rhythm", { site, job: "writer:rules", model: MODELS.writer, system: writerSystem(voice) }, markdown));
-  }
+  if (await DBOS.patch("writer-rhythm")) ({ markdown, rhythm } = await fixRhythm(site, voice, markdown));
   // One short description, kept in both places that show it: the subtitle (editor, reader) and the excerpt (listings, meta).
   // A new step (2026-10-15): runs recorded before it replay without it.
   if (await DBOS.patch("writer-one-description")) excerpt = titled.subtitle || excerpt;
@@ -479,9 +493,7 @@ ${current.content_md}`,
   const styled = await DBOS.patch("writer-revise-house-style");
   if (styled) markdown = (await polishTexts("polish the prose", { site, job: "writer:rules", model: MODELS.base, system: writerSystem(voice) }, [markdown])).texts[0];
   let rhythm: RhythmStats | null = null;
-  if (await DBOS.patch("writer-revise-rhythm")) {
-    ({ markdown, stats: rhythm } = await polishRhythm("fix the rhythm", { site, job: "writer:rules", model: MODELS.writer, system: writerSystem(voice) }, markdown));
-  }
+  if (await DBOS.patch("writer-revise-rhythm")) ({ markdown, rhythm } = await fixRhythm(site, voice, markdown));
 
   const versionId = await DBOS.runStep(() => Promise.resolve(newId()), { name: "mint the version" });
   const version = await DBOS.runStep(

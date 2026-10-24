@@ -415,11 +415,11 @@ export function applyPolish(texts: string[], items: PolishItem[], answers: Polis
 
 // ---- rhythm (2026-10-24): second person and sentence monotony ----
 
-// Ayadi, 2026-10-24: a PPGD draft with 136 "you" in 1,300 words and one-clause
+// Ayadi, 2026-10-24: a draft with 136 "you" in 1,300 words and one-clause
 // sentences throughout. Words are checked above; this measures the two things
-// no word check sees. The lines come from his own Verbatim posts: 0 to 4 "you"
-// per hundred words (the eight PPGD drafts: 5 to 9), and sentence lengths that
-// swing (deviation 4 to 11 over a post; the drafts 3 to 5).
+// no word check sees. The lines come from his own published posts: 0 to 4 "you"
+// per hundred words (the drafts: 5 to 9), and sentence lengths that swing
+// (deviation 4 to 11 over a post; the drafts 3 to 5).
 
 /** "You" per hundred words above which a text reads as a lecture. */
 export const YOU_PER_100 = 5;
