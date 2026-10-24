@@ -1,5 +1,6 @@
 // Builds api/ the way Vercel does (`vercel build`, offline, no project needed) and loads
-// every built function the way its Lambda runtime does: without require() of ES modules.
+// every built function the way its Lambda runtime does: without require() of ES modules; then
+// checks that dynamic routes (api/x/[id].ts) are not shadowed by vercel.json's rewrites.
 // A function that imports an ES-only package (ai, @ai-sdk/*) from CommonJS output crashes on
 // load in production (ERR_REQUIRE_ESM, Vercel's FUNCTION_INVOCATION_FAILED page) while every
 // unit test passes under tsx. Run: npm run check:function-load (from api/). ~20 s.
@@ -13,9 +14,11 @@ const root = resolve(import.meta.dirname, "..");
 const work = mkdtempSync(join(tmpdir(), "fn-load-"));
 try {
   cpSync(join(root, "api"), join(work, "api"), { recursive: true });
+  // The repo's own rewrites, without its install and build commands.
+  const repoConfig = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8"));
   mkdirSync(join(work, "public"));
   writeFileSync(join(work, "public", "index.html"), "ok");
-  writeFileSync(join(work, "vercel.json"), JSON.stringify({ outputDirectory: "public", framework: null }));
+  writeFileSync(join(work, "vercel.json"), JSON.stringify({ rewrites: repoConfig.rewrites ?? [], outputDirectory: "public", framework: null }));
   mkdirSync(join(work, ".vercel"));
   writeFileSync(
     join(work, ".vercel", "project.json"),
@@ -44,6 +47,21 @@ try {
       failed.push(f);
       console.error(`FAIL ${f}\n${String(e.stderr ?? e).split("\n").slice(0, 8).join("\n")}`);
     }
+  }
+  // A dynamic function (api/x/[id].ts) is reached through a route that vercel.json's own
+  // rewrites come before: a catch-all rewrite to the app shadows it, the app's index.html comes
+  // back for an API call ("Unexpected token '<'"), and nothing in the function ever runs.
+  const config = JSON.parse(readFileSync(join(work, ".vercel", "output", "config.json"), "utf8"));
+  const routes = config.routes.slice(config.routes.findIndex((r) => r.handle === "filesystem") + 1);
+  for (const f of funcs) {
+    const name = String(f).replace(/\.func$/, "");
+    if (!name.includes("[")) continue; // a plain path is served by the filesystem, before any rewrite
+    const url = `/api/${name}`.replace(/\[[^\]]+\]/g, "a1b2c3d4e5f6g7h").replace(/^\/api\/api\//, "/api/");
+    const hit = routes.find((r) => r.src && !r.has && new RegExp(r.src).test(url));
+    if (!hit?.dest?.includes(`/${name}`)) {
+      failed.push(name);
+      console.error(`FAIL ${name}: ${url} is answered by ${hit?.dest ?? "nothing"} before its function`);
+    } else console.log(`ok   route ${url}`);
   }
   if (failed.length) {
     console.error(`\n${failed.length} function(s) crash on load the way Lambda runs them.`);
