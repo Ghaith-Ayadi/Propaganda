@@ -1,10 +1,13 @@
 // Public-blog reads. No Dexie, no sync engine: this view is read-only and
 // visited by anonymous readers. Row-level security lets anyone read published
-// posts, collections and redirects, nothing else.
+// posts, collections and redirects, nothing else. A members' preview
+// (blog/preview.ts) also reads the unpublished post its address names, with
+// the member's session.
 
 import { useEffect, useState } from "react";
 import { fetchAll, must, publicSb } from "@/lib/supabase";
 import { slugify } from "@/lib/slug";
+import { isPostPreview, previewClient, previewTarget } from "./preview";
 import type { Collection } from "@/types";
 
 import {
@@ -71,8 +74,13 @@ export function useBlogData(siteId: string): {
             ),
           ),
         ]);
+        // A preview shows its post in place: in the lists too, and in its collection even when that one is hidden.
+        const target = previewTarget();
+        const previewed = target ? await previewPostAt(siteId, target.collection, target.slug) : null;
         if (cancelled) return;
-        setCols(colRecords.map(fromCollectionRecord));
+        if (previewed && !postRecords.some((r) => r.id === previewed.id)) postRecords.unshift(previewed);
+        const unhide = (c: Collection) => (previewed && c.name === previewed.type ? { ...c, isHidden: false } : c);
+        setCols(colRecords.map(fromCollectionRecord).map(unhide));
         setItems(postRecords.map(fromBlogRecord));
         setLoading(false);
       } catch (e) {
@@ -120,8 +128,28 @@ async function publishedById(siteId: string, id: string): Promise<BlogPostRecord
   return one<BlogPostRecord>(posts((f) => publishedPosts(siteId, f).eq("id", id).maybeSingle()));
 }
 
+/**
+ * In a members' preview: the post at an address whatever its status, read with
+ * the member's session. `slug` may also be the post's id (a post with no slug).
+ */
+async function previewPostAt(siteId: string, collection: string, slug: string): Promise<BlogPostRecord | null> {
+  const client = previewClient();
+  if (!client) return null;
+  const col = await one<CollectionRecord>(client.from("collections").select("*").eq("site", siteId).eq("slug", collection).maybeSingle());
+  const inCollection = (r: BlogPostRecord) => (col ? r.type === col.name : slugify(r.type) === collection);
+  const by = async (column: "slug" | "id") =>
+    ((await must(posts((f) => client.from("posts").select(f as typeof PUBLIC_FIELDS).eq("site", siteId).eq(column, slug).order("id"))).catch(
+      () => [],
+    )) as BlogPostRecord[]).find(inCollection) ?? null;
+  return (await by("slug")) ?? (await by("id"));
+}
+
 /** A post by its address, /<collection slug>/<post slug>, or where that address now points. */
 export async function fetchPostAt(siteId: string, collection: string, slug: string): Promise<ReaderFetch> {
+  if (isPostPreview()) {
+    const previewed = await previewPostAt(siteId, collection, slug);
+    if (previewed) return { kind: "post", post: fromBlogRecord(previewed) };
+  }
   const col = await one<CollectionRecord>(
     publicSb.from("collections").select("*").eq("site", siteId).eq("slug", collection).maybeSingle(),
   );

@@ -88,6 +88,15 @@ export function postPublicUrl(site: SiteAddress, collectionSlug: string, slug: s
 }
 
 /**
+ * Where a post that isn't published yet can be seen by the site's members:
+ * /<site slug>-preview/<collection slug>/<post slug> on the app host, the only
+ * origin that holds their session (blog/preview.ts renders it).
+ */
+export function postPreviewUrl(siteSlug: string, collectionSlug: string, slug: string): string {
+  return `${appOrigin()}/${siteSlug}-preview${postPath(collectionSlug, slug)}`;
+}
+
+/**
  * A URL as people read it, for display only: no scheme, and escapes decoded, so
  * a legacy slug shows as "journal/JRN·47", not "journal/JRN%C2%B747". Links
  * keep the encoded form. decodeURI leaves reserved characters (/, ?, #) escaped.
