@@ -48,10 +48,10 @@ release, and merge it right after the release's app deploy.
 ## Chat round trip
 
 `scripts/chat-roundtrip.mjs` runs Chat's path against a deployed server: start a conversation,
-read it back the way a refresh does, send one message (`--send`, a few cents on DeepSeek), check
+read it back the way a refresh does, send one message (`--send`), check
 the question and reply are stored, delete it. Every answer must be JSON from our functions, which
 catches a function that crashes on load and a rewrite that answers an API call with the app's
-HTML. Before any release or hotfix that touches `api/`, `vercel.json` or the Chat page, run it
+HTML. `--send` makes one real Chat call: a few cents of DeepSeek on dev, but on prod it runs on prod's Chat model and bills that tenant, so run prod without `--send` unless that is what you want. Before any release or hotfix that touches `api/`, `vercel.json` or the Chat page, run it
 against the dev site after the deploy and again against prod after the release:
 
 ```
