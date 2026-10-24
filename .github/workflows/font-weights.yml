@@ -1,5 +1,6 @@
 # Nothing in Propaganda is heavier than 600 (Ayadi, 2026-10-15). Fails a PR that
-# brings a font weight above it into the app's source.
+# brings a font weight above it into the app's source. Also runs the app's own
+# unit tests (node's runner on the pure modules, no install needed).
 name: font-weights
 on:
   pull_request:
@@ -19,3 +20,5 @@ jobs:
         with:
           node-version: 22
       - run: node app/scripts/check-font-weights.mjs
+      - run: npm test
+        working-directory: app

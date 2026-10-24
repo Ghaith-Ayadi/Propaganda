@@ -4,13 +4,16 @@
 // numbers only. Every label lives in a two-line header whose lines name the
 // cell's lines, and the header explains itself on hover. Rows sit under their
 // bucket (three since 2026-10-20: winnable now, must win over time, no data).
-// The number columns hug their content; the search column takes the rest.
+// The number columns hug their content; the search column takes the rest. The
+// words next to the numbers (what page one takes, the goal) come from
+// lib/goals/verdict.ts, which has the test.
 
 import { HelpCircle, Trash01 } from "@untitledui/icons";
 import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
 import type { Day, RankingSearch, SearchBucket } from "@/lib/goals/types";
+import { bucketOf, goalOf, verdictOf } from "@/lib/goals/verdict";
 import { shortDate } from "@/lib/goals/quarter";
 import { cx } from "@/utils/cx";
 
@@ -20,37 +23,12 @@ export const BUCKETS: { key: SearchBucket; label: string; color: "success" | "bl
   { key: "nodata", label: "No data yet", color: "gray", why: "DataForSEO has no number for it. Kept because the intent is exactly right; we report its position all the same." },
 ];
 
-export function bucketOf(s: Pick<RankingSearch, "bucket">): SearchBucket {
-  return s.bucket ?? "now";
-}
+export { bucketOf, goalOf, verdictOf };
 
 export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export const fmtVolume = (n: number) => n.toLocaleString("en-US");
 export const fmtTrend = (n: number) => `${n > 0 ? "+" : ""}${n}%`;
-
-/** What page one takes, from difficulty and page one's links: the thresholds the Strategist's prompt reads them by. */
-export function verdictOf(s: Pick<RankingSearch, "difficulty" | "referringDomains">): string {
-  const d = s.difficulty;
-  const l = s.referringDomains;
-  if (d == null || l == null) return "no data";
-  if (l < 10 && d < 30) return "open ground";
-  if (l <= 30 && d < 30) return "a quarter";
-  if (l <= 80 || d <= 50) return "a year";
-  return "beyond a post";
-}
-
-/** This quarter's goal for a search, from its bucket and where it sits today. */
-export function goalOf(s: Pick<RankingSearch, "bucket" | "position">): { label: string; tone: string } {
-  switch (bucketOf(s)) {
-    case "later":
-      return { label: "Top 30, then top 20", tone: "text-brand-secondary" };
-    case "nodata":
-      return { label: "Tracked", tone: "text-tertiary" };
-    default:
-      return s.position != null && s.position <= 20 ? { label: "Page one", tone: "text-primary" } : { label: "Climb toward page one", tone: "text-secondary" };
-  }
-}
 
 export function BucketBadge({ bucket }: { bucket: SearchBucket }) {
   const b = BUCKETS.find((x) => x.key === bucket) ?? BUCKETS[0];
@@ -108,14 +86,12 @@ export function SearchTable({
   searches,
   quarterEnd,
   onRemove,
-  showWhy = true,
 }: {
   searches: (RankingSearch & { why?: string })[];
   /** The quarter's last day, named in the goal header. */
   quarterEnd?: Day;
   /** When set, each row gets a remove button (the Goals page while the proposal is editable). */
   onRemove?: (index: number) => void;
-  showWhy?: boolean;
 }) {
   const indexed = searches.map((s, i) => ({ s, i }));
   /** Proposals since 2026-10-20 mark each search's bucket; older ones are one list. */
@@ -165,7 +141,7 @@ export function SearchTable({
                       <span className="font-medium text-primary">{s.query}</span>
                       <TopicChip name={s.topic} />
                     </div>
-                    {showWhy && s.why && <p className="mt-0.5 text-xs leading-[18px] text-tertiary">{s.why}</p>}
+                    {s.why && <p className="mt-0.5 text-xs leading-[18px] text-tertiary">{s.why}</p>}
                   </td>
                   <td className={NUM}>
                     <div className="font-medium text-primary">{s.volume != null ? fmtVolume(s.volume) : "–"}</div>
